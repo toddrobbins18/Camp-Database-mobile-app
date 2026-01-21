@@ -1,8 +1,11 @@
 import React from 'react';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer } from '@react-navigation/native';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LoginScreen } from '../screens/LoginScreen';
+import { SignUpScreen } from '../screens/SignUpScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { CamperScreen } from '../screens/CamperScreen';
 import { StaffScreen } from '../screens/StaffScreen';
@@ -13,6 +16,7 @@ import { SportsScreen } from '../screens/SportsScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
+const Stack = createNativeStackNavigator();
 
 // Custom Drawer Content
 const CustomDrawerContent = (props: any) => {
@@ -117,26 +121,43 @@ const CustomDrawerContent = (props: any) => {
     );
 };
 
+// Main App Navigator (Drawer)
+const MainAppNavigator = () => {
+    return (
+        <Drawer.Navigator
+            drawerContent={(props) => <CustomDrawerContent {...props} />}
+            screenOptions={{
+                headerShown: false, // We use custom headers in screens
+                drawerType: 'front',
+                drawerStyle: { width: '80%' },
+            }}
+            initialRouteName="Dashboard"
+        >
+            <Drawer.Screen name="Dashboard" component={DashboardScreen} />
+            <Drawer.Screen name="Camper" component={CamperScreen} />
+            <Drawer.Screen name="Staff" component={StaffScreen} />
+            <Drawer.Screen name="Calendar" component={CalendarScreen} />
+            <Drawer.Screen name="Health" component={HealthScreen} />
+            <Drawer.Screen name="Transport" component={TransportScreen} />
+            <Drawer.Screen name="Sports" component={SportsScreen} />
+        </Drawer.Navigator>
+    );
+};
+
+// Root Navigator (Stack)
 export const AppNavigator = () => {
     return (
         <NavigationContainer>
-            <Drawer.Navigator
-                drawerContent={(props) => <CustomDrawerContent {...props} />}
+            <Stack.Navigator
                 screenOptions={{
-                    headerShown: false, // We use custom headers in screens
-                    drawerType: 'front',
-                    drawerStyle: { width: '80%' },
+                    headerShown: false,
                 }}
-                initialRouteName="Dashboard"
+                initialRouteName="Login"
             >
-                <Drawer.Screen name="Dashboard" component={DashboardScreen} />
-                <Drawer.Screen name="Camper" component={CamperScreen} />
-                <Drawer.Screen name="Staff" component={StaffScreen} />
-                <Drawer.Screen name="Calendar" component={CalendarScreen} />
-                <Drawer.Screen name="Health" component={HealthScreen} />
-                <Drawer.Screen name="Transport" component={TransportScreen} />
-                <Drawer.Screen name="Sports" component={SportsScreen} />
-            </Drawer.Navigator>
+                <Stack.Screen name="Login" component={LoginScreen} />
+                <Stack.Screen name="SignUp" component={SignUpScreen} />
+                <Stack.Screen name="MainApp" component={MainAppNavigator} />
+            </Stack.Navigator>
         </NavigationContainer>
     );
 };
