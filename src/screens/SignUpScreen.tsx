@@ -19,7 +19,6 @@ interface SignUpScreenProps {
 export const SignUpScreen = ({ navigation }: SignUpScreenProps) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
 
     const handleSignUp = () => {
         // TODO: Implement signup logic
@@ -68,21 +67,6 @@ export const SignUpScreen = ({ navigation }: SignUpScreenProps) => {
                                     placeholderTextColor={theme.colors.textSecondary}
                                     value={password}
                                     onChangeText={setPassword}
-                                    secureTextEntry
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                />
-                            </View>
-
-                            {/* Confirm Password Input */}
-                            <View style={styles.inputContainer}>
-                                <Text style={styles.label}>Confirm Password</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Confirm your password"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    value={confirmPassword}
-                                    onChangeText={setConfirmPassword}
                                     secureTextEntry
                                     autoCapitalize="none"
                                     autoCorrect={false}
