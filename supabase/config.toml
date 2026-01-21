@@ -1,0 +1,64 @@
+project_id = "gdcxtefbarvnrtvacqln"
+
+[functions.check-medication-alerts]
+verify_jwt = false
+
+[functions.create-user]
+verify_jwt = true
+
+[functions.delete-user]
+verify_jwt = true
+
+[functions.send-user-invitation]
+verify_jwt = true
+
+[functions.notify-transportation-events]
+verify_jwt = false
+
+[functions.send-event-notifications]
+verify_jwt = false
+
+[functions.send-bulk-email]
+verify_jwt = true
+
+[functions.test-m365-connection]
+verify_jwt = true
+
+[functions.send-incident-notification]
+verify_jwt = false
+
+[functions.send-health-center-notification]
+verify_jwt = false
+
+[functions.send-user-approval-notification]
+verify_jwt = false
+
+[functions.get-weather]
+verify_jwt = false
+
+[functions.ai-chat]
+verify_jwt = true
+
+[functions.test-campminder-connection]
+verify_jwt = true
+
+[functions.sync-campminder]
+verify_jwt = false
+
+[functions.import-tyler-hill-data]
+verify_jwt = true
+
+[functions.process-scheduled-notifications]
+verify_jwt = false
+
+[functions.generate-daily-medications]
+verify_jwt = false
+
+[functions.detect-schedule-conflicts]
+verify_jwt = false
+
+[functions.send-sports-academy-notification]
+verify_jwt = false
+
+[functions.send-tutoring-notification]
+verify_jwt = false
