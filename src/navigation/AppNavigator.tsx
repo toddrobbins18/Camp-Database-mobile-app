@@ -14,6 +14,7 @@ import { HealthScreen } from '../screens/HealthScreen';
 import { TransportScreen } from '../screens/TransportScreen';
 import { SportsScreen } from '../screens/SportsScreen';
 import { IncidentReportsScreen } from '../screens/IncidentReportsScreen';
+import { MenuScreen } from '../screens/MenuScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -121,7 +122,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Menu"
                     icon={({ color }) => <Ionicons name="restaurant-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('Menu')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -300,6 +301,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Transport" component={TransportScreen} />
             <Drawer.Screen name="Sports" component={SportsScreen} />
             <Drawer.Screen name="IncidentReports" component={IncidentReportsScreen} />
+            <Drawer.Screen name="Menu" component={MenuScreen} />
         </Drawer.Navigator>
     );
 };
