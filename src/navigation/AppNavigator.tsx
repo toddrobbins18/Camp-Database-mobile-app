@@ -15,6 +15,7 @@ import { TransportScreen } from '../screens/TransportScreen';
 import { SportsScreen } from '../screens/SportsScreen';
 import { IncidentReportsScreen } from '../screens/IncidentReportsScreen';
 import { MenuScreen } from '../screens/MenuScreen';
+import { MessagesScreen } from '../screens/MessagesScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -129,7 +130,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Messages"
                     icon={({ color }) => <Ionicons name="mail-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('Messages')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -302,6 +303,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Sports" component={SportsScreen} />
             <Drawer.Screen name="IncidentReports" component={IncidentReportsScreen} />
             <Drawer.Screen name="Menu" component={MenuScreen} />
+            <Drawer.Screen name="Messages" component={MessagesScreen} />
         </Drawer.Navigator>
     );
 };

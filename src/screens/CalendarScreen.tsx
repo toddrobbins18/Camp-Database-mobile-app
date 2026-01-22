@@ -213,20 +213,28 @@ export const CalendarScreen = ({ navigation }: any) => {
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Header */}
-                <View style={styles.header}>
-                    <View style={styles.headerLeft}>
-                        <TouchableOpacity onPress={() => navigation.openDrawer()}>
-                            <Ionicons name="menu" size={28} color={theme.colors.text} />
-                        </TouchableOpacity>
-                        <View style={styles.titleContainer}>
-                            <Text style={styles.title}>Master Calendar</Text>
-                            <Text style={styles.subtitle}>Consolidated view of all events and activities for The Nest</Text>
-                        </View>
+    <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                        <Ionicons name="menu" size={28} color={theme.colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity>
+                        <Ionicons name="person-circle-outline" size={28} color={theme.colors.text} />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Title and Description Section */}
+                <View style={styles.titleSection}>
+                    <View style={styles.titleContainer}>
+                        <Text style={styles.title}>Master Calendar</Text>
+                        <Text style={styles.subtitle}>Consolidated view of all events and activities for The Nest</Text>
                     </View>
-                    <View style={styles.headerRight}>
-                        <View style={styles.calendarIcon}>
+                    <View style={styles.titleRight}>
+                        <TouchableOpacity 
+                            style={styles.calendarIcon}
+                            onPress={() => setShowEventList(false)}
+                        >
                             <Ionicons name="calendar" size={20} color="white" />
-                        </View>
+                        </TouchableOpacity>
                         <TouchableOpacity onPress={() => setShowEventList(!showEventList)}>
                             <Ionicons name="menu" size={28} color={theme.colors.text} />
                         </TouchableOpacity>
@@ -275,8 +283,8 @@ export const CalendarScreen = ({ navigation }: any) => {
                         >
                             <Text style={styles.dropdownText}>{selectedTime}</Text>
                             <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
-                        </TouchableOpacity>
-                    </View>
+        </TouchableOpacity>
+    </View>
 
                     <View style={styles.filterRow}>
                         <TouchableOpacity 
@@ -326,7 +334,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                                 <View style={styles.eventTags}>
                                                     {event.tags.map((tag, index) => {
                                                         const tagStyle = getTagStyle(tag);
-                                                        return (
+    return (
                                                             <View 
                                                                 key={index} 
                                                                 style={[styles.eventTag, tagStyle]}
@@ -382,23 +390,23 @@ export const CalendarScreen = ({ navigation }: any) => {
                     {/* View Tabs */}
                     <View style={styles.viewTabs}>
                         {['Month', 'Week', 'Day', 'Agenda'].map((view) => (
-                            <TouchableOpacity
+                        <TouchableOpacity
                                 key={view}
                                 style={[
                                     styles.viewTab,
                                     activeView === view && styles.viewTabActive
                                 ]}
                                 onPress={() => setActiveView(view)}
-                            >
+                        >
                                 <Text style={[
                                     styles.viewTabText,
                                     activeView === view && styles.viewTabTextActive
                                 ]}>
                                     {view}
                                 </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                        </TouchableOpacity>
+                    ))}
+                </View>
 
                     {/* Calendar Grid */}
                     <View style={styles.calendarGrid}>
@@ -409,7 +417,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     <Text style={styles.weekDayText}>{day}</Text>
                                 </View>
                             ))}
-                        </View>
+                </View>
 
                         {/* Calendar Days */}
                         <View style={styles.daysGrid}>
@@ -447,8 +455,8 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     </TouchableOpacity>
                                 );
                             })}
+                            </View>
                         </View>
-                    </View>
                 </StyledCard>
                 )}
 
@@ -457,7 +465,7 @@ export const CalendarScreen = ({ navigation }: any) => {
             {/* Floating Action Button */}
             <TouchableOpacity style={styles.fab}>
                 <Ionicons name="chatbubble" size={24} color="white" />
-            </TouchableOpacity>
+                        </TouchableOpacity>
 
             {/* Division Picker Modal */}
             <Modal
@@ -490,7 +498,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     )}
                                 </TouchableOpacity>
                             ))}
-                        </View>
+                            </View>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -524,7 +532,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     {selectedTime === time && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
                                     )}
-                                </TouchableOpacity>
+                        </TouchableOpacity>
                             ))}
                         </View>
                     </Pressable>
@@ -562,7 +570,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     )}
                                 </TouchableOpacity>
                             ))}
-                        </View>
+                            </View>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -596,9 +604,9 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     {sortBy === sort && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
                                     )}
-                                </TouchableOpacity>
+                        </TouchableOpacity>
                             ))}
-                        </View>
+                </View>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -618,17 +626,20 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: theme.spacing.md,
+    },
+    titleSection: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'flex-start',
         marginBottom: theme.spacing.lg,
-    },
-    headerLeft: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        gap: theme.spacing.sm,
+        flexWrap: 'wrap',
     },
     titleContainer: {
         flex: 1,
+        minWidth: '50%',
+        marginBottom: theme.spacing.sm,
     },
     title: {
         ...theme.typography.h1,
@@ -642,7 +653,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.textSecondary,
     },
-    headerRight: {
+    titleRight: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: theme.spacing.sm,
