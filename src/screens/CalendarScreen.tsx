@@ -209,6 +209,52 @@ export const CalendarScreen = ({ navigation }: any) => {
         return `${months[month]} ${year}`;
     };
 
+    // Get week days for Week view
+    const getWeekDays = (date: Date) => {
+        const weekStart = new Date(date);
+        const day = weekStart.getDay();
+        const diff = weekStart.getDate() - day; // Get Monday
+        weekStart.setDate(diff);
+        
+        const days = [];
+        for (let i = 0; i < 7; i++) {
+            const dayDate = new Date(weekStart);
+            dayDate.setDate(weekStart.getDate() + i);
+            days.push(dayDate);
+        }
+        return days;
+    };
+
+    // Get events for a specific date
+    const getEventsForDate = (date: Date) => {
+        return filteredEvents.filter(event => isSameDate(event.date, date));
+    };
+
+    // Get events for week
+    const getWeekEvents = () => {
+        const weekDays = getWeekDays(currentDate);
+        const weekEvents: { [key: string]: Event[] } = {};
+        weekDays.forEach(day => {
+            const dayKey = `${day.getDate()}-${day.getMonth()}-${day.getFullYear()}`;
+            weekEvents[dayKey] = getEventsForDate(day);
+        });
+        return { weekDays, weekEvents };
+    };
+
+    // Format time for display
+    const formatTime = (date: Date) => {
+        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    };
+
+    // Get agenda events (sorted by date and time)
+    const getAgendaEvents = () => {
+        return filteredEvents.sort((a, b) => {
+            const dateCompare = a.date.getTime() - b.date.getTime();
+            if (dateCompare !== 0) return dateCompare;
+            return (a.time || '').localeCompare(b.time || '');
+        });
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -408,55 +454,206 @@ export const CalendarScreen = ({ navigation }: any) => {
                     ))}
                 </View>
 
-                    {/* Calendar Grid */}
-                    <View style={styles.calendarGrid}>
-                        {/* Week Day Headers */}
-                        <View style={styles.weekHeader}>
-                            {weekDays.map((day) => (
-                                <View key={day} style={styles.weekDayHeader}>
-                                    <Text style={styles.weekDayText}>{day}</Text>
-                                </View>
-                            ))}
-                </View>
+                    {/* Conditional View Rendering */}
+                    {activeView === 'Month' && (
+                        <View style={styles.calendarGrid}>
+                            {/* Week Day Headers */}
+                            <View style={styles.weekHeader}>
+                                {weekDays.map((day) => (
+                                    <View key={day} style={styles.weekDayHeader}>
+                                        <Text style={styles.weekDayText}>{day}</Text>
+                                    </View>
+                                ))}
+                            </View>
 
-                        {/* Calendar Days */}
-                        <View style={styles.daysGrid}>
-                            {calendarDays.map((day, index) => {
-                                const isSelected = isSameDate(day.fullDate, selectedDate);
-                                const isToday = isSameDate(day.fullDate, new Date());
-                                
-                                return (
-                                    <TouchableOpacity
-                                        key={index}
-                                        style={[
-                                            styles.dayCell,
-                                            !day.isCurrentMonth && styles.dayCellOtherMonth,
-                                            isSelected && styles.dayCellSelected
-                                        ]}
-                                        onPress={() => {
-                                            setSelectedDate(day.fullDate);
-                                            if (!day.isCurrentMonth) {
-                                                setCurrentDate(day.fullDate);
-                                            }
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.dayText,
-                                            !day.isCurrentMonth && styles.dayTextOtherMonth,
-                                            isSelected && styles.dayTextSelected,
-                                            isToday && !isSelected && styles.dayTextToday
-                                        ]}>
-                                            {day.date}
-                                        </Text>
-                                        {/* Event indicator dot */}
-                                        {day.date === 8 && day.isCurrentMonth && (
-                                            <View style={styles.eventDot} />
-                                        )}
-                                    </TouchableOpacity>
-                                );
-                            })}
+                            {/* Calendar Days */}
+                            <View style={styles.daysGrid}>
+                                {calendarDays.map((day, index) => {
+                                    const isSelected = isSameDate(day.fullDate, selectedDate);
+                                    const isToday = isSameDate(day.fullDate, new Date());
+                                    const dayEvents = getEventsForDate(day.fullDate);
+                                    
+                                    return (
+                                        <TouchableOpacity
+                                            key={index}
+                                            style={[
+                                                styles.dayCell,
+                                                !day.isCurrentMonth && styles.dayCellOtherMonth,
+                                                isSelected && styles.dayCellSelected
+                                            ]}
+                                            onPress={() => {
+                                                setSelectedDate(day.fullDate);
+                                                if (!day.isCurrentMonth) {
+                                                    setCurrentDate(day.fullDate);
+                                                }
+                                            }}
+                                        >
+                                            <Text style={[
+                                                styles.dayText,
+                                                !day.isCurrentMonth && styles.dayTextOtherMonth,
+                                                isSelected && styles.dayTextSelected,
+                                                isToday && !isSelected && styles.dayTextToday
+                                            ]}>
+                                                {day.date}
+                                            </Text>
+                                            {/* Event indicator dot */}
+                                            {dayEvents.length > 0 && day.isCurrentMonth && (
+                                                <View style={styles.eventDot} />
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
                             </View>
                         </View>
+                    )}
+
+                    {activeView === 'Week' && (() => {
+                        const { weekDays: weekDaysList, weekEvents } = getWeekEvents();
+                        return (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                <View style={styles.weekViewContainer}>
+                                    {weekDaysList.map((day, index) => {
+                                        const dayEvents = weekEvents[`${day.getDate()}-${day.getMonth()}-${day.getFullYear()}`] || [];
+                                        const isSelected = isSameDate(day, selectedDate);
+                                        const isToday = isSameDate(day, new Date());
+                                        
+                                        return (
+                                            <View key={index} style={styles.weekDayColumn}>
+                                                <TouchableOpacity
+                                                    style={[
+                                                        styles.weekDayHeaderCell,
+                                                        isSelected && styles.weekDayHeaderCellSelected,
+                                                        isToday && !isSelected && styles.weekDayHeaderCellToday
+                                                    ]}
+                                                    onPress={() => setSelectedDate(day)}
+                                                >
+                                                    <Text style={styles.weekDayName}>{weekDays[day.getDay()]}</Text>
+                                                    <Text style={[
+                                                        styles.weekDayNumber,
+                                                        isSelected && styles.weekDayNumberSelected
+                                                    ]}>
+                                                        {day.getDate()}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                                <ScrollView style={styles.weekEventsList}>
+                                                    {dayEvents.map(event => (
+                                                        <TouchableOpacity key={event.id} style={styles.weekEventItem}>
+                                                            <Text style={styles.weekEventTime}>
+                                                                {event.time || formatTime(event.date)}
+                                                            </Text>
+                                                            <Text style={styles.weekEventTitle}>{event.title}</Text>
+                                                            {event.location && (
+                                                                <Text style={styles.weekEventLocation}>{event.location}</Text>
+                                                            )}
+                                                        </TouchableOpacity>
+                                                    ))}
+                                                </ScrollView>
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            </ScrollView>
+                        );
+                    })()}
+
+                    {activeView === 'Day' && (() => {
+                        const dayEvents = getEventsForDate(selectedDate);
+                        return (
+                            <View style={styles.dayViewContainer}>
+                                <View style={styles.dayHeader}>
+                                    <Text style={styles.dayHeaderDate}>
+                                        {formatEventDate(selectedDate)}
+                                    </Text>
+                                    <Text style={styles.dayHeaderYear}>
+                                        {selectedDate.getFullYear()}
+                                    </Text>
+                                </View>
+                                <ScrollView style={styles.dayEventsList}>
+                                    {dayEvents.length > 0 ? (
+                                        dayEvents.map(event => (
+                                            <StyledCard key={event.id} style={styles.dayEventCard}>
+                                                <View style={styles.dayEventHeader}>
+                                                    <Text style={styles.dayEventTime}>
+                                                        {event.time || formatTime(event.date)}
+                                                    </Text>
+                                                    <Ionicons 
+                                                        name={getEventIcon(event.type)} 
+                                                        size={20} 
+                                                        color={theme.colors.secondary} 
+                                                    />
+                                                </View>
+                                                <Text style={styles.dayEventTitle}>{event.title}</Text>
+                                                {event.location && (
+                                                    <View style={styles.dayEventLocation}>
+                                                        <Ionicons name="location" size={14} color="#ef4444" />
+                                                        <Text style={styles.dayEventLocationText}>{event.location}</Text>
+                                                    </View>
+                                                )}
+                                                {event.tags && event.tags.length > 0 && (
+                                                    <View style={styles.dayEventTags}>
+                                                        {event.tags.map((tag, idx) => {
+                                                            const tagStyle = getTagStyle(tag);
+                                                            return (
+                                                                <View key={idx} style={[styles.dayEventTag, tagStyle]}>
+                                                                    <Text style={[styles.dayEventTagText, { color: tagStyle.color }]}>
+                                                                        {tag}
+                                                                    </Text>
+                                                                </View>
+                                                            );
+                                                        })}
+                                                    </View>
+                                                )}
+                                            </StyledCard>
+                                        ))
+                                    ) : (
+                                        <View style={styles.emptyDayState}>
+                                            <Text style={styles.emptyDayText}>No events scheduled for this day</Text>
+                                        </View>
+                                    )}
+                                </ScrollView>
+                            </View>
+                        );
+                    })()}
+
+                    {activeView === 'Agenda' && (
+                        <ScrollView style={styles.agendaViewContainer}>
+                            {getAgendaEvents().length > 0 ? (
+                                getAgendaEvents().map(event => (
+                                    <StyledCard key={event.id} style={styles.agendaEventCard}>
+                                        <View style={styles.agendaEventDate}>
+                                            <Text style={styles.agendaEventDay}>{event.date.getDate()}</Text>
+                                            <Text style={styles.agendaEventMonth}>
+                                                {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][event.date.getMonth()]}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.agendaEventContent}>
+                                            <View style={styles.agendaEventHeader}>
+                                                <Text style={styles.agendaEventTime}>
+                                                    {event.time || formatTime(event.date)}
+                                                </Text>
+                                                <Ionicons 
+                                                    name={getEventIcon(event.type)} 
+                                                    size={18} 
+                                                    color={theme.colors.secondary} 
+                                                />
+                                            </View>
+                                            <Text style={styles.agendaEventTitle}>{event.title}</Text>
+                                            {event.location && (
+                                                <View style={styles.agendaEventLocation}>
+                                                    <Ionicons name="location" size={12} color="#ef4444" />
+                                                    <Text style={styles.agendaEventLocationText}>{event.location}</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    </StyledCard>
+                                ))
+                            ) : (
+                                <View style={styles.emptyAgendaState}>
+                                    <Text style={styles.emptyAgendaText}>No events found</Text>
+                                </View>
+                            )}
+                        </ScrollView>
+                    )}
                 </StyledCard>
                 )}
 
@@ -969,5 +1166,231 @@ const styles = StyleSheet.create({
         ...theme.typography.bodySmall,
         fontSize: 14,
         color: theme.colors.text,
+    },
+    // Week View Styles
+    weekViewContainer: {
+        flexDirection: 'row',
+        minHeight: 400,
+    },
+    weekDayColumn: {
+        width: 120,
+        borderRightWidth: 1,
+        borderRightColor: theme.colors.border,
+        paddingHorizontal: theme.spacing.sm,
+    },
+    weekDayHeaderCell: {
+        padding: theme.spacing.sm,
+        alignItems: 'center',
+        borderRadius: theme.borderRadius.md,
+        marginBottom: theme.spacing.sm,
+    },
+    weekDayHeaderCellSelected: {
+        backgroundColor: theme.colors.secondary,
+    },
+    weekDayHeaderCellToday: {
+        backgroundColor: '#FFA500',
+    },
+    weekDayName: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.xs,
+    },
+    weekDayNumber: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    weekDayNumberSelected: {
+        color: 'white',
+    },
+    weekEventsList: {
+        flex: 1,
+    },
+    weekEventItem: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.sm,
+        padding: theme.spacing.sm,
+        marginBottom: theme.spacing.xs,
+        borderLeftWidth: 3,
+        borderLeftColor: theme.colors.secondary,
+    },
+    weekEventTime: {
+        fontSize: 10,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        marginBottom: 2,
+    },
+    weekEventTitle: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: 2,
+    },
+    weekEventLocation: {
+        fontSize: 10,
+        color: theme.colors.textSecondary,
+    },
+    // Day View Styles
+    dayViewContainer: {
+        marginTop: theme.spacing.md,
+    },
+    dayHeader: {
+        alignItems: 'center',
+        marginBottom: theme.spacing.lg,
+        paddingBottom: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    dayHeaderDate: {
+        ...theme.typography.h1,
+        fontSize: 32,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    dayHeaderYear: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.textSecondary,
+        marginTop: theme.spacing.xs,
+    },
+    dayEventsList: {
+        maxHeight: 500,
+    },
+    dayEventCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    dayEventHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: theme.spacing.sm,
+    },
+    dayEventTime: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.secondary,
+    },
+    dayEventTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.sm,
+    },
+    dayEventLocation: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        marginBottom: theme.spacing.sm,
+    },
+    dayEventLocationText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    dayEventTags: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.xs,
+    },
+    dayEventTag: {
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 4,
+        borderRadius: theme.borderRadius.sm,
+    },
+    dayEventTagText: {
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    emptyDayState: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: theme.spacing.xl,
+    },
+    emptyDayText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.textSecondary,
+    },
+    // Agenda View Styles
+    agendaViewContainer: {
+        marginTop: theme.spacing.md,
+        maxHeight: 500,
+    },
+    agendaEventCard: {
+        flexDirection: 'row',
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    agendaEventDate: {
+        width: 60,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: theme.spacing.md,
+        paddingRight: theme.spacing.md,
+        borderRightWidth: 1,
+        borderRightColor: theme.colors.border,
+    },
+    agendaEventDay: {
+        ...theme.typography.h2,
+        fontSize: 24,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    agendaEventMonth: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        textTransform: 'uppercase',
+    },
+    agendaEventContent: {
+        flex: 1,
+    },
+    agendaEventHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: theme.spacing.xs,
+    },
+    agendaEventTime: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+    },
+    agendaEventTitle: {
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
+    },
+    agendaEventLocation: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+    },
+    agendaEventLocationText: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    emptyAgendaState: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: theme.spacing.xl,
+    },
+    emptyAgendaText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.textSecondary,
     },
 });
