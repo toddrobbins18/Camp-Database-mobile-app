@@ -1,0 +1,1311 @@
+import React, { useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Pressable, Switch } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { theme } from '../theme/theme';
+import { StyledCard } from '../components/StyledCard';
+
+// Mock appointments data
+const MOCK_APPOINTMENTS: any[] = [];
+
+// Appointment types (for filter)
+const APPOINTMENT_TYPES = [
+    'All Types',
+    'Orthodontist',
+    'Physical Therapy',
+    'Dentist',
+    'Optometrist',
+    'General Physician',
+    'Specialist',
+    'Mental Health',
+    'Other',
+];
+
+// Appointment types (for form dropdown)
+const APPOINTMENT_TYPE_OPTIONS = [
+    'Orthodontist',
+    'Physical Therapy',
+    'Dentist',
+    'Optometrist',
+    'General Physician',
+    'Specialist',
+    'Mental Health',
+    'Other',
+];
+
+// Appointment statuses (for filter)
+const APPOINTMENT_STATUSES = [
+    'All Status',
+    'Scheduled',
+    'Completed',
+    'Cancelled',
+    'Rescheduled',
+];
+
+// Appointment statuses (for form dropdown)
+const APPOINTMENT_STATUS_OPTIONS = [
+    'Scheduled',
+    'Completed',
+    'Cancelled',
+    'Rescheduled',
+];
+
+type AppointmentTab = 'Upcoming' | 'Past' | 'All';
+
+export const AppointmentsScreen = ({ navigation }: any) => {
+    const [activeTab, setActiveTab] = useState<AppointmentTab>('Upcoming');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
+    const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+    const [selectedType, setSelectedType] = useState('All Types');
+    const [selectedStatus, setSelectedStatus] = useState('All Status');
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingAppointment, setEditingAppointment] = useState<any>(null);
+    const [appointmentFor, setAppointmentFor] = useState<'Camper' | 'Staff'>('Camper');
+    const [isFormTypeDropdownOpen, setIsFormTypeDropdownOpen] = useState(false);
+    const [isFormStatusDropdownOpen, setIsFormStatusDropdownOpen] = useState(false);
+    const [isPersonDropdownOpen, setIsPersonDropdownOpen] = useState(false);
+    const [formData, setFormData] = useState({
+        date: '',
+        time: '',
+        person: '',
+        personId: '',
+        type: '',
+        provider: 'Dr. Smith',
+        location: '123 Medical Center',
+        status: 'Scheduled',
+        notes: '',
+        followUpRequired: false,
+    });
+
+    // Filter appointments based on active tab, search, type, and status
+    const filteredAppointments = MOCK_APPOINTMENTS.filter((appointment) => {
+        // Tab filter
+        const now = new Date();
+        const appointmentDate = new Date(appointment.date);
+        if (activeTab === 'Upcoming' && appointmentDate < now) return false;
+        if (activeTab === 'Past' && appointmentDate >= now) return false;
+
+        // Search filter
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            if (
+                !appointment.person?.toLowerCase().includes(query) &&
+                !appointment.provider?.toLowerCase().includes(query) &&
+                !appointment.type?.toLowerCase().includes(query)
+            ) {
+                return false;
+            }
+        }
+
+        // Type filter
+        if (selectedType !== 'All Types' && appointment.type !== selectedType) {
+            return false;
+        }
+
+        // Status filter
+        if (selectedStatus !== 'All Status' && appointment.status !== selectedStatus) {
+            return false;
+        }
+
+        return true;
+    });
+
+    const formatDate = (dateString: string) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
+    const formatDateTime = (dateString: string, timeString: string) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        if (timeString) {
+            return `${dateStr} at ${timeString}`;
+        }
+        return dateStr;
+    };
+
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'Scheduled':
+                return theme.colors.secondary;
+            case 'Completed':
+                return theme.colors.success;
+            case 'Cancelled':
+                return theme.colors.danger;
+            case 'Rescheduled':
+                return theme.colors.warning;
+            default:
+                return theme.colors.textSecondary;
+        }
+    };
+
+    const handleAddAppointment = () => {
+        setFormData({
+            date: '',
+            time: '',
+            person: '',
+            personId: '',
+            type: '',
+            provider: 'Dr. Smith',
+            location: '123 Medical Center',
+            status: 'Scheduled',
+            notes: '',
+            followUpRequired: false,
+        });
+        setAppointmentFor('Camper');
+        setEditingAppointment(null);
+        setIsAddModalOpen(true);
+    };
+
+    const handleEditAppointment = (appointment: any) => {
+        setFormData({
+            date: appointment.date || '',
+            time: appointment.time || '',
+            person: appointment.person || '',
+            type: appointment.type || '',
+            provider: appointment.provider || '',
+            status: appointment.status || 'Scheduled',
+            notes: appointment.notes || '',
+        });
+        setEditingAppointment(appointment);
+        setIsEditModalOpen(true);
+    };
+
+    return (
+        <SafeAreaView style={styles.container}>
+            {/* Header */}
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                    <Ionicons name="menu" size={28} color={theme.colors.primary} />
+                </TouchableOpacity>
+                <View style={styles.headerTitleContainer}>
+                    <View style={styles.headerTitleRow}>
+                        <Ionicons name="calendar-outline" size={24} color={theme.colors.primary} />
+                        <Text style={styles.headerTitle}>Appointments</Text>
+                    </View>
+                    <Text style={styles.headerSubtitle}>
+                        Manage medical and therapy appointments for campers and staff
+                    </Text>
+                </View>
+                <TouchableOpacity>
+                    <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
+                </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+                {/* Action Button */}
+                <View style={styles.actionBar}>
+                    <TouchableOpacity style={styles.addButton} onPress={handleAddAppointment}>
+                        <Ionicons name="add" size={20} color={theme.colors.surface} />
+                        <Text style={styles.addButtonText}>Add Appointment</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Tabs */}
+                <View style={styles.tabsContainer}>
+                    {(['Upcoming', 'Past', 'All'] as AppointmentTab[]).map((tab) => (
+                        <TouchableOpacity
+                            key={tab}
+                            style={[styles.tab, activeTab === tab && styles.tabActive]}
+                            onPress={() => setActiveTab(tab)}
+                        >
+                            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                                {tab}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+                {/* Filters */}
+                <View style={styles.filtersContainer}>
+                    {/* Search Bar */}
+                    <View style={styles.searchContainer}>
+                        <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.searchIcon} />
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search..."
+                            placeholderTextColor={theme.colors.textSecondary}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                        />
+                        {searchQuery.length > 0 && (
+                            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                                <Ionicons name="close-circle" size={20} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    {/* Dropdowns */}
+                    <View style={styles.dropdownsContainer}>
+                        {/* Type Dropdown */}
+                        <TouchableOpacity
+                            style={styles.dropdown}
+                            onPress={() => {
+                                setIsTypeDropdownOpen(!isTypeDropdownOpen);
+                                setIsStatusDropdownOpen(false);
+                            }}
+                        >
+                            <Text style={styles.dropdownText}>{selectedType}</Text>
+                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                        </TouchableOpacity>
+
+                        {/* Status Dropdown */}
+                        <TouchableOpacity
+                            style={styles.dropdown}
+                            onPress={() => {
+                                setIsStatusDropdownOpen(!isStatusDropdownOpen);
+                                setIsTypeDropdownOpen(false);
+                            }}
+                        >
+                            <Text style={styles.dropdownText}>{selectedStatus}</Text>
+                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* Type Dropdown Modal */}
+                <Modal
+                    visible={isTypeDropdownOpen}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setIsTypeDropdownOpen(false)}
+                >
+                    <TouchableOpacity
+                        style={styles.modalOverlay}
+                        activeOpacity={1}
+                        onPress={() => setIsTypeDropdownOpen(false)}
+                    >
+                        <View style={styles.dropdownModal}>
+                            <ScrollView style={styles.dropdownScroll}>
+                                {APPOINTMENT_TYPES.map((type) => (
+                                    <TouchableOpacity
+                                        key={type}
+                                        style={[
+                                            styles.dropdownItem,
+                                            selectedType === type && styles.dropdownItemSelected
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedType(type);
+                                            setIsTypeDropdownOpen(false);
+                                        }}
+                                    >
+                                        {selectedType === type && (
+                                            <Ionicons name="checkmark" size={18} color={theme.colors.accent} style={styles.checkIcon} />
+                                        )}
+                                        <Text style={[
+                                            styles.dropdownItemText,
+                                            selectedType === type && styles.dropdownItemTextSelected
+                                        ]}>
+                                            {type}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    </TouchableOpacity>
+                </Modal>
+
+                {/* Status Dropdown Modal */}
+                <Modal
+                    visible={isStatusDropdownOpen}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setIsStatusDropdownOpen(false)}
+                >
+                    <TouchableOpacity
+                        style={styles.modalOverlay}
+                        activeOpacity={1}
+                        onPress={() => setIsStatusDropdownOpen(false)}
+                    >
+                        <View style={styles.dropdownModal}>
+                            <ScrollView style={styles.dropdownScroll}>
+                                {APPOINTMENT_STATUSES.map((status) => (
+                                    <TouchableOpacity
+                                        key={status}
+                                        style={[
+                                            styles.dropdownItem,
+                                            selectedStatus === status && styles.dropdownItemSelected
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedStatus(status);
+                                            setIsStatusDropdownOpen(false);
+                                        }}
+                                    >
+                                        {selectedStatus === status && (
+                                            <Ionicons name="checkmark" size={18} color={theme.colors.accent} style={styles.checkIcon} />
+                                        )}
+                                        <Text style={[
+                                            styles.dropdownItemText,
+                                            selectedStatus === status && styles.dropdownItemTextSelected
+                                        ]}>
+                                            {status}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    </TouchableOpacity>
+                </Modal>
+
+                {/* Appointments List */}
+                <View style={styles.appointmentsSection}>
+                    <Text style={styles.sectionTitle}>Appointments</Text>
+                    <Text style={styles.sectionSubtitle}>
+                        {filteredAppointments.length} {filteredAppointments.length === 1 ? 'appointment' : 'appointments'} found
+                    </Text>
+
+                    {filteredAppointments.length === 0 ? (
+                        <StyledCard style={styles.emptyCard}>
+                            <View style={styles.emptyState}>
+                                <Ionicons name="calendar-outline" size={48} color={theme.colors.textSecondary} />
+                                <Text style={styles.emptyStateText}>No appointments found</Text>
+                            </View>
+                        </StyledCard>
+                    ) : (
+                        <View style={styles.appointmentsList}>
+                            {filteredAppointments.map((appointment, index) => (
+                                <StyledCard key={appointment.id || index} style={styles.appointmentCard}>
+                                    <TouchableOpacity
+                                        onPress={() => handleEditAppointment(appointment)}
+                                        activeOpacity={0.7}
+                                    >
+                                        {/* Card Header */}
+                                        <View style={styles.appointmentCardHeader}>
+                                            <View style={styles.appointmentCardTitleContainer}>
+                                                <Text style={styles.appointmentCardTitle}>
+                                                    {appointment.person || 'Unnamed Person'}
+                                                </Text>
+                                                <Text style={styles.appointmentCardDate}>
+                                                    {formatDateTime(appointment.date, appointment.time)}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.appointmentCardActions}>
+                                                <Pressable
+                                                    style={({ pressed }) => [
+                                                        styles.actionIconButton,
+                                                        pressed && styles.actionIconButtonPressed
+                                                    ]}
+                                                    onPress={() => handleEditAppointment(appointment)}
+                                                >
+                                                    <Ionicons name="pencil" size={20} color={theme.colors.textSecondary} />
+                                                </Pressable>
+                                            </View>
+                                        </View>
+
+                                        {/* Card Content */}
+                                        <View style={styles.appointmentCardContent}>
+                                            <View style={styles.appointmentInfoRow}>
+                                                <Ionicons name="medical-outline" size={18} color={theme.colors.textSecondary} style={styles.infoIcon} />
+                                                <View style={styles.appointmentInfo}>
+                                                    <Text style={styles.appointmentInfoLabel}>Type</Text>
+                                                    <Text style={styles.appointmentInfoValue}>{appointment.type || '-'}</Text>
+                                                </View>
+                                            </View>
+
+                                            <View style={styles.appointmentInfoRow}>
+                                                <Ionicons name="person-outline" size={18} color={theme.colors.textSecondary} style={styles.infoIcon} />
+                                                <View style={styles.appointmentInfo}>
+                                                    <Text style={styles.appointmentInfoLabel}>Provider</Text>
+                                                    <Text style={styles.appointmentInfoValue}>{appointment.provider || '-'}</Text>
+                                                </View>
+                                            </View>
+
+                                            <View style={styles.appointmentCardBadges}>
+                                                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appointment.status) + '20' }]}>
+                                                    <Text style={[styles.statusBadgeText, { color: getStatusColor(appointment.status) }]}>
+                                                        {appointment.status || 'Scheduled'}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    </TouchableOpacity>
+                                </StyledCard>
+                            ))}
+                        </View>
+                    )}
+                </View>
+            </ScrollView>
+
+            {/* Add/Edit Appointment Modal */}
+            <Modal
+                visible={isAddModalOpen || isEditModalOpen}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => {
+                    setIsAddModalOpen(false);
+                    setIsEditModalOpen(false);
+                    setEditingAppointment(null);
+                }}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.editModalContainer}>
+                        <ScrollView style={styles.editModalScroll} contentContainerStyle={styles.editModalContent}>
+                            {/* Modal Header */}
+                            <View style={styles.editModalHeader}>
+                                <View style={styles.editModalTitleContainer}>
+                                    <Text style={styles.editModalTitle}>
+                                        {editingAppointment ? 'Edit Appointment' : 'Add Appointment'}
+                                    </Text>
+                                    <Text style={styles.editModalSubtitle}>
+                                        Schedule a new appointment for a camper or staff member
+                                    </Text>
+                                </View>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setIsAddModalOpen(false);
+                                        setIsEditModalOpen(false);
+                                        setEditingAppointment(null);
+                                    }}
+                                >
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Appointment For Toggle */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Appointment For</Text>
+                                <View style={styles.toggleContainer}>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.toggleButton,
+                                            appointmentFor === 'Camper' && styles.toggleButtonActive
+                                        ]}
+                                        onPress={() => {
+                                            setAppointmentFor('Camper');
+                                            setFormData({ ...formData, person: '', personId: '' });
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.toggleButtonText,
+                                            appointmentFor === 'Camper' && styles.toggleButtonTextActive
+                                        ]}>
+                                            Camper
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.toggleButton,
+                                            appointmentFor === 'Staff' && styles.toggleButtonActive
+                                        ]}
+                                        onPress={() => {
+                                            setAppointmentFor('Staff');
+                                            setFormData({ ...formData, person: '', personId: '' });
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.toggleButtonText,
+                                            appointmentFor === 'Staff' && styles.toggleButtonTextActive
+                                        ]}>
+                                            Staff
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            {/* Select Camper/Staff Member */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>
+                                    Select {appointmentFor} <Text style={styles.requiredStar}>*</Text>
+                                </Text>
+                                <TouchableOpacity
+                                    style={styles.formInputDropdown}
+                                    onPress={() => setIsPersonDropdownOpen(true)}
+                                >
+                                    <Text style={formData.person ? styles.formInputText : styles.formInputPlaceholder}>
+                                        {formData.person || `Search ${appointmentFor.toLowerCase()}s...`}
+                                    </Text>
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Appointment Type */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>
+                                    Appointment Type <Text style={styles.requiredStar}>*</Text>
+                                </Text>
+                                <TouchableOpacity
+                                    style={styles.formInputDropdown}
+                                    onPress={() => setIsFormTypeDropdownOpen(true)}
+                                >
+                                    <Text style={formData.type ? styles.formInputText : styles.formInputPlaceholder}>
+                                        {formData.type || 'Select type...'}
+                                    </Text>
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Date */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>
+                                    Date <Text style={styles.requiredStar}>*</Text>
+                                </Text>
+                                <View style={styles.formInputWithIcon}>
+                                    <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                    <TextInput
+                                        style={styles.formInputText}
+                                        placeholder="Pick a date"
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        value={formData.date}
+                                        onChangeText={(text) => setFormData({ ...formData, date: text })}
+                                    />
+                                </View>
+                            </View>
+
+                            {/* Time */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Time</Text>
+                                <View style={styles.formInputWithIconRight}>
+                                    <TextInput
+                                        style={styles.formInputText}
+                                        placeholder="--:-- --"
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        value={formData.time}
+                                        onChangeText={(text) => setFormData({ ...formData, time: text })}
+                                    />
+                                    <Ionicons name="time-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIconRight} />
+                                </View>
+                            </View>
+
+                            {/* Status */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Status</Text>
+                                <TouchableOpacity
+                                    style={styles.formInputDropdown}
+                                    onPress={() => setIsFormStatusDropdownOpen(true)}
+                                >
+                                    <Text style={styles.formInputText}>
+                                        {formData.status || 'Scheduled'}
+                                    </Text>
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Provider Name */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Provider Name</Text>
+                                <TextInput
+                                    style={styles.formTextInput}
+                                    placeholder="Dr. Smith"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    value={formData.provider}
+                                    onChangeText={(text) => setFormData({ ...formData, provider: text })}
+                                />
+                            </View>
+
+                            {/* Location */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Location</Text>
+                                <TextInput
+                                    style={styles.formTextInput}
+                                    placeholder="123 Medical Center"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    value={formData.location}
+                                    onChangeText={(text) => setFormData({ ...formData, location: text })}
+                                />
+                            </View>
+
+                            {/* Notes */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Notes</Text>
+                                <TextInput
+                                    style={[styles.formTextInput, styles.formTextArea]}
+                                    placeholder="Additional notes..."
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    value={formData.notes}
+                                    onChangeText={(text) => setFormData({ ...formData, notes: text })}
+                                    multiline
+                                    numberOfLines={4}
+                                />
+                            </View>
+
+                            {/* Follow-up Required */}
+                            <View style={styles.checkboxContainer}>
+                                <Switch
+                                    value={formData.followUpRequired}
+                                    onValueChange={(value) => setFormData({ ...formData, followUpRequired: value })}
+                                    trackColor={{ false: theme.colors.border, true: theme.colors.secondary }}
+                                    thumbColor={theme.colors.surface}
+                                />
+                                <Text style={styles.checkboxLabel}>Follow-up Required</Text>
+                            </View>
+
+                            {/* Action Buttons */}
+                            <View style={styles.modalActions}>
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.cancelButton,
+                                        pressed && styles.cancelButtonPressed
+                                    ]}
+                                    onPress={() => {
+                                        setIsAddModalOpen(false);
+                                        setIsEditModalOpen(false);
+                                        setEditingAppointment(null);
+                                    }}
+                                >
+                                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                                </Pressable>
+                                <TouchableOpacity
+                                    style={styles.updateButton}
+                                    onPress={() => {
+                                        // Handle save (UI only - no database)
+                                        setIsAddModalOpen(false);
+                                        setIsEditModalOpen(false);
+                                        setEditingAppointment(null);
+                                    }}
+                                >
+                                    <Text style={styles.updateButtonText}>
+                                        {editingAppointment ? 'Update Appointment' : 'Create Appointment'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Type Dropdown Modal */}
+            <Modal
+                visible={isFormTypeDropdownOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsFormTypeDropdownOpen(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setIsFormTypeDropdownOpen(false)}
+                >
+                    <View style={styles.dropdownModal}>
+                        <ScrollView style={styles.dropdownScroll}>
+                            {APPOINTMENT_TYPE_OPTIONS.map((type) => (
+                                <TouchableOpacity
+                                    key={type}
+                                    style={[
+                                        styles.dropdownItem,
+                                        formData.type === type && styles.dropdownItemSelected
+                                    ]}
+                                    onPress={() => {
+                                        setFormData({ ...formData, type });
+                                        setIsFormTypeDropdownOpen(false);
+                                    }}
+                                >
+                                    {formData.type === type && (
+                                        <Ionicons name="checkmark" size={18} color={theme.colors.accent} style={styles.checkIcon} />
+                                    )}
+                                    <Text style={[
+                                        styles.dropdownItemText,
+                                        formData.type === type && styles.dropdownItemTextSelected
+                                    ]}>
+                                        {type}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
+            {/* Status Dropdown Modal */}
+            <Modal
+                visible={isFormStatusDropdownOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsFormStatusDropdownOpen(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setIsFormStatusDropdownOpen(false)}
+                >
+                    <View style={styles.dropdownModal}>
+                        <ScrollView style={styles.dropdownScroll}>
+                            {APPOINTMENT_STATUS_OPTIONS.map((status) => (
+                                <TouchableOpacity
+                                    key={status}
+                                    style={[
+                                        styles.dropdownItem,
+                                        formData.status === status && styles.dropdownItemSelected
+                                    ]}
+                                    onPress={() => {
+                                        setFormData({ ...formData, status });
+                                        setIsFormStatusDropdownOpen(false);
+                                    }}
+                                >
+                                    {formData.status === status && (
+                                        <Ionicons name="checkmark" size={18} color={theme.colors.accent} style={styles.checkIcon} />
+                                    )}
+                                    <Text style={[
+                                        styles.dropdownItemText,
+                                        formData.status === status && styles.dropdownItemTextSelected
+                                    ]}>
+                                        {status}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
+            {/* Person Dropdown Modal */}
+            <Modal
+                visible={isPersonDropdownOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsPersonDropdownOpen(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setIsPersonDropdownOpen(false)}
+                >
+                    <View style={styles.dropdownModal}>
+                        <View style={styles.dropdownSearchContainer}>
+                            <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.dropdownSearchIcon} />
+                            <TextInput
+                                style={styles.dropdownSearchInput}
+                                placeholder={`Search ${appointmentFor.toLowerCase()}s...`}
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                        </View>
+                        <ScrollView style={styles.dropdownScroll}>
+                            {/* Mock data - in real app, this would be filtered from actual campers/staff */}
+                            <TouchableOpacity
+                                style={styles.dropdownItem}
+                                onPress={() => {
+                                    setFormData({ ...formData, person: `Sample ${appointmentFor} Name`, personId: '1' });
+                                    setIsPersonDropdownOpen(false);
+                                }}
+                            >
+                                <Text style={styles.dropdownItemText}>
+                                    Sample {appointmentFor} Name
+                                </Text>
+                            </TouchableOpacity>
+                        </ScrollView>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+        </SafeAreaView>
+    );
+};
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: theme.colors.background,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    headerTitleContainer: {
+        flex: 1,
+        marginHorizontal: theme.spacing.md,
+    },
+    headerTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.xs,
+    },
+    headerTitle: {
+        ...theme.typography.h1,
+        fontSize: 24,
+        fontWeight: '700',
+    },
+    headerSubtitle: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    scrollView: {
+        flex: 1,
+    },
+    scrollContent: {
+        padding: theme.spacing.md,
+    },
+    actionBar: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginBottom: theme.spacing.md,
+    },
+    addButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        backgroundColor: theme.colors.secondary,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+    },
+    addButtonText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    tabsContainer: {
+        flexDirection: 'row',
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.xs,
+        marginBottom: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    tab: {
+        flex: 1,
+        paddingVertical: theme.spacing.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: theme.borderRadius.sm,
+        minHeight: 44,
+    },
+    tabActive: {
+        backgroundColor: theme.colors.secondary,
+    },
+    tabText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        fontWeight: '500',
+    },
+    tabTextActive: {
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    filtersContainer: {
+        marginBottom: theme.spacing.md,
+    },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        paddingHorizontal: theme.spacing.md,
+        marginBottom: theme.spacing.sm,
+        minHeight: 48,
+    },
+    searchIcon: {
+        marginRight: theme.spacing.sm,
+    },
+    searchInput: {
+        flex: 1,
+        ...theme.typography.body,
+        fontSize: 14,
+        paddingVertical: theme.spacing.sm,
+        color: theme.colors.text,
+    },
+    clearButton: {
+        padding: theme.spacing.xs,
+    },
+    dropdownsContainer: {
+        gap: theme.spacing.sm,
+    },
+    dropdown: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.md,
+        minHeight: 48,
+    },
+    dropdownText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    dropdownModal: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        width: '80%',
+        maxHeight: '60%',
+        ...theme.shadows.card,
+    },
+    dropdownScroll: {
+        maxHeight: 300,
+    },
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    dropdownItemSelected: {
+        backgroundColor: theme.colors.background,
+    },
+    checkIcon: {
+        marginRight: theme.spacing.sm,
+    },
+    dropdownItemText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    dropdownItemTextSelected: {
+        color: theme.colors.accent,
+        fontWeight: '600',
+    },
+    appointmentsSection: {
+        marginTop: theme.spacing.sm,
+    },
+    sectionTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        marginBottom: theme.spacing.xs,
+    },
+    sectionSubtitle: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.md,
+    },
+    appointmentsList: {
+        gap: theme.spacing.md,
+    },
+    appointmentCard: {
+        marginBottom: 0,
+    },
+    appointmentCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: theme.spacing.sm,
+    },
+    appointmentCardTitleContainer: {
+        flex: 1,
+        marginRight: theme.spacing.sm,
+    },
+    appointmentCardTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        marginBottom: theme.spacing.xs,
+        color: theme.colors.text,
+    },
+    appointmentCardDate: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    appointmentCardActions: {
+        flexDirection: 'row',
+        gap: theme.spacing.xs,
+    },
+    actionIconButton: {
+        padding: theme.spacing.xs,
+        borderRadius: theme.borderRadius.sm,
+    },
+    actionIconButtonPressed: {
+        backgroundColor: '#f3f4f6',
+    },
+    appointmentCardContent: {
+        gap: theme.spacing.md,
+    },
+    appointmentInfoRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    infoIcon: {
+        marginRight: theme.spacing.sm,
+        marginTop: 2,
+    },
+    appointmentInfo: {
+        flex: 1,
+    },
+    appointmentInfoLabel: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.xs / 2,
+    },
+    appointmentInfoValue: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    appointmentCardBadges: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.xs,
+        marginTop: theme.spacing.xs,
+    },
+    emptyCard: {
+        padding: theme.spacing.xl,
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 200,
+    },
+    emptyState: {
+        alignItems: 'center',
+    },
+    emptyStateText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.textSecondary,
+        marginTop: theme.spacing.md,
+    },
+    statusBadge: {
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: theme.spacing.xs,
+        borderRadius: theme.borderRadius.sm,
+        alignSelf: 'flex-start',
+    },
+    statusBadgeText: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    // Edit Modal Styles
+    editModalContainer: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        width: '90%',
+        maxHeight: '90%',
+        ...theme.shadows.card,
+    },
+    editModalScroll: {
+        maxHeight: '90%',
+    },
+    editModalContent: {
+        padding: theme.spacing.lg,
+    },
+    editModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: theme.spacing.lg,
+        paddingBottom: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    editModalTitleContainer: {
+        flex: 1,
+        marginRight: theme.spacing.md,
+    },
+    editModalTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        marginBottom: theme.spacing.xs,
+    },
+    editModalSubtitle: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    formField: {
+        marginBottom: theme.spacing.md,
+    },
+    formLabel: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
+    },
+    formInput: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+        backgroundColor: theme.colors.background,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+    },
+    formInputDropdown: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: theme.colors.background,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        minHeight: 48,
+    },
+    formTextInput: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+        backgroundColor: theme.colors.background,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        minHeight: 48,
+    },
+    formInputWithIcon: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.background,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        minHeight: 48,
+    },
+    formInputWithIconRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: theme.colors.background,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        minHeight: 48,
+    },
+    formInputText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+        flex: 1,
+    },
+    formInputPlaceholder: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        flex: 1,
+    },
+    inputIcon: {
+        marginRight: theme.spacing.sm,
+    },
+    inputIconRight: {
+        marginLeft: theme.spacing.sm,
+    },
+    requiredStar: {
+        color: theme.colors.danger,
+    },
+    formTextArea: {
+        minHeight: 100,
+        textAlignVertical: 'top',
+    },
+    modalActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: theme.spacing.sm,
+        marginTop: theme.spacing.lg,
+        paddingTop: theme.spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    cancelButton: {
+        paddingHorizontal: theme.spacing.lg,
+        paddingVertical: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.surface,
+    },
+    cancelButtonPressed: {
+        backgroundColor: theme.colors.accent,
+    },
+    cancelButtonText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    updateButton: {
+        paddingHorizontal: theme.spacing.lg,
+        paddingVertical: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.secondary,
+    },
+    updateButtonText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    // Toggle Styles
+    toggleContainer: {
+        flexDirection: 'row',
+        backgroundColor: theme.colors.background,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.xs,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    toggleButton: {
+        flex: 1,
+        paddingVertical: theme.spacing.sm,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: theme.borderRadius.sm,
+        backgroundColor: theme.colors.surface,
+    },
+    toggleButtonActive: {
+        backgroundColor: theme.colors.secondary,
+    },
+    toggleButtonText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        fontWeight: '500',
+    },
+    toggleButtonTextActive: {
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    // Checkbox Styles
+    checkboxContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: theme.spacing.md,
+        gap: theme.spacing.sm,
+    },
+    checkboxLabel: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    // Dropdown Search Styles
+    dropdownSearchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    dropdownSearchIcon: {
+        marginRight: theme.spacing.sm,
+    },
+    dropdownSearchInput: {
+        flex: 1,
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+        paddingVertical: 0,
+    },
+});
+

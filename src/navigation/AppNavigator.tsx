@@ -14,6 +14,7 @@ import { HealthScreen } from '../screens/HealthScreen';
 import { TransportScreen } from '../screens/TransportScreen';
 import { SportsScreen } from '../screens/SportsScreen';
 import { ActivitiesFieldTripsScreen } from '../screens/ActivitiesFieldTripsScreen';
+import { AppointmentsScreen } from '../screens/AppointmentsScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -71,10 +72,12 @@ const CustomDrawerContent = (props: any) => {
                 />
                 <DrawerItem
                     label="Appointments"
-                    icon={({ color }) => <Ionicons name="medical-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
+                    onPress={() => props.navigation.navigate('Appointments')}
                     labelStyle={styles.drawerLabel}
+                    activeTintColor={theme.colors.surface}
                     inactiveTintColor="#94a3b8"
+                    activeBackgroundColor={theme.colors.sidebarActiveBg}
                 />
                 <DrawerItem
                     label="Awards"
@@ -300,6 +303,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Transport" component={TransportScreen} />
             <Drawer.Screen name="Sports" component={SportsScreen} />
             <Drawer.Screen name="ActivitiesFieldTrips" component={ActivitiesFieldTripsScreen} />
+            <Drawer.Screen name="Appointments" component={AppointmentsScreen} />
         </Drawer.Navigator>
     );
 };
