@@ -695,6 +695,8 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 14,
         color: theme.colors.text,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
     },
     dropdownContainer: {
         flex: 1,

@@ -161,6 +161,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: theme.spacing.md,
         fontSize: 16,
         color: theme.colors.text,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
     },
     signInButton: {
         width: '100%',

@@ -177,6 +177,8 @@ const styles = StyleSheet.create({
     input: {
         flex: 1,
         marginLeft: theme.spacing.sm,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
     },
     filterBtn: {
         flexDirection: 'row',

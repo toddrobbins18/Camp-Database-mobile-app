@@ -749,6 +749,8 @@ const styles = StyleSheet.create({
         marginLeft: theme.spacing.sm,
         fontSize: 14,
         color: theme.colors.text,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
     },
     childrenList: {
         marginTop: theme.spacing.sm,
@@ -793,6 +795,8 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
         paddingVertical: 0,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
     },
     textArea: {
         backgroundColor: theme.colors.surface,
@@ -803,6 +807,8 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
         minHeight: 100,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
     },
     tagInputContainer: {
         flexDirection: 'row',
@@ -819,6 +825,8 @@ const styles = StyleSheet.create({
         height: 44,
         fontSize: 14,
         color: theme.colors.text,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
     },
     addTagBtn: {
         backgroundColor: theme.colors.secondary,

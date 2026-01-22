@@ -703,6 +703,8 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
         height: 44,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
     },
     textArea: {
         backgroundColor: theme.colors.surface,
@@ -713,6 +715,8 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
         minHeight: 120,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
     },
     actionButtons: {
         flexDirection: 'row',
@@ -766,6 +770,8 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         height: 44,
         marginTop: theme.spacing.sm,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
     },
     usersList: {
         marginTop: theme.spacing.md,
