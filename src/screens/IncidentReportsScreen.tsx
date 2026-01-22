@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -11,6 +11,20 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState('');
     const [tags, setTags] = useState<string[]>([]);
+    
+    // Form state
+    const [date, setDate] = useState<Date>(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [incidentType, setIncidentType] = useState<string>('');
+    const [showTypePicker, setShowTypePicker] = useState(false);
+    const [severity, setSeverity] = useState<string>('');
+    const [showSeverityPicker, setShowSeverityPicker] = useState(false);
+    const [description, setDescription] = useState<string>('');
+    const [reportedBy, setReportedBy] = useState<string>('');
+    
+    // Options
+    const incidentTypes = ['Accident', 'Behavior', 'Medical', 'Injury', 'Other'];
+    const severityLevels = ['Low', 'Medium', 'High', 'Critical'];
 
     const handleUploadCSV = () => {
         setShowBottomSheet(true);
@@ -30,9 +44,6 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
         setShowAddIncidentModal(true);
     };
 
-    const handleCloseAddIncident = () => {
-        setShowAddIncidentModal(false);
-    };
 
     const toggleChildSelection = (childName: string) => {
         setSelectedChildren(prev => 
@@ -47,6 +58,46 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
             setTags(prev => [...prev, tagInput.trim()]);
             setTagInput('');
         }
+    };
+
+    // Date formatting helper
+    const formatDate = (date: Date): string => {
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${month}/${day}/${year}`;
+    };
+
+    // Handle date selection
+    const handleDateSelect = (selectedDate: Date) => {
+        setDate(selectedDate);
+        setShowDatePicker(false);
+    };
+
+    // Handle type selection
+    const handleTypeSelect = (type: string) => {
+        setIncidentType(type);
+        setShowTypePicker(false);
+    };
+
+    // Handle severity selection
+    const handleSeveritySelect = (sev: string) => {
+        setSeverity(sev);
+        setShowSeverityPicker(false);
+    };
+
+    // Reset form when modal closes
+    const handleCloseAddIncident = () => {
+        setShowAddIncidentModal(false);
+        // Reset form fields
+        setSelectedChildren([]);
+        setDate(new Date());
+        setIncidentType('');
+        setSeverity('');
+        setDescription('');
+        setReportedBy('');
+        setTags([]);
+        setTagInput('');
     };
 
     return (
@@ -159,8 +210,23 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                         placeholderTextColor={theme.colors.textSecondary}
                                     />
                                 </View>
-                                <View style={styles.childrenList}>
-                                    {['Abby Weiss', 'Adam Elliott', 'Addison Brewer', 'Adrianna Gelb', 'Aiden Feld', 'Aiden Leon'].map((child) => (
+                                <ScrollView 
+                                    style={styles.childrenList}
+                                    nestedScrollEnabled={true}
+                                    showsVerticalScrollIndicator={true}
+                                >
+                                    {[
+                                        'Abby Weiss', 
+                                        'Adam Elliott', 
+                                        'Addison Brewer', 
+                                        'Adrianna Gelb', 
+                                        'Aiden Feld', 
+                                        'Aiden Leon',
+                                        'Alexandra Stone',
+                                        'Amelia Chen',
+                                        'Andrew Martinez',
+                                        'Anna Johnson'
+                                    ].map((child) => (
                                         <TouchableOpacity 
                                             key={child} 
                                             style={styles.childItem}
@@ -174,46 +240,62 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                             <Text style={styles.childName}>{child}</Text>
                                         </TouchableOpacity>
                                     ))}
-                                </View>
+                                </ScrollView>
                             </View>
 
                             {/* Date Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Date</Text>
-                                <View style={styles.inputContainer}>
+                                <TouchableOpacity 
+                                    style={styles.inputContainer}
+                                    onPress={() => setShowDatePicker(true)}
+                                >
                                     <TextInput
                                         style={styles.inputField}
-                                        value="01/21/2026"
+                                        value={formatDate(date)}
                                         editable={false}
+                                        pointerEvents="none"
                                     />
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                                </View>
+                                </TouchableOpacity>
                             </View>
 
                             {/* Type Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Type</Text>
-                                <View style={styles.inputContainer}>
+                                <TouchableOpacity 
+                                    style={styles.inputContainer}
+                                    onPress={() => setShowTypePicker(true)}
+                                >
                                     <TextInput
                                         style={styles.inputField}
                                         placeholder="Select Incident type"
                                         placeholderTextColor={theme.colors.textSecondary}
+                                        value={incidentType}
+                                        editable={false}
+                                        pointerEvents="none"
                                     />
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                                </View>
+                                </TouchableOpacity>
                             </View>
 
                             {/* Severity Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Severity</Text>
-                                <View style={styles.inputContainer}>
+                                <TouchableOpacity 
+                                    style={styles.inputContainer}
+                                    onPress={() => setShowSeverityPicker(true)}
+                                >
                                     <TextInput
                                         style={styles.inputField}
-                                        value="Medium"
+                                        placeholder="Select Severity"
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        value={severity}
                                         editable={false}
+                                        pointerEvents="none"
                                     />
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                                </View>
+                                </TouchableOpacity>
                             </View>
 
                             {/* Description Section */}
@@ -226,6 +308,8 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     multiline
                                     numberOfLines={4}
                                     textAlignVertical="top"
+                                    value={description}
+                                    onChangeText={setDescription}
                                 />
                             </View>
 
@@ -258,11 +342,15 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             {/* Reported By Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Reported By</Text>
-                                <TextInput
-                                    style={styles.inputField}
-                                    placeholder="Enter reporter name"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                />
+                                <View style={styles.inputContainer}>
+                                    <TextInput
+                                        style={styles.inputField}
+                                        placeholder="Enter reporter name"
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        value={reportedBy}
+                                        onChangeText={setReportedBy}
+                                    />
+                                </View>
                             </View>
 
                             {/* Status Section */}
@@ -288,6 +376,184 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Date Picker Modal */}
+            <Modal
+                visible={showDatePicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowDatePicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Date</Text>
+                            <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.datePickerContainer}>
+                            <ScrollView style={styles.dateScrollView}>
+                                {/* Month Selection */}
+                                <View style={styles.dateSection}>
+                                    <Text style={styles.dateSectionTitle}>Month</Text>
+                                    <View style={styles.dateOptionsRow}>
+                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => (
+                                            <TouchableOpacity
+                                                key={month}
+                                                style={[
+                                                    styles.dateOption,
+                                                    date.getMonth() + 1 === month && styles.dateOptionSelected
+                                                ]}
+                                                onPress={() => {
+                                                    const newDate = new Date(date);
+                                                    newDate.setMonth(month - 1);
+                                                    setDate(newDate);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.dateOptionText,
+                                                    date.getMonth() + 1 === month && styles.dateOptionTextSelected
+                                                ]}>
+                                                    {month}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                {/* Day Selection */}
+                                <View style={styles.dateSection}>
+                                    <Text style={styles.dateSectionTitle}>Day</Text>
+                                    <View style={styles.dateOptionsRow}>
+                                        {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                                            <TouchableOpacity
+                                                key={day}
+                                                style={[
+                                                    styles.dateOption,
+                                                    date.getDate() === day && styles.dateOptionSelected
+                                                ]}
+                                                onPress={() => {
+                                                    const newDate = new Date(date);
+                                                    newDate.setDate(day);
+                                                    setDate(newDate);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.dateOptionText,
+                                                    date.getDate() === day && styles.dateOptionTextSelected
+                                                ]}>
+                                                    {day}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                {/* Year Selection */}
+                                <View style={styles.dateSection}>
+                                    <Text style={styles.dateSectionTitle}>Year</Text>
+                                    <View style={styles.dateOptionsRow}>
+                                        {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => (
+                                            <TouchableOpacity
+                                                key={year}
+                                                style={[
+                                                    styles.dateOption,
+                                                    date.getFullYear() === year && styles.dateOptionSelected
+                                                ]}
+                                                onPress={() => {
+                                                    const newDate = new Date(date);
+                                                    newDate.setFullYear(year);
+                                                    setDate(newDate);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.dateOptionText,
+                                                    date.getFullYear() === year && styles.dateOptionTextSelected
+                                                ]}>
+                                                    {year}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+                            </ScrollView>
+                            <TouchableOpacity 
+                                style={styles.pickerConfirmBtn}
+                                onPress={() => setShowDatePicker(false)}
+                            >
+                                <Text style={styles.pickerConfirmBtnText}>Confirm</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Type Picker Modal */}
+            <Modal
+                visible={showTypePicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowTypePicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowTypePicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Incident Type</Text>
+                            <TouchableOpacity onPress={() => setShowTypePicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.pickerContent}>
+                            {incidentTypes.map((type) => (
+                                <TouchableOpacity
+                                    key={type}
+                                    style={styles.pickerOption}
+                                    onPress={() => handleTypeSelect(type)}
+                                >
+                                    <Text style={styles.pickerOptionText}>{type}</Text>
+                                    {incidentType === type && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Severity Picker Modal */}
+            <Modal
+                visible={showSeverityPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowSeverityPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowSeverityPicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Severity</Text>
+                            <TouchableOpacity onPress={() => setShowSeverityPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.pickerContent}>
+                            {severityLevels.map((level) => (
+                                <TouchableOpacity
+                                    key={level}
+                                    style={styles.pickerOption}
+                                    onPress={() => handleSeveritySelect(level)}
+                                >
+                                    <Text style={styles.pickerOptionText}>{level}</Text>
+                                    {severity === level && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -486,6 +752,7 @@ const styles = StyleSheet.create({
     },
     childrenList: {
         marginTop: theme.spacing.sm,
+        maxHeight: 220, // Shows approximately 5 items, rest will scroll
     },
     childItem: {
         flexDirection: 'row',
@@ -612,6 +879,106 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     submitBtnText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        fontWeight: '600',
+        color: 'white',
+    },
+    // Picker Modal Styles
+    pickerModal: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '50%',
+        paddingBottom: theme.spacing.xl,
+    },
+    pickerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.md,
+        paddingHorizontal: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    pickerTitle: {
+        ...theme.typography.h2,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    pickerContent: {
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.md,
+    },
+    pickerOption: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    pickerOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    datePickerContainer: {
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.md,
+        maxHeight: 400,
+    },
+    dateScrollView: {
+        maxHeight: 300,
+    },
+    dateSection: {
+        marginBottom: theme.spacing.lg,
+    },
+    dateSectionTitle: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.sm,
+    },
+    dateOptionsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.xs,
+    },
+    dateOption: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        minWidth: 50,
+        alignItems: 'center',
+    },
+    dateOptionSelected: {
+        backgroundColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+    },
+    dateOptionText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    dateOptionTextSelected: {
+        color: 'white',
+        fontWeight: '600',
+    },
+    pickerConfirmBtn: {
+        backgroundColor: theme.colors.secondary,
+        paddingVertical: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        alignItems: 'center',
+        marginTop: theme.spacing.md,
+    },
+    pickerConfirmBtnText: {
         ...theme.typography.body,
         fontSize: 16,
         fontWeight: '600',
