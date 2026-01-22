@@ -14,6 +14,7 @@ import { HealthScreen } from '../screens/HealthScreen';
 import { TransportScreen } from '../screens/TransportScreen';
 import { SportsScreen } from '../screens/SportsScreen';
 import { ReportsScreen } from '../screens/ReportsScreen';
+import { RosterTemplatesScreen } from '../screens/RosterTemplatesScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -163,7 +164,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Roster Templates"
                     icon={({ color }) => <Ionicons name="list-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('RosterTemplates')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -300,6 +301,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Transport" component={TransportScreen} />
             <Drawer.Screen name="Sports" component={SportsScreen} />
             <Drawer.Screen name="Reports" component={ReportsScreen} />
+            <Drawer.Screen name="RosterTemplates" component={RosterTemplatesScreen} />
         </Drawer.Navigator>
     );
 };
