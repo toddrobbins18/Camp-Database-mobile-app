@@ -7,6 +7,7 @@ import { StyledCard } from '../components/StyledCard';
 
 export const MessagesScreen = ({ navigation }: any) => {
     const [messageCount] = useState(0);
+    const [activeView, setActiveView] = useState('inbox'); // 'inbox' or 'compose'
     const [showComposeModal, setShowComposeModal] = useState(false);
     const [deliveryMethod, setDeliveryMethod] = useState('in-app'); // 'in-app' or 'email'
     const [subject, setSubject] = useState('');
@@ -30,11 +31,12 @@ export const MessagesScreen = ({ navigation }: any) => {
     ];
 
     const handleInbox = () => {
-        // TODO: Handle inbox navigation
-        console.log('Inbox clicked');
+        setActiveView('inbox');
+        setShowComposeModal(false);
     };
 
     const handleCompose = () => {
+        setActiveView('compose');
         setShowComposeModal(true);
     };
 
@@ -88,13 +90,31 @@ export const MessagesScreen = ({ navigation }: any) => {
                             <Text style={styles.title}>Notifications & Messages</Text>
                             {/* Action Buttons in Same Row */}
                             <View style={styles.actionButtonsContainer}>
-                                <TouchableOpacity style={styles.inboxBtn} onPress={handleInbox}>
-                                    <Ionicons name="notifications-outline" size={18} color="white" />
-                                    <Text style={styles.inboxBtnText}>Inbox</Text>
+                                <TouchableOpacity 
+                                    style={[styles.inboxBtn, activeView === 'inbox' && styles.inboxBtnActive]} 
+                                    onPress={handleInbox}
+                                >
+                                    <Ionicons 
+                                        name="notifications-outline" 
+                                        size={18} 
+                                        color={activeView === 'inbox' ? 'white' : theme.colors.text} 
+                                    />
+                                    <Text style={[styles.inboxBtnText, activeView === 'inbox' && styles.inboxBtnTextActive]}>
+                                        Inbox
+                                    </Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={styles.composeBtn} onPress={handleCompose}>
-                                    <Ionicons name="send-outline" size={18} color={theme.colors.text} />
-                                    <Text style={styles.composeBtnText}>Compose</Text>
+                                <TouchableOpacity 
+                                    style={[styles.composeBtn, activeView === 'compose' && styles.composeBtnActive]} 
+                                    onPress={handleCompose}
+                                >
+                                    <Ionicons 
+                                        name="send-outline" 
+                                        size={18} 
+                                        color={activeView === 'compose' ? 'white' : theme.colors.text} 
+                                    />
+                                    <Text style={[styles.composeBtnText, activeView === 'compose' && styles.composeBtnTextActive]}>
+                                        Compose
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -102,14 +122,38 @@ export const MessagesScreen = ({ navigation }: any) => {
                     </View>
                 </View>
 
-                {/* Main Content Card */}
-                <StyledCard style={styles.contentCard}>
-                    <Text style={styles.cardTitle}>Notifications & Messages</Text>
-                    <Text style={styles.messageCount}>{messageCount} total messages</Text>
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>No messages yet</Text>
+                {/* Inbox View */}
+                {activeView === 'inbox' && (
+                    <View style={styles.inboxContainer}>
+                        {/* Messages List Card */}
+                        <StyledCard style={styles.messagesListCard}>
+                            <Text style={styles.cardTitle}>Notifications & Messages</Text>
+                            <Text style={styles.messageCount}>{messageCount} total messages</Text>
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyText}>No messages yet</Text>
+                            </View>
+                        </StyledCard>
+
+                        {/* Select Message Card */}
+                        <StyledCard style={styles.selectMessageCard}>
+                            <Text style={styles.selectMessageTitle}>Select a message</Text>
+                            <View style={styles.selectMessageEmpty}>
+                                <Text style={styles.selectMessageText}>Select a message to view its contents</Text>
+                            </View>
+                        </StyledCard>
                     </View>
-                </StyledCard>
+                )}
+
+                {/* Compose View - Show empty state when compose is active but modal not open */}
+                {activeView === 'compose' && !showComposeModal && (
+                    <StyledCard style={styles.contentCard}>
+                        <Text style={styles.cardTitle}>Notifications & Messages</Text>
+                        <Text style={styles.messageCount}>{messageCount} total messages</Text>
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>No messages yet</Text>
+                        </View>
+                    </StyledCard>
+                )}
 
             </ScrollView>
 
@@ -373,16 +417,25 @@ const styles = StyleSheet.create({
     inboxBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.secondary,
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         paddingVertical: theme.spacing.sm,
         paddingHorizontal: theme.spacing.md,
         borderRadius: theme.borderRadius.md,
         gap: theme.spacing.xs,
     },
+    inboxBtnActive: {
+        backgroundColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+    },
     inboxBtnText: {
-        color: 'white',
+        color: theme.colors.text,
         fontWeight: '600',
         fontSize: 14,
+    },
+    inboxBtnTextActive: {
+        color: 'white',
     },
     composeBtn: {
         flexDirection: 'row',
@@ -395,10 +448,51 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.md,
         gap: theme.spacing.xs,
     },
+    composeBtnActive: {
+        backgroundColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+    },
     composeBtnText: {
         color: theme.colors.text,
         fontWeight: '600',
         fontSize: 14,
+    },
+    composeBtnTextActive: {
+        color: 'white',
+    },
+    inboxContainer: {
+        gap: theme.spacing.md,
+    },
+    messagesListCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.xl,
+        minHeight: 200,
+    },
+    selectMessageCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.xl,
+        minHeight: 400,
+    },
+    selectMessageTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.md,
+    },
+    selectMessageEmpty: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: theme.spacing.xl,
+    },
+    selectMessageText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
     },
     contentCard: {
         backgroundColor: theme.colors.surface,

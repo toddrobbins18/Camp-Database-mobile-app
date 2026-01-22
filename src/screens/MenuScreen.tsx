@@ -102,7 +102,7 @@ export const MenuScreen = ({ navigation }: any) => {
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.addBtn} onPress={handleAddMenuItem}>
                             <Ionicons name="add" size={18} color="white" />
-                            <Text style={styles.addBtnText}>Add Menu Item</Text>
+                            <Text style={styles.addBtnText} numberOfLines={1}>Add Menu</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -546,15 +546,10 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.lg,
     },
     titleSection: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
         marginBottom: theme.spacing.lg,
-        flexWrap: 'wrap',
     },
     titleContainer: {
-        flex: 1,
-        minWidth: '50%',
+        width: '100%',
         marginBottom: theme.spacing.sm,
     },
     title: {
@@ -572,13 +567,15 @@ const styles = StyleSheet.create({
     actionButtonsContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: theme.spacing.sm,
+        gap: theme.spacing.xs,
         flexWrap: 'wrap',
+        flexShrink: 1,
     },
     iconButton: {
         padding: theme.spacing.xs,
         alignItems: 'center',
         justifyContent: 'center',
+        flexShrink: 0,
     },
     orangeIcon: {
         width: 40,
@@ -595,28 +592,30 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: theme.colors.border,
         paddingVertical: theme.spacing.sm,
-        paddingHorizontal: theme.spacing.md,
+        paddingHorizontal: theme.spacing.sm,
         borderRadius: theme.borderRadius.md,
         gap: theme.spacing.xs,
+        flexShrink: 1,
     },
     uploadBtnText: {
         color: theme.colors.text,
         fontWeight: '600',
-        fontSize: 14,
+        fontSize: 12,
     },
     addBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: theme.colors.secondary,
         paddingVertical: theme.spacing.sm,
-        paddingHorizontal: theme.spacing.md,
+        paddingHorizontal: theme.spacing.sm,
         borderRadius: theme.borderRadius.md,
         gap: theme.spacing.xs,
+        flexShrink: 1,
     },
     addBtnText: {
         color: 'white',
         fontWeight: '600',
-        fontSize: 14,
+        fontSize: 12,
     },
     contentCard: {
         backgroundColor: theme.colors.surface,
