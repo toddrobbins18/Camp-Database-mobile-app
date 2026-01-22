@@ -306,7 +306,9 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 color={theme.colors.primary}
                                 style={styles.titleIcon}
                             />
-                            <Text style={styles.headerTitle}>Special Events & Evening Activities</Text>
+                            <Text style={styles.headerTitle} numberOfLines={2}>
+                                Special Events & Evening Activities
+                            </Text>
                         </View>
                         <Text style={styles.headerSubtitle}>
                             Special events and evening activities
@@ -692,14 +694,18 @@ const styles = StyleSheet.create({
     },
     titleRow: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         marginBottom: theme.spacing.xs,
+        gap: theme.spacing.sm,
     },
     titleIcon: {
-        marginRight: theme.spacing.xs,
+        marginTop: 2,
+        flexShrink: 0,
     },
     headerTitle: {
         ...theme.typography.h2,
+        flex: 1,
+        flexWrap: 'wrap',
     },
     headerSubtitle: {
         ...theme.typography.bodySmall,
