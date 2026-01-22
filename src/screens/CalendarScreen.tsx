@@ -1,118 +1,607 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 
-const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
-    <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()}>
-            <Ionicons name="menu" size={28} color={theme.colors.primary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{title}</Text>
-        <TouchableOpacity>
-            <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
-        </TouchableOpacity>
-    </View>
-);
+interface Event {
+    id: string;
+    title: string;
+    date: Date;
+    location: string;
+    tags: string[];
+    type: 'sports' | 'field-trip' | 'special-event';
+    time?: string;
+}
 
 export const CalendarScreen = ({ navigation }: any) => {
-    const [activeTab, setActiveTab] = useState('Month');
+    const [activeView, setActiveView] = useState('Month');
+    const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1)); // July 2026
+    const [selectedDate, setSelectedDate] = useState(new Date(2026, 6, 1));
+    const [showEventList, setShowEventList] = useState(false);
+    
+    // Search and filter states
+    const [eventNameSearch, setEventNameSearch] = useState('');
+    const [locationSearch, setLocationSearch] = useState('');
+    const [selectedDivision, setSelectedDivision] = useState('All Divisions');
+    const [selectedTime, setSelectedTime] = useState('All Times');
+    const [selectedLocationType, setSelectedLocationType] = useState('Home & Away');
+    const [sortBy, setSortBy] = useState('Sort by Date');
+    
+    // Picker modals
+    const [showDivisionPicker, setShowDivisionPicker] = useState(false);
+    const [showTimePicker, setShowTimePicker] = useState(false);
+    const [showLocationTypePicker, setShowLocationTypePicker] = useState(false);
+    const [showSortPicker, setShowSortPicker] = useState(false);
+
+    // Sample event data matching the screenshots
+    const events: Event[] = [
+        { id: '1', title: 'Kamen Cup', date: new Date(2026, 6, 5), location: 'Equinunk', tags: ['Sports', 'Soccer', 'Teen Boys'], type: 'sports' },
+        { id: '2', title: 'Soccer Cup', date: new Date(2026, 6, 6), location: 'Blue Ridge', tags: ['Sports', 'Soccer'], type: 'sports' },
+        { id: '3', title: 'Equinunk Cup', date: new Date(2026, 6, 8), location: 'Equinunk', tags: ['Sports', 'Hockey', 'Junior Boys'], type: 'sports' },
+        { id: '4', title: 'Falki Open', date: new Date(2026, 6, 8), location: 'Equinunk', tags: ['Sports', 'Tennis', 'Freshmen A Girls'], type: 'sports' },
+        { id: '5', title: 'Boys Basketball Invitational', date: new Date(2026, 6, 13), location: 'Home', tags: ['Sports', 'Basketball', 'CIT Boys'], type: 'sports' },
+        { id: '6', title: '3 v 3 Basketball Tourney', date: new Date(2026, 6, 15), location: 'Equinunk', tags: ['Sports', 'Basketball', 'Senior Boys'], type: 'sports' },
+        { id: '7', title: 'Basketball Tourney', date: new Date(2026, 6, 16), location: 'Blue Ridge', tags: ['Sports', 'Basketball', 'Senior Girls'], type: 'sports' },
+        { id: '8', title: 'Silent DJ Disco', date: new Date(2026, 6, 17), location: '', tags: ['Special Event', 'evening-activity'], type: 'special-event', time: '7:00 - 23 PM' },
+        { id: '9', title: 'Girls Basketball Invitational', date: new Date(2026, 6, 20), location: 'Home', tags: ['Sports', 'Basketball', 'CIT Girls'], type: 'sports' },
+        { id: '10', title: 'THC Dance Competition', date: new Date(2026, 6, 22), location: 'THC', tags: ['Sports', 'Dance', 'Freshmen A Girls'], type: 'sports' },
+        { id: '11', title: 'Jacobs Cup', date: new Date(2026, 6, 22), location: 'Timber Lake Camp', tags: ['Sports', 'Basketball', 'Super Boys'], type: 'sports' },
+        { id: '12', title: 'Soccer Cup', date: new Date(2026, 6, 23), location: 'Blue Ridge', tags: ['Sports', 'Soccer', 'Junior Girls'], type: 'sports' },
+        { id: '13', title: 'Sixes Lax Tourney', date: new Date(2026, 6, 24), location: 'THC', tags: ['Sports', 'Lacrosse', 'Cadet Boys'], type: 'sports' },
+        { id: '14', title: 'Laz Bowl', date: new Date(2026, 6, 27), location: 'Home', tags: ['Sports', 'Football', 'CIT Boys'], type: 'sports' },
+        { id: '15', title: 'Junior Hershey/Dorney Trip', date: new Date(2026, 6, 28), location: '', tags: ['Field Trip', 'field-trip'], type: 'field-trip' },
+        { id: '16', title: 'Franko Cup', date: new Date(2026, 6, 29), location: 'THC', tags: ['Sports', 'Football', 'Senior Girls'], type: 'sports' },
+        { id: '17', title: 'Gordon Cup', date: new Date(2026, 6, 29), location: 'Timber Lake Camp', tags: ['Sports', 'Hockey'], type: 'sports' },
+        { id: '18', title: 'Teen/CIT Cali Trip', date: new Date(2026, 6, 29), location: '', tags: ['Field Trip', 'field-trip'], type: 'field-trip' },
+        { id: '19', title: 'Super Montreal Trip', date: new Date(2026, 6, 30), location: '', tags: ['Field Trip', 'field-trip'], type: 'field-trip' },
+        { id: '20', title: 'Cubs Cup', date: new Date(2026, 7, 3), location: '', tags: ['Sports', 'Hockey', 'Freshmen B Boys'], type: 'sports' },
+        { id: '21', title: 'Party Hardy- DJ - End of Year Bash', date: new Date(2026, 7, 12), location: '', tags: ['Special Event', 'evening-activity'], type: 'special-event', time: '7:00 - 22 PM' },
+    ];
+
+    // Options
+    const divisions = ['All Divisions', 'Sports Academy', 'Field Trips', 'Special Events', 'Activities'];
+    const timeOptions = ['All Times', 'Morning', 'Afternoon', 'Evening'];
+    const locationTypes = ['Home & Away', 'Home', 'Away'];
+    const sortOptions = ['Sort by Date', 'Sort by Name', 'Sort by Time', 'Sort by Location'];
+
+    // Calendar functions
+    const getDaysInMonth = (date: Date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const daysInMonth = lastDay.getDate();
+        const startingDayOfWeek = firstDay.getDay();
+        
+        const days = [];
+        
+        // Previous month days
+        const prevMonth = new Date(year, month - 1, 0);
+        const prevMonthDays = prevMonth.getDate();
+        for (let i = startingDayOfWeek - 1; i >= 0; i--) {
+            days.push({
+                date: prevMonthDays - i,
+                isCurrentMonth: false,
+                fullDate: new Date(year, month - 1, prevMonthDays - i)
+            });
+        }
+        
+        // Current month days
+        for (let i = 1; i <= daysInMonth; i++) {
+            days.push({
+                date: i,
+                isCurrentMonth: true,
+                fullDate: new Date(year, month, i)
+            });
+        }
+        
+        // Next month days to fill the grid
+        const remainingDays = 42 - days.length;
+        for (let i = 1; i <= remainingDays; i++) {
+            days.push({
+                date: i,
+                isCurrentMonth: false,
+                fullDate: new Date(year, month + 1, i)
+            });
+        }
+        
+        return days;
+    };
+
+    const navigateMonth = (direction: 'prev' | 'next' | 'today') => {
+        if (direction === 'today') {
+            const today = new Date();
+            setCurrentDate(today);
+            setSelectedDate(today);
+        } else {
+            const newDate = new Date(currentDate);
+            if (direction === 'prev') {
+                newDate.setMonth(newDate.getMonth() - 1);
+            } else {
+                newDate.setMonth(newDate.getMonth() + 1);
+            }
+            setCurrentDate(newDate);
+        }
+    };
+
+    const formatMonthYear = (date: Date) => {
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+        return `${months[date.getMonth()]} ${date.getFullYear()}`;
+    };
+
+    const isSameDate = (date1: Date, date2: Date) => {
+        return date1.getDate() === date2.getDate() &&
+               date1.getMonth() === date2.getMonth() &&
+               date1.getFullYear() === date2.getFullYear();
+    };
+
+    const calendarDays = getDaysInMonth(currentDate);
+    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    // Format date for event list
+    const formatEventDate = (date: Date) => {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+    };
+
+    // Get event icon based on type
+    const getEventIcon = (type: string) => {
+        switch (type) {
+            case 'sports':
+                return 'trophy-outline';
+            case 'field-trip':
+                return 'people-outline';
+            case 'special-event':
+                return 'star-outline';
+            default:
+                return 'calendar-outline';
+        }
+    };
+
+    // Get tag color
+    const getTagStyle = (tag: string) => {
+        if (tag === 'Sports') {
+            return { backgroundColor: '#dbeafe', color: '#1e40af' };
+        } else if (tag === 'Field Trip') {
+            return { backgroundColor: '#dcfce7', color: '#166534' };
+        } else if (tag === 'Special Event') {
+            return { backgroundColor: '#f3e8ff', color: '#6b21a8' };
+        } else if (tag.includes('Boys') || tag.includes('Girls') || tag.includes('Teen') || tag.includes('CIT') || tag.includes('Freshmen') || tag.includes('Junior') || tag.includes('Senior') || tag.includes('Cadet') || tag.includes('Super')) {
+            return { backgroundColor: '#14b8a6', color: 'white' };
+        } else {
+            return { backgroundColor: 'white', color: theme.colors.text, borderWidth: 1, borderColor: theme.colors.border };
+        }
+    };
+
+    // Filter events
+    const filteredEvents = events.filter(event => {
+        const matchesName = event.title.toLowerCase().includes(eventNameSearch.toLowerCase());
+        const matchesLocation = event.location.toLowerCase().includes(locationSearch.toLowerCase());
+        return matchesName && matchesLocation;
+    }).sort((a, b) => {
+        if (sortBy === 'Sort by Date') {
+            return a.date.getTime() - b.date.getTime();
+        } else if (sortBy === 'Sort by Name') {
+            return a.title.localeCompare(b.title);
+        } else if (sortBy === 'Sort by Location') {
+            return a.location.localeCompare(b.location);
+        }
+        return 0;
+    });
+
+    // Group events by month
+    const groupedEvents = filteredEvents.reduce((acc, event) => {
+        const monthKey = `${event.date.getFullYear()}-${event.date.getMonth()}`;
+        if (!acc[monthKey]) {
+            acc[monthKey] = [];
+        }
+        acc[monthKey].push(event);
+        return acc;
+    }, {} as Record<string, Event[]>);
+
+    const formatMonthHeader = (year: number, month: number) => {
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+        return `${months[month]} ${year}`;
+    };
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <ScreenHeader title="Master Calendar" navigation={navigation} />
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                {/* Header */}
+                <View style={styles.header}>
+                    <View style={styles.headerLeft}>
+                        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                            <Ionicons name="menu" size={28} color={theme.colors.text} />
+                        </TouchableOpacity>
+                        <View style={styles.titleContainer}>
+                            <Text style={styles.title}>Master Calendar</Text>
+                            <Text style={styles.subtitle}>Consolidated view of all events and activities for The Nest</Text>
+                        </View>
+                    </View>
+                    <View style={styles.headerRight}>
+                        <View style={styles.calendarIcon}>
+                            <Ionicons name="calendar" size={20} color="white" />
+                        </View>
+                        <TouchableOpacity onPress={() => setShowEventList(!showEventList)}>
+                            <Ionicons name="menu" size={28} color={theme.colors.text} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
 
-                {/* View Toggles */}
-                <View style={styles.toggleContainer}>
-                    {['Day', 'Week', 'Month', 'Agenda'].map((tab) => (
-                        <TouchableOpacity
-                            key={tab}
-                            style={[styles.toggleBtn, activeTab === tab && styles.activeToggleBtn]}
-                            onPress={() => setActiveTab(tab)}
+                {/* Search and Filter Section */}
+                <StyledCard style={styles.filterCard}>
+                    <View style={styles.filterRow}>
+                        <View style={styles.searchContainer}>
+                            <Ionicons name="search" size={18} color={theme.colors.textSecondary} style={styles.searchIcon} />
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Search by event name..."
+                                placeholderTextColor={theme.colors.textSecondary}
+                                value={eventNameSearch}
+                                onChangeText={setEventNameSearch}
+                            />
+                        </View>
+                    </View>
+                    
+                    <View style={styles.filterRow}>
+                        <View style={styles.searchContainer}>
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Search by location..."
+                                placeholderTextColor={theme.colors.textSecondary}
+                                value={locationSearch}
+                                onChangeText={setLocationSearch}
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.filterRow}>
+                        <TouchableOpacity 
+                            style={styles.dropdownContainer}
+                            onPress={() => setShowDivisionPicker(true)}
                         >
-                            <Text style={[styles.toggleText, activeTab === tab && styles.activeToggleText]}>{tab}</Text>
+                            <Text style={styles.dropdownText}>{selectedDivision}</Text>
+                            <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
-                    ))}
-                </View>
 
-                {/* Filters Bar */}
-                <View style={styles.filterBar}>
-                    <TouchableOpacity style={styles.filterBtn}>
-                        <Ionicons name="filter" size={16} color={theme.colors.text} />
-                        <Text style={styles.filterText}>Filter Events</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.primaryBtn}>
-                        <Ionicons name="add" size={16} color="white" />
-                        <Text style={styles.primaryBtnText}>Add Event</Text>
-                    </TouchableOpacity>
-                </View>
-
-                <Text style={styles.dateHeader}>July 2026</Text>
-
-                {/* Calendar Grid / Event List Mockup */}
-                <View style={styles.eventList}>
-                    {/* Event 1 */}
-                    <StyledCard style={styles.eventCard}>
-                        <View style={[styles.eventTimeBox, { backgroundColor: '#fee2e2' }]}>
-                            <Text style={[styles.eventTime, { color: '#ef4444' }]}>10:00</Text>
-                            <Text style={[styles.eventAmPm, { color: '#ef4444' }]}>AM</Text>
-                        </View>
-                        <View style={styles.eventDetails}>
-                            <Text style={styles.eventTitle}>Senior Girls Soccer vs. Camp Walden</Text>
-                            <Text style={styles.eventLocation}>User: Field 3 • Sports Academy</Text>
-                            <View style={styles.attendees}>
-                                <Ionicons name="people" size={14} color={theme.colors.textSecondary} />
-                                <Text style={styles.attendeeText}>24 Attending</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity>
-                            <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textSecondary} />
+                        <TouchableOpacity 
+                            style={styles.dropdownContainer}
+                            onPress={() => setShowTimePicker(true)}
+                        >
+                            <Text style={styles.dropdownText}>{selectedTime}</Text>
+                            <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
-                    </StyledCard>
+                    </View>
 
-                    {/* Event 2 */}
-                    <StyledCard style={styles.eventCard}>
-                        <View style={[styles.eventTimeBox, { backgroundColor: '#e0e7ff' }]}>
-                            <Text style={[styles.eventTime, { color: '#4338ca' }]}>02:30</Text>
-                            <Text style={[styles.eventAmPm, { color: '#4338ca' }]}>PM</Text>
-                        </View>
-                        <View style={styles.eventDetails}>
-                            <Text style={styles.eventTitle}>Freshmen Boys: Lake Trip</Text>
-                            <Text style={styles.eventLocation}>User: Waterfront • Field Trip</Text>
-                            <View style={styles.attendees}>
-                                <Ionicons name="people" size={14} color={theme.colors.textSecondary} />
-                                <Text style={styles.attendeeText}>18 Attending</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity>
-                            <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textSecondary} />
+                    <View style={styles.filterRow}>
+                        <TouchableOpacity 
+                            style={styles.dropdownContainer}
+                            onPress={() => setShowLocationTypePicker(true)}
+                        >
+                            <Text style={styles.dropdownText}>{selectedLocationType}</Text>
+                            <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
-                    </StyledCard>
 
-                    {/* Event 3 */}
-                    <StyledCard style={styles.eventCard}>
-                        <View style={[styles.eventTimeBox, { backgroundColor: '#dcfce7' }]}>
-                            <Text style={[styles.eventTime, { color: '#15803d' }]}>07:00</Text>
-                            <Text style={[styles.eventAmPm, { color: '#15803d' }]}>PM</Text>
-                        </View>
-                        <View style={styles.eventDetails}>
-                            <Text style={styles.eventTitle}>Evening Activity: Talent Show</Text>
-                            <Text style={styles.eventLocation}>User: Main Hall • Special Event</Text>
-                            <View style={styles.attendees}>
-                                <Ionicons name="people" size={14} color={theme.colors.textSecondary} />
-                                <Text style={styles.attendeeText}>All Camp</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity>
-                            <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textSecondary} />
+                        <TouchableOpacity 
+                            style={styles.dropdownContainer}
+                            onPress={() => setShowSortPicker(true)}
+                        >
+                            <Text style={styles.dropdownText}>{sortBy}</Text>
+                            <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
-                    </StyledCard>
-                </View>
+                    </View>
+                </StyledCard>
+
+                {/* Event List View */}
+                {showEventList ? (
+                    <View style={styles.eventListView}>
+                        {Object.entries(groupedEvents).map(([monthKey, monthEvents]) => {
+                            const [year, month] = monthKey.split('-').map(Number);
+                            return (
+                                <View key={monthKey}>
+                                    <Text style={styles.monthHeader}>{formatMonthHeader(year, month)}</Text>
+                                    {monthEvents.map((event) => (
+                                        <StyledCard key={event.id} style={styles.eventCard}>
+                                            <View style={styles.eventIconContainer}>
+                                                <Ionicons 
+                                                    name={getEventIcon(event.type)} 
+                                                    size={24} 
+                                                    color={theme.colors.textSecondary} 
+                                                />
+                                            </View>
+                                            <View style={styles.eventContent}>
+                                                <Text style={styles.eventTitle}>{event.title}</Text>
+                                                <Text style={styles.eventDate}>{formatEventDate(event.date)}</Text>
+                                                {event.time && (
+                                                    <View style={styles.eventTimeContainer}>
+                                                        <Ionicons name="time-outline" size={14} color={theme.colors.textSecondary} />
+                                                        <Text style={styles.eventTime}>{event.time}</Text>
+                                                    </View>
+                                                )}
+                                                <View style={styles.eventTags}>
+                                                    {event.tags.map((tag, index) => {
+                                                        const tagStyle = getTagStyle(tag);
+                                                        return (
+                                                            <View 
+                                                                key={index} 
+                                                                style={[styles.eventTag, tagStyle]}
+                                                            >
+                                                                <Text style={[styles.eventTagText, { color: tagStyle.color }]}>
+                                                                    {tag}
+                                                                </Text>
+                                                            </View>
+                                                        );
+                                                    })}
+                                                </View>
+                                                {event.location && (
+                                                    <View style={styles.eventLocation}>
+                                                        <Ionicons name="location" size={14} color="#ef4444" />
+                                                        <Text style={styles.eventLocationText}>{event.location}</Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                        </StyledCard>
+                                    ))}
+                                </View>
+                            );
+                        })}
+                    </View>
+                ) : (
+                    /* Calendar Section */
+                    <StyledCard style={styles.calendarCard}>
+                    {/* Navigation Buttons */}
+                    <View style={styles.calendarNav}>
+                        <TouchableOpacity 
+                            style={styles.navButton}
+                            onPress={() => navigateMonth('today')}
+                        >
+                            <Text style={styles.navButtonText}>Today</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={styles.navButton}
+                            onPress={() => navigateMonth('prev')}
+                        >
+                            <Text style={styles.navButtonText}>Back</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={styles.navButton}
+                            onPress={() => navigateMonth('next')}
+                        >
+                            <Text style={styles.navButtonText}>Next</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Month and Year */}
+                    <Text style={styles.monthYear}>{formatMonthYear(currentDate)}</Text>
+
+                    {/* View Tabs */}
+                    <View style={styles.viewTabs}>
+                        {['Month', 'Week', 'Day', 'Agenda'].map((view) => (
+                            <TouchableOpacity
+                                key={view}
+                                style={[
+                                    styles.viewTab,
+                                    activeView === view && styles.viewTabActive
+                                ]}
+                                onPress={() => setActiveView(view)}
+                            >
+                                <Text style={[
+                                    styles.viewTabText,
+                                    activeView === view && styles.viewTabTextActive
+                                ]}>
+                                    {view}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    {/* Calendar Grid */}
+                    <View style={styles.calendarGrid}>
+                        {/* Week Day Headers */}
+                        <View style={styles.weekHeader}>
+                            {weekDays.map((day) => (
+                                <View key={day} style={styles.weekDayHeader}>
+                                    <Text style={styles.weekDayText}>{day}</Text>
+                                </View>
+                            ))}
+                        </View>
+
+                        {/* Calendar Days */}
+                        <View style={styles.daysGrid}>
+                            {calendarDays.map((day, index) => {
+                                const isSelected = isSameDate(day.fullDate, selectedDate);
+                                const isToday = isSameDate(day.fullDate, new Date());
+                                
+                                return (
+                                    <TouchableOpacity
+                                        key={index}
+                                        style={[
+                                            styles.dayCell,
+                                            !day.isCurrentMonth && styles.dayCellOtherMonth,
+                                            isSelected && styles.dayCellSelected
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedDate(day.fullDate);
+                                            if (!day.isCurrentMonth) {
+                                                setCurrentDate(day.fullDate);
+                                            }
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.dayText,
+                                            !day.isCurrentMonth && styles.dayTextOtherMonth,
+                                            isSelected && styles.dayTextSelected,
+                                            isToday && !isSelected && styles.dayTextToday
+                                        ]}>
+                                            {day.date}
+                                        </Text>
+                                        {/* Event indicator dot */}
+                                        {day.date === 8 && day.isCurrentMonth && (
+                                            <View style={styles.eventDot} />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </View>
+                </StyledCard>
+                )}
 
             </ScrollView>
+
+            {/* Floating Action Button */}
+            <TouchableOpacity style={styles.fab}>
+                <Ionicons name="chatbubble" size={24} color="white" />
+            </TouchableOpacity>
+
+            {/* Division Picker Modal */}
+            <Modal
+                visible={showDivisionPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowDivisionPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowDivisionPicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Division</Text>
+                            <TouchableOpacity onPress={() => setShowDivisionPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.pickerContent}>
+                            {divisions.map((division) => (
+                                <TouchableOpacity
+                                    key={division}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setSelectedDivision(division);
+                                        setShowDivisionPicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{division}</Text>
+                                    {selectedDivision === division && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Time Picker Modal */}
+            <Modal
+                visible={showTimePicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowTimePicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowTimePicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Time</Text>
+                            <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.pickerContent}>
+                            {timeOptions.map((time) => (
+                                <TouchableOpacity
+                                    key={time}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setSelectedTime(time);
+                                        setShowTimePicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{time}</Text>
+                                    {selectedTime === time && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Location Type Picker Modal */}
+            <Modal
+                visible={showLocationTypePicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowLocationTypePicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowLocationTypePicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Location Type</Text>
+                            <TouchableOpacity onPress={() => setShowLocationTypePicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.pickerContent}>
+                            {locationTypes.map((location) => (
+                                <TouchableOpacity
+                                    key={location}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setSelectedLocationType(location);
+                                        setShowLocationTypePicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{location}</Text>
+                                    {selectedLocationType === location && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Sort Picker Modal */}
+            <Modal
+                visible={showSortPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowSortPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowSortPicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Sort By</Text>
+                            <TouchableOpacity onPress={() => setShowSortPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.pickerContent}>
+                            {sortOptions.map((sort) => (
+                                <TouchableOpacity
+                                    key={sort}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setSortBy(sort);
+                                        setShowSortPicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{sort}</Text>
+                                    {sortBy === sort && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -124,124 +613,348 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         padding: theme.spacing.md,
+        paddingBottom: 100,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         marginBottom: theme.spacing.lg,
     },
-    headerTitle: {
-        ...theme.typography.h2,
-    },
-    toggleContainer: {
+    headerLeft: {
+        flex: 1,
         flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: theme.spacing.sm,
+    },
+    titleContainer: {
+        flex: 1,
+    },
+    title: {
+        ...theme.typography.h1,
+        fontSize: 32,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
+    },
+    subtitle: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+    },
+    calendarIcon: {
+        width: 40,
+        height: 40,
+        backgroundColor: theme.colors.accent,
+        borderRadius: theme.borderRadius.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    filterCard: {
         backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    filterRow: {
+        flexDirection: 'row',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.sm,
+    },
+    searchContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        height: 44,
+    },
+    searchIcon: {
+        marginRight: theme.spacing.xs,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    dropdownContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        height: 44,
+    },
+    dropdownText: {
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    calendarCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.md,
+    },
+    calendarNav: {
+        flexDirection: 'row',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.md,
+    },
+    navButton: {
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+    },
+    navButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    monthYear: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.md,
+        textAlign: 'center',
+    },
+    viewTabs: {
+        flexDirection: 'row',
+        backgroundColor: '#f3f4f6',
         borderRadius: theme.borderRadius.md,
         padding: 4,
         marginBottom: theme.spacing.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
     },
-    toggleBtn: {
+    viewTab: {
         flex: 1,
-        paddingVertical: 8,
+        paddingVertical: theme.spacing.sm,
         alignItems: 'center',
         borderRadius: theme.borderRadius.sm,
     },
-    activeToggleBtn: {
-        backgroundColor: theme.colors.primary,
+    viewTabActive: {
+        backgroundColor: theme.colors.surface,
     },
-    toggleText: {
+    viewTabText: {
+        fontSize: 14,
         fontWeight: '600',
         color: theme.colors.textSecondary,
     },
-    activeToggleText: {
-        color: 'white',
-    },
-    filterBar: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: theme.spacing.lg,
-    },
-    filterBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'white',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: theme.borderRadius.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        gap: 8,
-    },
-    filterText: {
-        fontWeight: '600',
+    viewTabTextActive: {
         color: theme.colors.text,
     },
-    primaryBtn: {
+    calendarGrid: {
+        marginTop: theme.spacing.sm,
+    },
+    weekHeader: {
         flexDirection: 'row',
+        marginBottom: theme.spacing.xs,
+    },
+    weekDayHeader: {
+        flex: 1,
         alignItems: 'center',
-        backgroundColor: theme.colors.secondary,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: theme.borderRadius.md,
-        gap: 4,
+        paddingVertical: theme.spacing.sm,
     },
-    primaryBtnText: {
+    weekDayText: {
+        fontSize: 12,
         fontWeight: '600',
-        color: 'white',
+        color: theme.colors.textSecondary,
     },
-    dateHeader: {
-        ...theme.typography.h3,
+    daysGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+    },
+    dayCell: {
+        width: '14.28%',
+        aspectRatio: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: theme.spacing.xs,
+        position: 'relative',
+    },
+    dayCellOtherMonth: {
+        opacity: 0.4,
+    },
+    dayCellSelected: {
+        backgroundColor: '#dbeafe',
+        borderRadius: theme.borderRadius.md,
+    },
+    dayText: {
+        fontSize: 14,
+        color: theme.colors.text,
+        fontWeight: '500',
+    },
+    dayTextOtherMonth: {
+        color: theme.colors.textSecondary,
+    },
+    dayTextSelected: {
+        color: theme.colors.secondary,
+        fontWeight: '700',
+    },
+    dayTextToday: {
+        fontWeight: '700',
+    },
+    eventDot: {
+        position: 'absolute',
+        bottom: 4,
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: theme.colors.secondary,
+    },
+    fab: {
+        position: 'absolute',
+        bottom: theme.spacing.xl,
+        right: theme.spacing.xl,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: theme.colors.secondary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        ...theme.shadows.card,
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    // Picker Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    pickerModal: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '50%',
+        paddingBottom: theme.spacing.xl,
+    },
+    pickerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.md,
+        paddingHorizontal: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    pickerTitle: {
+        ...theme.typography.h2,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    pickerContent: {
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.md,
+    },
+    pickerOption: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    pickerOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    // Event List Styles
+    eventListView: {
+        gap: theme.spacing.md,
+    },
+    monthHeader: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginTop: theme.spacing.lg,
         marginBottom: theme.spacing.md,
-    },
-    eventList: {
-        gap: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.sm,
     },
     eventCard: {
         flexDirection: 'row',
-        alignItems: 'center',
         padding: theme.spacing.md,
+        marginBottom: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        ...theme.shadows.card,
     },
-    eventTimeBox: {
+    eventIconContainer: {
+        width: 40,
+        height: 40,
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: theme.borderRadius.sm,
         marginRight: theme.spacing.md,
-        minWidth: 60,
     },
-    eventTime: {
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    eventAmPm: {
-        fontSize: 10,
-        fontWeight: '600',
-    },
-    eventDetails: {
+    eventContent: {
         flex: 1,
     },
     eventTitle: {
-        fontWeight: 'bold',
-        fontSize: 14,
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '700',
         color: theme.colors.text,
-        marginBottom: 2,
+        marginBottom: theme.spacing.xs,
     },
-    eventLocation: {
-        fontSize: 12,
+    eventDate: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
         color: theme.colors.textSecondary,
-        marginBottom: 4,
+        marginBottom: theme.spacing.xs,
     },
-    attendees: {
+    eventTimeContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
+        gap: theme.spacing.xs,
+        marginBottom: theme.spacing.xs,
     },
-    attendeeText: {
-        fontSize: 11,
+    eventTime: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
         color: theme.colors.textSecondary,
+    },
+    eventTags: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.xs,
+        marginBottom: theme.spacing.xs,
+    },
+    eventTag: {
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 4,
+        borderRadius: theme.borderRadius.sm,
+    },
+    eventTagText: {
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    eventLocation: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        marginTop: theme.spacing.xs,
+    },
+    eventLocationText: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.text,
     },
 });
