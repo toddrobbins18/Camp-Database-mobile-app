@@ -20,6 +20,14 @@ export const HealthScreen = ({ navigation }: any) => {
     const [showAdmitModal, setShowAdmitModal] = useState(false);
     const [admitReason, setAdmitReason] = useState('');
     const [childToAdmit, setChildToAdmit] = useState<{ id: string; name: string } | null>(null);
+    const [selectedMedicationChild, setSelectedMedicationChild] = useState<string>('');
+    const [medicationName, setMedicationName] = useState('');
+    const [dosage, setDosage] = useState('');
+    const [mealTime, setMealTime] = useState<string>('');
+    const [notes, setNotes] = useState('');
+    const [isRecurring, setIsRecurring] = useState(false);
+    const [showChildPicker, setShowChildPicker] = useState(false);
+    const [showUploadModal, setShowUploadModal] = useState(false);
 
     const divisions = [
         'All Divisions',
@@ -212,8 +220,7 @@ export const HealthScreen = ({ navigation }: any) => {
     const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
     const handleUploadCSV = () => {
-        // TODO: Handle CSV upload
-        console.log('Upload CSV');
+        setShowUploadModal(true);
     };
 
     const tabs = ['Daily Log', "Today's Medications", 'Health Center', 'Health Center Log', 'Add Medication'];
@@ -224,7 +231,7 @@ export const HealthScreen = ({ navigation }: any) => {
                 {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.openDrawer()}>
-                        <Ionicons name="document-text-outline" size={28} color={theme.colors.text} />
+                        <Ionicons name="menu" size={28} color={theme.colors.text} />
                     </TouchableOpacity>
                     <TouchableOpacity>
                         <Ionicons name="person-circle-outline" size={28} color={theme.colors.text} />
@@ -568,6 +575,221 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </ScrollView>
                                 </View>
                             </View>
+                        ) : activeTab === 'Health Center Log' ? (
+                            <StyledCard style={styles.healthCenterLogCard}>
+                                <View style={styles.healthCenterLogHeader}>
+                                    <Ionicons name="bar-chart-outline" size={24} color={theme.colors.text} />
+                                    <Text style={styles.healthCenterLogTitle}>Health Center Admission History</Text>
+                                </View>
+                                <Text style={styles.healthCenterLogSubtitle}>
+                                    Past health center admissions this season
+                                </Text>
+                                <View style={styles.emptyState}>
+                                    <Text style={styles.emptyText}>No admission history found for this season</Text>
+                                </View>
+                            </StyledCard>
+                        ) : activeTab === 'Add Medication' ? (
+                            <StyledCard style={styles.addMedicationCard}>
+                                <View style={styles.addMedicationHeader}>
+                                    <Ionicons name="link-outline" size={24} color={theme.colors.text} />
+                                    <Text style={styles.addMedicationTitle}>Add Medication</Text>
+                                </View>
+                                <Text style={styles.addMedicationSubtitle}>
+                                    Schedule medication for a child
+                                </Text>
+
+                                {/* Form Fields */}
+                                <View style={styles.formContainer}>
+                                    {/* Child Selection */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Child</Text>
+                                        <TouchableOpacity 
+                                            style={styles.childPickerButton}
+                                            onPress={() => setShowChildPicker(true)}
+                                        >
+                                            <Text style={[
+                                                styles.childPickerText,
+                                                !selectedMedicationChild && styles.childPickerPlaceholder
+                                            ]}>
+                                                {selectedMedicationChild || 'Select a child'}
+                                            </Text>
+                                            <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {/* Medication Name */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Medication Name</Text>
+                                        <TextInput
+                                            style={styles.formInput}
+                                            placeholder="Enter medication name"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={medicationName}
+                                            onChangeText={setMedicationName}
+                                        />
+                                    </View>
+
+                                    {/* Dosage */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Dosage</Text>
+                                        <TextInput
+                                            style={styles.formInput}
+                                            placeholder="e.g., 5ml, 1 tablet"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={dosage}
+                                            onChangeText={setDosage}
+                                        />
+                                    </View>
+
+                                    {/* Meal Time */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Meal Time</Text>
+                                        <View style={styles.mealTimeContainer}>
+                                            <View style={styles.mealTimeColumn}>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('Before Breakfast')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'Before Breakfast' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'Before Breakfast' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>Before Breakfast</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('Before Lunch')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'Before Lunch' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'Before Lunch' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>Before Lunch</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('Before Dinner')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'Before Dinner' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'Before Dinner' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>Before Dinner</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('Bedtime')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'Bedtime' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'Bedtime' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>Bedtime</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                            <View style={styles.mealTimeColumn}>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('After Breakfast')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'After Breakfast' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'After Breakfast' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>After Breakfast</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('After Lunch')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'After Lunch' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'After Lunch' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>After Lunch</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('After Dinner')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'After Dinner' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'After Dinner' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>After Dinner</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    </View>
+
+                                    {/* Notes */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Notes</Text>
+                                        <TextInput
+                                            style={styles.formTextArea}
+                                            placeholder="Additional notes..."
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={notes}
+                                            onChangeText={setNotes}
+                                            multiline={true}
+                                            numberOfLines={4}
+                                        />
+                                    </View>
+
+                                    {/* Recurring Medication Checkbox */}
+                                    <TouchableOpacity
+                                        style={styles.checkboxContainer}
+                                        onPress={() => setIsRecurring(!isRecurring)}
+                                    >
+                                        <View style={[
+                                            styles.checkbox,
+                                            isRecurring && styles.checkboxSelected
+                                        ]}>
+                                            {isRecurring && <Ionicons name="checkmark" size={16} color="white" />}
+                                        </View>
+                                        <Text style={styles.checkboxLabel}>Recurring medication</Text>
+                                    </TouchableOpacity>
+
+                                    {/* Add Medication Button */}
+                                    <TouchableOpacity 
+                                        style={styles.addMedicationButton}
+                                        onPress={() => {
+                                            // Handle add medication
+                                            console.log('Add Medication:', {
+                                                child: selectedMedicationChild,
+                                                medicationName,
+                                                dosage,
+                                                mealTime,
+                                                notes,
+                                                isRecurring
+                                            });
+                                            // Reset form
+                                            setSelectedMedicationChild('');
+                                            setMedicationName('');
+                                            setDosage('');
+                                            setMealTime('');
+                                            setNotes('');
+                                            setIsRecurring(false);
+                                        }}
+                                    >
+                                        <Text style={styles.addMedicationButtonText}>Add Medication</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </StyledCard>
                         ) : (
                             <StyledCard style={styles.medicationLogCard}>
                                 <Text style={styles.logTitle}>Daily Medication Log</Text>
@@ -681,6 +903,92 @@ export const HealthScreen = ({ navigation }: any) => {
                             }}
                         >
                             <Text style={styles.cancelButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Child Picker Modal for Add Medication */}
+            <Modal
+                visible={showChildPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowChildPicker(false)}
+            >
+                <Pressable 
+                    style={styles.modalOverlay} 
+                    onPress={() => setShowChildPicker(false)}
+                >
+                    <Pressable 
+                        style={styles.pickerModal} 
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Child</Text>
+                            <TouchableOpacity onPress={() => setShowChildPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.pickerContent}>
+                            {availableChildren.map((child) => (
+                                <TouchableOpacity
+                                    key={child.id}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setSelectedMedicationChild(child.name);
+                                        setShowChildPicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{child.name}</Text>
+                                    {selectedMedicationChild === child.name && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Upload CSV Modal */}
+            <Modal
+                visible={showUploadModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowUploadModal(false)}
+            >
+                <Pressable 
+                    style={styles.uploadModalOverlay} 
+                    onPress={() => setShowUploadModal(false)}
+                >
+                    <Pressable 
+                        style={styles.uploadModal} 
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <Text style={styles.uploadModalTitle}>Select file</Text>
+                        
+                        <TouchableOpacity 
+                            style={styles.uploadOption}
+                            onPress={() => {
+                                // Handle Aloha downloads selection
+                                console.log('Selected: Aloha downloads');
+                                setShowUploadModal(false);
+                            }}
+                        >
+                            <Ionicons name="folder-outline" size={24} color={theme.colors.text} />
+                            <Text style={styles.uploadOptionText}>Aloha downloads</Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity 
+                            style={styles.uploadOption}
+                            onPress={() => {
+                                // Handle Other files selection
+                                console.log('Selected: Other files');
+                                setShowUploadModal(false);
+                            }}
+                        >
+                            <Ionicons name="document-outline" size={24} color={theme.colors.text} />
+                            <Text style={styles.uploadOptionText}>Other files</Text>
                         </TouchableOpacity>
                     </Pressable>
                 </Pressable>
@@ -1399,5 +1707,269 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: theme.colors.secondary,
+    },
+    // Health Center Log Styles
+    healthCenterLogCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.xl,
+        minHeight: 400,
+        width: '100%',
+    },
+    healthCenterLogHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.xs,
+    },
+    healthCenterLogTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    healthCenterLogSubtitle: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.xl,
+    },
+    // Add Medication Styles
+    addMedicationCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.xl,
+        width: '100%',
+    },
+    addMedicationHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.xs,
+    },
+    addMedicationTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    addMedicationSubtitle: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.lg,
+    },
+    formContainer: {
+        width: '100%',
+    },
+    formField: {
+        marginBottom: theme.spacing.lg,
+    },
+    formLabel: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.sm,
+    },
+    childPickerButton: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        height: 44,
+    },
+    childPickerText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    childPickerPlaceholder: {
+        color: theme.colors.textSecondary,
+    },
+    formInput: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        fontSize: 14,
+        color: theme.colors.text,
+        height: 44,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
+    },
+    mealTimeContainer: {
+        flexDirection: 'row',
+        gap: theme.spacing.md,
+    },
+    mealTimeColumn: {
+        flex: 1,
+    },
+    radioButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: theme.spacing.md,
+        gap: theme.spacing.sm,
+    },
+    radioCircle: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        borderWidth: 2,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    radioCircleSelected: {
+        borderColor: theme.colors.secondary,
+        backgroundColor: theme.colors.secondary,
+    },
+    radioInner: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: 'white',
+    },
+    radioLabel: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    formTextArea: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        fontSize: 14,
+        color: theme.colors.text,
+        minHeight: 100,
+        textAlignVertical: 'top',
+        outlineWidth: 0,
+        outlineColor: 'transparent',
+    },
+    checkboxContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: theme.spacing.lg,
+        gap: theme.spacing.sm,
+    },
+    checkbox: {
+        width: 20,
+        height: 20,
+        borderRadius: 4,
+        borderWidth: 2,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    checkboxSelected: {
+        backgroundColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+    },
+    checkboxLabel: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    addMedicationButton: {
+        backgroundColor: theme.colors.secondary,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.lg,
+        alignItems: 'center',
+        marginTop: theme.spacing.md,
+    },
+    addMedicationButtonText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        fontWeight: '600',
+        color: 'white',
+    },
+    pickerModal: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '70%',
+        paddingBottom: theme.spacing.xl,
+        marginTop: 'auto',
+    },
+    pickerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.md,
+        paddingHorizontal: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    pickerTitle: {
+        ...theme.typography.h2,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    pickerContent: {
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.md,
+        maxHeight: 400,
+    },
+    pickerOption: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    pickerOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    // Upload CSV Modal Styles
+    uploadModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    uploadModal: {
+        backgroundColor: '#1f2937',
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+    },
+    uploadModalTitle: {
+        ...theme.typography.h2,
+        fontSize: 18,
+        fontWeight: '700',
+        color: 'white',
+        marginBottom: theme.spacing.lg,
+        textAlign: 'center',
+    },
+    uploadOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#374151',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+        gap: theme.spacing.md,
+    },
+    uploadOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: 'white',
     },
 });
