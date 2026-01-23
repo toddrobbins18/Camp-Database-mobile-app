@@ -19,6 +19,8 @@ import { MessagesScreen } from '../screens/MessagesScreen';
 import { AdminPanelScreen } from '../screens/AdminPanelScreen';
 import { EvaluationQuestionsScreen } from '../screens/EvaluationQuestionsScreen';
 import { QuestionTextScreen } from '../screens/QuestionTextScreen';
+import { RolePermissionsScreen } from '../screens/RolePermissionsScreen';
+import { DivisionPermissionsScreen } from '../screens/DivisionPermissionsScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -240,14 +242,14 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Role Permissions"
                     icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('RolePermissions')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
                 <DrawerItem
                     label="Division Permissions"
                     icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('DivisionPermissions')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -310,6 +312,8 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} />
             <Drawer.Screen name="EvaluationQuestions" component={EvaluationQuestionsScreen} />
             <Drawer.Screen name="QuestionText" component={QuestionTextScreen} />
+            <Drawer.Screen name="RolePermissions" component={RolePermissionsScreen} />
+            <Drawer.Screen name="DivisionPermissions" component={DivisionPermissionsScreen} />
         </Drawer.Navigator>
     );
 };

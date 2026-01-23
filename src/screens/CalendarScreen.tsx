@@ -464,7 +464,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                         <Text style={styles.weekDayText}>{day}</Text>
                                     </View>
                                 ))}
-                            </View>
+                </View>
 
                             {/* Calendar Days */}
                             <View style={styles.daysGrid}>
@@ -545,7 +545,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                                             {event.location && (
                                                                 <Text style={styles.weekEventLocation}>{event.location}</Text>
                                                             )}
-                                                        </TouchableOpacity>
+                        </TouchableOpacity>
                                                     ))}
                                                 </ScrollView>
                                             </View>
@@ -587,7 +587,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                                     <View style={styles.dayEventLocation}>
                                                         <Ionicons name="location" size={14} color="#ef4444" />
                                                         <Text style={styles.dayEventLocationText}>{event.location}</Text>
-                                                    </View>
+                        </View>
                                                 )}
                                                 {event.tags && event.tags.length > 0 && (
                                                     <View style={styles.dayEventTags}>
@@ -598,12 +598,12 @@ export const CalendarScreen = ({ navigation }: any) => {
                                                                     <Text style={[styles.dayEventTagText, { color: tagStyle.color }]}>
                                                                         {tag}
                                                                     </Text>
-                                                                </View>
+                            </View>
                                                             );
                                                         })}
-                                                    </View>
+                        </View>
                                                 )}
-                                            </StyledCard>
+                    </StyledCard>
                                         ))
                                     ) : (
                                         <View style={styles.emptyDayState}>
@@ -636,21 +636,21 @@ export const CalendarScreen = ({ navigation }: any) => {
                                                     size={18} 
                                                     color={theme.colors.secondary} 
                                                 />
-                                            </View>
+                        </View>
                                             <Text style={styles.agendaEventTitle}>{event.title}</Text>
                                             {event.location && (
                                                 <View style={styles.agendaEventLocation}>
                                                     <Ionicons name="location" size={12} color="#ef4444" />
                                                     <Text style={styles.agendaEventLocationText}>{event.location}</Text>
-                                                </View>
+                            </View>
                                             )}
-                                        </View>
-                                    </StyledCard>
+                        </View>
+                    </StyledCard>
                                 ))
                             ) : (
                                 <View style={styles.emptyAgendaState}>
                                     <Text style={styles.emptyAgendaText}>No events found</Text>
-                                </View>
+                </View>
                             )}
                         </ScrollView>
                     )}

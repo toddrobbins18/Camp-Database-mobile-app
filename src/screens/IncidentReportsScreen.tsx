@@ -343,13 +343,13 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Reported By</Text>
                                 <View style={styles.inputContainer}>
-                                    <TextInput
-                                        style={styles.inputField}
-                                        placeholder="Enter reporter name"
-                                        placeholderTextColor={theme.colors.textSecondary}
+                                <TextInput
+                                    style={styles.inputField}
+                                    placeholder="Enter reporter name"
+                                    placeholderTextColor={theme.colors.textSecondary}
                                         value={reportedBy}
                                         onChangeText={setReportedBy}
-                                    />
+                                />
                                 </View>
                             </View>
 
