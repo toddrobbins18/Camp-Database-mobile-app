@@ -17,6 +17,8 @@ import { IncidentReportsScreen } from '../screens/IncidentReportsScreen';
 import { MenuScreen } from '../screens/MenuScreen';
 import { MessagesScreen } from '../screens/MessagesScreen';
 import { AdminPanelScreen } from '../screens/AdminPanelScreen';
+import { EvaluationQuestionsScreen } from '../screens/EvaluationQuestionsScreen';
+import { QuestionTextScreen } from '../screens/QuestionTextScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -231,7 +233,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Evaluation Questions"
                     icon={({ color }) => <Ionicons name="clipboard-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('EvaluationQuestions')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -306,6 +308,8 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Menu" component={MenuScreen} />
             <Drawer.Screen name="Messages" component={MessagesScreen} />
             <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} />
+            <Drawer.Screen name="EvaluationQuestions" component={EvaluationQuestionsScreen} />
+            <Drawer.Screen name="QuestionText" component={QuestionTextScreen} />
         </Drawer.Navigator>
     );
 };
