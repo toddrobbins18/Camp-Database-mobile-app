@@ -8,6 +8,28 @@ import { StyledCard } from '../components/StyledCard';
 // Mock appointments data
 const MOCK_APPOINTMENTS: any[] = [];
 
+// Mock campers data
+const MOCK_CAMPERS = [
+    { id: '1', name: 'Abby Weiss' },
+    { id: '2', name: 'Adam Elliott' },
+    { id: '3', name: 'Addison Brewer' },
+    { id: '4', name: 'Adrianna Gelb' },
+    { id: '5', name: 'Aiden Feld' },
+    { id: '6', name: 'Aiden Leon' },
+    { id: '7', name: 'Aiden Weisz' },
+    { id: '8', name: 'Alex Haboush' },
+    { id: '9', name: 'Alaia Khalili' },
+    { id: '10', name: 'Alexa Alfred' },
+];
+
+// Mock staff data
+const MOCK_STAFF = [
+    { id: '1', name: 'John Smith' },
+    { id: '2', name: 'Jane Doe' },
+    { id: '3', name: 'Mike Johnson' },
+    { id: '4', name: 'Sarah Williams' },
+];
+
 // Appointment types (for filter)
 const APPOINTMENT_TYPES = [
     'All Types',
@@ -66,6 +88,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
     const [isFormTypeDropdownOpen, setIsFormTypeDropdownOpen] = useState(false);
     const [isFormStatusDropdownOpen, setIsFormStatusDropdownOpen] = useState(false);
     const [isPersonDropdownOpen, setIsPersonDropdownOpen] = useState(false);
+    const [personSearchText, setPersonSearchText] = useState('');
     const [formData, setFormData] = useState({
         date: '',
         time: '',
@@ -494,6 +517,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                         onPress={() => {
                                             setAppointmentFor('Staff');
                                             setFormData({ ...formData, person: '', personId: '' });
+                                            setPersonSearchText('');
                                         }}
                                     >
                                         <Text style={[
@@ -756,38 +780,64 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                 visible={isPersonDropdownOpen}
                 transparent={true}
                 animationType="fade"
-                onRequestClose={() => setIsPersonDropdownOpen(false)}
+                onRequestClose={() => {
+                    setIsPersonDropdownOpen(false);
+                    setPersonSearchText('');
+                }}
             >
-                <TouchableOpacity
+                <Pressable
                     style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setIsPersonDropdownOpen(false)}
+                    onPress={() => {
+                        setIsPersonDropdownOpen(false);
+                        setPersonSearchText('');
+                    }}
                 >
-                    <View style={styles.dropdownModal}>
+                    <View style={styles.dropdownModal} onStartShouldSetResponder={() => true}>
                         <View style={styles.dropdownSearchContainer}>
                             <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.dropdownSearchIcon} />
                             <TextInput
                                 style={styles.dropdownSearchInput}
                                 placeholder={`Search ${appointmentFor.toLowerCase()}s...`}
                                 placeholderTextColor={theme.colors.textSecondary}
+                                value={personSearchText}
+                                onChangeText={setPersonSearchText}
                             />
                         </View>
-                        <ScrollView style={styles.dropdownScroll}>
-                            {/* Mock data - in real app, this would be filtered from actual campers/staff */}
-                            <TouchableOpacity
-                                style={styles.dropdownItem}
-                                onPress={() => {
-                                    setFormData({ ...formData, person: `Sample ${appointmentFor} Name`, personId: '1' });
-                                    setIsPersonDropdownOpen(false);
-                                }}
-                            >
-                                <Text style={styles.dropdownItemText}>
-                                    Sample {appointmentFor} Name
-                                </Text>
-                            </TouchableOpacity>
+                        <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                            {(appointmentFor === 'Camper' ? MOCK_CAMPERS : MOCK_STAFF)
+                                .filter((person) =>
+                                    person.name.toLowerCase().includes(personSearchText.toLowerCase())
+                                )
+                                .map((person) => {
+                                    const isSelected = formData.personId === person.id;
+                                    return (
+                                        <TouchableOpacity
+                                            key={person.id}
+                                            style={[
+                                                styles.dropdownItem,
+                                                isSelected && styles.personDropdownItemSelected
+                                            ]}
+                                            onPress={() => {
+                                                setFormData({ ...formData, person: person.name, personId: person.id });
+                                                setIsPersonDropdownOpen(false);
+                                                setPersonSearchText('');
+                                            }}
+                                        >
+                                            <Text style={[
+                                                styles.dropdownItemText,
+                                                isSelected && styles.personDropdownItemTextSelected
+                                            ]}>
+                                                {person.name}
+                                            </Text>
+                                            {isSelected && (
+                                                <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
                         </ScrollView>
                     </View>
-                </TouchableOpacity>
+                </Pressable>
             </Modal>
         </SafeAreaView>
     );
@@ -950,10 +1000,18 @@ const styles = StyleSheet.create({
     dropdownItem: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.md,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
+    },
+    personDropdownItemSelected: {
+        backgroundColor: '#fb923c', // Orange color matching other dropdowns
+    },
+    personDropdownItemTextSelected: {
+        color: theme.colors.surface, // White text on orange background
+        fontWeight: '600',
     },
     dropdownItemSelected: {
         backgroundColor: theme.colors.background,

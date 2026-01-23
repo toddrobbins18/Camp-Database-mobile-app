@@ -154,19 +154,19 @@ export const AwardsScreen = ({ navigation }: any) => {
                         <Text style={styles.headerTitle}>
                             Awards & Achievements
                         </Text>
-                        <Text style={styles.headerSubtitle}>
-                            Celebrating success across all children
-                        </Text>
-                    </View>
+                    <Text style={styles.headerSubtitle}>
+                        Celebrating success across all children
+                    </Text>
+                </View>
                     
                     {/* Action Buttons - Below title on small screens, to the right on larger */}
                     <View style={styles.actionButtons}>
-                        <TouchableOpacity
+                    <TouchableOpacity
                             style={styles.helpButton}
-                            onPress={handleHelp}
-                        >
+                        onPress={handleHelp}
+                    >
                             <Ionicons name="help-circle" size={20} color={theme.colors.text} />
-                        </TouchableOpacity>
+                    </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.uploadButton}
                             onPress={handleUploadCSV}
@@ -174,15 +174,15 @@ export const AwardsScreen = ({ navigation }: any) => {
                             <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} style={styles.uploadIcon} />
                             <Text style={styles.uploadButtonText}>Upload CSV</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.addButton}
-                            onPress={handleAddAward}
-                        >
-                            <Ionicons name="add" size={20} color={theme.colors.surface} style={styles.addIcon} />
+                    <TouchableOpacity
+                        style={styles.addButton}
+                        onPress={handleAddAward}
+                    >
+                        <Ionicons name="add" size={20} color={theme.colors.surface} style={styles.addIcon} />
                             <Text style={styles.addButtonText}>Add Award</Text>
-                        </TouchableOpacity>
-                    </View>
+                    </TouchableOpacity>
                 </View>
+            </View>
 
                 {/* Summary Cards - Three cards in a row */}
                 <View style={styles.summaryCards}>
@@ -202,8 +202,8 @@ export const AwardsScreen = ({ navigation }: any) => {
 
                 {/* Empty State */}
                 <View style={styles.emptyStateContainer}>
-                    <Text style={styles.emptyStateText}>No awards found. Add your first achievement!</Text>
-                </View>
+                        <Text style={styles.emptyStateText}>No awards found. Add your first achievement!</Text>
+                    </View>
             </ScrollView>
 
             {/* Add New Award Modal */}
@@ -232,7 +232,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                             keyboardShouldPersistTaps="handled"
                         >
                             {/* Child Selection */}
-                            <View style={styles.formField}>
+                            <View style={[styles.formField, styles.childFormField]}>
                                 <Text style={styles.formLabel}>Child</Text>
                                 <View style={styles.childSelectContainer}>
                                     <TextInput
@@ -278,6 +278,9 @@ export const AwardsScreen = ({ navigation }: any) => {
                                                             ]}>
                                                                 {child.name}
                                                             </Text>
+                                                            {selectedChild === child.id && (
+                                                                <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
+                                                            )}
                                                         </TouchableOpacity>
                                                     ))
                                                 ) : (
@@ -555,7 +558,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                         {/* Tab Content */}
                         <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
                             {renderTabContent(activeTab)}
-                        </ScrollView>
+            </ScrollView>
                     </View>
                 </View>
             </Modal>
@@ -992,6 +995,9 @@ const styles = StyleSheet.create({
     formField: {
         marginBottom: theme.spacing.lg,
     },
+    childFormField: {
+        zIndex: 1000,
+    },
     formLabel: {
         fontSize: 14,
         fontWeight: '500',
@@ -1000,6 +1006,7 @@ const styles = StyleSheet.create({
     },
     childSelectContainer: {
         position: 'relative',
+        zIndex: 1000,
     },
     childInput: {
         backgroundColor: theme.colors.background,
@@ -1023,18 +1030,21 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.md,
         marginTop: theme.spacing.xs,
         maxHeight: 250,
-        zIndex: 1000,
-        elevation: 5,
+        zIndex: 9999,
+        elevation: 10,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4.65,
         overflow: 'hidden',
     },
     childDropdownScroll: {
         maxHeight: 250,
     },
     childDropdownItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.sm,
         borderBottomWidth: 1,
