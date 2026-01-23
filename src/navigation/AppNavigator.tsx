@@ -15,6 +15,8 @@ import { TransportScreen } from '../screens/TransportScreen';
 import { SportsScreen } from '../screens/SportsScreen';
 import { ActivitiesFieldTripsScreen } from '../screens/ActivitiesFieldTripsScreen';
 import { AppointmentsScreen } from '../screens/AppointmentsScreen';
+import { AwardsScreen } from '../screens/AwardsScreen';
+import { DailyNewsScreen } from '../screens/DailyNewsScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -82,9 +84,11 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Awards"
                     icon={({ color }) => <Ionicons name="ribbon-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('Awards')}
                     labelStyle={styles.drawerLabel}
+                    activeTintColor={theme.colors.surface}
                     inactiveTintColor="#94a3b8"
+                    activeBackgroundColor={theme.colors.sidebarActiveBg}
                 />
                 <DrawerItem
                     label="Camper"
@@ -96,9 +100,11 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Daily News"
                     icon={({ color }) => <Ionicons name="document-text-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('DailyNews')}
                     labelStyle={styles.drawerLabel}
+                    activeTintColor={theme.colors.surface}
                     inactiveTintColor="#94a3b8"
+                    activeBackgroundColor={theme.colors.sidebarActiveBg}
                 />
                 <DrawerItem
                     label="Dashboard"
@@ -304,6 +310,8 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Sports" component={SportsScreen} />
             <Drawer.Screen name="ActivitiesFieldTrips" component={ActivitiesFieldTripsScreen} />
             <Drawer.Screen name="Appointments" component={AppointmentsScreen} />
+            <Drawer.Screen name="Awards" component={AwardsScreen} />
+            <Drawer.Screen name="DailyNews" component={DailyNewsScreen} />
         </Drawer.Navigator>
     );
 };
