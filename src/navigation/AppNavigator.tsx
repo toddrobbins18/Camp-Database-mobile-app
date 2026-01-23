@@ -16,6 +16,7 @@ import { SportsScreen } from '../screens/SportsScreen';
 import { IncidentReportsScreen } from '../screens/IncidentReportsScreen';
 import { MenuScreen } from '../screens/MenuScreen';
 import { MessagesScreen } from '../screens/MessagesScreen';
+import { AdminPanelScreen } from '../screens/AdminPanelScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -223,7 +224,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Admin Panel"
                     icon={({ color }) => <Ionicons name="shield-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('AdminPanel')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -304,6 +305,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="IncidentReports" component={IncidentReportsScreen} />
             <Drawer.Screen name="Menu" component={MenuScreen} />
             <Drawer.Screen name="Messages" component={MessagesScreen} />
+            <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} />
         </Drawer.Navigator>
     );
 };

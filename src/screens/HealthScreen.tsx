@@ -229,14 +229,14 @@ export const HealthScreen = ({ navigation }: any) => {
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.openDrawer()}>
+    <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
                         <Ionicons name="menu" size={28} color={theme.colors.text} />
-                    </TouchableOpacity>
-                    <TouchableOpacity>
+        </TouchableOpacity>
+        <TouchableOpacity>
                         <Ionicons name="person-circle-outline" size={28} color={theme.colors.text} />
-                    </TouchableOpacity>
-                </View>
+        </TouchableOpacity>
+    </View>
 
                 {/* Title and Description Section */}
                 <View style={styles.titleSection}>
@@ -341,7 +341,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     const isTodayDate = isToday(day.fullDate);
                                     const isPast = isPastDate(day.fullDate);
                                     
-                                    return (
+    return (
                                         <TouchableOpacity
                                             key={index}
                                             style={[
@@ -382,7 +382,7 @@ export const HealthScreen = ({ navigation }: any) => {
                             <View style={styles.emptyState}>
                                 <Text style={styles.emptyText}>No medications scheduled for this date</Text>
                             </View>
-                        </StyledCard>
+                    </StyledCard>
                     </>
                 ) : (
                     <>
@@ -441,14 +441,14 @@ export const HealthScreen = ({ navigation }: any) => {
                                             <Text style={styles.clearButtonText}>Clear</Text>
                                         </TouchableOpacity>
                                     </View>
-                                </StyledCard>
+                    </StyledCard>
 
                                 {/* Empty State */}
                                 <View style={styles.emptyStateRow}>
                                     <Text style={styles.emptyText}>No medications scheduled for today</Text>
                                     <View style={styles.emptyDot} />
                                 </View>
-                            </StyledCard>
+                    </StyledCard>
                         ) : activeTab === 'Health Center' ? (
                             <View style={styles.healthCenterContainer}>
                                 {/* Health Center Admissions Header */}
@@ -460,7 +460,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     <Text style={styles.healthCenterSubtitle}>
                                         Track overnight admissions to the health center
                                     </Text>
-                                </View>
+                </View>
 
                                 {/* RFID Quick Check-in / Check-Out Card */}
                                 <StyledCard style={styles.rfidCard}>
@@ -483,14 +483,14 @@ export const HealthScreen = ({ navigation }: any) => {
                                         <TouchableOpacity style={styles.scanButton}>
                                             <Ionicons name="scan-outline" size={18} color="white" />
                                             <Text style={styles.scanButtonText}>Scan</Text>
-                                        </TouchableOpacity>
+                    </TouchableOpacity>
                                         <TouchableOpacity 
                                             style={styles.clearButton}
                                             onPress={() => setHealthCenterRfidInput('')}
                                         >
                                             <Text style={styles.clearButtonText}>Clear</Text>
-                                        </TouchableOpacity>
-                                    </View>
+                    </TouchableOpacity>
+                </View>
                                 </StyledCard>
 
                                 {/* Search Children Section */}
@@ -513,7 +513,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     <View style={styles.availableChildrenHeader}>
                                         <Ionicons name="checkmark-circle" size={20} color="#10b981" />
                                         <Text style={styles.availableChildrenTitle}>Available Children</Text>
-                                    </View>
+                            </View>
                                     
                                     <ScrollView 
                                         style={styles.childrenList}
@@ -544,8 +544,8 @@ export const HealthScreen = ({ navigation }: any) => {
                                                             ]}>
                                                                 {child.division}
                                                             </Text>
-                                                        </View>
-                                                    </View>
+                        </View>
+                                </View>
                                                     <TouchableOpacity 
                                                         style={[
                                                             styles.admitButton,
@@ -573,21 +573,21 @@ export const HealthScreen = ({ navigation }: any) => {
                                             );
                                         })}
                                     </ScrollView>
-                                </View>
+                            </View>
                             </View>
                         ) : activeTab === 'Health Center Log' ? (
                             <StyledCard style={styles.healthCenterLogCard}>
                                 <View style={styles.healthCenterLogHeader}>
                                     <Ionicons name="bar-chart-outline" size={24} color={theme.colors.text} />
                                     <Text style={styles.healthCenterLogTitle}>Health Center Admission History</Text>
-                                </View>
+                        </View>
                                 <Text style={styles.healthCenterLogSubtitle}>
                                     Past health center admissions this season
                                 </Text>
                                 <View style={styles.emptyState}>
                                     <Text style={styles.emptyText}>No admission history found for this season</Text>
                                 </View>
-                            </StyledCard>
+                    </StyledCard>
                         ) : activeTab === 'Add Medication' ? (
                             <StyledCard style={styles.addMedicationCard}>
                                 <View style={styles.addMedicationHeader}>
@@ -615,7 +615,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                             </Text>
                                             <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                                         </TouchableOpacity>
-                                    </View>
+                            </View>
 
                                     {/* Medication Name */}
                                     <View style={styles.formField}>
@@ -627,7 +627,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                             value={medicationName}
                                             onChangeText={setMedicationName}
                                         />
-                                    </View>
+                        </View>
 
                                     {/* Dosage */}
                                     <View style={styles.formField}>
@@ -639,7 +639,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                             value={dosage}
                                             onChangeText={setDosage}
                                         />
-                                    </View>
+                                </View>
 
                                     {/* Meal Time */}
                                     <View style={styles.formField}>
@@ -655,7 +655,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                         mealTime === 'Before Breakfast' && styles.radioCircleSelected
                                                     ]}>
                                                         {mealTime === 'Before Breakfast' && <View style={styles.radioInner} />}
-                                                    </View>
+                            </View>
                                                     <Text style={styles.radioLabel}>Before Breakfast</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity
@@ -667,7 +667,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                         mealTime === 'Before Lunch' && styles.radioCircleSelected
                                                     ]}>
                                                         {mealTime === 'Before Lunch' && <View style={styles.radioInner} />}
-                                                    </View>
+                            </View>
                                                     <Text style={styles.radioLabel}>Before Lunch</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity
@@ -788,15 +788,15 @@ export const HealthScreen = ({ navigation }: any) => {
                                     >
                                         <Text style={styles.addMedicationButtonText}>Add Medication</Text>
                                     </TouchableOpacity>
-                                </View>
-                            </StyledCard>
+                        </View>
+                    </StyledCard>
                         ) : (
                             <StyledCard style={styles.medicationLogCard}>
                                 <Text style={styles.logTitle}>Daily Medication Log</Text>
                                 <Text style={styles.logDescription}>Mark off medications administered today.</Text>
                                 <View style={styles.emptyState}>
                                     <Text style={styles.emptyText}>No medications scheduled for today.</Text>
-                                </View>
+                </View>
                             </StyledCard>
                         )}
                     </>
