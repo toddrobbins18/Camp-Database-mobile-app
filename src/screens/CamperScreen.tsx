@@ -6,7 +6,9 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const isSmallScreen = SCREEN_WIDTH < 400;
+const isSmallScreen = SCREEN_WIDTH < 600; // Mobile: full width cards
+const isMediumScreen = SCREEN_WIDTH >= 600 && SCREEN_WIDTH < 1024; // Tablet: 2 columns
+const isLargeScreen = SCREEN_WIDTH >= 1024; // Desktop: 3 columns
 
 // Division options matching the screenshot
 const DIVISIONS = [
@@ -1939,16 +1941,24 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* Camper Grid */}
                 <View style={styles.grid}>
                     {currentCampers.map((camper, index) => (
-                        <StyledCard key={startIndex + index} style={styles.camperCard}>
+                        <TouchableOpacity
+                            key={startIndex + index}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                                navigation.navigate('CamperDetail', { camper });
+                            }}
+                        >
+                            <StyledCard style={styles.camperCard}>
                             <View style={styles.cardTop}>
                                 <View style={styles.cardTopLeft}>
-                                    <Text style={styles.camperName}>{camper.name}</Text>
-                                    <Text style={styles.camperGrade}>{camper.grade}</Text>
+                                    <Text style={styles.camperName} numberOfLines={1} ellipsizeMode="tail">{camper.name}</Text>
+                                    <Text style={styles.camperGrade}>{camper.grade || "N/A"}</Text>
                                 </View>
                                 <View style={styles.cardTopRight}>
                                     <TouchableOpacity 
                                         style={styles.cardIconButton}
-                                        onPress={() => {
+                                        onPress={(e) => {
+                                            e.stopPropagation();
                                             setCamperToEdit(camper);
                                             // Pre-fill form with camper data
                                             setEditFormData({
@@ -1973,28 +1983,29 @@ export const CamperScreen = ({ navigation }: any) => {
                                             setShowEditChildModal(true);
                                         }}
                                     >
-                                        <Ionicons name="pencil-outline" size={18} color={theme.colors.text} />
+                                        <Ionicons name="pencil-outline" size={18} color="#9ca3af" />
                                     </TouchableOpacity>
                                     <TouchableOpacity 
                                         style={styles.cardIconButton}
-                                        onPress={() => {
+                                        onPress={(e) => {
+                                            e.stopPropagation();
                                             setCamperToDelete(camper);
                                             setShowDeleteModal(true);
                                         }}
                                     >
-                                        <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                                        <Ionicons name="trash-outline" size={18} color="#9ca3af" />
                                     </TouchableOpacity>
                                 </View>
                             </View>
 
-                            <Text style={styles.divisionText}>Division: {camper.division}</Text>
-
                             <View style={styles.cardFooter}>
+                                <Text style={styles.divisionText}>Division: {camper.division || "N/A"}</Text>
                                 <View style={styles.statusBadge}>
                                     <Text style={styles.statusText}>active</Text>
                                 </View>
                             </View>
                         </StyledCard>
+                        </TouchableOpacity>
                     ))}
                 </View>
 
@@ -2061,7 +2072,7 @@ export const CamperScreen = ({ navigation }: any) => {
 
 // Mock Data - matching screenshot (expanded to show pagination)
 const mockCampers = [
-    { name: 'Abby Weiss', grade: '11th', division: 'CIT Girls' },
+    { name: 'Abby Weiss', grade: '11th', division: 'CIT Girls', guardianEmail: 'abbyw8135@icloud.com', guardianPhone: '5167880571', gender: 'Female' },
     { name: 'Adam Elliott', grade: '4th', division: 'Freshmen B Boys' },
     { name: 'Addison Brewer', grade: '6th', division: 'Sophomore Girls' },
     { name: 'Adrianna Gelb', grade: '11th', division: 'CIT Girls' },
@@ -2089,7 +2100,7 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.background,
     },
     scrollContent: {
-        padding: theme.spacing.md,
+        padding: isSmallScreen ? 12 : theme.spacing.md, // Smaller padding on mobile
         paddingBottom: 80, // Space for FAB
     },
     header: {
@@ -2328,61 +2339,80 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.sm,
     },
     grid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
+        flexDirection: isSmallScreen ? 'column' : 'row', // Column on mobile, row on larger screens
+        flexWrap: isSmallScreen ? 'nowrap' : 'wrap',
+        width: '100%',
+        gap: isSmallScreen ? 12 : 16,
     },
     camperCard: {
-        width: '48%', // 2 columns
-        padding: theme.spacing.md,
+        width: isSmallScreen ? '100%' : (isMediumScreen ? '48%' : (isLargeScreen ? (SCREEN_WIDTH - 32 - 32) / 3 : '100%')), // Full width on mobile, responsive on larger screens
+        padding: isSmallScreen ? 16 : 24, // Smaller padding on mobile
+        marginBottom: 0, // Gap handles spacing
+        backgroundColor: '#ffffff', // White background
+        borderWidth: 1,
+        borderColor: '#e5e7eb', // Light gray border
+        borderRadius: 8, // Rounded corners
     },
     cardTop: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: theme.spacing.sm,
+        marginBottom: isSmallScreen ? 10 : 12, // Spacing between top and footer sections
     },
     cardTopLeft: {
         flex: 1,
+        marginRight: isSmallScreen ? 6 : 8,
+        paddingRight: isSmallScreen ? 6 : 8,
+        minWidth: 0, // Allow text to shrink properly
     },
     cardTopRight: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: theme.spacing.xs,
+        gap: isSmallScreen ? 6 : 8,
+        flexShrink: 0,
     },
     cardIconButton: {
-        padding: theme.spacing.xs,
+        padding: isSmallScreen ? 3 : 4,
     },
     camperName: {
-        fontWeight: 'bold',
-        fontSize: 16,
-        color: theme.colors.text,
+        fontWeight: '600', // font-semibold
+        fontSize: isSmallScreen ? 16 : 18, // Slightly smaller on mobile
+        color: '#374151', // dark gray
+        marginBottom: 4, // space-y-1 equivalent (4px gap between name and grade)
+        lineHeight: isSmallScreen ? 22 : 24,
     },
     camperGrade: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
+        fontSize: isSmallScreen ? 13 : 14, // text-sm, slightly smaller on mobile
+        color: '#6b7280', // text-muted-foreground
+        marginBottom: 0,
+        lineHeight: isSmallScreen ? 18 : 20,
     },
     divisionText: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.md,
+        fontSize: isSmallScreen ? 13 : 14, // text-sm, slightly smaller on mobile
+        color: '#6b7280', // text-muted-foreground
+        marginBottom: 0,
+        lineHeight: isSmallScreen ? 18 : 20,
+        flex: 1,
     },
     cardFooter: {
         flexDirection: 'row',
-        justifyContent: 'flex-end',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 0,
+        flexWrap: 'wrap', // Allow wrapping on very small screens
     },
     statusBadge: {
-        backgroundColor: '#dcfce7', // light green
+        backgroundColor: '#dcfce7',
         paddingHorizontal: 8,
-        paddingVertical: 2,
+        paddingVertical: 4,
         borderRadius: 12,
-        borderWidth: 1,
-        borderColor: theme.colors.success,
+        borderWidth: 0,
     },
     statusText: {
-        color: theme.colors.success,
+        color: '#166534',
         fontSize: 10,
-        fontWeight: 'bold',
+        fontWeight: '700',
+        lineHeight: 16,
     },
     fab: {
         position: 'absolute',

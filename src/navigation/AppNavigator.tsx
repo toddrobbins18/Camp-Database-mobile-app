@@ -8,6 +8,7 @@ import { LoginScreen } from '../screens/LoginScreen';
 import { SignUpScreen } from '../screens/SignUpScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { CamperScreen } from '../screens/CamperScreen';
+import { CamperDetailScreen } from '../screens/CamperDetailScreen';
 import { StaffScreen } from '../screens/StaffScreen';
 import { CalendarScreen } from '../screens/CalendarScreen';
 import { HealthScreen } from '../screens/HealthScreen';
@@ -289,6 +290,20 @@ const CustomDrawerContent = (props: any) => {
     );
 };
 
+// Camper Stack Navigator
+const CamperStackNavigator = () => {
+    return (
+        <Stack.Navigator
+            screenOptions={{
+                headerShown: false,
+            }}
+        >
+            <Stack.Screen name="CamperList" component={CamperScreen} />
+            <Stack.Screen name="CamperDetail" component={CamperDetailScreen} />
+        </Stack.Navigator>
+    );
+};
+
 // Main App Navigator (Drawer)
 const MainAppNavigator = () => {
     return (
@@ -302,7 +317,7 @@ const MainAppNavigator = () => {
             initialRouteName="Dashboard"
         >
             <Drawer.Screen name="Dashboard" component={DashboardScreen} />
-            <Drawer.Screen name="Camper" component={CamperScreen} />
+            <Drawer.Screen name="Camper" component={CamperStackNavigator} />
             <Drawer.Screen name="Staff" component={StaffScreen} />
             <Drawer.Screen name="Calendar" component={CalendarScreen} />
             <Drawer.Screen name="Health" component={HealthScreen} />
