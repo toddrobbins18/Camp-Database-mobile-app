@@ -18,6 +18,7 @@ import { RosterTemplatesScreen } from '../screens/RosterTemplatesScreen';
 import { SpecialEventsScreen } from '../screens/SpecialEventsScreen';
 import { SpecialMealsScreen } from '../screens/SpecialMealsScreen';
 import { SportsCalendarScreen } from '../screens/SportsCalendarScreen';
+import { RainyDayScheduleScreen } from '../screens/RainyDayScheduleScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -153,7 +154,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Rainy Day Schedule"
                     icon={({ color }) => <Ionicons name="rainy-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('RainyDaySchedule')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -304,6 +305,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Transport" component={TransportScreen} />
             <Drawer.Screen name="Sports" component={SportsScreen} />
             <Drawer.Screen name="SportsCalendar" component={SportsCalendarScreen} />
+            <Drawer.Screen name="RainyDaySchedule" component={RainyDayScheduleScreen} />
             <Drawer.Screen name="Reports" component={ReportsScreen} />
             <Drawer.Screen name="RosterTemplates" component={RosterTemplatesScreen} />
             <Drawer.Screen name="SpecialEvents" component={SpecialEventsScreen} />
