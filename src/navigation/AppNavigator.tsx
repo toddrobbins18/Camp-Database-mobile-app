@@ -26,6 +26,8 @@ import { ActivitiesFieldTripsScreen } from '../screens/ActivitiesFieldTripsScree
 import { AppointmentsScreen } from '../screens/AppointmentsScreen';
 import { AwardsScreen } from '../screens/AwardsScreen';
 import { DailyNewsScreen } from '../screens/DailyNewsScreen';
+import { UserApprovalsScreen } from '../screens/UserApprovalsScreen';
+import { AccessDeniedScreen } from '../screens/AccessDeniedScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -267,14 +269,14 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Specialist Sport Assignments"
                     icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('AccessDenied')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
                 <DrawerItem
                     label="User Approvals"
                     icon={({ color }) => <Ionicons name="checkmark-circle-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('UserApprovals')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -343,6 +345,8 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Appointments" component={AppointmentsScreen} />
             <Drawer.Screen name="Awards" component={AwardsScreen} />
             <Drawer.Screen name="DailyNews" component={DailyNewsScreen} />
+            <Drawer.Screen name="UserApprovals" component={UserApprovalsScreen} />
+            <Drawer.Screen name="AccessDenied" component={AccessDeniedScreen} />
         </Drawer.Navigator>
     );
 };

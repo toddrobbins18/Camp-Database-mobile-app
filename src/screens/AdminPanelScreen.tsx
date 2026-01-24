@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -9,41 +9,186 @@ interface User {
     id: string;
     name: string;
     email: string;
-    role: 'Super Admin' | 'Admin' | 'Viewer' | 'Staff';
+    role: string;
+    roleColor: string; // 'danger' | 'info' | 'primary' | 'success' etc.
     tags?: string[];
 }
 
 export const AdminPanelScreen = ({ navigation }: any) => {
-    const [activeTab, setActiveTab] = useState('User Management');
+    // Mock Users Data
     const [users, setUsers] = useState<User[]>([
-        { id: '1', name: 'Todd Robbins', email: 'todd@camptic.com', role: 'Super Admin' },
-        { id: '2', name: 'Haley Thomas', email: 'haley@camptic.com', role: 'Admin' },
-        { id: '3', name: 'todd', email: 'todd.robbins18@gmail.com', role: 'Admin' },
-        { id: '4', name: 'Athletics', email: 'athletics@tylerhillcamp.com', role: 'Admin' },
-        { id: '5', name: 'Nick Williams', email: 'nick@tylerhillcamp.com', role: 'Admin' },
-        { id: '6', name: 'Mike Davidowitz', email: 'mike@camptic.com', role: 'Admin' },
-        { id: '7', name: 'ansaralyh@gmail.com', email: 'ansaralyh@gmail.com', role: 'Viewer' },
-        { id: '8', name: 'Courtney Sloan Parker', email: 'courtney@tylerhillcamp.com', role: 'Staff' },
-        { id: '9', name: 'raeesajidal10', email: 'raeesajidal10@gmail.com', role: 'Admin' },
+        { id: '1', name: 'Todd Robbins', email: 'todd@camptlc.com', role: 'Super Admin', roleColor: '#ef4444', tags: [] },
+        { id: '2', name: 'Haley Thomas', email: 'haley@camptlc.com', role: 'Admin', roleColor: '#ef4444', tags: [] },
+        { id: '3', name: 'Athletics', email: 'athletics@tylerhillcamp.com', role: 'Admin', roleColor: '#ef4444', tags: [] },
+        { id: '4', name: 'Nick Williams', email: 'nick@tylerhillcamp.com', role: 'Admin', roleColor: '#ef4444', tags: [] },
+        { id: '5', name: 'Mike Davidowitz', email: 'mike@camptlc.com', role: 'Admin', roleColor: '#ef4444', tags: [] },
+        { id: '6', name: 'ansaralyh@gmail.com', email: 'ansaralyh@gmail.com', role: 'Viewer', roleColor: '#0ea5e9', tags: [] },
+        { id: '7', name: 'Courtney Sloan Parker', email: 'courtney@tylerhillcamp.com', role: 'Staff', roleColor: '#2563eb', tags: [] },
+        { id: '8', name: 'raeessajidali10', email: 'raeessajidali10@gmail.com', role: 'Admin', roleColor: '#ef4444', tags: [] },
     ]);
-    const [showAddUserModal, setShowAddUserModal] = useState(false);
-    const [showRolePicker, setShowRolePicker] = useState<string | null>(null);
-    const [newUserName, setNewUserName] = useState('');
-    const [newUserEmail, setNewUserEmail] = useState('');
-    const [newUserRole, setNewUserRole] = useState<'Super Admin' | 'Admin' | 'Viewer' | 'Staff'>('Admin');
-    const [showNewUserRolePicker, setShowNewUserRolePicker] = useState(false);
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+    const [currentTab, setCurrentTab] = useState<'userManagement' | 'userTags' | 'emailAutomation' | 'dataImport' | 'editHistory'>('userManagement');
+    const [showRolePicker, setShowRolePicker] = useState(false);
+    const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [userToDelete, setUserToDelete] = useState<User | null>(null);
-    const [showRolePopup, setShowRolePopup] = useState(false);
-    const [selectedRoleForPopup, setSelectedRoleForPopup] = useState<'Super Admin' | 'Admin' | 'Viewer' | 'Staff' | null>(null);
-    const [selectedUserForRole, setSelectedUserForRole] = useState<string | null>(null);
-    
-    // User Tags state
-    const [userTagsSearch, setUserTagsSearch] = useState('');
-    const [selectedTagFilter, setSelectedTagFilter] = useState('All Tags');
-    const [showTagFilter, setShowTagFilter] = useState(false);
-    const [showTagPicker, setShowTagPicker] = useState<string | null>(null);
-    const [availableTags, setAvailableTags] = useState<string[]>([
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [showAddTagModal, setShowAddTagModal] = useState(false);
+    const [userForTags, setUserForTags] = useState<User | null>(null);
+
+    // Add User Modal State
+    const [showAddUserModal, setShowAddUserModal] = useState(false);
+    const [activeTab, setActiveTab] = useState<'create' | 'invite'>('create');
+    const [newUserRole, setNewUserRole] = useState('Staff');
+    const [showNewUserRolePicker, setShowNewUserRolePicker] = useState(false);
+
+    // Tags Management State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedFilterTag, setSelectedFilterTag] = useState('All Tags');
+    const [showFilterTagPicker, setShowFilterTagPicker] = useState(false);
+
+    // Email Automation State
+    interface EmailConfig {
+        id: string;
+        title: string;
+        description: string;
+        enabled: boolean;
+        selectedTags: string[];
+        selectedTimings: string[];
+        lastUpdated: string;
+    }
+
+    const [emailConfigs, setEmailConfigs] = useState<EmailConfig[]>([
+        { id: '1', title: 'Health Center Admissions', description: 'Division leaders see only their divisions.', enabled: true, selectedTags: ['nurse', 'transportation', 'food service'], selectedTimings: ['When Created'], lastUpdated: '1/24/2026, 3:00:39 PM' },
+        { id: '2', title: 'Health Center Checkouts', description: 'Division leaders see only their divisions.', enabled: true, selectedTags: ['director', 'admin staff'], selectedTimings: ['When Created'], lastUpdated: '11/2/2025, 0:22:20 PM' },
+        { id: '3', title: 'Incident Reports', description: 'Division leaders see only their divisions.', enabled: true, selectedTags: ['director', 'admin staff'], selectedTimings: ['When Created'], lastUpdated: '11/2/2025, 5:22:20 PM' },
+        { id: '4', title: 'Missed Medication Alerts', description: 'When scheduled medications are not administered - division leaders see only their divisions.', enabled: true, selectedTags: ['division leader'], selectedTimings: ['When Created'], lastUpdated: '11/22/2005, 8:30:16 PM' },
+        { id: '5', title: 'Sports Academy', description: 'Division leaders see only their divisions, specialists see only their sports.', enabled: true, selectedTags: [], selectedTimings: ['When Created'], lastUpdated: '11/22/2025, 5:53:08 PM' },
+        { id: '6', title: 'Sports Events (Away)', description: 'Division leaders see only their divisions, specialists see only their sports.', enabled: true, selectedTags: ['transportation', 'food service'], selectedTimings: ['When Created'], lastUpdated: '12/3/2025, 10:34:30 PM' },
+        { id: '7', title: 'Sports Events (Home)', description: 'Division leaders see only their divisions, specialists see only their sports.', enabled: true, selectedTags: [], selectedTimings: ['When Created'], lastUpdated: '11/22/2025, 6:53:08 PM' },
+        { id: '8', title: 'Transportation Events', description: 'When transportation events are scheduled or updated.', enabled: false, selectedTags: [], selectedTimings: ['When Created'], lastUpdated: '11/22/2025, 5:53:08 PM' },
+        { id: '9', title: 'Trip Updates', description: 'Division leaders see only their divisions.', enabled: true, selectedTags: ['division leader', 'director', 'admin staff', 'head of girls side'], selectedTimings: ['When Created'], lastUpdated: '11/2/2025, 3:22:20 PM' },
+        { id: '10', title: 'Tutoring & Therapy', description: 'Division leaders see only their divisions.', enabled: false, selectedTags: ['division leader'], selectedTimings: ['When Created'], lastUpdated: '12/3/2025, 10:33:46 PM' },
+        { id: '11', title: 'User Approval Requests', description: 'When new users request access to the system.', enabled: true, selectedTags: ['director', 'admin staff'], selectedTimings: ['When Created'], lastUpdated: '11/2/2025, 5:22:20 PM' },
+    ]);
+
+    const sendTimingOptions = [
+        { value: 'When Created', label: 'When Created', description: 'Send immediately when record is created.' },
+        { value: 'When Updated', label: 'When Updated', description: 'Send immediately when record is updated.' },
+        { value: 'Day Before', label: 'Day Before', description: 'Send 24 hours before the event.' },
+        { value: 'Morning Of (8 AM)', label: 'Morning Of (8 AM)', description: 'Send at 8:00 AM on the event day.' },
+        { value: '2 Hours Before', label: '2 Hours Before', description: 'Send 2 hours before event time.' },
+        { value: '4 Hours Before', label: '4 Hours Before', description: 'Send 4 hours before event time.' },
+        { value: '1 Week Before', label: '1 Week Before', description: 'Send 7 days before the event.' },
+    ];
+
+    const emailTags = ['nurse', 'transportation', 'food service', 'specialist', 'division leader', 'director', 'general staff', 'admin staff', 'head of girls side', 'head of boys side'];
+
+    const handleToggleEmailConfig = (id: string) => {
+        setEmailConfigs(emailConfigs.map(config => 
+            config.id === id ? { ...config, enabled: !config.enabled } : config
+        ));
+    };
+
+    const handleTagToggle = (configId: string, tag: string) => {
+        setEmailConfigs(emailConfigs.map(config => {
+            if (config.id === configId) {
+                const selectedTags = config.selectedTags.includes(tag)
+                    ? config.selectedTags.filter(t => t !== tag)
+                    : [...config.selectedTags, tag];
+                return { ...config, selectedTags, lastUpdated: new Date().toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) };
+            }
+            return config;
+        }));
+    };
+
+    const handleTimingToggle = (configId: string, timing: string) => {
+        setEmailConfigs(emailConfigs.map(config => {
+            if (config.id === configId) {
+                const selectedTimings = config.selectedTimings.includes(timing)
+                    ? config.selectedTimings.filter(t => t !== timing)
+                    : [...config.selectedTimings, timing];
+                return { ...config, selectedTimings, lastUpdated: new Date().toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) };
+            }
+            return config;
+        }));
+    };
+
+    // Data Import State
+    const [importSeason, setImportSeason] = useState('2025');
+    const [showSeasonPicker, setShowSeasonPicker] = useState(false);
+    const [campersFile, setCampersFile] = useState<string | null>(null);
+    const [awardsFile, setAwardsFile] = useState<string | null>(null);
+    const [showFilePicker, setShowFilePicker] = useState(false);
+    const [activeFileType, setActiveFileType] = useState<'campers' | 'awards' | null>(null);
+    const [activeFileButton, setActiveFileButton] = useState<'campers' | 'awards'>('campers');
+
+    // Edit History State
+    interface EditHistoryEntry {
+        id: string;
+        dateTime: string;
+        user: string;
+        table: string;
+        action: string;
+        recordId: string;
+    }
+
+    const [editHistorySearch, setEditHistorySearch] = useState('');
+    const [selectedTableFilter, setSelectedTableFilter] = useState('All Tables');
+    const [showTableFilterPicker, setShowTableFilterPicker] = useState(false);
+    const [showDownloadModal, setShowDownloadModal] = useState(false);
+    const [downloadFileName, setDownloadFileName] = useState('aucit-log-2026-01-25');
+    const [selectedLocation, setSelectedLocation] = useState('Private folder');
+
+    const [editHistoryEntries, setEditHistoryEntries] = useState<EditHistoryEntry[]>([
+        { id: '1', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'ad8a9f7e3c2b1a0d9e8f7c6b5a4d3e2f1' },
+        { id: '2', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '72a9d0e8f7c6b5a4d3e2f1a0b9c8d7e6' },
+        { id: '3', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '6e8d41c3b2a1f0e9d8c7b6a5d4e3f2a1' },
+        { id: '4', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '2236974a8b9c0d1e2f3a4b5c6d7e8f9' },
+        { id: '5', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'a844225b3c4d5e6f7a8b9c0d1e2f3a4' },
+        { id: '6', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '53b3f1d2e3f4a5b6c7d8e9f0a1b2c3' },
+        { id: '7', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '902c4f7e8d9c0b1a2f3e4d5c6b7a8' },
+        { id: '8', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '4006521c2d3e4f5a6b7c8d9e0f1a2' },
+        { id: '9', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'b1ac0f7f8e9d0c1b2a3f4e5d6c7b8' },
+        { id: '10', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'ac4a251a3b4c5d6e7f8a9b0c1d2e3' },
+        { id: '11', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'f2a0d113e4f5a6b7c8d9e0f1a2b3' },
+        { id: '12', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '219c57a8b9c0d1e2f3a4b5c6d7e8' },
+        { id: '13', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'b41478a9b0c1d2e3f4a5b6c7d8e9' },
+        { id: '14', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '81a1a1a2b3c4d5e6f7a8b9c0d1' },
+        { id: '15', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '21a27ac3d4e5f6a7b8c9d0e1f2a3' },
+    ]);
+
+    const tableFilters = ['All Tables', 'children', 'users', 'staff', 'divisions', 'sessions', 'awards'];
+
+    const seasons = ['2025', '2026', '2027', '2028', '2029'];
+
+    const handleFileSelectClick = (fileType: 'campers' | 'awards') => {
+        setActiveFileType(fileType);
+        setActiveFileButton(fileType);
+        setShowFilePicker(true);
+    };
+
+    const handleFileSourceSelect = (source: string) => {
+        if (activeFileType === 'campers') {
+            setCampersFile(source);
+        } else if (activeFileType === 'awards') {
+            setAwardsFile(source);
+        }
+        setShowFilePicker(false);
+        setActiveFileType(null);
+    };
+
+    const roles = [
+        'Viewer',
+        'Staff',
+        'Division Leader',
+        'Specialist',
+        'Health Center',
+        'Admin',
+        'Super Admin'
+    ];
+
+    const availableTags = [
+        'All Tags',
         'Nurse',
         'Transportation',
         'Food Service',
@@ -54,1375 +199,746 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         'Admin Staff',
         'Head of Girls Side',
         'Head of Boys Side'
-    ]);
-    const [newTagName, setNewTagName] = useState('');
-    const allFilterTags = ['All Tags', ...availableTags];
-
-    // Email Automation state
-    interface EmailConfig {
-        id: string;
-        title: string;
-        description: string;
-        enabled: boolean;
-        recipientTags: string[];
-        sendTimings: string[];
-        lastUpdated: string;
-    }
-
-    const [emailConfigs, setEmailConfigs] = useState<EmailConfig[]>([
-        {
-            id: '1',
-            title: 'Health Center Admissions',
-            description: 'Division leaders see only their divisions.',
-            enabled: true,
-            recipientTags: [],
-            sendTimings: ['When Created'],
-            lastUpdated: '11/2/2025, 5:22:20 PM'
-        },
-        {
-            id: '2',
-            title: 'Health Center Checkouts',
-            description: 'Division leaders see only their divisions.',
-            enabled: true,
-            recipientTags: ['nurse', 'director', 'admin staff'],
-            sendTimings: ['When Created'],
-            lastUpdated: '11/2/2025, 5:22:20 PM'
-        },
-        {
-            id: '3',
-            title: 'Missed Medication Alerts',
-            description: 'When scheduled medications are not administered - division leaders see only their divisions.',
-            enabled: true,
-            recipientTags: ['division leader'],
-            sendTimings: ['When Created'],
-            lastUpdated: '11/22/2025, 6:30:16 PM'
-        },
-        {
-            id: '4',
-            title: 'Trip Updates',
-            description: 'Division leaders see only their divisions.',
-            enabled: true,
-            recipientTags: ['division leader', 'director', 'admin staff'],
-            sendTimings: ['When Created'],
-            lastUpdated: '11/2/2025, 5:22:20 PM'
-        },
-        {
-            id: '5',
-            title: 'Transportation Events',
-            description: 'When transportation events are scheduled or updated.',
-            enabled: false,
-            recipientTags: [],
-            sendTimings: ['When Created'],
-            lastUpdated: '11/22/2025, 6:53:08 PM'
-        },
-        {
-            id: '6',
-            title: 'Sports Events (Home)',
-            description: 'Division leaders see only their divisions, specialists see only their sports.',
-            enabled: true,
-            recipientTags: [],
-            sendTimings: ['When Created'],
-            lastUpdated: '11/22/2025, 6:53:08 PM'
-        },
-        {
-            id: '7',
-            title: 'Sports Events (Away)',
-            description: 'Division leaders see only their divisions, specialists see only their sports.',
-            enabled: true,
-            recipientTags: ['transportation', 'food service'],
-            sendTimings: ['When Created'],
-            lastUpdated: '12/3/2025, 10:34:30 PM'
-        },
-        {
-            id: '8',
-            title: 'Sports Academy',
-            description: 'Division leaders see only their divisions, specialists see only their sports.',
-            enabled: false,
-            recipientTags: [],
-            sendTimings: ['When Created'],
-            lastUpdated: '11/22/2025, 6:53:08 PM'
-        },
-        {
-            id: '9',
-            title: 'User Approval Requests',
-            description: 'When new users request access to the system',
-            enabled: true,
-            recipientTags: ['director', 'admin staff'],
-            sendTimings: ['When Created'],
-            lastUpdated: '11/2/2025, 5:22:20 PM'
-        },
-    ]);
-
-    const sendTimingOptions = [
-        { id: 'When Created', label: 'When Created', description: 'Send immediately when record is created.' },
-        { id: 'When Updated', label: 'When Updated', description: 'Send immediately when record is updated.' },
-        { id: 'Day Before', label: 'Day Before', description: 'Send 24 hours before the event.' },
-        { id: 'Morning Of (8 AM)', label: 'Morning Of (8 AM)', description: 'Send at 8:00 AM on the event day.' },
-        { id: '2 Hours Before', label: '2 Hours Before', description: 'Send 2 hours before event time.' },
-        { id: '4 Hours Before', label: '4 Hours Before', description: 'Send 4 hours before event time.' },
-        { id: '1 Week Before', label: '1 Week Before', description: 'Send 7 days before the event.' },
     ];
 
-    const toggleEmailConfig = (configId: string) => {
-        setEmailConfigs(emailConfigs.map(config => 
-            config.id === configId ? { ...config, enabled: !config.enabled } : config
-        ));
+    const handleRoleClick = (user: User) => {
+        setSelectedUser(user);
+        setShowRolePicker(true);
     };
 
-    const toggleRecipientTag = (configId: string, tag: string) => {
-        setEmailConfigs(emailConfigs.map(config => {
-            if (config.id === configId) {
-                const tagLower = tag.toLowerCase();
-                const tags = config.recipientTags.includes(tagLower)
-                    ? config.recipientTags.filter(t => t !== tagLower)
-                    : [...config.recipientTags, tagLower];
-                return { ...config, recipientTags: tags };
-            }
-            return config;
-        }));
-    };
-
-    const toggleSendTiming = (configId: string, timing: string) => {
-        setEmailConfigs(emailConfigs.map(config => {
-            if (config.id === configId) {
-                const timings = config.sendTimings.includes(timing)
-                    ? config.sendTimings.filter(t => t !== timing)
-                    : [...config.sendTimings, timing];
-                return { ...config, sendTimings: timings };
-            }
-            return config;
-        }));
-    };
-
-    // Data Import state
-    const [selectedSeason, setSelectedSeason] = useState('2025');
-    const [showSeasonPicker, setShowSeasonPicker] = useState(false);
-    const [campersFileName, setCampersFileName] = useState<string | null>(null);
-    const [awardsFileName, setAwardsFileName] = useState<string | null>(null);
-    const [syncStatus, setSyncStatus] = useState({
-        lastSynced: 'Jan 23, 2026 8:04 AM',
-        isConfigured: true,
-    });
-
-    const seasons = ['2025', '2026', '2027', '2028', '2029'];
-
-    const handleFileSelect = (type: 'campers' | 'awards') => {
-        // In a real app, this would open a file picker
-        // For now, we'll just simulate file selection
-        if (type === 'campers') {
-            setCampersFileName('campers.json');
-        } else {
-            setAwardsFileName('awards.json');
+    const handleRoleSelect = (newRole: string) => {
+        if (selectedUser) {
+            setUsers(users.map(u => {
+                if (u.id === selectedUser.id) {
+                    let color = '#ef4444'; // Default Admin/Super Admin
+                    if (newRole === 'Viewer') color = '#0ea5e9'; // Teal
+                    if (newRole === 'Staff') color = '#2563eb'; // Blue
+                    if (newRole === 'Division Leader') color = '#8b5cf6'; // Purple
+                    // Add more color mappings as needed
+                    return { ...u, role: newRole, roleColor: color };
+                }
+                return u;
+            }));
+            setShowRolePicker(false);
+            setSelectedUser(null);
         }
     };
 
-    const handleStartImport = () => {
-        // Handle import logic here
-        console.log('Starting import...');
-    };
-
-    const handleFullSync = () => {
-        // Handle full sync logic here
-        console.log('Starting full sync...');
-    };
-
-    const handleStaffOnlySync = () => {
-        // Handle staff only sync logic here
-        console.log('Starting staff only sync...');
-    };
-
-    // Edit History state
-    interface HistoryEntry {
-        id: string;
-        dateTime: string;
-        user: string;
-        table: string;
-        action: string;
-        recordId: string;
-        expanded?: boolean;
-    }
-
-    const [historySearch, setHistorySearch] = useState('');
-    const [selectedTableFilter, setSelectedTableFilter] = useState('All Tables');
-    const [showTableFilter, setShowTableFilter] = useState(false);
-    const [expandedHistoryIds, setExpandedHistoryIds] = useState<Set<string>>(new Set());
-    
-    const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([
-        { id: '1', dateTime: 'Jan 23, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: 'c0f6e25a8b9c1d2e3f4a5b6c7d8e9f0a' },
-        { id: '2', dateTime: 'Jan 25, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: 'c7f018d3e4f5a6b7c8d9e0f1a2b3c4d' },
-        { id: '3', dateTime: 'Jan 24, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: 'b00c8f1a2b3c4d5e6f7a8b9c0d1e2f' },
-        { id: '4', dateTime: 'Jan 22, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: '538d97a9b0c1d2e3f4a5b6c7d8e9f' },
-        { id: '5', dateTime: 'Jan 23, 2026 17:25:34', user: 'System', table: 'children', action: 'UPDATE', recordId: '9d0d9d64e5f6a7b8c9d0e1f2a3b4c' },
-        { id: '6', dateTime: 'Jan 25, 2026 17:05:24', user: 'System', table: 'children', action: 'UPDATE', recordId: 'f2a34b09c1d2e3f4a5b6c7d8e9f0a' },
-        { id: '7', dateTime: 'Jan 23, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: 'b1d1d4a5e6f7a8b9c0d1e2f3a4b' },
-        { id: '8', dateTime: 'Jan 24, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: 'd4d1a1e1f2a3b4c5d6e7f8a9b0c' },
-        { id: '9', dateTime: 'Jan 22, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: 'a1d4ead7b8c9d0e1f2a3b4c5d6e' },
-        { id: '10', dateTime: 'Jan 23, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: '37998756a1b2c3d4e5f6a7b8c9d' },
-        { id: '11', dateTime: 'Jan 25, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: '54819x1a2b3c4d5e6f7a8b9c' },
-        { id: '12', dateTime: 'Jan 24, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: '8181x1a2b3c4d5e6f7a8b9c' },
-        { id: '13', dateTime: 'Jan 23, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: 'b1dc0de1f2a3b4c5d6e7f8a9b0c' },
-        { id: '14', dateTime: 'Jan 25, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: '9c71d4d5e6f7a8b9c0d1e2f3a4b' },
-        { id: '15', dateTime: 'Jan 24, 2026 17:05:34', user: 'System', table: 'children', action: 'UPDATE', recordId: '3f043ed6e7f8a9b0c1d2e3f4a5b6c' },
-    ]);
-
-    const tableFilterOptions = ['All Tables', 'children', 'staff', 'events', 'health', 'transportation', 'sports'];
-
-    const toggleHistoryExpanded = (id: string) => {
-        const newExpanded = new Set(expandedHistoryIds);
-        if (newExpanded.has(id)) {
-            newExpanded.delete(id);
-        } else {
-            newExpanded.add(id);
-        }
-        setExpandedHistoryIds(newExpanded);
-    };
-
-    // Download File Modal state
-    const [showDownloadModal, setShowDownloadModal] = useState(false);
-    const [downloadFileName, setDownloadFileName] = useState('audit-log-2026-01-23');
-    const [selectedLocation, setSelectedLocation] = useState('Downloads');
-    const [showLocationPicker, setShowLocationPicker] = useState(false);
-
-    const handleExportCSV = () => {
-        // Generate default filename with current date
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        setDownloadFileName(`audit-log-${year}-${month}-${day}`);
-        setShowDownloadModal(true);
-    };
-
-    const handleDownload = () => {
-        // Handle download logic here
-        console.log('Downloading file:', downloadFileName, 'to:', selectedLocation);
-        setShowDownloadModal(false);
-    };
-
-    const locations = ['Downloads', 'Private folder', 'Documents', 'Desktop'];
-
-    const truncateId = (id: string, length: number = 12) => {
-        return id.length > length ? `${id.substring(0, length)}...` : id;
-    };
-
-    const roles: Array<'Super Admin' | 'Admin' | 'Viewer' | 'Staff'> = ['Super Admin', 'Admin', 'Viewer', 'Staff'];
-
-    const getRoleBadgeColor = (role: string) => {
-        switch (role) {
-            case 'Super Admin':
-            case 'Admin':
-                return '#ef4444'; // Red
-            case 'Viewer':
-                return '#14b8a6'; // Teal
-            case 'Staff':
-                return '#2563eb'; // Blue
-            default:
-                return '#6b7280'; // Gray
-        }
-    };
-
-    const handleAddUser = () => {
-        if (newUserName.trim() && newUserEmail.trim()) {
-            const newUser: User = {
-                id: Date.now().toString(),
-                name: newUserName.trim(),
-                email: newUserEmail.trim(),
-                role: newUserRole,
-            };
-            setUsers([...users, newUser]);
-            setNewUserName('');
-            setNewUserEmail('');
-            setNewUserRole('Admin');
-            setShowNewUserRolePicker(false);
-            setShowAddUserModal(false);
-        }
-    };
-
-    const handleUpdateRole = (userId: string, newRole: 'Super Admin' | 'Admin' | 'Viewer' | 'Staff') => {
-        setUsers(users.map(user => 
-            user.id === userId ? { ...user, role: newRole } : user
-        ));
-        setShowRolePicker(null);
-        setShowRolePopup(false);
-        setSelectedRoleForPopup(null);
-        setSelectedUserForRole(null);
-    };
-
-    const handleRoleOptionClick = (role: 'Super Admin' | 'Admin' | 'Viewer' | 'Staff', userId: string) => {
-        // Close dropdown first
-        setShowRolePicker(null);
-        // Small delay to ensure dropdown closes before modal opens
-        setTimeout(() => {
-            setSelectedRoleForPopup(role);
-            setSelectedUserForRole(userId);
-            setShowRolePopup(true);
-        }, 100);
-    };
-
-    const handleDeleteClick = (user: User) => {
-        setUserToDelete(user);
-        setShowDeleteModal(true);
-    };
-
-    const handleConfirmDelete = () => {
+    const handleDeleteUser = () => {
         if (userToDelete) {
-            setUsers(users.filter(user => user.id !== userToDelete.id));
+            setUsers(users.filter(u => u.id !== userToDelete.id));
             setShowDeleteModal(false);
             setUserToDelete(null);
         }
     };
 
-    const handleCancelDelete = () => {
-        setShowDeleteModal(false);
-        setUserToDelete(null);
+    const handleFilterTagSelect = (tag: string) => {
+        setSelectedFilterTag(tag);
+        setShowFilterTagPicker(false);
     };
 
-    const tabs = [
-        { id: 'User Management', label: 'User Management', icon: 'people-outline' },
-        { id: 'User Tags', label: 'User Tags', icon: 'pricetag-outline' },
-        { id: 'Email Automation', label: 'Email Automation', icon: 'mail-outline' },
-        { id: 'Data Import', label: 'Data Import', icon: 'download-outline' },
-        { id: 'Edit History', label: 'Edit History', icon: 'time-outline' },
-    ];
+    const handleAddTagClick = (user: User) => {
+        setUserForTags(user);
+        setShowAddTagModal(true);
+    };
+
+    const handleAddTagSelect = (tag: string) => {
+        if (userForTags) {
+            setUsers(users.map(u => {
+                if (u.id === userForTags.id) {
+                    const currentTags = u.tags || [];
+                    if (!currentTags.includes(tag)) {
+                        return { ...u, tags: [...currentTags, tag] };
+                    }
+                }
+                return u;
+            }));
+            setShowAddTagModal(false);
+            setUserForTags(null);
+        }
+    };
+
+    const renderUserManagement = () => (
+        <StyledCard style={styles.usersContainer}>
+            <View style={styles.cardHeader}>
+                <View style={styles.cardTitleContainer}>
+                    <Text style={styles.cardTitle}>User Roles</Text>
+                    <Text style={styles.cardSubtitle}>Manage user permissions and access levels</Text>
+                </View>
+                <TouchableOpacity 
+                    style={styles.addUserBtn}
+                    onPress={() => setShowAddUserModal(true)}
+                >
+                    <Ionicons name="person-add-outline" size={18} color="white" />
+                    <Text style={styles.addUserBtnText}>Add User</Text>
+                </TouchableOpacity>
+            </View>
+
+            <View style={styles.usersList}>
+                {users.map((user) => (
+                    <View key={user.id} style={styles.userRow}>
+                        <View style={styles.userInfo}>
+                            <Text style={styles.userName}>{user.name}</Text>
+                            <Text style={styles.userEmail}>{user.email}</Text>
+                        </View>
+                        
+                        <View style={styles.roleContainer}>
+                            {/* Role Badge */}
+                            <View style={[styles.roleBadge, { backgroundColor: user.roleColor }]}>
+                                <Ionicons name={user.role.includes('Admin') ? 'shield-checkmark' : user.role === 'Staff' ? 'people' : 'eye'} size={12} color="white" />
+                                <Text style={styles.roleBadgeText}>{user.role}</Text>
+                            </View>
+
+                            {/* Role Dropdown Trigger */}
+                            <TouchableOpacity 
+                                style={styles.roleDropdown}
+                                onPress={() => handleRoleClick(user)}
+                            >
+                                <Text style={styles.roleDropdownText}>{user.role}</Text>
+                                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.actionIcon}>
+                                <Ionicons name="key-outline" size={18} color={theme.colors.text} />
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={styles.actionIcon}
+                                onPress={() => {
+                                    setUserToDelete(user);
+                                    setShowDeleteModal(true);
+                                }}
+                            >
+                                <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                ))}
+            </View>
+        </StyledCard>
+    );
+
+    const renderUserTags = () => (
+        <View style={styles.usersContainer}>
+            <View style={styles.tagsHeader}>
+                <Ionicons name="pricetag-outline" size={24} color={theme.colors.text} />
+                <Text style={styles.cardTitle}>User Tag Management</Text>
+            </View>
+            <Text style={styles.cardSubtitle}>Assign tags to users for targeted messaging and organization</Text>
+
+            <View style={styles.searchFilterContainer}>
+                <View style={styles.searchBar}>
+                    <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
+                    <TextInput 
+                        style={styles.searchInput}
+                        placeholder="Search by name or email"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </View>
+                <TouchableOpacity 
+                    style={styles.filterDropdown}
+                    onPress={() => setShowFilterTagPicker(true)}
+                >
+                    <Text style={styles.filterDropdownText}>{selectedFilterTag}</Text>
+                    <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+            </View>
+
+            <View style={styles.usersList}>
+                {users.map((user) => (
+                    <View key={user.id} style={styles.userCard}>
+                        <View style={styles.userInfo}>
+                            <Text style={styles.userName}>{user.name}</Text>
+                            <Text style={styles.userEmail}>{user.email}</Text>
+                            <Text style={styles.noTagsText}>{user.tags?.length ? user.tags.join(', ') : 'No tags'}</Text>
+                        </View>
+                        
+                        <TouchableOpacity 
+                            style={styles.addTagDropdown}
+                            onPress={() => handleAddTagClick(user)}
+                        >
+                            <Text style={styles.addTagText}>Add tag...</Text>
+                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+                ))}
+            </View>
+
+            <View style={styles.aboutTagsBox}>
+                <View style={styles.aboutTagsHeader}>
+                    <Ionicons name="pricetag" size={16} color={theme.colors.primary} />
+                    <Text style={styles.aboutTagsTitle}>About Tags</Text>
+                </View>
+                <Text style={styles.aboutTagsText}>
+                    Tags allow you to organize users for targeted messaging. Users can have multiple tags. Click on a tag badge to remove it, or use the dropdown to add new tags.
+                </Text>
+                <View style={styles.chatIconBubble}>
+                     <Ionicons name="chatbubble-ellipses" size={20} color="white" />
+                </View>
+            </View>
+        </View>
+    );
+
+    const renderEmailAutomation = () => (
+        <View style={styles.emailAutomationContainer}>
+            <View style={styles.emailAutomationHeader}>
+                <Text style={styles.cardTitle}>Automated Email Configuration</Text>
+                <Text style={styles.cardSubtitle}>Configure which user tags receive automated email notifications for different events</Text>
+            </View>
+
+            <View style={styles.emailConfigsList}>
+                {emailConfigs.map((config) => (
+                    <StyledCard key={config.id} style={styles.emailConfigCard}>
+                        {/* Header */}
+                        <View style={styles.emailConfigHeader}>
+                            <View style={styles.emailConfigTitleRow}>
+                                <Ionicons name="mail-outline" size={20} color={theme.colors.text} />
+                                <Text style={styles.emailConfigTitle}>{config.title}</Text>
+                            </View>
+                            <View style={styles.toggleContainer}>
+                                <Text style={styles.enabledLabel}>Enabled</Text>
+                                <TouchableOpacity
+                                    style={[styles.toggleSwitch, config.enabled && styles.toggleSwitchActive]}
+                                    onPress={() => handleToggleEmailConfig(config.id)}
+                                >
+                                    <View style={[styles.toggleThumb, config.enabled && styles.toggleThumbActive]} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <Text style={styles.emailConfigDescription}>{config.description}</Text>
+
+                        {/* Recipient Tags */}
+                        <View style={styles.emailSection}>
+                            <Text style={styles.emailSectionTitle}>Recipient Tags</Text>
+                            <View style={styles.tagsGrid}>
+                                {emailTags.map((tag) => {
+                                    const isSelected = config.selectedTags.includes(tag);
+                                    return (
+                                        <TouchableOpacity
+                                            key={tag}
+                                            style={[styles.emailTag, isSelected && styles.emailTagSelected]}
+                                            onPress={() => handleTagToggle(config.id, tag)}
+                                        >
+                                            <Text style={[styles.emailTagText, isSelected && styles.emailTagTextSelected]}>{tag}</Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </View>
+
+                        {/* Send Timing */}
+                        <View style={styles.emailSection}>
+                            <View style={styles.emailSectionTitleRow}>
+                                <Ionicons name="time-outline" size={16} color={theme.colors.text} />
+                                <Text style={styles.emailSectionTitle}>Send Timing (select multiple)</Text>
+                            </View>
+                            {sendTimingOptions.map((option) => {
+                                const isSelected = config.selectedTimings.includes(option.value);
+                                return (
+                                    <TouchableOpacity
+                                        key={option.value}
+                                        style={styles.timingOption}
+                                        onPress={() => handleTimingToggle(config.id, option.value)}
+                                    >
+                                        <View style={[styles.radioButton, isSelected && styles.radioButtonSelected]}>
+                                            {isSelected && <Ionicons name="checkmark" size={12} color="white" />}
+                                        </View>
+                                        <View style={styles.timingOptionContent}>
+                                            <Text style={styles.timingOptionLabel}>{option.label}</Text>
+                                            <Text style={styles.timingOptionDescription}>{option.description}</Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        {/* Selected Timings Display */}
+                        {config.selectedTimings.length > 0 && (
+                            <View style={styles.selectedTimingsSection}>
+                                <Text style={styles.selectedTimingsLabel}>Selected timings:</Text>
+                                <View style={styles.selectedTimingsTags}>
+                                    {config.selectedTimings.map((timing) => (
+                                        <View key={timing} style={styles.selectedTimingTag}>
+                                            <Text style={styles.selectedTimingTagText}>{timing}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+
+                        {/* Last Updated */}
+                        <Text style={styles.lastUpdatedText}>Last updated: {config.lastUpdated}</Text>
+                    </StyledCard>
+                ))}
+            </View>
+        </View>
+    );
+
+    const renderDataImport = () => (
+        <View style={styles.dataImportContainer}>
+            {/* CampMinder Sync Section */}
+            <StyledCard style={styles.dataImportCard}>
+                <View style={styles.dataImportHeader}>
+                    <Ionicons name="refresh-outline" size={20} color={theme.colors.text} />
+                    <Text style={styles.cardTitle}>CampMinder Sync</Text>
+                </View>
+                <Text style={styles.dataImportDescription}>
+                    Sync campers, staff, divisions, and sessions from CampMinder API for the 2025 season. Auto-sync runs every hour for all configured camps.
+                </Text>
+
+                {/* Camp Card */}
+                <View style={styles.campCard}>
+                    <Text style={styles.campName}>Tyler Hill Camp</Text>
+                    <Text style={styles.lastSyncedText}>Last synced: Jan 24, 2026 11:28 PM</Text>
+                    <View style={styles.statusBadges}>
+                        <View style={styles.configuredBadge}>
+                            <Text style={styles.configuredBadgeText}>Configured</Text>
+                        </View>
+                        <View style={styles.staffOnlyBadge}>
+                            <Text style={styles.staffOnlyBadgeText}>Staff Only</Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity style={styles.fullSyncButton}>
+                        <Ionicons name="refresh" size={16} color="white" />
+                        <Text style={styles.fullSyncButtonText}>Full Sync</Text>
+                    </TouchableOpacity>
+                </View>
+            </StyledCard>
+
+            {/* Manual JSON Import Section */}
+            <StyledCard style={styles.dataImportCard}>
+                <View style={styles.dataImportHeader}>
+                    <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.text} />
+                    <Text style={styles.cardTitle}>Manual JSON Import</Text>
+                </View>
+                <Text style={styles.dataImportDescription}>
+                    Import campers and awards data from JSON files. Awards will retain their original years while being linked to the selected season records.
+                </Text>
+
+                {/* Import Season */}
+                <View style={styles.formGroup}>
+                    <Text style={styles.label}>Import Season</Text>
+                    <TouchableOpacity 
+                        style={styles.selectInput}
+                        onPress={() => setShowSeasonPicker(true)}
+                    >
+                        <Text style={styles.selectInputText}>{importSeason}</Text>
+                        <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Campers File */}
+                <View style={styles.formGroup}>
+                    <Text style={styles.label}>Campers File (campers.json)</Text>
+                    <TouchableOpacity 
+                        style={[styles.campersFileButton, activeFileButton === 'campers' && styles.campersFileButtonActive, activeFileButton === 'awards' && styles.campersFileButtonInactive]}
+                        onPress={() => handleFileSelectClick('campers')}
+                    >
+                        <Ionicons name="cloud-upload-outline" size={18} color={activeFileButton === 'campers' ? "white" : theme.colors.text} />
+                        <Text style={[styles.campersFileButtonText, activeFileButton === 'awards' && styles.campersFileButtonTextInactive]}>
+                            {campersFile || 'Select File'}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Awards File */}
+                <View style={styles.formGroup}>
+                    <Text style={styles.label}>Awards File (awards.json)</Text>
+                    <TouchableOpacity 
+                        style={[styles.awardsFileButton, activeFileButton === 'awards' && styles.awardsFileButtonActive, activeFileButton === 'campers' && styles.awardsFileButtonInactive]}
+                        onPress={() => handleFileSelectClick('awards')}
+                    >
+                        <Ionicons name="cloud-upload-outline" size={18} color={activeFileButton === 'awards' ? "white" : theme.colors.text} />
+                        <Text style={[styles.awardsFileButtonText, activeFileButton === 'awards' && styles.awardsFileButtonTextActive]}>
+                            {awardsFile || 'Select File'}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Start Import Button */}
+                <View style={styles.startImportContainer}>
+                    <TouchableOpacity style={styles.startImportButton}>
+                        <Text style={styles.startImportButtonText}>Start Import</Text>
+                    </TouchableOpacity>
+                </View>
+            </StyledCard>
+
+            {/* Important Notes Section */}
+            <StyledCard style={styles.dataImportCard}>
+                <View style={styles.importantNotesHeader}>
+                    <Ionicons name="information-circle-outline" size={18} color={theme.colors.primary} />
+                    <Text style={styles.importantNotesTitle}>Important Notes:</Text>
+                </View>
+                <View style={styles.notesList}>
+                    <Text style={styles.noteItem}>• CampMinder sync runs automatically every hour for all configured camps</Text>
+                    <Text style={styles.noteItem}>• The import process uses person_id to link historical data across seasons</Text>
+                    <Text style={styles.noteItem}>• When a camper returns in future seasons with the same person_id, all their historical awards will be visible</Text>
+                    <Text style={styles.noteItem}>• Duplicate person_ids within the same season will be skipped</Text>
+                    <Text style={styles.noteItem}>• Award dates reflect the original year earned</Text>
+                </View>
+            </StyledCard>
+        </View>
+    );
+
+    const renderEditHistory = () => (
+        <View style={styles.editHistoryContainer}>
+            <View style={styles.editHistoryHeader}>
+                <View style={styles.editHistoryTitleRow}>
+                    <Ionicons name="document-text-outline" size={20} color={theme.colors.text} />
+                    <View style={styles.editHistoryTitleContainer}>
+                        <Text style={styles.cardTitle}>Edit History</Text>
+                        <Text style={styles.cardSubtitle}>View all changes made to the system</Text>
+                    </View>
+                </View>
+                <TouchableOpacity 
+                    style={styles.exportCsvButton}
+                    onPress={() => setShowDownloadModal(true)}
+                >
+                    <Ionicons name="download-outline" size={16} color="white" />
+                    <Text style={styles.exportCsvButtonText}>Export CSV</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Search and Filter */}
+            <View style={styles.searchFilterRow}>
+                <View style={styles.searchBar}>
+                    <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
+                    <TextInput 
+                        style={styles.searchInput}
+                        placeholder="Search by table, user, or email..."
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={editHistorySearch}
+                        onChangeText={setEditHistorySearch}
+                    />
+                </View>
+                <TouchableOpacity 
+                    style={styles.filterDropdown}
+                    onPress={() => setShowTableFilterPicker(true)}
+                >
+                    <Text style={styles.filterDropdownText}>{selectedTableFilter}</Text>
+                    <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+            </View>
+
+            {/* History Table */}
+            <StyledCard style={styles.historyTableCard}>
+                {/* Table Header */}
+                <View style={styles.tableHeader}>
+                    <View style={styles.tableHeaderCell}>
+                        <Text style={styles.tableHeaderText}>Date & Time</Text>
+                    </View>
+                    <View style={styles.tableHeaderCell}>
+                        <Text style={styles.tableHeaderText}>User</Text>
+                    </View>
+                    <View style={styles.tableHeaderCell}>
+                        <Text style={styles.tableHeaderText}>Table</Text>
+                    </View>
+                    <View style={styles.tableHeaderCell}>
+                        <Text style={styles.tableHeaderText}>Action</Text>
+                    </View>
+                    <View style={styles.tableHeaderCell}>
+                        <Text style={styles.tableHeaderText}>Record ID</Text>
+                    </View>
+                </View>
+
+                {/* Table Rows */}
+                <View style={styles.tableRows}>
+                    {editHistoryEntries.map((entry) => (
+                        <View key={entry.id} style={styles.tableRow}>
+                            <View style={styles.tableCell}>
+                                <Ionicons name="chevron-down" size={14} color={theme.colors.textSecondary} />
+                                <Text style={styles.tableCellText}>{entry.dateTime}</Text>
+                            </View>
+                            <View style={styles.tableCell}>
+                                <Text style={styles.tableCellText}>{entry.user}</Text>
+                            </View>
+                            <View style={styles.tableCell}>
+                                <View style={styles.tableTag}>
+                                    <Text style={styles.tableTagText}>{entry.table}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.tableCell}>
+                                <View style={styles.actionTag}>
+                                    <Text style={styles.actionTagText}>{entry.action}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.tableCell}>
+                                <Text style={styles.recordIdText}>{entry.recordId.substring(0, 8)}...</Text>
+                            </View>
+                        </View>
+                    ))}
+                </View>
+            </StyledCard>
+        </View>
+    );
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header Bar */}
-            <View style={styles.topHeader}>
+            {/* Header */}
+            <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.openDrawer()}>
-                    <Ionicons name="menu" size={24} color={theme.colors.text} />
+                    <Ionicons name="menu" size={28} color={theme.colors.primary} />
                 </TouchableOpacity>
-                <Text style={styles.topHeaderTitle}>Admin Panel</Text>
                 <TouchableOpacity>
-                    <Ionicons name="notifications-outline" size={24} color={theme.colors.text} />
+                    <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
                 </TouchableOpacity>
             </View>
 
             <ScrollView 
                 contentContainerStyle={styles.scrollContent} 
                 showsVerticalScrollIndicator={false}
-                onScrollBeginDrag={() => {
-                    setShowRolePicker(null);
-                    setShowTagFilter(false);
-                    setShowTagPicker(null);
-                    setShowSeasonPicker(false);
-                    setShowTableFilter(false);
-                }}
             >
-                {/* Title and Description Section */}
+                {/* Title Section */}
                 <View style={styles.titleSection}>
-                    <Text style={styles.title}>Admin Panel</Text>
-                    <Text style={styles.subtitle}>Manage users, roles, and system settings</Text>
+                    <View style={styles.titleContainer}>
+                        <Text style={styles.title}>Admin Panel</Text>
+                        <Text style={styles.subtitle}>Manage users, roles, and system settings</Text>
+                    </View>
                 </View>
 
-                {/* Navigation Tabs */}
-                <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false} 
-                    contentContainerStyle={styles.tabsContainer}
-                >
-                    {tabs.map((tab) => (
-                        <TouchableOpacity
-                            key={tab.id}
-                            style={[
-                                styles.tab,
-                                activeTab === tab.id && styles.tabActive
-                            ]}
-                            onPress={() => setActiveTab(tab.id)}
-                        >
-                            <Ionicons 
-                                name={tab.icon as any} 
-                                size={18} 
-                                color={activeTab === tab.id ? theme.colors.text : theme.colors.textSecondary} 
-                                style={styles.tabIcon}
-                            />
-                            <Text style={[
-                                styles.tabText,
-                                activeTab === tab.id && styles.tabTextActive
-                            ]}>
-                                {tab.label}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+                {/* Tabs Section */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsContainer}>
+                        <TouchableOpacity 
+                        style={[styles.tab, currentTab === 'userManagement' && styles.activeTab]}
+                        onPress={() => setCurrentTab('userManagement')}
+                    >
+                        <Text style={[styles.tabText, currentTab === 'userManagement' && styles.activeTabText]}>User Management</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={[styles.tab, currentTab === 'userTags' && styles.activeTab]}
+                        onPress={() => setCurrentTab('userTags')}
+                    >
+                        <Ionicons name="pricetag-outline" size={16} color={currentTab === 'userTags' ? theme.colors.text : theme.colors.textSecondary} />
+                        <Text style={[styles.tabText, currentTab === 'userTags' && styles.activeTabText]}>User Tags</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={[styles.tab, currentTab === 'emailAutomation' && styles.activeTab]}
+                        onPress={() => setCurrentTab('emailAutomation')}
+                    >
+                        <Text style={[styles.tabText, currentTab === 'emailAutomation' && styles.activeTabText]}>Email Automation</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={[styles.tab, currentTab === 'dataImport' && styles.activeTab]}
+                        onPress={() => setCurrentTab('dataImport')}
+                    >
+                        <Ionicons name="cloud-upload-outline" size={16} color={currentTab === 'dataImport' ? theme.colors.text : theme.colors.textSecondary} />
+                        <Text style={[styles.tabText, currentTab === 'dataImport' && styles.activeTabText]}>Data Import</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={[styles.tab, currentTab === 'editHistory' && styles.activeTab]}
+                        onPress={() => setCurrentTab('editHistory')}
+                    >
+                        <Ionicons name="document-text-outline" size={16} color={currentTab === 'editHistory' ? theme.colors.text : theme.colors.textSecondary} />
+                        <Text style={[styles.tabText, currentTab === 'editHistory' && styles.activeTabText]}>Edit History</Text>
+                    </TouchableOpacity>
                 </ScrollView>
 
-                {/* User Roles Section */}
-                {activeTab === 'User Management' && (
-                    <StyledCard style={styles.userRolesCard}>
-                        <View style={styles.userRolesHeader}>
-                            <View style={styles.userRolesTitleContainer}>
-                                <Text style={styles.userRolesTitle}>User Roles</Text>
-                                <Text style={styles.userRolesSubtitle}>Manage user permissions and access levels</Text>
-                            </View>
-                            <TouchableOpacity 
-                                style={styles.addUserButton}
-                                onPress={() => setShowAddUserModal(true)}
-                            >
-                                <Ionicons name="person-add-outline" size={18} color="white" />
-                                <Text style={styles.addUserButtonText}>Add User</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* User List */}
-                        <View style={styles.userList}>
-                            {users.map((user) => (
-                                <View 
-                                    key={user.id} 
-                                    style={[
-                                        styles.userCard,
-                                        showRolePicker === user.id && styles.userCardWithOpenDropdown
-                                    ]}
-                                >
-                                    <View style={styles.userInfoRow}>
-                                        <View style={styles.userInfo}>
-                                            <Text style={styles.userName}>{user.name}</Text>
-                                            <Text style={styles.userEmail}> • {user.email}</Text>
-                                        </View>
-                                        <View style={styles.roleContainer}>
-                                            <View 
-                                                style={[
-                                                    styles.roleBadge, 
-                                                    { backgroundColor: getRoleBadgeColor(user.role) }
-                                                ]}
-                                            >
-                                                <Text style={styles.roleBadgeText}>{user.role}</Text>
-                                            </View>
-                                            <TouchableOpacity
-                                                style={styles.roleDropdown}
-                                                onPress={(e) => {
-                                                    e.stopPropagation();
-                                                    setShowRolePicker(showRolePicker === user.id ? null : user.id);
-                                                }}
-                                            >
-                                                <Text style={styles.roleDropdownText}>{user.role}</Text>
-                                                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                                            </TouchableOpacity>
-                                            {showRolePicker === user.id && (
-                                                <View style={styles.rolePickerDropdown}>
-                                                    {roles.map((role) => (
-                                                        <TouchableOpacity
-                                                            key={role}
-                                                            style={styles.rolePickerOption}
-                                                            onPress={(e) => {
-                                                                e.stopPropagation();
-                                                                handleRoleOptionClick(role, user.id);
-                                                            }}
-                                                        >
-                                                            <Text style={styles.rolePickerOptionText}>{role}</Text>
-                                                            {user.role === role && (
-                                                                <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
-                                                            )}
-                                                        </TouchableOpacity>
-                                                    ))}
-                                                </View>
-                                            )}
-                                        </View>
-                                    </View>
-                                    <View style={styles.actionIcons}>
-                                        <TouchableOpacity style={styles.actionIcon}>
-                                            <Ionicons name="key-outline" size={20} color={theme.colors.textSecondary} />
-                                        </TouchableOpacity>
-                                        <TouchableOpacity 
-                                            style={styles.actionIcon}
-                                            onPress={() => handleDeleteClick(user)}
-                                        >
-                                            <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            ))}
-                        </View>
-                    </StyledCard>
-                )}
-
-                {/* User Tags Section */}
-                {activeTab === 'User Tags' && (
-                    <StyledCard style={styles.userTagsCard}>
-                        <View style={styles.userTagsHeader}>
-                            <View style={styles.userTagsTitleContainer}>
-                                <Ionicons name="pricetag-outline" size={20} color={theme.colors.text} style={styles.userTagsIcon} />
-                                <Text style={styles.userTagsTitle}>User Tag Management</Text>
-                            </View>
-                            <Text style={styles.userTagsSubtitle}>Assign tags to users for targeted messaging and organization</Text>
-                        </View>
-
-                        {/* Search and Filter Bar */}
-                        <View style={[styles.userTagsSearchBar, showTagFilter && styles.userTagsSearchBarWithDropdown]}>
-                            <View style={styles.searchInputContainer}>
-                                <Ionicons name="search-outline" size={18} color={theme.colors.textSecondary} style={styles.searchIcon} />
-                                <TextInput
-                                    style={styles.searchInput}
-                                    placeholder="Search by name or..."
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    value={userTagsSearch}
-                                    onChangeText={setUserTagsSearch}
-                                />
-                            </View>
-                            <View style={styles.tagFilterContainer}>
-                                <TouchableOpacity
-                                    style={styles.tagFilterButton}
-                                    onPress={() => setShowTagFilter(!showTagFilter)}
-                                >
-                                    <Text style={styles.tagFilterText}>{selectedTagFilter}</Text>
-                                    <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                                </TouchableOpacity>
-                                {showTagFilter && (
-                                    <View style={styles.tagFilterDropdown}>
-                                        <ScrollView 
-                                            style={styles.tagFilterScrollView}
-                                            nestedScrollEnabled={true}
-                                            showsVerticalScrollIndicator={true}
-                                        >
-                                            {allFilterTags.map((tag) => (
-                                                <TouchableOpacity
-                                                    key={tag}
-                                                    style={[
-                                                        styles.tagFilterOption,
-                                                        selectedTagFilter === tag && styles.tagFilterOptionSelected
-                                                    ]}
-                                                    onPress={() => {
-                                                        setSelectedTagFilter(tag);
-                                                        setShowTagFilter(false);
-                                                    }}
-                                                >
-                                                    <Text style={[
-                                                        styles.tagFilterOptionText,
-                                                        selectedTagFilter === tag && styles.tagFilterOptionTextSelected
-                                                    ]}>
-                                                        {tag}
-                                                    </Text>
-                                                    {selectedTagFilter === tag && (
-                                                        <Ionicons name="checkmark" size={18} color={theme.colors.accent} />
-                                                    )}
-                                                </TouchableOpacity>
-                                            ))}
-                                        </ScrollView>
-                                    </View>
-                                )}
-                            </View>
-                        </View>
-
-                        {/* User List with Tags */}
-                        <View style={styles.userTagsList}>
-                            {users
-                                .filter(user => {
-                                    const searchLower = userTagsSearch.toLowerCase();
-                                    return user.name.toLowerCase().includes(searchLower) || 
-                                           user.email.toLowerCase().includes(searchLower);
-                                })
-                                .map((user) => (
-                                <View 
-                                    key={user.id} 
-                                    style={[
-                                        styles.userTagCard,
-                                        showTagPicker === user.id && styles.userTagCardWithOpenDropdown
-                                    ]}
-                                >
-                                    <View style={styles.userTagInfo}>
-                                        <Text style={styles.userTagName}>{user.name}</Text>
-                                        <Text style={styles.userTagEmail}>{user.email}</Text>
-                                        <View style={styles.userTagsContainer}>
-                                            {user.tags && user.tags.length > 0 ? (
-                                                user.tags.map((tag, index) => (
-                                                    <TouchableOpacity
-                                                        key={index}
-                                                        style={styles.tagBadge}
-                                                        onPress={() => {
-                                                            const updatedTags = user.tags?.filter(t => t !== tag) || [];
-                                                            setUsers(users.map(u => 
-                                                                u.id === user.id ? { ...u, tags: updatedTags } : u
-                                                            ));
-                                                        }}
-                                                    >
-                                                        <Text style={styles.tagBadgeText}>{tag}</Text>
-                                                        <Ionicons name="close" size={14} color={theme.colors.textSecondary} />
-                                                    </TouchableOpacity>
-                                                ))
-                                            ) : (
-                                                <Text style={styles.noTagsText}>No tags</Text>
-                                            )}
-                                        </View>
-                                    </View>
-                                    <TouchableOpacity
-                                        style={styles.addTagButton}
-                                        onPress={() => setShowTagPicker(showTagPicker === user.id ? null : user.id)}
-                                    >
-                                        <Text style={styles.addTagButtonText}>Add tag...</Text>
-                                        <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                                    </TouchableOpacity>
-                                    {showTagPicker === user.id && (
-                                        <View style={styles.tagPickerDropdown}>
-                                            <ScrollView 
-                                                style={styles.tagPickerScrollView}
-                                                nestedScrollEnabled={true}
-                                                showsVerticalScrollIndicator={true}
-                                            >
-                                                {availableTags.map((tag) => (
-                                                    <TouchableOpacity
-                                                        key={tag}
-                                                        style={styles.tagPickerOption}
-                                                        onPress={() => {
-                                                            const currentTags = user.tags || [];
-                                                            if (!currentTags.includes(tag)) {
-                                                                setUsers(users.map(u => 
-                                                                    u.id === user.id ? { ...u, tags: [...currentTags, tag] } : u
-                                                                ));
-                                                            }
-                                                            setShowTagPicker(null);
-                                                        }}
-                                                    >
-                                                        <Text style={styles.tagPickerOptionText}>{tag}</Text>
-                                                        {user.tags?.includes(tag) && (
-                                                            <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
-                                                        )}
-                                                    </TouchableOpacity>
-                                                ))}
-                                            </ScrollView>
-                                            <View style={styles.addNewTagContainer}>
-                                                <TextInput
-                                                    style={styles.newTagInput}
-                                                    placeholder="Create new tag..."
-                                                    placeholderTextColor={theme.colors.textSecondary}
-                                                    value={newTagName}
-                                                    onChangeText={setNewTagName}
-                                                    onSubmitEditing={() => {
-                                                        if (newTagName.trim() && !availableTags.includes(newTagName.trim())) {
-                                                            setAvailableTags([...availableTags, newTagName.trim()]);
-                                                            const currentTags = user.tags || [];
-                                                            setUsers(users.map(u => 
-                                                                u.id === user.id ? { ...u, tags: [...currentTags, newTagName.trim()] } : u
-                                                            ));
-                                                            setNewTagName('');
-                                                            setShowTagPicker(null);
-                                                        }
-                                                    }}
-                                                />
-                                            </View>
-                                        </View>
-                                    )}
-                                </View>
-                            ))}
-                        </View>
-
-                        {/* About Tags Section */}
-                        <View style={styles.aboutTagsSection}>
-                            <Ionicons name="information-circle-outline" size={20} color={theme.colors.secondary} />
-                            <View style={styles.aboutTagsContent}>
-                                <Text style={styles.aboutTagsTitle}>About Tags</Text>
-                                <Text style={styles.aboutTagsText}>
-                                    Tags allow you to organize users for targeted messaging. Users can have multiple tags. Click on a tag badge to remove it, or use the dropdown to add new tags.
-                                </Text>
-                            </View>
-                        </View>
-                    </StyledCard>
-                )}
-
-                {/* Email Automation Section */}
-                {activeTab === 'Email Automation' && (
-                    <View style={styles.emailAutomationContainer}>
-                        <View style={styles.emailAutomationHeader}>
-                            <Text style={styles.emailAutomationTitle}>Automated Email Configuration</Text>
-                            <Text style={styles.emailAutomationSubtitle}>
-                                Configure which user tags receive automated email notifications for different events.
-                            </Text>
-                        </View>
-
-                        <View style={styles.emailConfigsList}>
-                            {emailConfigs.map((config) => (
-                                <StyledCard key={config.id} style={styles.emailConfigCard}>
-                                    <View style={styles.emailConfigHeader}>
-                                        <View style={styles.emailConfigTitleRow}>
-                                            <Ionicons name="mail-outline" size={20} color={theme.colors.text} style={styles.emailConfigIcon} />
-                                            <Text style={styles.emailConfigTitle}>{config.title}</Text>
-                                        </View>
-                                        <View style={styles.toggleContainer}>
-                                            <Text style={styles.toggleLabel}>Enabled</Text>
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.toggleSwitch,
-                                                    config.enabled && styles.toggleSwitchActive
-                                                ]}
-                                                onPress={() => toggleEmailConfig(config.id)}
-                                            >
-                                                <View style={[
-                                                    styles.toggleThumb,
-                                                    config.enabled && styles.toggleThumbActive
-                                                ]} />
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-
-                                    <Text style={styles.emailConfigDescription}>{config.description}</Text>
-
-                                    {/* Recipient Tags */}
-                                    <View style={styles.recipientTagsSection}>
-                                        <Text style={styles.sectionLabel}>Recipient Tags</Text>
-                                        <View style={styles.tagsGrid}>
-                                            {availableTags.map((tag) => {
-                                                const tagLower = tag.toLowerCase();
-                                                const isSelected = config.recipientTags.includes(tagLower);
-                                                return (
-                                                    <TouchableOpacity
-                                                        key={tag}
-                                                        style={[
-                                                            styles.recipientTag,
-                                                            isSelected && styles.recipientTagSelected
-                                                        ]}
-                                                        onPress={() => toggleRecipientTag(config.id, tag)}
-                                                    >
-                                                        <Text style={[
-                                                            styles.recipientTagText,
-                                                            isSelected && styles.recipientTagTextSelected
-                                                        ]}>
-                                                            {tagLower}
-                                                        </Text>
-                                                    </TouchableOpacity>
-                                                );
-                                            })}
-                                        </View>
-                                        {config.recipientTags.length > 0 && (
-                                            <View style={styles.selectedTagsDisplay}>
-                                                {config.recipientTags.map((tag, index) => {
-                                                    const colors = ['#fef3c7', '#fce7f3', '#f3e8ff'];
-                                                    return (
-                                                        <View
-                                                            key={index}
-                                                            style={[styles.selectedTagBadge, { backgroundColor: colors[index % colors.length] }]}
-                                                        >
-                                                            <Text style={styles.selectedTagBadgeText}>{tag}</Text>
-                                                        </View>
-                                                    );
-                                                })}
-                                            </View>
-                                        )}
-                                    </View>
-
-                                    {/* Send Timing */}
-                                    <View style={styles.sendTimingSection}>
-                                        <View style={styles.sendTimingHeader}>
-                                            <Ionicons name="time-outline" size={18} color={theme.colors.text} />
-                                            <Text style={styles.sectionLabel}>Send Timing (select multiple)</Text>
-                                        </View>
-                                        <View style={styles.timingOptions}>
-                                            {sendTimingOptions.map((timing) => {
-                                                const isSelected = config.sendTimings.includes(timing.id);
-                                                return (
-                                                    <TouchableOpacity
-                                                        key={timing.id}
-                                                        style={styles.timingOption}
-                                                        onPress={() => toggleSendTiming(config.id, timing.id)}
-                                                    >
-                                                        <View style={styles.radioButton}>
-                                                            {isSelected && <View style={styles.radioButtonSelected} />}
-                                                        </View>
-                                                        <View style={styles.timingOptionContent}>
-                                                            <Text style={styles.timingOptionLabel}>{timing.label}</Text>
-                                                            <Text style={styles.timingOptionDescription}>{timing.description}</Text>
-                                                        </View>
-                                                    </TouchableOpacity>
-                                                );
-                                            })}
-                                        </View>
-                                        {config.sendTimings.length > 0 && (
-                                            <View style={styles.selectedTimingsDisplay}>
-                                                <Text style={styles.selectedTimingsLabel}>Selected timings:</Text>
-                                                {config.sendTimings.map((timing, index) => (
-                                                    <View key={index} style={styles.selectedTimingBadge}>
-                                                        <Text style={styles.selectedTimingBadgeText}>{timing}</Text>
-                                                    </View>
-                                                ))}
-                                            </View>
-                                        )}
-                                    </View>
-
-                                    <Text style={styles.lastUpdatedText}>Last updated: {config.lastUpdated}</Text>
-                                </StyledCard>
-                            ))}
-                        </View>
-                    </View>
-                )}
-
-                {/* Data Import Section */}
-                {activeTab === 'Data Import' && (
-                    <View style={styles.dataImportContainer}>
-                        {/* CampMinder Sync Section */}
-                        <View style={styles.syncSection}>
-                            <View style={styles.sectionHeader}>
-                                <Ionicons name="refresh" size={20} color={theme.colors.text} style={styles.sectionIcon} />
-                                <Text style={styles.sectionTitle}>CampMinder Sync</Text>
-                            </View>
-                            <Text style={styles.sectionDescription}>
-                                Sync campers, staff, divisions, and sessions from CampMinder API for the 2026 season. Auto sync runs every hour for all configured camps.
-                            </Text>
-                            
-                            <StyledCard style={styles.campSyncCard}>
-                                <View style={styles.campSyncHeader}>
-                                    <View style={styles.campSyncInfo}>
-                                        <Text style={styles.campName}>Tyler Hill Camp</Text>
-                                        <Text style={styles.lastSyncedText}>Last synced: {syncStatus.lastSynced}</Text>
-                                    </View>
-                                    <View style={styles.campSyncActions}>
-                                        {syncStatus.isConfigured && (
-                                            <View style={styles.configuredBadge}>
-                                                <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-                                                <Text style={styles.configuredBadgeText}>Configured</Text>
-                                            </View>
-                                        )}
-                                        <TouchableOpacity
-                                            style={styles.staffOnlyButton}
-                                            onPress={handleStaffOnlySync}
-                                        >
-                                            <Text style={styles.staffOnlyButtonText}>Staff Only</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={styles.fullSyncButton}
-                                            onPress={handleFullSync}
-                                        >
-                                            <Ionicons name="refresh" size={16} color="white" />
-                                            <Text style={styles.fullSyncButtonText}>Full Sync</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            </StyledCard>
-                        </View>
-
-                        {/* Manual JSON Import Section */}
-                        <View style={styles.importSection}>
-                            <View style={styles.sectionHeader}>
-                                <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.text} style={styles.sectionIcon} />
-                                <Text style={styles.sectionTitle}>Manual JSON Import</Text>
-                            </View>
-                            <Text style={styles.sectionDescription}>
-                                Import campers and awards data from JSON files. Awards will retain their original years while being linked to the selected season records.
-                            </Text>
-
-                            <StyledCard style={styles.importCard}>
-                                {/* Import Season Dropdown */}
-                                <View style={styles.importField}>
-                                    <Text style={styles.fieldLabel}>Import Season</Text>
-                                    <View style={styles.seasonPickerContainer}>
-                                        <TouchableOpacity
-                                            style={styles.seasonPickerButton}
-                                            onPress={() => setShowSeasonPicker(!showSeasonPicker)}
-                                        >
-                                            <Text style={styles.seasonPickerText}>{selectedSeason}</Text>
-                                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                                        </TouchableOpacity>
-                                        {showSeasonPicker && (
-                                            <View style={styles.seasonPickerDropdown}>
-                                                <ScrollView
-                                                    nestedScrollEnabled={true}
-                                                    showsVerticalScrollIndicator={true}
-                                                >
-                                                    {seasons.map((season) => (
-                                                        <TouchableOpacity
-                                                            key={season}
-                                                            style={[
-                                                                styles.seasonPickerOption,
-                                                                selectedSeason === season && styles.seasonPickerOptionSelected
-                                                            ]}
-                                                            onPress={() => {
-                                                                setSelectedSeason(season);
-                                                                setShowSeasonPicker(false);
-                                                            }}
-                                                        >
-                                                            <Text style={[
-                                                                styles.seasonPickerOptionText,
-                                                                selectedSeason === season && styles.seasonPickerOptionTextSelected
-                                                            ]}>
-                                                                {season}
-                                                            </Text>
-                                                            {selectedSeason === season && (
-                                                                <Ionicons name="checkmark" size={18} color={theme.colors.accent} />
-                                                            )}
-                                                        </TouchableOpacity>
-                                                    ))}
-                                                </ScrollView>
-                                            </View>
-                                        )}
-                                    </View>
-                                </View>
-
-                                {/* Campers File */}
-                                <View style={styles.importField}>
-                                    <Text style={styles.fieldLabel}>Campers File (campers.json)</Text>
-                                    <TouchableOpacity
-                                        style={styles.campersFileButton}
-                                        onPress={() => handleFileSelect('campers')}
-                                    >
-                                        <Ionicons name="cloud-upload-outline" size={18} color="white" />
-                                        <Text style={styles.campersFileButtonText}>Select File</Text>
-                                    </TouchableOpacity>
-                                    {campersFileName && (
-                                        <Text style={styles.selectedFileName}>{campersFileName}</Text>
-                                    )}
-                                </View>
-
-                                {/* Awards File */}
-                                <View style={styles.importField}>
-                                    <Text style={styles.fieldLabel}>Awards File (awards.json)</Text>
-                                    <TouchableOpacity
-                                        style={styles.awardsFileButton}
-                                        onPress={() => handleFileSelect('awards')}
-                                    >
-                                        <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} />
-                                        <Text style={styles.awardsFileButtonText}>Select File</Text>
-                                    </TouchableOpacity>
-                                    {awardsFileName && (
-                                        <Text style={styles.selectedFileName}>{awardsFileName}</Text>
-                                    )}
-                                </View>
-
-                                {/* Start Import Button */}
-                                <TouchableOpacity
-                                    style={styles.startImportButton}
-                                    onPress={handleStartImport}
-                                >
-                                    <Text style={styles.startImportButtonText}>Start Import</Text>
-                                </TouchableOpacity>
-                            </StyledCard>
-                        </View>
-
-                        {/* Important Notes Section */}
-                        <StyledCard style={styles.importantNotesCard}>
-                            <View style={styles.importantNotesHeader}>
-                                <Ionicons name="information-circle-outline" size={20} color={theme.colors.textSecondary} style={styles.importantNotesIcon} />
-                                <Text style={styles.importantNotesTitle}>Important Notes:</Text>
-                            </View>
-                            <View style={styles.notesList}>
-                                <View style={styles.noteItem}>
-                                    <Text style={styles.noteBullet}>•</Text>
-                                    <Text style={styles.noteText}>CampMinder sync runs automatically every hour for all configured camps</Text>
-                                </View>
-                                <View style={styles.noteItem}>
-                                    <Text style={styles.noteBullet}>•</Text>
-                                    <Text style={styles.noteText}>The import process uses person_id to link historical data across seasons</Text>
-                                </View>
-                                <View style={styles.noteItem}>
-                                    <Text style={styles.noteBullet}>•</Text>
-                                    <Text style={styles.noteText}>When a camper returns in future seasons with the same person_id, all their historical awards will be visible</Text>
-                                </View>
-                                <View style={styles.noteItem}>
-                                    <Text style={styles.noteBullet}>•</Text>
-                                    <Text style={styles.noteText}>Duplicate person_ids within the same season will be skipped</Text>
-                                </View>
-                                <View style={styles.noteItem}>
-                                    <Text style={styles.noteBullet}>•</Text>
-                                    <Text style={styles.noteText}>Award dates reflect the original year earned</Text>
-                                </View>
-                            </View>
-                        </StyledCard>
-                    </View>
-                )}
-
-                {/* Edit History Section */}
-                {activeTab === 'Edit History' && (
-                    <View style={styles.editHistoryContainer}>
-                        <StyledCard style={styles.editHistoryCard}>
-                            <View style={styles.editHistoryHeader}>
-                                <View style={styles.editHistoryTitleContainer}>
-                                    <Ionicons name="document-text-outline" size={20} color={theme.colors.text} style={styles.editHistoryIcon} />
-                                    <View>
-                                        <Text style={styles.editHistoryTitle}>Edit History</Text>
-                                        <Text style={styles.editHistorySubtitle}>View all changes made to the system.</Text>
-                                    </View>
-                                </View>
-                                <TouchableOpacity
-                                    style={styles.exportButton}
-                                    onPress={handleExportCSV}
-                                >
-                                    <Ionicons name="download-outline" size={18} color="white" />
-                                    <Text style={styles.exportButtonText}>Export CSV</Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            {/* Search and Filter Bar */}
-                            <View style={styles.historySearchBar}>
-                                <View style={styles.historySearchInputContainer}>
-                                    <Ionicons name="search-outline" size={18} color={theme.colors.textSecondary} style={styles.historySearchIcon} />
-                                    <TextInput
-                                        style={styles.historySearchInput}
-                                        placeholder="Search by table, user, or email..."
-                                        placeholderTextColor={theme.colors.textSecondary}
-                                        value={historySearch}
-                                        onChangeText={setHistorySearch}
-                                    />
-                                </View>
-                                <View style={styles.tableFilterContainer}>
-                                    <TouchableOpacity
-                                        style={styles.tableFilterButton}
-                                        onPress={() => setShowTableFilter(!showTableFilter)}
-                                    >
-                                        <Text style={styles.tableFilterText}>{selectedTableFilter}</Text>
-                                        <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                                    </TouchableOpacity>
-                                    {showTableFilter && (
-                                        <View style={styles.tableFilterDropdown}>
-                                            <ScrollView
-                                                style={styles.tableFilterScrollView}
-                                                nestedScrollEnabled={true}
-                                                showsVerticalScrollIndicator={true}
-                                            >
-                                                {tableFilterOptions.map((table) => (
-                                                    <TouchableOpacity
-                                                        key={table}
-                                                        style={[
-                                                            styles.tableFilterOption,
-                                                            selectedTableFilter === table && styles.tableFilterOptionSelected
-                                                        ]}
-                                                        onPress={() => {
-                                                            setSelectedTableFilter(table);
-                                                            setShowTableFilter(false);
-                                                        }}
-                                                    >
-                                                        <Text style={[
-                                                            styles.tableFilterOptionText,
-                                                            selectedTableFilter === table && styles.tableFilterOptionTextSelected
-                                                        ]}>
-                                                            {table}
-                                                        </Text>
-                                                        {selectedTableFilter === table && (
-                                                            <Ionicons name="checkmark" size={18} color={theme.colors.accent} />
-                                                        )}
-                                                    </TouchableOpacity>
-                                                ))}
-                                            </ScrollView>
-                                        </View>
-                                    )}
-                                </View>
-                            </View>
-
-                            {/* History List */}
-                            <View style={styles.historyList}>
-                                {historyEntries
-                                    .filter(entry => {
-                                        const searchLower = historySearch.toLowerCase();
-                                        const matchesSearch = !historySearch || 
-                                            entry.user.toLowerCase().includes(searchLower) ||
-                                            entry.table.toLowerCase().includes(searchLower) ||
-                                            entry.recordId.toLowerCase().includes(searchLower);
-                                        
-                                        const matchesTable = selectedTableFilter === 'All Tables' || entry.table === selectedTableFilter.toLowerCase();
-                                        
-                                        return matchesSearch && matchesTable;
-                                    })
-                                    .map((entry) => {
-                                        const isExpanded = expandedHistoryIds.has(entry.id);
-                                        return (
-                                            <View key={entry.id} style={styles.historyEntry}>
-                                                <ScrollView
-                                                    horizontal={true}
-                                                    showsHorizontalScrollIndicator={false}
-                                                    contentContainerStyle={styles.historyEntryRow}
-                                                >
-                                                    <TouchableOpacity
-                                                        style={styles.historyExpandButton}
-                                                        onPress={() => toggleHistoryExpanded(entry.id)}
-                                                    >
-                                                        <Ionicons 
-                                                            name={isExpanded ? "chevron-up" : "chevron-down"} 
-                                                            size={16} 
-                                                            color={theme.colors.textSecondary} 
-                                                        />
-                                                    </TouchableOpacity>
-                                                    <View style={styles.historyDateTimeContainer}>
-                                                        <Text style={styles.historyDate}>
-                                                            {entry.dateTime.split(' ')[0]} {entry.dateTime.split(' ')[1]}
-                                                        </Text>
-                                                        <Text style={styles.historyTime}>
-                                                            {entry.dateTime.split(' ')[2]}
-                                                        </Text>
-                                                    </View>
-                                                    <Text style={styles.historyUser}>{entry.user}</Text>
-                                                    <View style={styles.historyTableBadge}>
-                                                        <Text style={styles.historyTableBadgeText}>
-                                                            {entry.table.charAt(0).toUpperCase() + entry.table.slice(1)}
-                                                        </Text>
-                                                    </View>
-                                                    <View style={styles.historyActionBadge}>
-                                                        <Text style={styles.historyActionBadgeText}>{entry.action}</Text>
-                                                    </View>
-                                                    <Text style={styles.historyRecordId} numberOfLines={1} ellipsizeMode="tail">
-                                                        {truncateId(entry.recordId, 12)}
-                                                    </Text>
-                                                </ScrollView>
-                                                {isExpanded && (
-                                                    <View style={styles.historyExpandedContent}>
-                                                        <Text style={styles.historyExpandedText}>Full Record ID: {entry.recordId}</Text>
-                                                        <Text style={styles.historyExpandedText}>Action: {entry.action}</Text>
-                                                        <Text style={styles.historyExpandedText}>Table: {entry.table}</Text>
-                                                        <Text style={styles.historyExpandedText}>User: {entry.user}</Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                        );
-                                    })}
-                            </View>
-                        </StyledCard>
-                    </View>
-                )}
-
-                {/* Placeholder for other tabs */}
-                {activeTab !== 'User Management' && activeTab !== 'User Tags' && activeTab !== 'Email Automation' && activeTab !== 'Data Import' && activeTab !== 'Edit History' && (
-                    <StyledCard style={styles.placeholderCard}>
-                        <Text style={styles.placeholderText}>{activeTab} content coming soon</Text>
-                    </StyledCard>
-                )}
+                {currentTab === 'userManagement' ? renderUserManagement() : currentTab === 'userTags' ? renderUserTags() : currentTab === 'emailAutomation' ? renderEmailAutomation() : currentTab === 'dataImport' ? renderDataImport() : renderEditHistory()}
             </ScrollView>
 
-            {/* Role Picker Overlay */}
-            {showRolePicker && (
-                <Pressable 
-                    style={styles.overlay}
-                    onPress={() => setShowRolePicker(null)}
-                />
-            )}
-
-            {/* Tag Filter Overlay */}
-            {showTagFilter && (
-                <Pressable 
-                    style={styles.overlay}
-                    onPress={() => setShowTagFilter(false)}
-                />
-            )}
-
-            {/* Tag Picker Overlay */}
-            {showTagPicker && (
-                <Pressable 
-                    style={styles.overlay}
-                    onPress={() => {
-                        setShowTagPicker(null);
-                        setNewTagName('');
-                    }}
-                />
-            )}
-
-            {/* Season Picker Overlay */}
-            {showSeasonPicker && (
-                <Pressable
-                    style={styles.overlay}
-                    onPress={() => setShowSeasonPicker(false)}
-                />
-            )}
-
-            {/* Table Filter Overlay */}
-            {showTableFilter && (
-                <Pressable
-                    style={styles.overlay}
-                    onPress={() => setShowTableFilter(false)}
-                />
-            )}
-
-            {/* Add User Modal */}
+            {/* Role Picker Modal (Popup) */}
             <Modal
-                visible={showAddUserModal}
+                visible={showRolePicker}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowRolePicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowRolePicker(false)}>
+                    <View style={styles.pickerContent}>
+                        {roles.map((role) => (
+                            <TouchableOpacity
+                                key={role}
+                                style={[
+                                    styles.pickerOption,
+                                    selectedUser?.role === role && styles.pickerOptionSelected
+                                ]}
+                                onPress={() => handleRoleSelect(role)}
+                            >
+                                <Text style={[
+                                    styles.pickerOptionText,
+                                    selectedUser?.role === role && styles.pickerOptionTextSelected
+                                ]}>
+                                    {role}
+                                </Text>
+                                {selectedUser?.role === role && (
+                                    <Ionicons name="checkmark" size={18} color="white" />
+                                )}
+                            </TouchableOpacity>
+                        ))}
+                                </View>
+                </Pressable>
+            </Modal>
+
+            {/* Filter Tag Picker Modal */}
+            <Modal
+                visible={showFilterTagPicker}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowFilterTagPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowFilterTagPicker(false)}>
+                    <View style={styles.pickerContent}>
+                        {availableTags.map((tag) => (
+                            <TouchableOpacity
+                                key={tag}
+                                style={[
+                                    styles.pickerOption,
+                                    selectedFilterTag === tag && styles.pickerOptionSelected
+                                ]}
+                                onPress={() => handleFilterTagSelect(tag)}
+                            >
+                                <Text style={[
+                                    styles.pickerOptionText,
+                                    selectedFilterTag === tag && styles.pickerOptionTextSelected
+                                ]}>
+                                    {tag}
+                                </Text>
+                                {selectedFilterTag === tag && (
+                                    <Ionicons name="checkmark" size={18} color="white" />
+                                )}
+                            </TouchableOpacity>
+                        ))}
+                                </View>
+                </Pressable>
+            </Modal>
+
+            {/* Add Tag Modal */}
+            <Modal
+                visible={showAddTagModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowAddTagModal(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowAddTagModal(false)}>
+                    <View style={styles.pickerContent}>
+                        {availableTags.filter(tag => tag !== 'All Tags').map((tag) => (
+                            <TouchableOpacity
+                                key={tag}
+                                style={styles.pickerOption}
+                                onPress={() => handleAddTagSelect(tag)}
+                            >
+                                <Text style={styles.pickerOptionText}>{tag}</Text>
+                                {userForTags?.tags?.includes(tag) && (
+                                    <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
+                                )}
+                        </TouchableOpacity>
+                    ))}
+                </View>
+                </Pressable>
+            </Modal>
+
+            {/* Season Picker Modal */}
+            <Modal
+                visible={showSeasonPicker}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowSeasonPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowSeasonPicker(false)}>
+                    <View style={styles.pickerContent}>
+                        {seasons.map((season) => (
+                            <TouchableOpacity
+                                key={season}
+                                style={[
+                                    styles.pickerOption,
+                                    importSeason === season && styles.pickerOptionSelected
+                                ]}
+                                onPress={() => {
+                                    setImportSeason(season);
+                                    setShowSeasonPicker(false);
+                                }}
+                            >
+                                <Text style={[
+                                    styles.pickerOptionText,
+                                    importSeason === season && styles.pickerOptionTextSelected
+                                ]}>
+                                    {season}
+                                </Text>
+                                {importSeason === season && (
+                                    <Ionicons name="checkmark" size={18} color="white" />
+                                )}
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </Pressable>
+            </Modal>
+
+            {/* File Picker Bottom Sheet */}
+            <Modal
+                visible={showFilePicker}
                 transparent={true}
                 animationType="slide"
-                onRequestClose={() => setShowAddUserModal(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowAddUserModal(false)}>
-                    <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Add User</Text>
-                            <TouchableOpacity onPress={() => setShowAddUserModal(false)}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.modalBody}>
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Name</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Enter user name"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    value={newUserName}
-                                    onChangeText={setNewUserName}
-                                />
-                            </View>
-
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Email</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Enter user email"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    value={newUserEmail}
-                                    onChangeText={setNewUserEmail}
-                                    keyboardType="email-address"
-                                    autoCapitalize="none"
-                                />
-                            </View>
-
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Role</Text>
-                                <TouchableOpacity
-                                    style={styles.roleSelectButton}
-                                    onPress={() => setShowNewUserRolePicker(!showNewUserRolePicker)}
-                                >
-                                    <Text style={styles.roleSelectText}>{newUserRole}</Text>
-                                    <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
-                                </TouchableOpacity>
-                                {showNewUserRolePicker && (
-                                    <View style={styles.roleOptions}>
-                                        {roles.map((role) => (
-                                            <TouchableOpacity
-                                                key={role}
-                                                style={[
-                                                    styles.roleOption,
-                                                    newUserRole === role && styles.roleOptionSelected
-                                                ]}
-                                                onPress={() => {
-                                                    setNewUserRole(role);
-                                                    setShowNewUserRolePicker(false);
-                                                }}
-                                            >
-                                                <Text style={[
-                                                    styles.roleOptionText,
-                                                    newUserRole === role && styles.roleOptionTextSelected
-                                                ]}>
-                                                    {role}
-                                                </Text>
-                                                {newUserRole === role && (
-                                                    <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
-                                                )}
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                )}
-                            </View>
-                        </View>
-
-                        <View style={styles.modalFooter}>
-                            <TouchableOpacity
-                                style={styles.cancelButton}
-                                onPress={() => setShowAddUserModal(false)}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.createButton}
-                                onPress={handleAddUser}
-                            >
-                                <Text style={styles.createButtonText}>Create User</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Delete User Confirmation Modal */}
-            <Modal
-                visible={showDeleteModal}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={handleCancelDelete}
-            >
-                <Pressable style={styles.modalOverlay} onPress={handleCancelDelete}>
-                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.deleteModalHeader}>
-                            <Text style={styles.deleteModalTitle}>Delete User</Text>
-                        </View>
-
-                        <View style={styles.deleteModalBody}>
-                            <Text style={styles.deleteModalMessage}>
-                                Are you sure you want to delete {userToDelete?.name}? This action cannot be undone.
-                            </Text>
-                        </View>
-
-                        <View style={styles.deleteModalFooter}>
-                            <TouchableOpacity
-                                style={styles.deleteButton}
-                                onPress={handleConfirmDelete}
-                            >
-                                <Text style={styles.deleteButtonText}>Delete</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.cancelDeleteButton}
-                                onPress={handleCancelDelete}
-                            >
-                                <Text style={styles.cancelDeleteButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Role Change Popup Modal */}
-            <Modal
-                visible={showRolePopup}
-                transparent={true}
-                animationType="fade"
-                statusBarTranslucent={true}
                 onRequestClose={() => {
-                    setShowRolePopup(false);
-                    setSelectedRoleForPopup(null);
-                    setSelectedUserForRole(null);
+                    setShowFilePicker(false);
+                    setActiveFileType(null);
                 }}
             >
                 <Pressable 
-                    style={styles.rolePopupOverlay} 
+                    style={styles.modalOverlay} 
                     onPress={() => {
-                        setShowRolePopup(false);
-                        setSelectedRoleForPopup(null);
-                        setSelectedUserForRole(null);
+                        setShowFilePicker(false);
+                        setActiveFileType(null);
                     }}
                 >
-                    <Pressable style={styles.rolePopupContent} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.rolePopupHeader}>
-                            <Text style={styles.rolePopupTitle}>Change User Role</Text>
+                    <Pressable style={styles.filePickerBottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.filePickerHeader}>
+                            <Text style={styles.filePickerTitle}>Select file</Text>
+                        </View>
+                        <View style={styles.filePickerContent}>
                             <TouchableOpacity 
-                                onPress={() => {
-                                    setShowRolePopup(false);
-                                    setSelectedRoleForPopup(null);
-                                    setSelectedUserForRole(null);
-                                }}
+                                style={styles.filePickerOption}
+                                onPress={() => handleFileSourceSelect('Aloha downloads')}
                             >
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                                <Ionicons name="briefcase-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.filePickerOptionText}>Aloha downloads</Text>
                             </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.rolePopupBody}>
-                            {selectedRoleForPopup && (
-                                <>
-                                    <View style={styles.rolePopupBadgeContainer}>
-                                        <View 
-                                            style={[
-                                                styles.rolePopupBadge,
-                                                { backgroundColor: getRoleBadgeColor(selectedRoleForPopup) }
-                                            ]}
-                                        >
-                                            <Text style={styles.rolePopupBadgeText}>{selectedRoleForPopup}</Text>
-                                        </View>
-                                    </View>
-                                    <Text style={styles.rolePopupMessage}>
-                                        Are you sure you want to change this user's role to {selectedRoleForPopup}?
-                                    </Text>
-                                </>
-                            )}
-                        </View>
-
-                        <View style={styles.rolePopupFooter}>
-                            <TouchableOpacity
-                                style={styles.rolePopupCancelButton}
-                                onPress={() => {
-                                    setShowRolePopup(false);
-                                    setSelectedRoleForPopup(null);
-                                    setSelectedUserForRole(null);
-                                }}
+                            <TouchableOpacity 
+                                style={styles.filePickerOption}
+                                onPress={() => handleFileSourceSelect('Other files')}
                             >
-                                <Text style={styles.rolePopupCancelText}>Cancel</Text>
+                                <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.filePickerOptionText}>Other files</Text>
                             </TouchableOpacity>
-                            {selectedRoleForPopup && selectedUserForRole && (
-                                <TouchableOpacity
-                                    style={styles.rolePopupConfirmButton}
-                                    onPress={() => handleUpdateRole(selectedUserForRole, selectedRoleForPopup)}
-                                >
-                                    <Text style={styles.rolePopupConfirmText}>Confirm</Text>
-                                </TouchableOpacity>
-                            )}
                         </View>
                     </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Table Filter Picker Modal */}
+            <Modal
+                visible={showTableFilterPicker}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowTableFilterPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowTableFilterPicker(false)}>
+                    <View style={styles.pickerContent}>
+                        {tableFilters.map((table) => (
+                            <TouchableOpacity
+                                key={table}
+                                style={[
+                                    styles.pickerOption,
+                                    selectedTableFilter === table && styles.pickerOptionSelected
+                                ]}
+                                onPress={() => {
+                                    setSelectedTableFilter(table);
+                                    setShowTableFilterPicker(false);
+                                }}
+                            >
+                                <Text style={[
+                                    styles.pickerOptionText,
+                                    selectedTableFilter === table && styles.pickerOptionTextSelected
+                                ]}>
+                                    {table}
+                                </Text>
+                                {selectedTableFilter === table && (
+                                    <Ionicons name="checkmark" size={18} color="white" />
+                                )}
+                            </TouchableOpacity>
+                        ))}
+                    </View>
                 </Pressable>
             </Modal>
 
@@ -1432,115 +948,72 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowDownloadModal(false)}
-                statusBarTranslucent={true}
             >
-                <Pressable
-                    style={styles.downloadModalOverlay}
+                <Pressable 
+                    style={styles.modalOverlay} 
                     onPress={() => setShowDownloadModal(false)}
                 >
-                    <Pressable
-                        style={styles.downloadModalContent}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        <View style={styles.downloadModalHeader}>
-                            <Text style={styles.downloadModalTitle}>Download file</Text>
-                            <TouchableOpacity
-                                onPress={() => setShowDownloadModal(false)}
-                                style={styles.downloadModalCloseButton}
+                    <Pressable style={styles.downloadModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.downloadModalTitle}>Download file</Text>
+
+                        {/* Name Field */}
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Name</Text>
+                            <TextInput 
+                                style={styles.input}
+                                value={downloadFileName}
+                                onChangeText={setDownloadFileName}
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                        </View>
+
+                        {/* Recent Section */}
+                        <View style={styles.downloadSection}>
+                            <Text style={styles.downloadSectionTitle}>Recent</Text>
+                            <TouchableOpacity 
+                                style={[styles.locationOption, styles.locationOptionSelected]}
+                                onPress={() => setSelectedLocation('Private folder')}
                             >
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                                <Ionicons name="folder" size={20} color={theme.colors.secondary} />
+                                <Text style={styles.locationOptionText}>Private folder</Text>
                             </TouchableOpacity>
                         </View>
 
-                        <View style={styles.downloadModalBody}>
-                            {/* Name Input */}
-                            <View style={styles.downloadInputGroup}>
-                                <Text style={styles.downloadInputLabel}>Name</Text>
-                                <TextInput
-                                    style={styles.downloadInput}
-                                    value={downloadFileName}
-                                    onChangeText={setDownloadFileName}
-                                    placeholder="Enter file name"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                />
-                            </View>
-
-                            {/* Recent Section */}
-                            <View style={styles.downloadSection}>
-                                <Text style={styles.downloadSectionTitle}>Recent</Text>
-                                <TouchableOpacity
-                                    style={styles.downloadLocationItem}
-                                    onPress={() => {
-                                        setSelectedLocation('Private folder');
-                                        setShowDownloadModal(false);
-                                        handleDownload();
-                                    }}
-                                >
-                                    <Ionicons name="folder" size={20} color={theme.colors.textSecondary} />
-                                    <Text style={styles.downloadLocationText}>Private folder</Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            {/* Location Section */}
-                            <View style={styles.downloadSection}>
-                                <Text style={styles.downloadSectionTitle}>Location</Text>
-                                <TouchableOpacity
-                                    style={styles.downloadLocationItem}
-                                    onPress={() => setShowLocationPicker(!showLocationPicker)}
-                                >
-                                    <Ionicons name="folder" size={20} color={theme.colors.textSecondary} />
-                                    <Text style={styles.downloadLocationText}>{selectedLocation}</Text>
-                                    <Ionicons
-                                        name={showLocationPicker ? "chevron-up" : "chevron-down"}
-                                        size={18}
-                                        color={theme.colors.textSecondary}
-                                    />
-                                </TouchableOpacity>
-                                {showLocationPicker && (
-                                    <View style={styles.downloadLocationPicker}>
-                                        {locations.map((location) => (
-                                            <TouchableOpacity
-                                                key={location}
-                                                style={[
-                                                    styles.downloadLocationOption,
-                                                    selectedLocation === location && styles.downloadLocationOptionSelected
-                                                ]}
-                                                onPress={() => {
-                                                    setSelectedLocation(location);
-                                                    setShowLocationPicker(false);
-                                                }}
-                                            >
-                                                <Ionicons name="folder" size={18} color={theme.colors.textSecondary} />
-                                                <Text style={[
-                                                    styles.downloadLocationOptionText,
-                                                    selectedLocation === location && styles.downloadLocationOptionTextSelected
-                                                ]}>
-                                                    {location}
-                                                </Text>
-                                                {selectedLocation === location && (
-                                                    <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
-                                                )}
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                )}
-                                <TouchableOpacity
-                                    style={styles.downloadLocationItem}
-                                    onPress={() => {
-                                        setSelectedLocation('Private folder');
-                                        setShowLocationPicker(false);
-                                    }}
-                                >
-                                    <Ionicons name="folder" size={20} color={theme.colors.textSecondary} />
-                                    <Text style={styles.downloadLocationText}>Private folder</Text>
-                                </TouchableOpacity>
-                            </View>
+                        {/* Location Section */}
+                        <View style={styles.downloadSection}>
+                            <Text style={styles.downloadSectionTitle}>Location</Text>
+                            <TouchableOpacity 
+                                style={styles.locationOption}
+                                onPress={() => setSelectedLocation('Downloads')}
+                            >
+                                <Ionicons name="folder" size={20} color={theme.colors.secondary} />
+                                <Text style={styles.locationOptionText}>Downloads</Text>
+                                <Ionicons name="chevron-up" size={16} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.locationOption, selectedLocation === 'Private folder' && styles.locationOptionSelected]}
+                                onPress={() => setSelectedLocation('Private folder')}
+                            >
+                                <Ionicons name="folder" size={20} color={theme.colors.secondary} />
+                                <Text style={styles.locationOptionText}>Private folder</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={styles.locationOption}
+                                onPress={() => setSelectedLocation('Device downloads')}
+                            >
+                                <Ionicons name="folder" size={20} color={theme.colors.secondary} />
+                                <Text style={styles.locationOptionText}>Device downloads</Text>
+                                <Ionicons name="star" size={16} color="#ec4899" />
+                            </TouchableOpacity>
                         </View>
 
                         {/* Download Button */}
-                        <TouchableOpacity
+                        <TouchableOpacity 
                             style={styles.downloadButton}
-                            onPress={handleDownload}
+                            onPress={() => {
+                                // TODO: Handle download
+                                setShowDownloadModal(false);
+                            }}
                         >
                             <Text style={styles.downloadButtonText}>Download</Text>
                         </TouchableOpacity>
@@ -1548,10 +1021,149 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
-            {/* Floating Action Button */}
-            <TouchableOpacity style={styles.fab}>
-                <Ionicons name="chatbubble-outline" size={24} color="white" />
-            </TouchableOpacity>
+            {/* Add User Modal */}
+            <Modal
+                visible={showAddUserModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowAddUserModal(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowAddUserModal(false)}>
+                    <Pressable style={styles.addUserModalContent} onPress={(e) => e.stopPropagation()}>
+                        {/* Close Button */}
+                        <TouchableOpacity 
+                            style={styles.closeModalBtn}
+                            onPress={() => setShowAddUserModal(false)}
+                        >
+                            <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
+                        </TouchableOpacity>
+
+                        <Text style={styles.modalTitle}>Add New User</Text>
+                        <Text style={styles.modalSubtitle}>Create a user directly or send an invitation email</Text>
+
+                        {/* Modal Tabs */}
+                        <View style={styles.modalTabs}>
+                            <TouchableOpacity 
+                                style={[styles.modalTab, activeTab === 'create' && styles.modalTabActive]}
+                                onPress={() => setActiveTab('create')}
+                            >
+                                <Text style={[styles.modalTabText, activeTab === 'create' && styles.modalTabTextActive]}>Create User</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.modalTab, activeTab === 'invite' && styles.modalTabActive]}
+                                onPress={() => setActiveTab('invite')}
+                            >
+                                <Text style={[styles.modalTabText, activeTab === 'invite' && styles.modalTabTextActive]}>Send Invitation</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Form Fields */}
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Full Name</Text>
+                            <TextInput 
+                                style={styles.input}
+                                placeholder="John Doe"
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Email</Text>
+                            <TextInput 
+                                style={styles.input}
+                                placeholder="user@example.com"
+                                placeholderTextColor={theme.colors.textSecondary}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Password</Text>
+                            <TextInput 
+                                style={styles.input}
+                                placeholder="•••••••"
+                                placeholderTextColor={theme.colors.textSecondary}
+                                secureTextEntry
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Role</Text>
+                            <TouchableOpacity 
+                                style={styles.selectInput}
+                                onPress={() => setShowNewUserRolePicker(!showNewUserRolePicker)}
+                            >
+                                <Text style={styles.selectInputText}>{newUserRole}</Text>
+                                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Role Picker Dropdown (Inside Modal) */}
+                        {showNewUserRolePicker && (
+                            <View style={styles.inlineRolePicker}>
+                                {roles.map((role) => (
+                                    <TouchableOpacity
+                                        key={role}
+                                        style={[
+                                            styles.inlineRoleOption,
+                                            newUserRole === role && styles.inlineRoleOptionSelected
+                                        ]}
+                                        onPress={() => {
+                                            setNewUserRole(role);
+                                            setShowNewUserRolePicker(false);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.inlineRoleOptionText,
+                                            newUserRole === role && styles.inlineRoleOptionTextSelected
+                                        ]}>{role}</Text>
+                                        {newUserRole === role && (
+                                            <Ionicons name="checkmark" size={16} color={theme.colors.secondary} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+
+                        <TouchableOpacity style={styles.createButton}>
+                            <Text style={styles.createButtonText}>Create User</Text>
+                        </TouchableOpacity>
+
+                    </Pressable>
+                </Pressable>
+            </Modal>
+            {/* Delete User Modal */}
+            <Modal
+                visible={showDeleteModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowDeleteModal(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowDeleteModal(false)}>
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.deleteModalTitle}>Delete User</Text>
+                        <Text style={styles.deleteModalMessage}>
+                            Are you sure you want to delete {userToDelete?.name}? This action cannot be undone.
+                        </Text>
+                        
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity 
+                                style={styles.deleteButton}
+                                onPress={handleDeleteUser}
+                            >
+                                <Text style={styles.deleteButtonText}>Delete</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={styles.cancelButton}
+                                onPress={() => setShowDeleteModal(false)}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -1561,174 +1173,156 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: theme.colors.background,
     },
-    topHeader: {
+    header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.sm,
-        backgroundColor: theme.colors.surface,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    topHeaderTitle: {
-        ...theme.typography.h3,
-        fontSize: 18,
-        fontWeight: '700',
-        color: theme.colors.text,
     },
     scrollContent: {
         padding: theme.spacing.md,
         paddingBottom: 100,
     },
     titleSection: {
-        marginBottom: theme.spacing.lg,
-        marginTop: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    titleContainer: {
+        marginBottom: theme.spacing.sm,
     },
     title: {
         ...theme.typography.h1,
-        fontSize: 28,
+        fontSize: 32,
         fontWeight: '700',
         color: theme.colors.text,
         marginBottom: theme.spacing.xs,
     },
     subtitle: {
-        ...theme.typography.bodySmall,
+        ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.textSecondary,
     },
     tabsContainer: {
         flexDirection: 'row',
-        paddingVertical: theme.spacing.sm,
-        marginBottom: theme.spacing.md,
+        marginBottom: theme.spacing.lg,
+        paddingBottom: theme.spacing.xs, // For scrollbar
     },
     tab: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.sm,
-        marginRight: theme.spacing.md,
-        borderBottomWidth: 2,
-        borderBottomColor: 'transparent',
+        borderRadius: theme.borderRadius.md,
+        marginRight: theme.spacing.sm,
+        gap: 6,
     },
-    tabActive: {
-        borderBottomColor: theme.colors.text,
-    },
-    tabIcon: {
-        marginRight: theme.spacing.xs,
+    activeTab: {
+        backgroundColor: 'white',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
     },
     tabText: {
         fontSize: 14,
         fontWeight: '500',
         color: theme.colors.textSecondary,
     },
-    tabTextActive: {
+    activeTabText: {
         color: theme.colors.text,
-        fontWeight: '700',
+        fontWeight: '600',
     },
-    userRolesCard: {
+    usersContainer: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
         padding: theme.spacing.md,
-        marginTop: theme.spacing.sm,
     },
-    userRolesHeader: {
+    cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: theme.spacing.lg,
+        alignItems: 'center',
+        marginBottom: theme.spacing.md,
+        gap: 12,
     },
-    userRolesTitleContainer: {
+    cardTitleContainer: {
         flex: 1,
+        marginRight: 8,
     },
-    userRolesTitle: {
-        ...theme.typography.h2,
-        fontSize: 20,
+    cardTitle: {
+        fontSize: 18,
         fontWeight: '700',
         color: theme.colors.text,
-        marginBottom: theme.spacing.xs,
+        marginBottom: 4,
     },
-    userRolesSubtitle: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
+    cardSubtitle: {
+        fontSize: 13,
         color: theme.colors.textSecondary,
     },
-    addUserButton: {
+    addUserBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.secondary,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        borderRadius: theme.borderRadius.md,
-        gap: theme.spacing.xs,
+        backgroundColor: '#2563eb', // Blue
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 8,
+        minWidth: 110,
+        justifyContent: 'center',
     },
-    addUserButtonText: {
+    addUserBtnText: {
         color: 'white',
         fontSize: 14,
         fontWeight: '600',
     },
-    userList: {
+    usersList: {
         gap: theme.spacing.sm,
     },
-    userCard: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: theme.colors.surface,
+    userRow: {
         borderWidth: 1,
         borderColor: theme.colors.border,
         borderRadius: theme.borderRadius.md,
         padding: theme.spacing.md,
-        marginBottom: theme.spacing.sm,
-        zIndex: 1,
+        gap: 12,
     },
-    userCardWithOpenDropdown: {
-        zIndex: 100,
-        elevation: 100,
-    },
-    userInfoRow: {
-        flex: 1,
+    userCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        gap: 12,
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        marginRight: theme.spacing.md,
-        flexWrap: 'wrap',
-        gap: theme.spacing.sm,
     },
     userInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        flexShrink: 1,
+        flex: 1,
     },
     userName: {
-        ...theme.typography.h3,
         fontSize: 16,
-        fontWeight: '700',
+        fontWeight: '600',
         color: theme.colors.text,
-        marginRight: theme.spacing.xs,
+        marginBottom: 2,
     },
     userEmail: {
-        ...theme.typography.bodySmall,
         fontSize: 14,
         color: theme.colors.textSecondary,
+        marginBottom: 2,
     },
     roleContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: theme.spacing.xs,
-        position: 'relative',
-        flexShrink: 0,
-    },
-    actionIcons: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.sm,
-        flexShrink: 0,
+        flexWrap: 'wrap',
+        gap: 12,
     },
     roleBadge: {
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: 4,
-        borderRadius: theme.borderRadius.sm,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 12,
+        gap: 6,
     },
     roleBadgeText: {
         color: 'white',
@@ -1738,650 +1332,376 @@ const styles = StyleSheet.create({
     roleDropdown: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.surface,
+        justifyContent: 'space-between',
         borderWidth: 1,
         borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: theme.spacing.xs,
-        minWidth: 120,
-        gap: theme.spacing.xs,
+        borderRadius: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        minWidth: 140,
+        backgroundColor: '#f8fafc',
     },
     roleDropdownText: {
-        fontSize: 14,
-        color: theme.colors.text,
-        flex: 1,
-    },
-    rolePickerDropdown: {
-        position: 'absolute',
-        top: 40,
-        right: 0,
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        minWidth: 150,
-        zIndex: 1000,
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 1000,
-        maxHeight: 200,
-    },
-    rolePickerOption: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    rolePickerOptionText: {
-        fontSize: 14,
+        fontSize: 13,
         color: theme.colors.text,
     },
     actionIcon: {
-        padding: theme.spacing.xs,
+        padding: 4,
     },
-    placeholderCard: {
-        padding: theme.spacing.xl,
-        alignItems: 'center',
-    },
-    placeholderText: {
-        ...theme.typography.body,
-        color: theme.colors.textSecondary,
-    },
-    // User Tags Styles
-    userTagsCard: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.md,
-        marginTop: theme.spacing.sm,
-        zIndex: 1,
-    },
-    userTagsHeader: {
-        marginBottom: theme.spacing.lg,
-    },
-    userTagsTitleContainer: {
+    // Tags Tab Styles
+    tagsHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: theme.spacing.xs,
+        gap: 8,
+        marginBottom: 4,
     },
-    userTagsIcon: {
-        marginRight: theme.spacing.xs,
-    },
-    userTagsTitle: {
-        ...theme.typography.h2,
-        fontSize: 20,
-        fontWeight: '700',
-        color: theme.colors.text,
-    },
-    userTagsSubtitle: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-        marginTop: theme.spacing.xs,
-    },
-    userTagsSearchBar: {
+    searchFilterContainer: {
         flexDirection: 'row',
-        gap: theme.spacing.sm,
-        marginBottom: theme.spacing.md,
-        position: 'relative',
-        zIndex: 1,
+        gap: 12,
+        marginTop: 16,
+        marginBottom: 24,
     },
-    userTagsSearchBarWithDropdown: {
-        zIndex: 2000,
-    },
-    searchInputContainer: {
+    searchBar: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.surface,
+        backgroundColor: 'white',
         borderWidth: 1,
         borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.sm,
+        borderRadius: 8,
+        paddingHorizontal: 12,
         height: 44,
-    },
-    searchIcon: {
-        marginRight: theme.spacing.xs,
     },
     searchInput: {
         flex: 1,
+        marginLeft: 8,
         fontSize: 14,
         color: theme.colors.text,
     },
-    tagFilterButton: {
+    filterDropdown: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.surface,
+        justifyContent: 'space-between',
+        backgroundColor: 'white',
         borderWidth: 1,
         borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        gap: theme.spacing.xs,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        height: 44,
         minWidth: 120,
     },
-    tagFilterText: {
+    filterDropdownText: {
         fontSize: 14,
         color: theme.colors.text,
-    },
-    tagFilterContainer: {
-        position: 'relative',
-        zIndex: 1000,
-    },
-    tagFilterDropdown: {
-        position: 'absolute',
-        top: 48,
-        right: 0,
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        minWidth: 200,
-        maxWidth: 250,
-        zIndex: 2000,
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 2000,
-        maxHeight: 300,
-        overflow: 'hidden',
-    },
-    tagFilterOption: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    tagFilterOptionSelected: {
-        backgroundColor: '#fff7ed',
-    },
-    tagFilterOptionText: {
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    tagFilterOptionTextSelected: {
-        color: theme.colors.accent,
-        fontWeight: '600',
-    },
-    tagFilterScrollView: {
-        maxHeight: 240,
-    },
-    userTagsList: {
-        gap: theme.spacing.sm,
-        marginBottom: theme.spacing.lg,
-        zIndex: 1,
-    },
-    userTagCard: {
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        padding: theme.spacing.md,
-        marginBottom: theme.spacing.sm,
-        position: 'relative',
-        zIndex: 1,
-    },
-    userTagCardWithOpenDropdown: {
-        zIndex: 100,
-        elevation: 100,
-    },
-    userTagInfo: {
-        marginBottom: theme.spacing.sm,
-    },
-    userTagName: {
-        ...theme.typography.h3,
-        fontSize: 16,
-        fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.xs,
-    },
-    userTagEmail: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.sm,
-    },
-    userTagsContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: theme.spacing.xs,
-        marginBottom: theme.spacing.sm,
-    },
-    tagBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#eff6ff',
-        borderWidth: 1,
-        borderColor: theme.colors.secondary,
-        borderRadius: theme.borderRadius.sm,
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: 4,
-        gap: theme.spacing.xs,
-    },
-    tagBadgeText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.secondary,
     },
     noTagsText: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
+        fontSize: 13,
         color: theme.colors.textSecondary,
         fontStyle: 'italic',
     },
-    addTagButton: {
+    addTagDropdown: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        gap: theme.spacing.xs,
-        alignSelf: 'flex-start',
-    },
-    addTagButtonText: {
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-    },
-    tagPickerDropdown: {
-        position: 'absolute',
-        top: '100%',
-        left: 0,
-        right: 0,
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        marginTop: theme.spacing.xs,
-        zIndex: 1000,
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 1000,
-        maxHeight: 300,
-        overflow: 'hidden',
-    },
-    tagPickerScrollView: {
-        maxHeight: 240,
-    },
-    tagPickerOption: {
-        flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    tagPickerOptionText: {
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    addNewTagContainer: {
-        padding: theme.spacing.sm,
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
-    },
-    newTagInput: {
-        backgroundColor: theme.colors.surface,
+        backgroundColor: '#f8fafc',
         borderWidth: 1,
         borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: theme.spacing.xs,
-        fontSize: 14,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        minWidth: 120,
+    },
+    addTagText: {
+        fontSize: 13,
         color: theme.colors.text,
     },
-    aboutTagsSection: {
-        flexDirection: 'row',
-        backgroundColor: '#eff6ff',
-        borderRadius: theme.borderRadius.md,
-        padding: theme.spacing.md,
-        marginTop: theme.spacing.md,
+    aboutTagsBox: {
+        backgroundColor: '#f0f9ff',
+        borderRadius: 12,
+        padding: 16,
+        marginTop: 24,
+        position: 'relative',
     },
-    aboutTagsContent: {
-        flex: 1,
-        marginLeft: theme.spacing.sm,
+    aboutTagsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
     },
     aboutTagsTitle: {
-        ...theme.typography.h3,
-        fontSize: 16,
-        fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.xs,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.primary,
     },
     aboutTagsText: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
+        fontSize: 13,
         color: theme.colors.textSecondary,
         lineHeight: 20,
+    },
+    chatIconBubble: {
+        position: 'absolute',
+        bottom: 16,
+        right: 16,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#2563eb',
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 4,
     },
     // Modal Styles
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)', // Darker overlay for better focus
         justifyContent: 'center',
         alignItems: 'center',
+        padding: theme.spacing.md,
     },
-    modalContent: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.xl,
-        width: '90%',
-        maxWidth: 500,
-        ...theme.shadows.card,
+    pickerContent: {
+        backgroundColor: 'white',
+        borderRadius: 8,
+        padding: 4,
+        width: 200,
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    pickerOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 4,
+    },
+    pickerOptionSelected: {
+        backgroundColor: '#f97316', // Orange as shown in screenshot
+    },
+    pickerOptionText: {
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    pickerOptionTextSelected: {
+        color: 'white',
+        fontWeight: '600',
+    },
+    // Add User Modal Styles
+    addUserModalContent: {
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 4,
+        },
         shadowOpacity: 0.3,
-        shadowRadius: 10,
+        shadowRadius: 8,
         elevation: 10,
     },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: theme.spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
+    closeModalBtn: {
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        padding: 4,
     },
     modalTitle: {
-        ...theme.typography.h2,
         fontSize: 20,
         fontWeight: '700',
         color: theme.colors.text,
+        textAlign: 'center',
+        marginBottom: 4,
     },
-    modalBody: {
-        padding: theme.spacing.lg,
+    modalSubtitle: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        marginBottom: 20,
     },
-    inputGroup: {
-        marginBottom: theme.spacing.md,
-    },
-    inputLabel: {
-        ...theme.typography.body,
-        fontSize: 14,
-        fontWeight: '600',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.xs,
-    },
-    input: {
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    roleSelectButton: {
+    modalTabs: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        backgroundColor: '#f1f5f9',
+        borderRadius: 8,
+        padding: 4,
+        marginBottom: 20,
+    },
+    modalTab: {
+        flex: 1,
+        paddingVertical: 8,
         alignItems: 'center',
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
+        borderRadius: 6,
     },
-    roleSelectText: {
+    modalTabActive: {
+        backgroundColor: 'white',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    modalTabText: {
         fontSize: 14,
-        color: theme.colors.text,
-    },
-    roleOptions: {
-        marginTop: theme.spacing.sm,
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        overflow: 'hidden',
-    },
-    roleOption: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    roleOptionSelected: {
-        backgroundColor: '#eff6ff',
-    },
-    roleOptionText: {
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    roleOptionTextSelected: {
-        color: theme.colors.secondary,
-        fontWeight: '600',
-    },
-    modalFooter: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: theme.spacing.md,
-        padding: theme.spacing.lg,
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
-    },
-    cancelButton: {
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.sm,
-        borderRadius: theme.borderRadius.md,
-    },
-    cancelButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
+        fontWeight: '500',
         color: theme.colors.textSecondary,
     },
+    modalTabTextActive: {
+        color: theme.colors.text,
+        fontWeight: '600',
+    },
+    formGroup: {
+        marginBottom: 16,
+    },
+    label: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: theme.colors.text,
+        marginBottom: 8,
+    },
+    input: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        fontSize: 14,
+        color: theme.colors.text,
+        backgroundColor: 'white',
+    },
+    selectInput: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        backgroundColor: 'white',
+    },
+    selectInputText: {
+        fontSize: 14,
+        color: theme.colors.text,
+    },
     createButton: {
-        backgroundColor: theme.colors.secondary,
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.sm,
-        borderRadius: theme.borderRadius.md,
+        backgroundColor: '#2563eb',
+        paddingVertical: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+        marginTop: 8,
     },
     createButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
         color: 'white',
+        fontSize: 15,
+        fontWeight: '600',
     },
-    overlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'transparent',
-        zIndex: 999,
+    inlineRolePicker: {
+        backgroundColor: 'white',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        marginTop: -8,
+        marginBottom: 16,
+        maxHeight: 200,
+    },
+    inlineRoleOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+    },
+    inlineRoleOptionSelected: {
+        backgroundColor: '#f0f9ff',
+    },
+    inlineRoleOptionText: {
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    inlineRoleOptionTextSelected: {
+        color: '#2563eb',
+        fontWeight: '500',
     },
     // Delete Modal Styles
     deleteModalContent: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.xl,
-        width: '85%',
-        maxWidth: 400,
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 10,
-    },
-    deleteModalHeader: {
-        padding: theme.spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 24,
+        width: '90%',
+        maxWidth: 340,
+        alignItems: 'center',
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
     deleteModalTitle: {
-        ...theme.typography.h2,
-        fontSize: 20,
-        fontWeight: '700',
+        fontSize: 18,
+        fontWeight: '600',
         color: theme.colors.text,
-    },
-    deleteModalBody: {
-        padding: theme.spacing.lg,
+        marginBottom: 12,
+        textAlign: 'center',
     },
     deleteModalMessage: {
-        ...theme.typography.body,
-        fontSize: 16,
-        color: theme.colors.text,
-        lineHeight: 24,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        marginBottom: 24,
+        lineHeight: 20,
     },
-    deleteModalFooter: {
-        padding: theme.spacing.lg,
-        paddingTop: theme.spacing.md,
-        gap: theme.spacing.sm,
+    deleteModalActions: {
+        width: '100%',
+        gap: 12,
     },
     deleteButton: {
-        backgroundColor: theme.colors.secondary,
-        paddingVertical: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
+        backgroundColor: '#2563eb', // Blue
+        paddingVertical: 12,
+        borderRadius: 8,
         alignItems: 'center',
+        width: '100%',
     },
     deleteButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
         color: 'white',
-    },
-    cancelDeleteButton: {
-        backgroundColor: theme.colors.surface,
-        paddingVertical: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    cancelDeleteButtonText: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
-        color: theme.colors.text,
     },
-    // Role Popup Modal Styles
-    rolePopupOverlay: {
-        flex: 1,
+    cancelButton: {
+        backgroundColor: 'white',
+        paddingVertical: 12,
+        borderRadius: 8,
+        alignItems: 'center',
         width: '100%',
-        height: '100%',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
     },
-    rolePopupContent: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.xl,
-        width: '85%',
-        maxWidth: 400,
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 10000,
-        zIndex: 10000,
-    },
-    rolePopupHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: theme.spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    rolePopupTitle: {
-        ...theme.typography.h2,
-        fontSize: 20,
-        fontWeight: '700',
+    cancelButtonText: {
         color: theme.colors.text,
-    },
-    rolePopupBody: {
-        padding: theme.spacing.lg,
-        alignItems: 'center',
-    },
-    rolePopupBadgeContainer: {
-        marginBottom: theme.spacing.md,
-    },
-    rolePopupBadge: {
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        borderRadius: theme.borderRadius.md,
-    },
-    rolePopupBadgeText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '700',
-    },
-    rolePopupMessage: {
-        ...theme.typography.body,
-        fontSize: 16,
-        color: theme.colors.text,
-        textAlign: 'center',
-        lineHeight: 24,
-    },
-    rolePopupFooter: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: theme.spacing.md,
-        padding: theme.spacing.lg,
-        paddingTop: theme.spacing.md,
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
-    },
-    rolePopupCancelButton: {
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-    },
-    rolePopupCancelText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-    },
-    rolePopupConfirmButton: {
-        backgroundColor: theme.colors.secondary,
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-    },
-    rolePopupConfirmText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: 'white',
-    },
-    fab: {
-        position: 'absolute',
-        bottom: theme.spacing.xl,
-        right: theme.spacing.xl,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: theme.colors.secondary,
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
-        zIndex: 100,
+        fontSize: 14,
+        fontWeight: '500',
     },
     // Email Automation Styles
     emailAutomationContainer: {
-        marginTop: theme.spacing.sm,
+        backgroundColor: 'transparent',
     },
     emailAutomationHeader: {
         marginBottom: theme.spacing.lg,
-    },
-    emailAutomationTitle: {
-        ...theme.typography.h2,
-        fontSize: 20,
-        fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.xs,
-    },
-    emailAutomationSubtitle: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
-        color: theme.colors.textSecondary,
     },
     emailConfigsList: {
         gap: theme.spacing.md,
@@ -2401,124 +1721,95 @@ const styles = StyleSheet.create({
     emailConfigTitleRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 8,
         flex: 1,
     },
-    emailConfigIcon: {
-        marginRight: theme.spacing.xs,
-    },
     emailConfigTitle: {
-        ...theme.typography.h3,
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 16,
+        fontWeight: '600',
         color: theme.colors.text,
     },
     toggleContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: theme.spacing.sm,
+        gap: 8,
     },
-    toggleLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: theme.colors.text,
+    enabledLabel: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
     },
     toggleSwitch: {
-        width: 48,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: theme.colors.border,
+        width: 44,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#e2e8f0',
         justifyContent: 'center',
         paddingHorizontal: 2,
     },
     toggleSwitchActive: {
-        backgroundColor: theme.colors.secondary,
+        backgroundColor: '#2563eb',
     },
     toggleThumb: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: theme.colors.surface,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: 'white',
+        alignSelf: 'flex-start',
     },
     toggleThumbActive: {
         alignSelf: 'flex-end',
     },
     emailConfigDescription: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
+        fontSize: 13,
         color: theme.colors.textSecondary,
         marginBottom: theme.spacing.md,
+        lineHeight: 18,
     },
-    recipientTagsSection: {
+    emailSection: {
         marginBottom: theme.spacing.md,
     },
-    sectionLabel: {
-        ...theme.typography.h3,
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.sm,
-    },
-    sendTimingHeader: {
+    emailSectionTitleRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: theme.spacing.xs,
+        gap: 6,
+        marginBottom: theme.spacing.sm,
+    },
+    emailSectionTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
         marginBottom: theme.spacing.sm,
     },
     tagsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: theme.spacing.xs,
-        marginBottom: theme.spacing.sm,
+        gap: 8,
     },
-    recipientTag: {
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.xs,
-        borderRadius: theme.borderRadius.md,
-        backgroundColor: theme.colors.surface,
+    emailTag: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 6,
         borderWidth: 1,
         borderColor: theme.colors.border,
+        backgroundColor: 'white',
     },
-    recipientTagSelected: {
-        backgroundColor: theme.colors.secondary,
-        borderColor: theme.colors.secondary,
+    emailTagSelected: {
+        backgroundColor: '#2563eb',
+        borderColor: '#2563eb',
     },
-    recipientTagText: {
-        fontSize: 14,
-        color: theme.colors.text,
-        textTransform: 'capitalize',
-    },
-    recipientTagTextSelected: {
-        color: 'white',
-        fontWeight: '600',
-    },
-    selectedTagsDisplay: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: theme.spacing.xs,
-        marginTop: theme.spacing.sm,
-    },
-    selectedTagBadge: {
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: 4,
-        borderRadius: theme.borderRadius.sm,
-    },
-    selectedTagBadgeText: {
+    emailTagText: {
         fontSize: 12,
-        fontWeight: '600',
         color: theme.colors.text,
-        textTransform: 'capitalize',
     },
-    sendTimingSection: {
-        marginBottom: theme.spacing.md,
-    },
-    timingOptions: {
-        gap: theme.spacing.sm,
-        marginBottom: theme.spacing.sm,
+    emailTagTextSelected: {
+        color: 'white',
+        fontWeight: '500',
     },
     timingOption: {
         flexDirection: 'row',
         alignItems: 'flex-start',
-        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.sm,
+        gap: 12,
     },
     radioButton: {
         width: 20,
@@ -2531,684 +1822,429 @@ const styles = StyleSheet.create({
         marginTop: 2,
     },
     radioButtonSelected: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: theme.colors.secondary,
+        backgroundColor: '#2563eb',
+        borderColor: '#2563eb',
     },
     timingOptionContent: {
         flex: 1,
     },
     timingOptionLabel: {
-        ...theme.typography.body,
-        fontSize: 16,
-        fontWeight: '600',
+        fontSize: 14,
+        fontWeight: '500',
         color: theme.colors.text,
         marginBottom: 2,
     },
     timingOptionDescription: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
+        fontSize: 12,
         color: theme.colors.textSecondary,
+        lineHeight: 16,
     },
-    selectedTimingsDisplay: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: theme.spacing.xs,
+    selectedTimingsSection: {
         marginTop: theme.spacing.sm,
+        marginBottom: theme.spacing.sm,
     },
     selectedTimingsLabel: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
-        color: theme.colors.textSecondary,
+        fontSize: 13,
+        fontWeight: '500',
+        color: theme.colors.text,
+        marginBottom: 6,
     },
-    selectedTimingBadge: {
-        paddingHorizontal: theme.spacing.sm,
+    selectedTimingsTags: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+    },
+    selectedTimingTag: {
+        paddingHorizontal: 10,
         paddingVertical: 4,
-        borderRadius: theme.borderRadius.sm,
-        backgroundColor: theme.colors.surface,
+        borderRadius: 6,
+        backgroundColor: '#f1f5f9',
         borderWidth: 1,
         borderColor: theme.colors.border,
     },
-    selectedTimingBadgeText: {
+    selectedTimingTagText: {
         fontSize: 12,
-        fontWeight: '600',
         color: theme.colors.text,
     },
     lastUpdatedText: {
-        ...theme.typography.bodySmall,
         fontSize: 12,
         color: theme.colors.textSecondary,
-        marginTop: theme.spacing.md,
-        fontStyle: 'italic',
+        marginTop: theme.spacing.sm,
     },
     // Data Import Styles
     dataImportContainer: {
-        marginTop: theme.spacing.sm,
+        backgroundColor: 'transparent',
     },
-    syncSection: {
-        marginBottom: theme.spacing.lg,
-    },
-    importSection: {
-        marginBottom: theme.spacing.lg,
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: theme.spacing.sm,
-    },
-    sectionIcon: {
-        marginRight: theme.spacing.xs,
-    },
-    sectionTitle: {
-        ...theme.typography.h2,
-        fontSize: 20,
-        fontWeight: '700',
-        color: theme.colors.text,
-    },
-    sectionDescription: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.md,
-        lineHeight: 20,
-    },
-    campSyncCard: {
+    dataImportCard: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
         padding: theme.spacing.md,
+        marginBottom: theme.spacing.md,
     },
-    campSyncHeader: {
+    dataImportHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        flexWrap: 'nowrap',
+        gap: 8,
+        marginBottom: theme.spacing.sm,
     },
-    campSyncInfo: {
-        flex: 1,
-        marginRight: theme.spacing.md,
+    dataImportDescription: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.md,
+        lineHeight: 18,
+    },
+    campCard: {
+        backgroundColor: theme.colors.background,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
     },
     campName: {
-        ...theme.typography.h3,
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 16,
+        fontWeight: '600',
         color: theme.colors.text,
-        marginBottom: theme.spacing.xs,
+        marginBottom: 4,
     },
     lastSyncedText: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
+        fontSize: 13,
         color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.sm,
     },
-    campSyncActions: {
+    statusBadges: {
         flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.xs,
-        flexShrink: 0,
-        flexWrap: 'nowrap',
+        gap: 8,
+        marginBottom: theme.spacing.md,
     },
     configuredBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
         backgroundColor: '#d1fae5',
-        paddingHorizontal: theme.spacing.sm,
+        paddingHorizontal: 10,
         paddingVertical: 4,
-        borderRadius: theme.borderRadius.sm,
-        gap: theme.spacing.xs,
-        flexShrink: 0,
+        borderRadius: 6,
     },
     configuredBadgeText: {
         fontSize: 12,
-        fontWeight: '600',
-        color: '#10b981',
+        fontWeight: '500',
+        color: '#059669',
     },
-    staffOnlyButton: {
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: theme.spacing.xs,
-        borderRadius: theme.borderRadius.md,
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        flexShrink: 0,
+    staffOnlyBadge: {
+        backgroundColor: '#f1f5f9',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 6,
     },
-    staffOnlyButtonText: {
+    staffOnlyBadgeText: {
         fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.text,
+        fontWeight: '500',
+        color: theme.colors.textSecondary,
     },
     fullSyncButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: theme.spacing.xs,
-        borderRadius: theme.borderRadius.md,
-        backgroundColor: theme.colors.secondary,
-        gap: theme.spacing.xs,
-        flexShrink: 0,
+        backgroundColor: '#2563eb',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 8,
+        alignSelf: 'flex-start',
     },
     fullSyncButtonText: {
-        fontSize: 12,
-        fontWeight: '600',
         color: 'white',
-    },
-    importCard: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.md,
-    },
-    importField: {
-        marginBottom: theme.spacing.lg,
-    },
-    fieldLabel: {
-        ...theme.typography.body,
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.sm,
-    },
-    seasonPickerContainer: {
-        position: 'relative',
-        zIndex: 100,
-    },
-    seasonPickerButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        minWidth: 120,
-    },
-    seasonPickerText: {
         fontSize: 14,
-        color: theme.colors.text,
-    },
-    seasonPickerDropdown: {
-        position: 'absolute',
-        top: 48,
-        left: 0,
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        minWidth: 200,
-        maxWidth: 250,
-        zIndex: 1000,
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 1000,
-        maxHeight: 300,
-        overflow: 'hidden',
-    },
-    seasonPickerOption: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    seasonPickerOptionSelected: {
-        backgroundColor: '#fff7ed',
-    },
-    seasonPickerOptionText: {
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    seasonPickerOptionTextSelected: {
-        color: theme.colors.accent,
         fontWeight: '600',
     },
     campersFileButton: {
         flexDirection: 'row',
         alignItems: 'center',
+        backgroundColor: '#fa8c16',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 8,
         justifyContent: 'center',
-        backgroundColor: '#f97316',
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-        gap: theme.spacing.xs,
+    },
+    campersFileButtonActive: {
+        backgroundColor: '#fa8c16',
+    },
+    campersFileButtonInactive: {
+        backgroundColor: 'white',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
     },
     campersFileButtonText: {
+        color: 'white',
         fontSize: 14,
         fontWeight: '600',
-        color: 'white',
+    },
+    campersFileButtonTextInactive: {
+        color: theme.colors.text,
     },
     awardsFileButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.surface,
+        backgroundColor: 'white',
         borderWidth: 1,
         borderColor: theme.colors.border,
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-        gap: theme.spacing.xs,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 8,
+        justifyContent: 'center',
+    },
+    awardsFileButtonActive: {
+        backgroundColor: '#fa8c16',
+        borderColor: '#fa8c16',
+    },
+    awardsFileButtonInactive: {
+        backgroundColor: 'white',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
     },
     awardsFileButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
         color: theme.colors.text,
-    },
-    selectedFileName: {
-        ...theme.typography.bodySmall,
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-        marginTop: theme.spacing.xs,
-        fontStyle: 'italic',
-    },
-    startImportButton: {
-        alignSelf: 'flex-end',
-        backgroundColor: theme.colors.secondary,
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-        marginTop: theme.spacing.md,
-    },
-    startImportButtonText: {
         fontSize: 14,
         fontWeight: '600',
+    },
+    awardsFileButtonTextActive: {
         color: 'white',
     },
-    importantNotesCard: {
-        backgroundColor: theme.colors.weatherBg,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.md,
+    // File Picker Bottom Sheet Styles
+    filePickerBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '30%',
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+    },
+    filePickerHeader: {
+        marginBottom: theme.spacing.lg,
+    },
+    filePickerTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    filePickerContent: {
+        gap: theme.spacing.md,
+    },
+    filePickerOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        gap: theme.spacing.md,
+    },
+    filePickerOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    startImportContainer: {
+        alignItems: 'flex-end',
         marginTop: theme.spacing.md,
+    },
+    startImportButton: {
+        backgroundColor: '#a855f7',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 8,
+    },
+    startImportButtonText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '600',
     },
     importantNotesHeader: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 8,
         marginBottom: theme.spacing.sm,
     },
-    importantNotesIcon: {
-        marginRight: theme.spacing.xs,
-    },
     importantNotesTitle: {
-        ...theme.typography.h3,
-        fontSize: 16,
-        fontWeight: '700',
+        fontSize: 14,
+        fontWeight: '600',
         color: theme.colors.text,
     },
     notesList: {
-        gap: theme.spacing.sm,
+        gap: 8,
     },
     noteItem: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        gap: theme.spacing.xs,
-    },
-    noteBullet: {
-        fontSize: 16,
+        fontSize: 13,
         color: theme.colors.textSecondary,
-        marginTop: 2,
-    },
-    noteText: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-        flex: 1,
         lineHeight: 20,
     },
     // Edit History Styles
     editHistoryContainer: {
-        marginTop: theme.spacing.sm,
-        width: '100%',
-    },
-    editHistoryCard: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.md,
-        width: '100%',
+        backgroundColor: 'transparent',
     },
     editHistoryHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: theme.spacing.lg,
+        marginBottom: theme.spacing.md,
+        gap: 12,
+    },
+    editHistoryTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 8,
+        flex: 1,
     },
     editHistoryTitleContainer: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
         flex: 1,
     },
-    editHistoryIcon: {
-        marginRight: theme.spacing.sm,
-        marginTop: 2,
-    },
-    editHistoryTitle: {
-        ...theme.typography.h2,
-        fontSize: 20,
-        fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.xs,
-    },
-    editHistorySubtitle: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-    },
-    exportButton: {
+    exportCsvButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#f97316',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        borderRadius: theme.borderRadius.md,
-        gap: theme.spacing.xs,
+        backgroundColor: '#fa8c16',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 6,
     },
-    exportButtonText: {
+    exportCsvButtonText: {
+        color: 'white',
         fontSize: 14,
         fontWeight: '600',
-        color: 'white',
     },
-    historySearchBar: {
+    searchFilterRow: {
         flexDirection: 'row',
-        gap: theme.spacing.sm,
+        gap: 12,
         marginBottom: theme.spacing.md,
-        zIndex: 100,
     },
-    historySearchInputContainer: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
+    historyTableCard: {
         backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.sm,
-        height: 44,
-    },
-    historySearchIcon: {
-        marginRight: theme.spacing.xs,
-    },
-    historySearchInput: {
-        flex: 1,
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    tableFilterContainer: {
-        position: 'relative',
-        zIndex: 100,
-    },
-    tableFilterButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        gap: theme.spacing.xs,
-        minWidth: 120,
-    },
-    tableFilterText: {
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    tableFilterDropdown: {
-        position: 'absolute',
-        top: 48,
-        right: 0,
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        minWidth: 200,
-        maxWidth: 250,
-        zIndex: 1000,
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 1000,
-        maxHeight: 300,
+        borderRadius: theme.borderRadius.lg,
+        padding: 0,
         overflow: 'hidden',
     },
-    tableFilterScrollView: {
-        maxHeight: 240,
-    },
-    tableFilterOption: {
+    tableHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        backgroundColor: '#f8fafc',
+        paddingVertical: theme.spacing.sm,
         paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
-    tableFilterOptionSelected: {
-        backgroundColor: '#fff7ed',
+    tableHeaderCell: {
+        flex: 1,
     },
-    tableFilterOptionText: {
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    tableFilterOptionTextSelected: {
-        color: theme.colors.accent,
+    tableHeaderText: {
+        fontSize: 12,
         fontWeight: '600',
+        color: theme.colors.textSecondary,
+        textTransform: 'uppercase',
     },
-    historyList: {
-        gap: theme.spacing.xs,
-        width: '100%',
+    tableRows: {
+        gap: 0,
     },
-    historyEntry: {
+    tableRow: {
+        flexDirection: 'row',
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.md,
         borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-        paddingVertical: theme.spacing.sm,
-        width: '100%',
+        borderBottomColor: '#f1f5f9',
+        alignItems: 'center',
     },
-    historyEntryRow: {
+    tableCell: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        paddingRight: theme.spacing.md,
-        minWidth: '100%',
+        gap: 6,
     },
-    historyExpandButton: {
-        padding: theme.spacing.xs,
-        justifyContent: 'center',
-        alignItems: 'center',
-        width: 32,
-        marginRight: theme.spacing.xs,
-    },
-    historyDateTimeContainer: {
-        width: 90,
-        alignItems: 'flex-start',
-        marginRight: theme.spacing.sm,
-    },
-    historyDate: {
-        ...theme.typography.bodySmall,
+    tableCellText: {
         fontSize: 13,
         color: theme.colors.text,
-        fontWeight: '600',
-        lineHeight: 18,
     },
-    historyTime: {
-        ...theme.typography.bodySmall,
-        fontSize: 11,
-        color: theme.colors.textSecondary,
-        lineHeight: 16,
+    tableTag: {
+        backgroundColor: '#f1f5f9',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
     },
-    historyUser: {
-        ...theme.typography.body,
-        fontSize: 13,
+    tableTagText: {
+        fontSize: 12,
+        fontWeight: '500',
         color: theme.colors.text,
-        width: 60,
-        marginRight: theme.spacing.sm,
     },
-    historyTableBadge: {
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.sm,
-        paddingHorizontal: theme.spacing.sm,
+    actionTag: {
+        backgroundColor: '#dbeafe',
+        paddingHorizontal: 10,
         paddingVertical: 4,
-        marginRight: theme.spacing.sm,
+        borderRadius: 12,
     },
-    historyTableBadgeText: {
-        fontSize: 11,
+    actionTagText: {
+        fontSize: 12,
         fontWeight: '600',
-        color: theme.colors.textSecondary,
-        textTransform: 'capitalize',
+        color: '#2563eb',
     },
-    historyActionBadge: {
-        backgroundColor: theme.colors.secondary,
-        borderRadius: theme.borderRadius.sm,
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: 4,
-        marginRight: theme.spacing.sm,
-    },
-    historyActionBadgeText: {
-        fontSize: 11,
-        fontWeight: '600',
-        color: 'white',
-    },
-    historyRecordId: {
-        ...theme.typography.bodySmall,
-        fontSize: 11,
-        color: theme.colors.textSecondary,
-        fontFamily: 'monospace',
-        width: 120,
-        textAlign: 'left',
-    },
-    historyExpandedContent: {
-        marginTop: theme.spacing.sm,
-        paddingLeft: theme.spacing.xl,
-        paddingVertical: theme.spacing.sm,
-        backgroundColor: theme.colors.weatherBg,
-        borderRadius: theme.borderRadius.md,
-    },
-    historyExpandedText: {
-        ...theme.typography.bodySmall,
+    recordIdText: {
         fontSize: 12,
         color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.xs,
+        fontFamily: 'monospace',
     },
-    // Download File Modal Styles
-    downloadModalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'flex-end',
-    },
+    // Download Modal Styles
     downloadModalContent: {
-        backgroundColor: theme.colors.surface,
+        backgroundColor: 'white',
         borderTopLeftRadius: theme.borderRadius.xl,
         borderTopRightRadius: theme.borderRadius.xl,
-        paddingBottom: theme.spacing.xl,
-        maxHeight: '90%',
-    },
-    downloadModalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         padding: theme.spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
+        paddingBottom: theme.spacing.xl,
+        width: '100%',
+        maxHeight: '70%',
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
     },
     downloadModalTitle: {
-        ...theme.typography.h2,
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '700',
         color: theme.colors.text,
-    },
-    downloadModalCloseButton: {
-        padding: theme.spacing.xs,
-    },
-    downloadModalBody: {
-        padding: theme.spacing.lg,
-        maxHeight: 500,
-    },
-    downloadInputGroup: {
         marginBottom: theme.spacing.lg,
-    },
-    downloadInputLabel: {
-        ...theme.typography.body,
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.sm,
-    },
-    downloadInput: {
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        fontSize: 14,
-        color: theme.colors.text,
     },
     downloadSection: {
-        marginBottom: theme.spacing.lg,
+        marginTop: theme.spacing.lg,
     },
     downloadSectionTitle: {
-        ...theme.typography.body,
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
         color: theme.colors.text,
         marginBottom: theme.spacing.sm,
     },
-    downloadLocationItem: {
+    locationOption: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: theme.spacing.md,
         paddingHorizontal: theme.spacing.sm,
-        gap: theme.spacing.sm,
-        borderRadius: theme.borderRadius.md,
+        borderRadius: 8,
+        gap: 12,
+        marginBottom: 4,
     },
-    downloadLocationText: {
-        ...theme.typography.body,
+    locationOptionSelected: {
+        backgroundColor: '#e0f2fe',
+    },
+    locationOptionText: {
+        flex: 1,
         fontSize: 14,
         color: theme.colors.text,
-        flex: 1,
-    },
-    downloadLocationPicker: {
-        backgroundColor: theme.colors.weatherBg,
-        borderRadius: theme.borderRadius.md,
-        marginTop: theme.spacing.xs,
-        marginBottom: theme.spacing.sm,
-        overflow: 'hidden',
-    },
-    downloadLocationOption: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: theme.spacing.sm,
-        paddingHorizontal: theme.spacing.md,
-        gap: theme.spacing.sm,
-    },
-    downloadLocationOptionSelected: {
-        backgroundColor: '#fff7ed',
-    },
-    downloadLocationOptionText: {
-        ...theme.typography.body,
-        fontSize: 14,
-        color: theme.colors.text,
-        flex: 1,
-    },
-    downloadLocationOptionTextSelected: {
-        color: theme.colors.accent,
-        fontWeight: '600',
     },
     downloadButton: {
-        backgroundColor: theme.colors.secondary,
-        paddingVertical: theme.spacing.md,
-        paddingHorizontal: theme.spacing.lg,
-        marginHorizontal: theme.spacing.lg,
-        borderRadius: theme.borderRadius.md,
+        backgroundColor: '#2563eb',
+        paddingVertical: 14,
+        borderRadius: 8,
         alignItems: 'center',
-        justifyContent: 'center',
+        marginTop: theme.spacing.xl,
     },
     downloadButtonText: {
-        ...theme.typography.body,
+        color: 'white',
         fontSize: 16,
         fontWeight: '600',
-        color: 'white',
     },
 });
