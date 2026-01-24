@@ -21,6 +21,7 @@ import { EvaluationQuestionsScreen } from '../screens/EvaluationQuestionsScreen'
 import { QuestionTextScreen } from '../screens/QuestionTextScreen';
 import { RolePermissionsScreen } from '../screens/RolePermissionsScreen';
 import { DivisionPermissionsScreen } from '../screens/DivisionPermissionsScreen';
+import { UserApprovalsScreen } from '../screens/UserApprovalsScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -263,7 +264,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="User Approvals"
                     icon={({ color }) => <Ionicons name="checkmark-circle-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('UserApprovals')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -314,6 +315,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="QuestionText" component={QuestionTextScreen} />
             <Drawer.Screen name="RolePermissions" component={RolePermissionsScreen} />
             <Drawer.Screen name="DivisionPermissions" component={DivisionPermissionsScreen} />
+            <Drawer.Screen name="UserApprovals" component={UserApprovalsScreen} />
         </Drawer.Navigator>
     );
 };
