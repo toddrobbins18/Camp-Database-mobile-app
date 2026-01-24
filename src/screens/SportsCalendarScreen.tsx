@@ -141,6 +141,8 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
     const [mealOption, setMealOption] = useState('');
     const [staffAssignment, setStaffAssignment] = useState('');
 
+    const [headerHeight, setHeaderHeight] = useState(0);
+
     // Modal dropdown states
     const [showSportTypeDropdown, setShowSportTypeDropdown] = useState(false);
     const [showModalEventTypeDropdown, setShowModalEventTypeDropdown] = useState(false);
@@ -157,7 +159,122 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
     const [eventDatePickerYear, setEventDatePickerYear] = useState(new Date().getFullYear());
 
     // Sample events data (in a real app, this would come from an API)
-    const [events, setEvents] = useState<any[]>([]);
+    const [events, setEvents] = useState<any[]>([
+        {
+            id: '1',
+            title: 'Falki Open',
+            date: 'Wed, Jul 8',
+            location: 'Home',
+            tags: [
+                { label: 'Tennis', type: 'sport' },
+                { label: 'Invitational', type: 'eventType' },
+                { label: 'Freshmen B Girls', type: 'division' },
+                { label: 'Cadet Girls', type: 'division' },
+                { label: 'Sophomore Girls', type: 'division' },
+                { label: 'Junior Girls', type: 'division' },
+                { label: 'Senior Girls', type: 'division' },
+                { label: 'Super Girls', type: 'division' },
+                { label: 'Teen Girls', type: 'division' },
+                { label: 'CIT Girls', type: 'division' },
+                { label: 'Freshmen A Boys', type: 'division' },
+                { label: 'Freshmen B Boys', type: 'division' },
+                { label: 'Cadet Boys', type: 'division' },
+                { label: 'Sophomore Boys', type: 'division' },
+                { label: 'Senior Boys', type: 'division' },
+                { label: 'Super Boys', type: 'division' },
+                { label: 'Teen Boys', type: 'division' },
+                { label: 'CIT Boys', type: 'division' },
+                { label: '0 roster', type: 'roster' },
+            ],
+        },
+        {
+            id: '2',
+            title: 'THC Dance Competition',
+            date: 'Wed, Jul 22',
+            location: 'THC',
+            tags: [
+                { label: 'Dance', type: 'sport' },
+                { label: 'Invitational', type: 'eventType' },
+                { label: 'Freshmen A Girls', type: 'division' },
+                { label: 'Freshmen B Girls', type: 'division' },
+                { label: 'Cadet Girls', type: 'division' },
+                { label: 'Sophomore Girls', type: 'division' },
+                { label: 'Junior Girls', type: 'division' },
+                { label: 'Senior Girls', type: 'division' },
+                { label: 'Super Girls', type: 'division' },
+                { label: 'Teen Girls', type: 'division' },
+                { label: 'CIT Girls', type: 'division' },
+                { label: '0 roster', type: 'roster' },
+            ],
+        },
+        {
+            id: '3',
+            title: 'Soccer Cup',
+            date: 'Thu, Jul 23',
+            location: 'Blue Ridge',
+            tags: [
+                { label: 'Soccer', type: 'sport' },
+                { label: 'Invitational', type: 'eventType' },
+                { label: 'Junior Girls', type: 'division' },
+                { label: '0 roster', type: 'roster' },
+            ],
+        },
+        {
+            id: '4',
+            title: 'Basketball Tourney',
+            date: 'Thu, Jul 16',
+            location: 'Blue Ridge',
+            tags: [
+                { label: 'Basketball', type: 'sport' },
+                { label: 'Invitational', type: 'eventType' },
+                { label: 'Senior Girls', type: 'division' },
+                { label: '0 roster', type: 'roster' },
+            ],
+        },
+        {
+            id: '5',
+            title: 'Franko Cup',
+            date: 'Wed, Jul 29',
+            location: 'THC',
+            tags: [
+                { label: 'Football', type: 'sport' },
+                { label: 'Invitational', type: 'eventType' },
+                { label: 'Senior Girls', type: 'division' },
+                { label: 'Junior Girls', type: 'division' },
+                { label: '0 roster', type: 'roster' },
+            ],
+        },
+        {
+            id: '6',
+            title: 'Girls Basketball Invitational',
+            date: 'Mon, Jul 20',
+            location: 'Home',
+            tags: [
+                { label: 'Tournament', type: 'sport' },
+                { label: 'Other', type: 'eventType' },
+                { label: 'CIT Girls', type: 'division' },
+                { label: 'Teen Girls', type: 'division' },
+                { label: 'Super Girls', type: 'division' },
+                { label: 'Senior Girls', type: 'division' },
+                { label: '0 roster', type: 'roster' },
+            ],
+        },
+        {
+            id: '7',
+            title: 'Sixes Lax Tourney',
+            date: 'Fri, Jul 24',
+            location: 'THC',
+            tags: [
+                { label: 'Lacrosse', type: 'sport' },
+                { label: 'Invitational', type: 'eventType' },
+                { label: 'Cadet Boys', type: 'division' },
+                { label: 'Sophomore Boys', type: 'division' },
+                { label: 'Junior Boys', type: 'division' },
+                { label: 'Senior Boys', type: 'division' },
+                { label: '0 roster', type: 'roster' },
+            ],
+        },
+    ]);
 
     // Event Detail Modal states
     const [showEventDetailModal, setShowEventDetailModal] = useState(false);
@@ -1244,20 +1361,7 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                                                             {event.title}
                                                         </Text>
                                                         <View style={styles.eventCardActions}>
-                                                            <TouchableOpacity
-                                                                style={styles.eventActionIcon}
-                                                                onPress={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setSelectedEvent(event);
-                                                                    setShowManageRosterModal(true);
-                                                                }}
-                                                            >
-                                                                <Ionicons
-                                                                    name="people-outline"
-                                                                    size={18}
-                                                                    color={theme.colors.textSecondary}
-                                                                />
-                                                            </TouchableOpacity>
+                                                            {/* View Roster */}
                                                             <TouchableOpacity
                                                                 style={styles.eventActionIcon}
                                                                 onPress={(e) => {
@@ -1267,25 +1371,69 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                                                                 }}
                                                             >
                                                                 <Ionicons
+                                                                    name="people-outline"
+                                                                    size={18}
+                                                                    color={theme.colors.textSecondary}
+                                                                />
+                                                            </TouchableOpacity>
+                                                            {/* Manage Roster */}
+                                                            <TouchableOpacity
+                                                                style={styles.eventActionIcon}
+                                                                onPress={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSelectedEvent(event);
+                                                                    setShowManageRosterModal(true);
+                                                                }}
+                                                            >
+                                                                <Ionicons
+                                                                    name="person-add-outline"
+                                                                    size={18}
+                                                                    color={theme.colors.textSecondary}
+                                                                />
+                                                            </TouchableOpacity>
+                                                            {/* Edit Event */}
+                                                            <TouchableOpacity
+                                                                style={styles.eventActionIcon}
+                                                                onPress={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSelectedEvent(event);
+                                                                    // Populate form
+                                                                    setEventTitle(event.title || '');
+                                                                    setEventDate(event.date || '');
+                                                                    
+                                                                    const sportTag = event.tags?.find((t: any) => t.type === 'sport');
+                                                                    const typeTag = event.tags?.find((t: any) => t.type === 'eventType');
+                                                                    const divisionTags = event.tags?.filter((t: any) => t.type === 'division') || [];
+                                                                    
+                                                                    setSportType(sportTag ? sportTag.label : '');
+                                                                    setEventType(typeTag ? typeTag.label : '');
+                                                                    setSelectedDivisions(divisionTags.map((t: any) => t.label));
+                                                                    setLocation(event.location || '');
+                                                                    
+                                                                    setShowEditEventModal(true);
+                                                                }}
+                                                            >
+                                                                <Ionicons
                                                                     name="pencil-outline"
                                                                     size={18}
                                                                     color={theme.colors.textSecondary}
                                                                 />
                                                             </TouchableOpacity>
-                                                        <TouchableOpacity
-                                                            style={styles.eventActionIcon}
-                                                            onPress={(e) => {
-                                                                e.stopPropagation();
-                                                                setSelectedEvent(event);
-                                                                setShowDeleteConfirmModal(true);
-                                                            }}
-                                                        >
-                                                            <Ionicons
-                                                                name="trash-outline"
-                                                                size={18}
-                                                                color={theme.colors.danger}
-                                                            />
-                                                        </TouchableOpacity>
+                                                            {/* Delete Event */}
+                                                            <TouchableOpacity
+                                                                style={styles.eventActionIcon}
+                                                                onPress={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSelectedEvent(event);
+                                                                    setShowDeleteConfirmModal(true);
+                                                                }}
+                                                            >
+                                                                <Ionicons
+                                                                    name="trash-outline"
+                                                                    size={18}
+                                                                    color={theme.colors.danger}
+                                                                />
+                                                            </TouchableOpacity>
                                                         </View>
                                                     </View>
                                                     <Text style={styles.eventCardDate}>{event.date}</Text>
@@ -1399,7 +1547,10 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                         }}
                     >
                         {/* Modal Header */}
-                        <View style={styles.modalHeader}>
+                        <View 
+                            style={styles.modalHeader}
+                            onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+                        >
                             <Text style={styles.modalTitle}>Add Sports Event</Text>
                             <TouchableOpacity
                                 onPress={() => setShowAddEventModal(false)}
@@ -1473,11 +1624,14 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                                 <Text style={styles.label}>
                                     Sport Type <Text style={styles.required}>*</Text>
                                 </Text>
-                                <View style={styles.dropdownContainer}>
+                                <View 
+                                    style={styles.dropdownContainer}
+                                    onLayout={(e) => setSportTypeInputLayout(e.nativeEvent.layout)}
+                                >
                                     <TouchableOpacity
                                         style={styles.dropdownInput}
                                         onPress={() => {
-                                            setShowSportTypeDropdown(true);
+                                            setShowSportTypeDropdown(!showSportTypeDropdown);
                                             setShowModalEventTypeDropdown(false);
                                             setShowHomeOrAwayDropdown(false);
                                         }}
@@ -1502,11 +1656,14 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                             {/* Event Type */}
                             <View style={styles.formSection}>
                                 <Text style={styles.label}>Event Type</Text>
-                                <View style={styles.dropdownContainer}>
+                                <View 
+                                    style={styles.dropdownContainer}
+                                    onLayout={(e) => setEventTypeInputLayout(e.nativeEvent.layout)}
+                                >
                                     <TouchableOpacity
                                         style={styles.dropdownInput}
                                         onPress={() => {
-                                            setShowModalEventTypeDropdown(true);
+                                            setShowModalEventTypeDropdown(!showModalEventTypeDropdown);
                                             setShowSportTypeDropdown(false);
                                             setShowHomeOrAwayDropdown(false);
                                         }}
@@ -1599,11 +1756,14 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                             {/* Home or Away */}
                             <View style={styles.formSection}>
                                 <Text style={styles.label}>Home or Away</Text>
-                                <View style={styles.dropdownContainer}>
+                                <View 
+                                    style={styles.dropdownContainer}
+                                    onLayout={(e) => setHomeOrAwayInputLayout(e.nativeEvent.layout)}
+                                >
                                     <TouchableOpacity
                                         style={styles.dropdownInput}
                                         onPress={() => {
-                                            setShowHomeOrAwayDropdown(true);
+                                            setShowHomeOrAwayDropdown(!showHomeOrAwayDropdown);
                                             setShowSportTypeDropdown(false);
                                             setShowModalEventTypeDropdown(false);
                                         }}
@@ -1743,9 +1903,11 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                                 style={[
                                     styles.modalDropdownMenuAbsolute,
                                     {
-                                        top: sportTypeInputLayout.y - scrollViewOffset + sportTypeInputLayout.height + 4 + 80,
+                                        top: sportTypeInputLayout.y - scrollViewOffset + sportTypeInputLayout.height + headerHeight + 4,
                                         left: sportTypeInputLayout.x,
                                         width: sportTypeInputLayout.width,
+                                        zIndex: 2000,
+                                        elevation: 10,
                                     },
                                 ]}
                                 collapsable={false}
@@ -1794,9 +1956,11 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                                 style={[
                                     styles.modalDropdownMenuAbsolute,
                                     {
-                                        top: eventTypeInputLayout.y - scrollViewOffset + eventTypeInputLayout.height + 4 + 80,
+                                        top: eventTypeInputLayout.y - scrollViewOffset + eventTypeInputLayout.height + headerHeight + 4,
                                         left: eventTypeInputLayout.x,
                                         width: eventTypeInputLayout.width,
+                                        zIndex: 2000,
+                                        elevation: 10,
                                     },
                                 ]}
                                 collapsable={false}
@@ -1845,9 +2009,11 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                                 style={[
                                     styles.modalDropdownMenuAbsolute,
                                     {
-                                        top: homeOrAwayInputLayout.y - scrollViewOffset + homeOrAwayInputLayout.height + 4 + 80,
+                                        top: homeOrAwayInputLayout.y - scrollViewOffset + homeOrAwayInputLayout.height + headerHeight + 4,
                                         left: homeOrAwayInputLayout.x,
                                         width: homeOrAwayInputLayout.width,
+                                        zIndex: 2000,
+                                        elevation: 10,
                                     },
                                 ]}
                                 collapsable={false}
@@ -1950,28 +2116,6 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
             {/* Event Date Picker Modal */}
             {renderEventDatePicker()}
 
-            {/* Modal Dropdowns for Add Event Modal - Mobile optimized */}
-            {renderModalDropdown(
-                showSportTypeDropdown,
-                () => setShowSportTypeDropdown(false),
-                SPORT_TYPES,
-                sportType,
-                setSportType
-            )}
-            {renderModalDropdown(
-                showModalEventTypeDropdown,
-                () => setShowModalEventTypeDropdown(false),
-                EVENT_TYPES.filter((e) => e !== 'All Event Types'),
-                eventType,
-                setEventType
-            )}
-            {renderModalDropdown(
-                showHomeOrAwayDropdown,
-                () => setShowHomeOrAwayDropdown(false),
-                HOME_OR_AWAY,
-                homeOrAway,
-                setHomeOrAway
-            )}
 
             {/* Event Detail Modal */}
             <Modal
@@ -2031,11 +2175,17 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                                         if (selectedEvent) {
                                             setEventDate(selectedEvent.date || '');
                                             setEventTitle(selectedEvent.title || '');
-                                            setSportType(selectedEvent.sportType || '');
-                                            setEventType(selectedEvent.eventType || '');
-                                            setSelectedDivisions(selectedEvent.divisions || []);
-                                            setHomeOrAway(selectedEvent.homeOrAway || '');
+                                            
+                                            const sportTag = selectedEvent.tags?.find((t: any) => t.type === 'sport');
+                                            const typeTag = selectedEvent.tags?.find((t: any) => t.type === 'eventType');
+                                            const divisionTags = selectedEvent.tags?.filter((t: any) => t.type === 'division') || [];
+                                            
+                                            setSportType(sportTag ? sportTag.label : '');
+                                            setEventType(typeTag ? typeTag.label : '');
+                                            setSelectedDivisions(divisionTags.map((t: any) => t.label));
                                             setLocation(selectedEvent.location || '');
+                                            
+                                            // Keep these if they exist in the object (from API) or default to empty
                                             setTeam(selectedEvent.team || '');
                                             setOpponent(selectedEvent.opponent || '');
                                             setDescription(selectedEvent.description || '');
@@ -2763,9 +2913,11 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                                 style={[
                                     styles.modalDropdownMenuAbsolute,
                                     {
-                                        top: sportTypeInputLayout.y - scrollViewOffset + sportTypeInputLayout.height + 4 + 80,
+                                        top: sportTypeInputLayout.y - scrollViewOffset + sportTypeInputLayout.height + headerHeight + 4,
                                         left: sportTypeInputLayout.x,
                                         width: sportTypeInputLayout.width,
+                                        zIndex: 2000,
+                                        elevation: 10,
                                     },
                                 ]}
                                 collapsable={false}
@@ -2814,9 +2966,11 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                                 style={[
                                     styles.modalDropdownMenuAbsolute,
                                     {
-                                        top: eventTypeInputLayout.y - scrollViewOffset + eventTypeInputLayout.height + 4 + 80,
+                                        top: eventTypeInputLayout.y - scrollViewOffset + eventTypeInputLayout.height + headerHeight + 4,
                                         left: eventTypeInputLayout.x,
                                         width: eventTypeInputLayout.width,
+                                        zIndex: 2000,
+                                        elevation: 10,
                                     },
                                 ]}
                                 collapsable={false}
@@ -2865,9 +3019,11 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                                 style={[
                                     styles.modalDropdownMenuAbsolute,
                                     {
-                                        top: homeOrAwayInputLayout.y - scrollViewOffset + homeOrAwayInputLayout.height + 4 + 80,
+                                        top: homeOrAwayInputLayout.y - scrollViewOffset + homeOrAwayInputLayout.height + headerHeight + 4,
                                         left: homeOrAwayInputLayout.x,
                                         width: homeOrAwayInputLayout.width,
+                                        zIndex: 2000,
+                                        elevation: 10,
                                     },
                                 ]}
                                 collapsable={false}
@@ -3932,12 +4088,12 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: theme.spacing.md,
+        marginBottom: theme.spacing.lg,
         paddingHorizontal: theme.spacing.xs,
         position: 'relative',
         zIndex: 1,
         flexWrap: 'wrap',
-        gap: theme.spacing.xs,
+        gap: theme.spacing.sm,
     },
     calendarNavLeft: {
         flexDirection: 'row',
@@ -4174,11 +4330,14 @@ const styles = StyleSheet.create({
         gap: theme.spacing.md,
     },
     eventCard: {
-        flex: 1,
-        minWidth: '48%',
+        width: '100%',
+        marginBottom: theme.spacing.md,
         padding: theme.spacing.md,
         borderLeftWidth: 4,
         borderLeftColor: theme.colors.danger,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        ...theme.shadows.card,
     },
     eventCardHeader: {
         marginBottom: theme.spacing.sm,
@@ -4193,6 +4352,7 @@ const styles = StyleSheet.create({
         ...theme.typography.h3,
         flex: 1,
         marginRight: theme.spacing.sm,
+        flexWrap: 'wrap',
     },
     eventCardActions: {
         flexDirection: 'row',
@@ -4210,11 +4370,13 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
         gap: theme.spacing.xs,
         marginBottom: theme.spacing.sm,
+        width: '100%',
     },
     eventTag: {
         paddingHorizontal: theme.spacing.sm,
         paddingVertical: theme.spacing.xs,
         borderRadius: theme.borderRadius.sm,
+        maxWidth: '100%',
     },
     sportTag: {
         backgroundColor: '#3b82f6',
@@ -4231,6 +4393,7 @@ const styles = StyleSheet.create({
     eventTagText: {
         ...theme.typography.bodySmall,
         fontSize: 12,
+        flexShrink: 1,
     },
     sportTagText: {
         color: theme.colors.surface,
@@ -5106,7 +5269,8 @@ const styles = StyleSheet.create({
     },
     // Week View Styles
     weekViewContainer: {
-        height: 500,
+        minHeight: 300,
+        maxHeight: 500,
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.md,
         overflow: 'hidden',
@@ -5187,7 +5351,8 @@ const styles = StyleSheet.create({
     },
     // Day View Styles
     dayViewContainer: {
-        height: 500,
+        minHeight: 300,
+        maxHeight: 500,
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.md,
         overflow: 'hidden',
