@@ -2252,6 +2252,8 @@ const styles = StyleSheet.create({
     searchInput: {
         flex: 1,
         marginLeft: theme.spacing.sm,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
         fontSize: 14,
         color: theme.colors.text,
     },

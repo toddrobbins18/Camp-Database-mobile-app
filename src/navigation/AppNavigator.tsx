@@ -14,6 +14,14 @@ import { CalendarScreen } from '../screens/CalendarScreen';
 import { HealthScreen } from '../screens/HealthScreen';
 import { TransportScreen } from '../screens/TransportScreen';
 import { SportsScreen } from '../screens/SportsScreen';
+import { IncidentReportsScreen } from '../screens/IncidentReportsScreen';
+import { MenuScreen } from '../screens/MenuScreen';
+import { MessagesScreen } from '../screens/MessagesScreen';
+import { AdminPanelScreen } from '../screens/AdminPanelScreen';
+import { EvaluationQuestionsScreen } from '../screens/EvaluationQuestionsScreen';
+import { QuestionTextScreen } from '../screens/QuestionTextScreen';
+import { RolePermissionsScreen } from '../screens/RolePermissionsScreen';
+import { DivisionPermissionsScreen } from '../screens/DivisionPermissionsScreen';
 import { ActivitiesFieldTripsScreen } from '../screens/ActivitiesFieldTripsScreen';
 import { AppointmentsScreen } from '../screens/AppointmentsScreen';
 import { AwardsScreen } from '../screens/AwardsScreen';
@@ -117,7 +125,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Incident Reports"
                     icon={({ color }) => <Ionicons name="warning-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('IncidentReports')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -131,14 +139,14 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Menu"
                     icon={({ color }) => <Ionicons name="restaurant-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('Menu')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
                 <DrawerItem
                     label="Messages"
                     icon={({ color }) => <Ionicons name="mail-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('Messages')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -231,28 +239,28 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Admin Panel"
                     icon={({ color }) => <Ionicons name="shield-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('AdminPanel')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
                 <DrawerItem
                     label="Evaluation Questions"
                     icon={({ color }) => <Ionicons name="clipboard-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('EvaluationQuestions')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
                 <DrawerItem
                     label="Role Permissions"
                     icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('RolePermissions')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
                 <DrawerItem
                     label="Division Permissions"
                     icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('DivisionPermissions')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -323,6 +331,14 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Health" component={HealthScreen} />
             <Drawer.Screen name="Transport" component={TransportScreen} />
             <Drawer.Screen name="Sports" component={SportsScreen} />
+            <Drawer.Screen name="IncidentReports" component={IncidentReportsScreen} />
+            <Drawer.Screen name="Menu" component={MenuScreen} />
+            <Drawer.Screen name="Messages" component={MessagesScreen} />
+            <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} />
+            <Drawer.Screen name="EvaluationQuestions" component={EvaluationQuestionsScreen} />
+            <Drawer.Screen name="QuestionText" component={QuestionTextScreen} />
+            <Drawer.Screen name="RolePermissions" component={RolePermissionsScreen} />
+            <Drawer.Screen name="DivisionPermissions" component={DivisionPermissionsScreen} />
             <Drawer.Screen name="ActivitiesFieldTrips" component={ActivitiesFieldTripsScreen} />
             <Drawer.Screen name="Appointments" component={AppointmentsScreen} />
             <Drawer.Screen name="Awards" component={AwardsScreen} />
