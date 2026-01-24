@@ -2690,44 +2690,59 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                             </TouchableOpacity>
                         </View>
 
-                        {/* Tabs */}
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.csvGuideTabsContainer}
-                            contentContainerStyle={styles.csvGuideTabsContent}
-                        >
-                            {[
-                                'Children',
-                                'Staff',
-                                'Medications',
-                                'Trips',
-                                'Menu',
-                                'Awards',
-                                'Daily Notes',
-                                'Incidents',
-                                'Calendar',
-                                'Sports',
-                            ].map((tab) => (
-                                <TouchableOpacity
-                                    key={tab}
-                                    style={[
-                                        styles.csvGuideTab,
-                                        csvGuideTab === tab && styles.csvGuideTabActive,
-                                    ]}
-                                    onPress={() => setCsvGuideTab(tab)}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.csvGuideTabText,
-                                            csvGuideTab === tab && styles.csvGuideTabTextActive,
-                                        ]}
-                                    >
-                                        {tab}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
+                        {/* Tabs - Two Rows */}
+                        <View style={styles.csvGuideTabsContainer}>
+                            {/* First Row */}
+                            <View style={styles.csvGuideTabsRow}>
+                                {['Children', 'Staff', 'Medications', 'Trips', 'Menu'].map(
+                                    (tab) => (
+                                        <TouchableOpacity
+                                            key={tab}
+                                            style={[
+                                                styles.csvGuideTab,
+                                                csvGuideTab === tab && styles.csvGuideTabActive,
+                                            ]}
+                                            onPress={() => setCsvGuideTab(tab)}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.csvGuideTabText,
+                                                    csvGuideTab === tab &&
+                                                        styles.csvGuideTabTextActive,
+                                                ]}
+                                            >
+                                                {tab}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )
+                                )}
+                            </View>
+                            {/* Second Row */}
+                            <View style={styles.csvGuideTabsRow}>
+                                {['Awards', 'Daily Notes', 'Incidents', 'Calendar', 'Sports'].map(
+                                    (tab) => (
+                                        <TouchableOpacity
+                                            key={tab}
+                                            style={[
+                                                styles.csvGuideTab,
+                                                csvGuideTab === tab && styles.csvGuideTabActive,
+                                            ]}
+                                            onPress={() => setCsvGuideTab(tab)}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.csvGuideTabText,
+                                                    csvGuideTab === tab &&
+                                                        styles.csvGuideTabTextActive,
+                                                ]}
+                                            >
+                                                {tab}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )
+                                )}
+                            </View>
+                        </View>
 
                         {/* Tab Content */}
                         <ScrollView
@@ -4623,20 +4638,28 @@ const styles = StyleSheet.create({
     csvGuideTabsContainer: {
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
-        marginBottom: 0,
-    },
-    csvGuideTabsContent: {
         paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+    },
+    csvGuideTabsRow: {
+        flexDirection: 'row',
+        justifyContent: 'flex-start',
+        flexWrap: 'wrap',
+        marginBottom: theme.spacing.xs,
     },
     csvGuideTab: {
-        paddingVertical: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
         paddingHorizontal: theme.spacing.md,
-        borderBottomWidth: 2,
-        borderBottomColor: 'transparent',
-        marginRight: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.background,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        marginRight: theme.spacing.xs,
+        marginBottom: theme.spacing.xs,
     },
     csvGuideTabActive: {
-        borderBottomColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+        borderWidth: 2,
     },
     csvGuideTabText: {
         ...theme.typography.body,
@@ -4651,21 +4674,19 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     csvGuideScrollContent: {
-        padding: theme.spacing.lg,
-        paddingTop: theme.spacing.md,
-        paddingBottom: theme.spacing.xl,
+        padding: theme.spacing.md,
+        paddingBottom: theme.spacing.lg,
     },
     csvGuideSection: {
-        gap: theme.spacing.lg,
-        marginBottom: theme.spacing.xl,
+        gap: theme.spacing.md,
     },
     csvGuideTitle: {
-        ...theme.typography.h1,
+        ...theme.typography.h2,
         marginTop: 0,
         marginBottom: theme.spacing.xs,
     },
     csvGuideSubtitle: {
-        ...theme.typography.body,
+        ...theme.typography.bodySmall,
         color: theme.colors.textSecondary,
         marginTop: 0,
         marginBottom: theme.spacing.md,
@@ -4674,13 +4695,14 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.background,
         borderRadius: theme.borderRadius.md,
         padding: theme.spacing.md,
-        marginBottom: theme.spacing.lg,
+        marginBottom: theme.spacing.md,
         borderWidth: 1,
         borderColor: theme.colors.border,
     },
     csvGuideInfoTitle: {
-        ...theme.typography.h3,
-        marginBottom: theme.spacing.sm,
+        ...theme.typography.body,
+        fontWeight: '600',
+        marginBottom: theme.spacing.xs,
     },
     csvGuideInfoText: {
         ...theme.typography.body,
@@ -4689,8 +4711,8 @@ const styles = StyleSheet.create({
     csvGuideCodeBox: {
         backgroundColor: '#f5f5f5',
         borderRadius: theme.borderRadius.sm,
-        padding: theme.spacing.md,
-        marginTop: theme.spacing.sm,
+        padding: theme.spacing.sm,
+        marginTop: theme.spacing.xs,
     },
     csvGuideCodeText: {
         ...theme.typography.bodySmall,
@@ -4702,13 +4724,15 @@ const styles = StyleSheet.create({
         backgroundColor: '#e3f2fd',
         borderRadius: theme.borderRadius.md,
         padding: theme.spacing.md,
-        marginBottom: theme.spacing.lg,
+        marginBottom: theme.spacing.md,
+        marginTop: theme.spacing.xs,
         borderWidth: 1,
         borderColor: '#90caf9',
     },
     csvGuideImportantTitle: {
-        ...theme.typography.h3,
-        marginBottom: theme.spacing.sm,
+        ...theme.typography.body,
+        fontWeight: '600',
+        marginBottom: theme.spacing.xs,
         color: '#1976d2',
     },
     csvGuideImportantText: {
@@ -4720,19 +4744,21 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff9c4',
         borderRadius: theme.borderRadius.md,
         padding: theme.spacing.md,
-        marginBottom: theme.spacing.lg,
+        marginBottom: theme.spacing.md,
+        marginTop: theme.spacing.xs,
         borderWidth: 1,
         borderColor: '#fdd835',
     },
     csvGuideTipsTitle: {
-        ...theme.typography.h3,
-        marginBottom: theme.spacing.sm,
+        ...theme.typography.body,
+        fontWeight: '600',
+        marginBottom: theme.spacing.xs,
         color: '#f57f17',
     },
     csvGuideTipItem: {
-        ...theme.typography.body,
+        ...theme.typography.bodySmall,
         color: '#f9a825',
         marginBottom: theme.spacing.xs,
-        lineHeight: 22,
+        lineHeight: 20,
     },
 });
