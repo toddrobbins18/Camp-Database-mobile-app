@@ -63,6 +63,10 @@ export const StaffScreen = ({ navigation }: any) => {
                         <Text style={styles.btnText}>Assign Wristbands</Text>
                     </TouchableOpacity>
 
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => toggleModal('formatGuide', true)}>
+                         <Ionicons name="help-circle-outline" size={24} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+
                     <TouchableOpacity style={styles.secondaryBtn} onPress={() => toggleModal('uploadCsv', true)}>
                         <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} />
                         <Text style={styles.btnText}>Upload CSV</Text>
@@ -341,6 +345,78 @@ export const StaffScreen = ({ navigation }: any) => {
                     </View>
                 </View>
             </Modal>
+            {/* 4. Format Guide Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={modalVisible.formatGuide}
+                onRequestClose={() => toggleModal('formatGuide', false)}
+            >
+                 <View style={styles.modalOverlay}>
+                    <View style={styles.modalContentLarge}>
+                        <View style={styles.modalHeader}>
+                            <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                                <Ionicons name="document-text-outline" size={20} color={theme.colors.text} />
+                                <Text style={styles.modalTitle}>CSV Upload Format Guide</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => toggleModal('formatGuide', false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Tabs for Guide */}
+                         <View style={{marginBottom: 16}}>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                {['Children', 'Staff', 'Medications', 'Trips', 'Menu', 'Awards', 'Daily Notes', 'Incidents', 'Calendar', 'Sports'].map((tab) => (
+                                    <TouchableOpacity 
+                                        key={tab} 
+                                        style={[
+                                            styles.guideTab, 
+                                            tab === 'Staff' && styles.activeGuideTab
+                                        ]}
+                                    >
+                                        <Text style={[
+                                            styles.guideTabText,
+                                            tab === 'Staff' && styles.activeGuideTabText
+                                        ]}>{tab}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+
+                        <ScrollView style={styles.modalBody}>
+                             <View style={styles.guideCard}>
+                                <Text style={styles.guideCardTitle}>Staff Directory</Text>
+                                <Text style={styles.guideCardSubtitle}>CSV format for staff directory upload</Text>
+
+                                <Text style={styles.guideLabel}>Required Columns (first row):</Text>
+                                <View style={styles.codeBlock}>
+                                    <Text style={styles.codeText}>name, email, phone, role, department, hire_date, leader_id, status, season</Text>
+                                </View>
+
+                                <Text style={styles.guideLabel}>Example Data Row:</Text>
+                                <View style={styles.codeBlock}>
+                                    <Text style={styles.codeText}>Jane Smith, jane@thenest.com, 555-9876, Counselor, Activities, 2024-01-15, &lt;leader_id&gt;, active, Summer 2024</Text>
+                                </View>
+
+                                <View style={[styles.infoBox, {marginTop: 16}]}>
+                                    <Text style={styles.infoText}>
+                                        <Text style={{fontWeight: 'bold'}}>Important Notes: </Text>
+                                        leader_id must be a valid UUID from staff table. hire_date format: YYYY-MM-DD
+                                    </Text>
+                                </View>
+
+                                <View style={styles.tipsBox}>
+                                    <Text style={styles.tipsTitle}>General Tips:</Text>
+                                    <Text style={styles.tipsText}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.tipsText}>• Use commas to separate values</Text>
+                                    <Text style={styles.tipsText}>• Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
+                                </View>
+                             </View>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -399,6 +475,16 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.1,
         shadowRadius: 2,
+    },
+    iconBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     secondaryBtn: {
         backgroundColor: theme.colors.surface,
@@ -807,5 +893,63 @@ const styles = StyleSheet.create({
         height: 1,
         backgroundColor: theme.colors.border,
         marginVertical: 20,
+    },
+    // New Guide Modal Styles
+    guideTab: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        backgroundColor: '#f3f4f6',
+        marginRight: 8,
+    },
+    activeGuideTab: {
+        backgroundColor: 'white',
+        borderWidth: 1,
+        borderColor: theme.colors.secondary,
+    },
+    guideTabText: {
+        color: theme.colors.textSecondary,
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    activeGuideTabText: {
+        color: theme.colors.secondary,
+        fontWeight: '600',
+    },
+    guideCard: {
+        backgroundColor: 'white',
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        padding: 16,
+    },
+    guideCardTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: theme.colors.text,
+        marginBottom: 4,
+    },
+    guideCardSubtitle: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        marginBottom: 16,
+    },
+    tipsBox: {
+        marginTop: 20,
+        backgroundColor: '#fffbeb', // light yellow
+        padding: 12,
+        borderRadius: theme.borderRadius.md,
+    },
+    tipsTitle: {
+        fontWeight: 'bold',
+        color: '#92400e', // dark yellow/orange
+        fontSize: 13,
+        marginBottom: 8,
+    },
+    tipsText: {
+        fontSize: 12,
+        color: '#92400e',
+        marginBottom: 4,
+        lineHeight: 18,
     }
 });
