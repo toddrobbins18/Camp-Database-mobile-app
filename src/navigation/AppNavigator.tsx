@@ -8,6 +8,7 @@ import { LoginScreen } from '../screens/LoginScreen';
 import { SignUpScreen } from '../screens/SignUpScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { CamperScreen } from '../screens/CamperScreen';
+import { CamperDetailScreen } from '../screens/CamperDetailScreen';
 import { StaffScreen } from '../screens/StaffScreen';
 import { CalendarScreen } from '../screens/CalendarScreen';
 import { HealthScreen } from '../screens/HealthScreen';
@@ -21,6 +22,10 @@ import { EvaluationQuestionsScreen } from '../screens/EvaluationQuestionsScreen'
 import { QuestionTextScreen } from '../screens/QuestionTextScreen';
 import { RolePermissionsScreen } from '../screens/RolePermissionsScreen';
 import { DivisionPermissionsScreen } from '../screens/DivisionPermissionsScreen';
+import { ActivitiesFieldTripsScreen } from '../screens/ActivitiesFieldTripsScreen';
+import { AppointmentsScreen } from '../screens/AppointmentsScreen';
+import { AwardsScreen } from '../screens/AwardsScreen';
+import { DailyNewsScreen } from '../screens/DailyNewsScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -70,7 +75,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Activities & Field Trips"
                     icon={({ color }) => <Ionicons name="leaf-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Transport')}
+                    onPress={() => props.navigation.navigate('ActivitiesFieldTrips')}
                     labelStyle={styles.drawerLabel}
                     activeTintColor={theme.colors.surface}
                     inactiveTintColor="#94a3b8"
@@ -78,17 +83,21 @@ const CustomDrawerContent = (props: any) => {
                 />
                 <DrawerItem
                     label="Appointments"
-                    icon={({ color }) => <Ionicons name="medical-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
+                    onPress={() => props.navigation.navigate('Appointments')}
                     labelStyle={styles.drawerLabel}
+                    activeTintColor={theme.colors.surface}
                     inactiveTintColor="#94a3b8"
+                    activeBackgroundColor={theme.colors.sidebarActiveBg}
                 />
                 <DrawerItem
                     label="Awards"
                     icon={({ color }) => <Ionicons name="ribbon-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('Awards')}
                     labelStyle={styles.drawerLabel}
+                    activeTintColor={theme.colors.surface}
                     inactiveTintColor="#94a3b8"
+                    activeBackgroundColor={theme.colors.sidebarActiveBg}
                 />
                 <DrawerItem
                     label="Camper"
@@ -100,9 +109,11 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Daily News"
                     icon={({ color }) => <Ionicons name="document-text-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('DailyNews')}
                     labelStyle={styles.drawerLabel}
+                    activeTintColor={theme.colors.surface}
                     inactiveTintColor="#94a3b8"
+                    activeBackgroundColor={theme.colors.sidebarActiveBg}
                 />
                 <DrawerItem
                     label="Dashboard"
@@ -287,6 +298,20 @@ const CustomDrawerContent = (props: any) => {
     );
 };
 
+// Camper Stack Navigator
+const CamperStackNavigator = () => {
+    return (
+        <Stack.Navigator
+            screenOptions={{
+                headerShown: false,
+            }}
+        >
+            <Stack.Screen name="CamperList" component={CamperScreen} />
+            <Stack.Screen name="CamperDetail" component={CamperDetailScreen} />
+        </Stack.Navigator>
+    );
+};
+
 // Main App Navigator (Drawer)
 const MainAppNavigator = () => {
     return (
@@ -300,7 +325,7 @@ const MainAppNavigator = () => {
             initialRouteName="Dashboard"
         >
             <Drawer.Screen name="Dashboard" component={DashboardScreen} />
-            <Drawer.Screen name="Camper" component={CamperScreen} />
+            <Drawer.Screen name="Camper" component={CamperStackNavigator} />
             <Drawer.Screen name="Staff" component={StaffScreen} />
             <Drawer.Screen name="Calendar" component={CalendarScreen} />
             <Drawer.Screen name="Health" component={HealthScreen} />
@@ -314,6 +339,10 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="QuestionText" component={QuestionTextScreen} />
             <Drawer.Screen name="RolePermissions" component={RolePermissionsScreen} />
             <Drawer.Screen name="DivisionPermissions" component={DivisionPermissionsScreen} />
+            <Drawer.Screen name="ActivitiesFieldTrips" component={ActivitiesFieldTripsScreen} />
+            <Drawer.Screen name="Appointments" component={AppointmentsScreen} />
+            <Drawer.Screen name="Awards" component={AwardsScreen} />
+            <Drawer.Screen name="DailyNews" component={DailyNewsScreen} />
         </Drawer.Navigator>
     );
 };
