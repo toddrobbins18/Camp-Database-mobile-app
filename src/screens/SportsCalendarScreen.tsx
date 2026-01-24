@@ -1349,6 +1349,7 @@ export const SportsCalendarScreen = ({ navigation }: SportsCalendarScreenProps) 
                                     {events.map((event, index) => (
                                         <TouchableOpacity
                                             key={index}
+                                            style={styles.eventItemWrapper}
                                             onPress={() => {
                                                 setSelectedEvent(event);
                                                 setShowEventDetailModal(true);
@@ -4325,9 +4326,11 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.md,
     },
     eventsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
+        flexDirection: 'column',
         gap: theme.spacing.md,
+    },
+    eventItemWrapper: {
+        width: '100%',
     },
     eventCard: {
         width: '100%',
@@ -4382,7 +4385,9 @@ const styles = StyleSheet.create({
         backgroundColor: '#3b82f6',
     },
     eventTypeTag: {
-        backgroundColor: '#e0f2fe',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
     },
     divisionTag: {
         backgroundColor: '#14b8a6',
@@ -4399,7 +4404,7 @@ const styles = StyleSheet.create({
         color: theme.colors.surface,
     },
     eventTypeTagText: {
-        color: '#0369a1',
+        color: theme.colors.text,
     },
     divisionTagText: {
         color: theme.colors.surface,
