@@ -5,6 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 
+interface MenuItem {
+    id: string;
+    date: Date;
+    mealType: string;
+    menuItems: string;
+    allergens: string;
+}
+
 export const MenuScreen = ({ navigation }: any) => {
     const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
     const [showGuideModal, setShowGuideModal] = useState(false);
@@ -12,6 +20,7 @@ export const MenuScreen = ({ navigation }: any) => {
     const [showAddMenuItemModal, setShowAddMenuItemModal] = useState(false);
     const [activeTab, setActiveTab] = useState('Children');
     const [activeSubTab, setActiveSubTab] = useState('Roster');
+    const [menuItemsList, setMenuItemsList] = useState<MenuItem[]>([]);
     
     // Add Menu Item form states
     const [menuDate, setMenuDate] = useState(new Date(2026, 0, 22));
@@ -51,6 +60,43 @@ export const MenuScreen = ({ navigation }: any) => {
         setMealType('');
         setMenuItems('');
         setAllergens('');
+    };
+
+    const handleSaveMenuItem = () => {
+        if (!mealType || !menuItems.trim()) {
+            // Basic validation - could show an alert here
+            return;
+        }
+
+        const newMenuItem: MenuItem = {
+            id: Date.now().toString(),
+            date: new Date(menuDate),
+            mealType,
+            menuItems: menuItems.trim(),
+            allergens: allergens.trim(),
+        };
+
+        setMenuItemsList([...menuItemsList, newMenuItem]);
+        handleCloseAddMenuItem();
+    };
+
+    const handleDeleteMenuItem = (id: string) => {
+        setMenuItemsList(menuItemsList.filter(item => item.id !== id));
+    };
+
+    const getMealTypeColor = (type: string) => {
+        switch (type.toLowerCase()) {
+            case 'breakfast':
+                return '#fef3c7';
+            case 'lunch':
+                return '#dbeafe';
+            case 'dinner':
+                return '#e0e7ff';
+            case 'snack':
+                return '#fce7f3';
+            default:
+                return '#f3f4f6';
+        }
     };
 
     return (
@@ -109,9 +155,43 @@ export const MenuScreen = ({ navigation }: any) => {
 
                 {/* Main Content Card */}
                 <StyledCard style={styles.contentCard}>
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>No menu items found. Add your first menu item!</Text>
-                    </View>
+                    {menuItemsList.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>No menu items found. Add your first menu item!</Text>
+                        </View>
+                    ) : (
+                        <View style={viewMode === 'grid' ? styles.gridContainer : styles.listContainer}>
+                            {menuItemsList.map((item) => (
+                                <View 
+                                    key={item.id} 
+                                    style={[
+                                        viewMode === 'grid' ? styles.gridItem : styles.listItem,
+                                        { backgroundColor: getMealTypeColor(item.mealType) }
+                                    ]}
+                                >
+                                    <View style={styles.menuItemHeader}>
+                                        <View style={styles.menuItemHeaderLeft}>
+                                            <Text style={styles.menuItemMealType}>{item.mealType}</Text>
+                                            <Text style={styles.menuItemDate}>{formatDate(item.date)}</Text>
+                                        </View>
+                                        <TouchableOpacity 
+                                            onPress={() => handleDeleteMenuItem(item.id)}
+                                            style={styles.deleteButton}
+                                        >
+                                            <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <Text style={styles.menuItemText}>{item.menuItems}</Text>
+                                    {item.allergens && (
+                                        <View style={styles.allergenContainer}>
+                                            <Ionicons name="warning-outline" size={14} color={theme.colors.warning} />
+                                            <Text style={styles.allergenText}>{item.allergens}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            ))}
+                        </View>
+                    )}
                 </StyledCard>
 
             </ScrollView>
@@ -373,7 +453,7 @@ export const MenuScreen = ({ navigation }: any) => {
 
                             {/* Action Button */}
                             <View style={styles.formActions}>
-                                <TouchableOpacity style={styles.addMenuItemBtn} onPress={handleCloseAddMenuItem}>
+                                <TouchableOpacity style={styles.addMenuItemBtn} onPress={handleSaveMenuItem}>
                                     <Text style={styles.addMenuItemBtnText}>Add Menu Item</Text>
                                 </TouchableOpacity>
                             </View>
@@ -620,20 +700,86 @@ const styles = StyleSheet.create({
     contentCard: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.xl,
+        padding: theme.spacing.md,
         minHeight: 400,
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     emptyState: {
         alignItems: 'center',
         justifyContent: 'center',
+        minHeight: 300,
     },
     emptyText: {
         ...theme.typography.body,
         fontSize: 16,
         color: theme.colors.textSecondary,
         textAlign: 'center',
+    },
+    listContainer: {
+        gap: theme.spacing.md,
+    },
+    gridContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.md,
+    },
+    listItem: {
+        padding: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    gridItem: {
+        width: '48%',
+        padding: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    menuItemHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: theme.spacing.sm,
+    },
+    menuItemHeaderLeft: {
+        flex: 1,
+    },
+    menuItemMealType: {
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
+    },
+    menuItemDate: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    deleteButton: {
+        padding: theme.spacing.xs,
+    },
+    menuItemText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
+        lineHeight: 20,
+    },
+    allergenContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        marginTop: theme.spacing.xs,
+        paddingTop: theme.spacing.xs,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    allergenText: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.warning,
+        flex: 1,
     },
     // Modal Styles
     modalOverlay: {
@@ -776,7 +922,7 @@ const styles = StyleSheet.create({
     },
     // Bottom Sheet Styles
     bottomSheet: {
-        backgroundColor: '#1f2937',
+        backgroundColor: theme.colors.surface,
         borderTopLeftRadius: theme.borderRadius.xl,
         borderTopRightRadius: theme.borderRadius.xl,
         paddingTop: theme.spacing.lg,
@@ -791,7 +937,7 @@ const styles = StyleSheet.create({
         ...theme.typography.h3,
         fontSize: 18,
         fontWeight: '700',
-        color: 'white',
+        color: theme.colors.text,
     },
     bottomSheetContent: {
         gap: theme.spacing.md,
@@ -805,7 +951,7 @@ const styles = StyleSheet.create({
     bottomSheetOptionText: {
         ...theme.typography.body,
         fontSize: 16,
-        color: 'white',
+        color: theme.colors.text,
     },
     // Add Menu Item Modal Styles
     addMenuItemModal: {

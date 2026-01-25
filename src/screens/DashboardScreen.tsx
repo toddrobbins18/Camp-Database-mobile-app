@@ -61,7 +61,10 @@ export const DashboardScreen = ({ navigation }: any) => {
                             <Text style={styles.menuLabel}>DINNER</Text>
                         </TouchableOpacity>
                     </View>
-                    <TouchableOpacity style={styles.viewMenuBtn}>
+                    <TouchableOpacity 
+                        style={styles.viewMenuBtn}
+                        onPress={() => navigation.navigate('Menu')}
+                    >
                         <Text style={styles.viewMenuText}>View Full Menu</Text>
                     </TouchableOpacity>
                 </StyledCard>
@@ -76,7 +79,10 @@ export const DashboardScreen = ({ navigation }: any) => {
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyText}>No sports events today</Text>
                     </View>
-                    <TouchableOpacity style={styles.outlineBtn}>
+                    <TouchableOpacity 
+                        style={styles.outlineBtn}
+                        onPress={() => navigation.navigate('SportsCalendar')}
+                    >
                         <Text style={styles.outlineBtnText}>View Full Schedule</Text>
                     </TouchableOpacity>
                 </StyledCard>
@@ -91,7 +97,10 @@ export const DashboardScreen = ({ navigation }: any) => {
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyText}>No special events today</Text>
                     </View>
-                    <TouchableOpacity style={styles.outlineBtn}>
+                    <TouchableOpacity 
+                        style={styles.outlineBtn}
+                        onPress={() => navigation.navigate('SpecialEvents')}
+                    >
                         <Text style={styles.outlineBtnText}>View All Events</Text>
                     </TouchableOpacity>
                 </StyledCard>
@@ -105,21 +114,21 @@ export const DashboardScreen = ({ navigation }: any) => {
                     <Text style={styles.cardSubtitle}>Celebrate with them!</Text>
                     <View style={styles.birthdaysList}>
                         <View style={[styles.birthdayItem, styles.birthdayItemGreen]}>
-                            <Ionicons name="cake" size={16} color="#10b981" />
+                            <Ionicons name="balloon-outline" size={16} color="#10b981" />
                             <View style={styles.birthdayContent}>
                                 <Text style={styles.birthdayName}>Spencer Weinberg</Text>
                                 <Text style={styles.birthdayDesc}>Turning 12 today! 🎉</Text>
                             </View>
                         </View>
                         <View style={[styles.birthdayItem, styles.birthdayItemBlue]}>
-                            <Ionicons name="cake" size={16} color={theme.colors.secondary} />
+                            <Ionicons name="balloon-outline" size={16} color={theme.colors.secondary} />
                             <View style={styles.birthdayContent}>
                                 <Text style={styles.birthdayName}>George Talbot</Text>
                                 <Text style={styles.birthdayDesc}>Staff Member 🎂</Text>
                             </View>
                         </View>
                         <View style={[styles.birthdayItem, styles.birthdayItemBlue]}>
-                            <Ionicons name="cake" size={16} color={theme.colors.secondary} />
+                            <Ionicons name="balloon-outline" size={16} color={theme.colors.secondary} />
                             <View style={styles.birthdayContent}>
                                 <Text style={styles.birthdayName}>Logan Rosenberg</Text>
                                 <Text style={styles.birthdayDesc}>Staff Member 🎉</Text>

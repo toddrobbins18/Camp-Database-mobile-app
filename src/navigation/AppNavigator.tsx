@@ -16,6 +16,7 @@ import { TransportScreen } from '../screens/TransportScreen';
 import { SportsScreen } from '../screens/SportsScreen';
 import { IncidentReportsScreen } from '../screens/IncidentReportsScreen';
 import { MenuScreen } from '../screens/MenuScreen';
+import { AddMenuItemScreen } from '../screens/AddMenuItemScreen';
 import { MessagesScreen } from '../screens/MessagesScreen';
 import { AdminPanelScreen } from '../screens/AdminPanelScreen';
 import { EvaluationQuestionsScreen } from '../screens/EvaluationQuestionsScreen';
@@ -28,6 +29,8 @@ import { AwardsScreen } from '../screens/AwardsScreen';
 import { DailyNewsScreen } from '../screens/DailyNewsScreen';
 import { UserApprovalsScreen } from '../screens/UserApprovalsScreen';
 import { AccessDeniedScreen } from '../screens/AccessDeniedScreen';
+import { SportsCalendarScreen } from '../screens/SportsCalendarScreen';
+import { SpecialEventsScreen } from '../screens/SpecialEventsScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -314,6 +317,20 @@ const CamperStackNavigator = () => {
     );
 };
 
+// Menu Stack Navigator
+const MenuStackNavigator = () => {
+    return (
+        <Stack.Navigator
+            screenOptions={{
+                headerShown: false,
+            }}
+        >
+            <Stack.Screen name="MenuList" component={MenuScreen} />
+            <Stack.Screen name="AddMenuItem" component={AddMenuItemScreen} />
+        </Stack.Navigator>
+    );
+};
+
 // Main App Navigator (Drawer)
 const MainAppNavigator = () => {
     return (
@@ -334,7 +351,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Transport" component={TransportScreen} />
             <Drawer.Screen name="Sports" component={SportsScreen} />
             <Drawer.Screen name="IncidentReports" component={IncidentReportsScreen} />
-            <Drawer.Screen name="Menu" component={MenuScreen} />
+            <Drawer.Screen name="Menu" component={MenuStackNavigator} />
             <Drawer.Screen name="Messages" component={MessagesScreen} />
             <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} />
             <Drawer.Screen name="EvaluationQuestions" component={EvaluationQuestionsScreen} />
@@ -347,6 +364,8 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="DailyNews" component={DailyNewsScreen} />
             <Drawer.Screen name="UserApprovals" component={UserApprovalsScreen} />
             <Drawer.Screen name="AccessDenied" component={AccessDeniedScreen} />
+            <Drawer.Screen name="SportsCalendar" component={SportsCalendarScreen} />
+            <Drawer.Screen name="SpecialEvents" component={SpecialEventsScreen} />
         </Drawer.Navigator>
     );
 };
