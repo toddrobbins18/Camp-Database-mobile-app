@@ -31,6 +31,7 @@ import { UserApprovalsScreen } from '../screens/UserApprovalsScreen';
 import { AccessDeniedScreen } from '../screens/AccessDeniedScreen';
 import { SportsCalendarScreen } from '../screens/SportsCalendarScreen';
 import { SpecialEventsScreen } from '../screens/SpecialEventsScreen';
+import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
@@ -165,7 +166,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="OD Management"
                     icon={({ color }) => <Ionicons name="clipboard-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('ODManagement')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -366,6 +367,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="AccessDenied" component={AccessDeniedScreen} />
             <Drawer.Screen name="SportsCalendar" component={SportsCalendarScreen} />
             <Drawer.Screen name="SpecialEvents" component={SpecialEventsScreen} />
+            <Drawer.Screen name="ODManagement" component={ODManagementScreen} />
         </Drawer.Navigator>
     );
 };
