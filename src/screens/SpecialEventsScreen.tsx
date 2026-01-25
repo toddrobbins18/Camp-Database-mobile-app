@@ -8,6 +8,7 @@ import {
     TextInput,
     Modal,
     FlatList,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -57,6 +58,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
     const [showAddEventModal, setShowAddEventModal] = useState(false);
+    const [showUploadCSVModal, setShowUploadCSVModal] = useState(false);
 
     // Add Event Modal States
     const [eventDate, setEventDate] = useState('01/22/2026');
@@ -107,7 +109,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         const today = new Date();
         const selectedDateValue = type === 'filter' ? selectedDate : eventDate;
 
-        const monthNames = [
+        const MONTH_NAMES = [
             'January',
             'February',
             'March',
@@ -137,9 +139,8 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
 
         return (
             <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-                <TouchableOpacity
+                <Pressable
                     style={styles.modalOverlay}
-                    activeOpacity={1}
                     onPress={onClose}
                 >
                     <View style={styles.datePickerContainer} onStartShouldSetResponder={() => true}>
@@ -157,7 +158,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
                             </TouchableOpacity>
                             <Text style={styles.datePickerMonth}>
-                                {monthNames[currentMonth]} {currentYear}
+                                {MONTH_NAMES[currentMonth]} {currentYear}
                             </Text>
                             <TouchableOpacity
                                 onPress={() => {
@@ -228,7 +229,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                             </TouchableOpacity>
                         </View>
                     </View>
-                </TouchableOpacity>
+                </Pressable>
             </Modal>
         );
     };
@@ -290,6 +291,12 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         setShowAddEventModal(false);
     };
 
+    const handleSelectFileOption = (option: string) => {
+        console.log('Selected:', option);
+        setShowUploadCSVModal(false);
+        // TODO: Handle file selection
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -324,7 +331,10 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                     <TouchableOpacity style={styles.helpButton}>
                         <Ionicons name="help-circle-outline" size={24} color={theme.colors.text} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.uploadButton}>
+                    <TouchableOpacity 
+                        style={styles.uploadButton}
+                        onPress={() => setShowUploadCSVModal(true)}
+                    >
                         <Ionicons name="arrow-up-outline" size={20} color={theme.colors.text} />
                         <Text style={styles.uploadButtonText}>Upload CSV</Text>
                     </TouchableOpacity>
@@ -430,7 +440,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                 animationType="slide"
                 onRequestClose={handleCloseAddEventModal}
             >
-                <View style={styles.modalOverlay}>
+                <Pressable style={styles.modalOverlay} onPress={handleCloseAddEventModal}>
                     <View style={styles.addEventModalContainer}>
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
@@ -668,7 +678,39 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                             </TouchableOpacity>
                         </View>
                     </View>
-                </View>
+                </Pressable>
+            </Modal>
+
+            {/* Upload CSV Modal */}
+            <Modal
+                visible={showUploadCSVModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowUploadCSVModal(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowUploadCSVModal(false)}>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select file</Text>
+                        </View>
+                        <View style={styles.bottomSheetContent}>
+                            <TouchableOpacity 
+                                style={styles.bottomSheetOption}
+                                onPress={() => handleSelectFileOption('Aloha downloads')}
+                            >
+                                <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={styles.bottomSheetOption}
+                                onPress={() => handleSelectFileOption('Other files')}
+                            >
+                                <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.bottomSheetOptionText}>Other files</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
         </SafeAreaView>
     );
@@ -681,6 +723,7 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         padding: theme.spacing.md,
+        paddingBottom: 100,
     },
     header: {
         flexDirection: 'row',
@@ -1150,5 +1193,37 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         color: theme.colors.surface,
         fontWeight: '600',
+    },
+    bottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '30%',
+    },
+    bottomSheetHeader: {
+        marginBottom: theme.spacing.lg,
+    },
+    bottomSheetTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    bottomSheetContent: {
+        gap: theme.spacing.md,
+    },
+    bottomSheetOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        gap: theme.spacing.md,
+    },
+    bottomSheetOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
     },
 });
