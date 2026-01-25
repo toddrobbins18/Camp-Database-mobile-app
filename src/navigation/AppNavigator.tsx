@@ -36,8 +36,7 @@ import { AwardsScreen } from '../screens/AwardsScreen';
 import { DailyNewsScreen } from '../screens/DailyNewsScreen';
 import { UserApprovalsScreen } from '../screens/UserApprovalsScreen';
 import { AccessDeniedScreen } from '../screens/AccessDeniedScreen';
-import { SportsCalendarScreen } from '../screens/SportsCalendarScreen';
-import { SpecialEventsScreen } from '../screens/SpecialEventsScreen';
+
 import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { theme } from '../theme/theme';
 
@@ -379,8 +378,6 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="DailyNews" component={DailyNewsScreen} />
             <Drawer.Screen name="UserApprovals" component={UserApprovalsScreen} />
             <Drawer.Screen name="AccessDenied" component={AccessDeniedScreen} />
-            <Drawer.Screen name="SportsCalendar" component={SportsCalendarScreen} />
-            <Drawer.Screen name="SpecialEvents" component={SpecialEventsScreen} />
             <Drawer.Screen name="ODManagement" component={ODManagementScreen} />
         </Drawer.Navigator>
     );
