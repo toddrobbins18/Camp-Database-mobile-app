@@ -1,10 +1,4 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { theme } from '../theme/theme';
-import { StyledCard } from '../components/StyledCard';
-
 interface SportsEvent {
     id: string;
     title: string;

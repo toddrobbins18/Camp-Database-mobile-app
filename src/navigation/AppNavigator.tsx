@@ -14,6 +14,13 @@ import { CalendarScreen } from '../screens/CalendarScreen';
 import { HealthScreen } from '../screens/HealthScreen';
 import { TransportScreen } from '../screens/TransportScreen';
 import { SportsScreen } from '../screens/SportsScreen';
+import { ReportsScreen } from '../screens/ReportsScreen';
+import { RosterTemplatesScreen } from '../screens/RosterTemplatesScreen';
+import { SpecialEventsScreen } from '../screens/SpecialEventsScreen';
+import { SpecialMealsScreen } from '../screens/SpecialMealsScreen';
+import { SportsCalendarScreen } from '../screens/SportsCalendarScreen';
+import { RainyDayScheduleScreen } from '../screens/RainyDayScheduleScreen';
+import { TutoringTherapyScreen } from '../screens/TutoringTherapyScreen';
 import { IncidentReportsScreen } from '../screens/IncidentReportsScreen';
 import { MenuScreen } from '../screens/MenuScreen';
 import { AddMenuItemScreen } from '../screens/AddMenuItemScreen';
@@ -173,35 +180,35 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Rainy Day Schedule"
                     icon={({ color }) => <Ionicons name="rainy-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('RainyDaySchedule')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
                 <DrawerItem
                     label="Reports"
                     icon={({ color }) => <Ionicons name="bar-chart-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('Reports')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
                 <DrawerItem
                     label="Roster Templates"
                     icon={({ color }) => <Ionicons name="list-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('RosterTemplates')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
                 <DrawerItem
                     label="Special Events & Evening Activities"
                     icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('SpecialEvents')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
                 <DrawerItem
                     label="Special Meals"
                     icon={({ color }) => <Ionicons name="restaurant-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('SpecialMeals')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -215,7 +222,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Sports Calendar"
                     icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('SportsCalendar')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -236,7 +243,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Tutoring & Therapy"
                     icon={({ color }) => <Ionicons name="book-outline" size={22} color={color} />}
-                    onPress={() => { }}
+                    onPress={() => props.navigation.navigate('TutoringTherapy')}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor="#94a3b8"
                 />
@@ -351,6 +358,13 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Health" component={HealthScreen} />
             <Drawer.Screen name="Transport" component={TransportScreen} />
             <Drawer.Screen name="Sports" component={SportsScreen} />
+            <Drawer.Screen name="SportsCalendar" component={SportsCalendarScreen} />
+            <Drawer.Screen name="RainyDaySchedule" component={RainyDayScheduleScreen} />
+            <Drawer.Screen name="TutoringTherapy" component={TutoringTherapyScreen} />
+            <Drawer.Screen name="Reports" component={ReportsScreen} />
+            <Drawer.Screen name="RosterTemplates" component={RosterTemplatesScreen} />
+            <Drawer.Screen name="SpecialEvents" component={SpecialEventsScreen} />
+            <Drawer.Screen name="SpecialMeals" component={SpecialMealsScreen} />
             <Drawer.Screen name="IncidentReports" component={IncidentReportsScreen} />
             <Drawer.Screen name="Menu" component={MenuStackNavigator} />
             <Drawer.Screen name="Messages" component={MessagesScreen} />
