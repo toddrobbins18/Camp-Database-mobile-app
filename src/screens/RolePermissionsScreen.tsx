@@ -294,7 +294,7 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
                         </View>
 
                         {/* Permissions List */}
-                        <ScrollView 
+                        <ScrollView
                             style={styles.permissionsListContainer}
                             nestedScrollEnabled={true}
                             showsVerticalScrollIndicator={false}
@@ -305,10 +305,10 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
                                     return (
                                         <View key={permission.id} style={styles.permissionItem}>
                                             <View style={styles.permissionLeft}>
-                                                <Ionicons 
-                                                    name={permission.icon as any} 
-                                                    size={20} 
-                                                    color={permission.iconColor} 
+                                                <Ionicons
+                                                    name={permission.icon as any}
+                                                    size={20}
+                                                    color={permission.iconColor}
                                                 />
                                                 <Text style={styles.permissionName}>{permission.name}</Text>
                                             </View>

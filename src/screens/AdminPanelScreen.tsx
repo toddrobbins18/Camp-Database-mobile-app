@@ -84,7 +84,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     const emailTags = ['nurse', 'transportation', 'food service', 'specialist', 'division leader', 'director', 'general staff', 'admin staff', 'head of girls side', 'head of boys side'];
 
     const handleToggleEmailConfig = (id: string) => {
-        setEmailConfigs(emailConfigs.map(config => 
+        setEmailConfigs(emailConfigs.map(config =>
             config.id === id ? { ...config, enabled: !config.enabled } : config
         ));
     };
@@ -265,7 +265,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     <Text style={styles.cardTitle}>User Roles</Text>
                     <Text style={styles.cardSubtitle}>Manage user permissions and access levels</Text>
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.addUserBtn}
                     onPress={() => setShowAddUserModal(true)}
                 >
@@ -281,7 +281,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                             <Text style={styles.userName}>{user.name}</Text>
                             <Text style={styles.userEmail}>{user.email}</Text>
                         </View>
-                        
+
                         <View style={styles.roleContainer}>
                             {/* Role Badge */}
                             <View style={[styles.roleBadge, { backgroundColor: user.roleColor }]}>
@@ -290,7 +290,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                             </View>
 
                             {/* Role Dropdown Trigger */}
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.roleDropdown}
                                 onPress={() => handleRoleClick(user)}
                             >
@@ -301,7 +301,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                             <TouchableOpacity style={styles.actionIcon}>
                                 <Ionicons name="key-outline" size={18} color={theme.colors.text} />
                             </TouchableOpacity>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.actionIcon}
                                 onPress={() => {
                                     setUserToDelete(user);
@@ -328,7 +328,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
             <View style={styles.searchFilterContainer}>
                 <View style={styles.searchBar}>
                     <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
-                    <TextInput 
+                    <TextInput
                         style={styles.searchInput}
                         placeholder="Search by name or email"
                         placeholderTextColor={theme.colors.textSecondary}
@@ -336,7 +336,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                         onChangeText={setSearchQuery}
                     />
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.filterDropdown}
                     onPress={() => setShowFilterTagPicker(true)}
                 >
@@ -353,8 +353,8 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                             <Text style={styles.userEmail}>{user.email}</Text>
                             <Text style={styles.noTagsText}>{user.tags?.length ? user.tags.join(', ') : 'No tags'}</Text>
                         </View>
-                        
-                        <TouchableOpacity 
+
+                        <TouchableOpacity
                             style={styles.addTagDropdown}
                             onPress={() => handleAddTagClick(user)}
                         >
@@ -374,7 +374,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     Tags allow you to organize users for targeted messaging. Users can have multiple tags. Click on a tag badge to remove it, or use the dropdown to add new tags.
                 </Text>
                 <View style={styles.chatIconBubble}>
-                     <Ionicons name="chatbubble-ellipses" size={20} color="white" />
+                    <Ionicons name="chatbubble-ellipses" size={20} color="white" />
                 </View>
             </View>
         </View>
@@ -520,7 +520,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 {/* Import Season */}
                 <View style={styles.formGroup}>
                     <Text style={styles.label}>Import Season</Text>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.selectInput}
                         onPress={() => setShowSeasonPicker(true)}
                     >
@@ -532,7 +532,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 {/* Campers File */}
                 <View style={styles.formGroup}>
                     <Text style={styles.label}>Campers File (campers.json)</Text>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.campersFileButton, activeFileButton === 'campers' && styles.campersFileButtonActive, activeFileButton === 'awards' && styles.campersFileButtonInactive]}
                         onPress={() => handleFileSelectClick('campers')}
                     >
@@ -546,7 +546,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 {/* Awards File */}
                 <View style={styles.formGroup}>
                     <Text style={styles.label}>Awards File (awards.json)</Text>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.awardsFileButton, activeFileButton === 'awards' && styles.awardsFileButtonActive, activeFileButton === 'campers' && styles.awardsFileButtonInactive]}
                         onPress={() => handleFileSelectClick('awards')}
                     >
@@ -592,7 +592,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                         <Text style={styles.cardSubtitle}>View all changes made to the system</Text>
                     </View>
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.exportCsvButton}
                     onPress={() => setShowDownloadModal(true)}
                 >
@@ -605,7 +605,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
             <View style={styles.searchFilterRow}>
                 <View style={styles.searchBar}>
                     <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
-                    <TextInput 
+                    <TextInput
                         style={styles.searchInput}
                         placeholder="Search by table, user, or email..."
                         placeholderTextColor={theme.colors.textSecondary}
@@ -613,7 +613,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                         onChangeText={setEditHistorySearch}
                     />
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.filterDropdown}
                     onPress={() => setShowTableFilterPicker(true)}
                 >
@@ -686,8 +686,8 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 </TouchableOpacity>
             </View>
 
-            <ScrollView 
-                contentContainerStyle={styles.scrollContent} 
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
                 {/* Title Section */}
@@ -700,33 +700,33 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
                 {/* Tabs Section */}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsContainer}>
-                        <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.tab, currentTab === 'userManagement' && styles.activeTab]}
                         onPress={() => setCurrentTab('userManagement')}
                     >
                         <Text style={[styles.tabText, currentTab === 'userManagement' && styles.activeTabText]}>User Management</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.tab, currentTab === 'userTags' && styles.activeTab]}
                         onPress={() => setCurrentTab('userTags')}
                     >
                         <Ionicons name="pricetag-outline" size={16} color={currentTab === 'userTags' ? theme.colors.text : theme.colors.textSecondary} />
                         <Text style={[styles.tabText, currentTab === 'userTags' && styles.activeTabText]}>User Tags</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.tab, currentTab === 'emailAutomation' && styles.activeTab]}
                         onPress={() => setCurrentTab('emailAutomation')}
                     >
                         <Text style={[styles.tabText, currentTab === 'emailAutomation' && styles.activeTabText]}>Email Automation</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.tab, currentTab === 'dataImport' && styles.activeTab]}
                         onPress={() => setCurrentTab('dataImport')}
                     >
                         <Ionicons name="cloud-upload-outline" size={16} color={currentTab === 'dataImport' ? theme.colors.text : theme.colors.textSecondary} />
                         <Text style={[styles.tabText, currentTab === 'dataImport' && styles.activeTabText]}>Data Import</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.tab, currentTab === 'editHistory' && styles.activeTab]}
                         onPress={() => setCurrentTab('editHistory')}
                     >
@@ -738,130 +738,164 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 {currentTab === 'userManagement' ? renderUserManagement() : currentTab === 'userTags' ? renderUserTags() : currentTab === 'emailAutomation' ? renderEmailAutomation() : currentTab === 'dataImport' ? renderDataImport() : renderEditHistory()}
             </ScrollView>
 
-            {/* Role Picker Modal (Popup) */}
+            {/* Role Picker Bottom Sheet */}
             <Modal
                 visible={showRolePicker}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowRolePicker(false)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowRolePicker(false)}>
-                    <View style={styles.pickerContent}>
-                        {roles.map((role) => (
-                            <TouchableOpacity
-                                key={role}
-                                style={[
-                                    styles.pickerOption,
-                                    selectedUser?.role === role && styles.pickerOptionSelected
-                                ]}
-                                onPress={() => handleRoleSelect(role)}
-                            >
-                                <Text style={[
-                                    styles.pickerOptionText,
-                                    selectedUser?.role === role && styles.pickerOptionTextSelected
-                                ]}>
-                                    {role}
-                                </Text>
-                                {selectedUser?.role === role && (
-                                    <Ionicons name="checkmark" size={18} color="white" />
-                                )}
-                            </TouchableOpacity>
-                        ))}
-                                </View>
+                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowRolePicker(false)}>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Role</Text>
+                        </View>
+                        <ScrollView style={styles.bottomSheetScroll}>
+                            {roles.map((role) => (
+                                <TouchableOpacity
+                                    key={role}
+                                    style={[
+                                        styles.bottomSheetOption,
+                                        selectedUser?.role === role && styles.bottomSheetOptionSelected
+                                    ]}
+                                    onPress={() => handleRoleSelect(role)}
+                                >
+                                    <Ionicons
+                                        name={role.includes('Admin') ? 'shield-checkmark-outline' : 'person-outline'}
+                                        size={24}
+                                        color={selectedUser?.role === role ? theme.colors.secondary : theme.colors.textSecondary}
+                                    />
+                                    <Text style={[
+                                        styles.bottomSheetOptionText,
+                                        selectedUser?.role === role && styles.bottomSheetOptionTextSelected
+                                    ]}>
+                                        {role}
+                                    </Text>
+                                    {selectedUser?.role === role && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
                 </Pressable>
             </Modal>
 
-            {/* Filter Tag Picker Modal */}
+            {/* Filter Tag Picker Bottom Sheet */}
             <Modal
                 visible={showFilterTagPicker}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowFilterTagPicker(false)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowFilterTagPicker(false)}>
-                    <View style={styles.pickerContent}>
-                        {availableTags.map((tag) => (
-                            <TouchableOpacity
-                                key={tag}
-                                style={[
-                                    styles.pickerOption,
-                                    selectedFilterTag === tag && styles.pickerOptionSelected
-                                ]}
-                                onPress={() => handleFilterTagSelect(tag)}
-                            >
-                                <Text style={[
-                                    styles.pickerOptionText,
-                                    selectedFilterTag === tag && styles.pickerOptionTextSelected
-                                ]}>
-                                    {tag}
-                                </Text>
-                                {selectedFilterTag === tag && (
-                                    <Ionicons name="checkmark" size={18} color="white" />
-                                )}
-                            </TouchableOpacity>
-                        ))}
-                                </View>
+                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowFilterTagPicker(false)}>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Filter by Tag</Text>
+                        </View>
+                        <ScrollView style={styles.bottomSheetScroll}>
+                            {availableTags.map((tag) => (
+                                <TouchableOpacity
+                                    key={tag}
+                                    style={[
+                                        styles.bottomSheetOption,
+                                        selectedFilterTag === tag && styles.bottomSheetOptionSelected
+                                    ]}
+                                    onPress={() => handleFilterTagSelect(tag)}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                        <Ionicons name="pricetag-outline" size={20} color={theme.colors.textSecondary} />
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            selectedFilterTag === tag && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {tag}
+                                        </Text>
+                                    </View>
+                                    {selectedFilterTag === tag && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
                 </Pressable>
             </Modal>
 
-            {/* Add Tag Modal */}
+            {/* Add Tag Bottom Sheet */}
             <Modal
                 visible={showAddTagModal}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowAddTagModal(false)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowAddTagModal(false)}>
-                    <View style={styles.pickerContent}>
-                        {availableTags.filter(tag => tag !== 'All Tags').map((tag) => (
-                            <TouchableOpacity
-                                key={tag}
-                                style={styles.pickerOption}
-                                onPress={() => handleAddTagSelect(tag)}
-                            >
-                                <Text style={styles.pickerOptionText}>{tag}</Text>
-                                {userForTags?.tags?.includes(tag) && (
-                                    <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
-                                )}
-                        </TouchableOpacity>
-                    ))}
-                </View>
+                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowAddTagModal(false)}>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Add Tag to User</Text>
+                        </View>
+                        <ScrollView style={styles.bottomSheetScroll}>
+                            {availableTags.filter(tag => tag !== 'All Tags').map((tag) => (
+                                <TouchableOpacity
+                                    key={tag}
+                                    style={styles.bottomSheetOption}
+                                    onPress={() => handleAddTagSelect(tag)}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                        <Ionicons name="pricetag-outline" size={20} color={theme.colors.textSecondary} />
+                                        <Text style={styles.bottomSheetOptionText}>{tag}</Text>
+                                    </View>
+                                    {userForTags?.tags?.includes(tag) && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
                 </Pressable>
             </Modal>
 
-            {/* Season Picker Modal */}
+            {/* Season Picker Bottom Sheet */}
             <Modal
                 visible={showSeasonPicker}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowSeasonPicker(false)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowSeasonPicker(false)}>
-                    <View style={styles.pickerContent}>
-                        {seasons.map((season) => (
-                            <TouchableOpacity
-                                key={season}
-                                style={[
-                                    styles.pickerOption,
-                                    importSeason === season && styles.pickerOptionSelected
-                                ]}
-                                onPress={() => {
-                                    setImportSeason(season);
-                                    setShowSeasonPicker(false);
-                                }}
-                            >
-                                <Text style={[
-                                    styles.pickerOptionText,
-                                    importSeason === season && styles.pickerOptionTextSelected
-                                ]}>
-                                    {season}
-                                </Text>
-                                {importSeason === season && (
-                                    <Ionicons name="checkmark" size={18} color="white" />
-                                )}
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowSeasonPicker(false)}>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Season</Text>
+                        </View>
+                        <ScrollView style={styles.bottomSheetScroll}>
+                            {seasons.map((season) => (
+                                <TouchableOpacity
+                                    key={season}
+                                    style={[
+                                        styles.bottomSheetOption,
+                                        importSeason === season && styles.bottomSheetOptionSelected
+                                    ]}
+                                    onPress={() => {
+                                        setImportSeason(season);
+                                        setShowSeasonPicker(false);
+                                    }}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            importSeason === season && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {season}
+                                        </Text>
+                                    </View>
+                                    {importSeason === season && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
                 </Pressable>
             </Modal>
 
@@ -875,291 +909,314 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     setActiveFileType(null);
                 }}
             >
-                <Pressable 
-                    style={styles.modalOverlay} 
+                <Pressable
+                    style={styles.bottomSheetOverlay}
                     onPress={() => {
                         setShowFilePicker(false);
                         setActiveFileType(null);
                     }}
                 >
-                    <Pressable style={styles.filePickerBottomSheet} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.filePickerHeader}>
-                            <Text style={styles.filePickerTitle}>Select file</Text>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select file</Text>
                         </View>
-                        <View style={styles.filePickerContent}>
-                            <TouchableOpacity 
-                                style={styles.filePickerOption}
+                        <ScrollView style={styles.bottomSheetScroll}>
+                            <TouchableOpacity
+                                style={styles.bottomSheetOption}
                                 onPress={() => handleFileSourceSelect('Aloha downloads')}
                             >
                                 <Ionicons name="briefcase-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.filePickerOptionText}>Aloha downloads</Text>
+                                <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
+                                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} style={{ marginLeft: 'auto' }} />
                             </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={styles.filePickerOption}
+                            <TouchableOpacity
+                                style={styles.bottomSheetOption}
                                 onPress={() => handleFileSourceSelect('Other files')}
                             >
                                 <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.filePickerOptionText}>Other files</Text>
+                                <Text style={styles.bottomSheetOptionText}>Other files</Text>
+                                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} style={{ marginLeft: 'auto' }} />
                             </TouchableOpacity>
-                        </View>
+                        </ScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
 
-            {/* Table Filter Picker Modal */}
+            {/* Table Filter Picker Bottom Sheet */}
             <Modal
                 visible={showTableFilterPicker}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowTableFilterPicker(false)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowTableFilterPicker(false)}>
-                    <View style={styles.pickerContent}>
-                        {tableFilters.map((table) => (
-                            <TouchableOpacity
-                                key={table}
-                                style={[
-                                    styles.pickerOption,
-                                    selectedTableFilter === table && styles.pickerOptionSelected
-                                ]}
-                                onPress={() => {
-                                    setSelectedTableFilter(table);
-                                    setShowTableFilterPicker(false);
-                                }}
-                            >
-                                <Text style={[
-                                    styles.pickerOptionText,
-                                    selectedTableFilter === table && styles.pickerOptionTextSelected
-                                ]}>
-                                    {table}
-                                </Text>
-                                {selectedTableFilter === table && (
-                                    <Ionicons name="checkmark" size={18} color="white" />
-                                )}
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowTableFilterPicker(false)}>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Filter by Table</Text>
+                        </View>
+                        <ScrollView style={styles.bottomSheetScroll}>
+                            {tableFilters.map((table) => (
+                                <TouchableOpacity
+                                    key={table}
+                                    style={[
+                                        styles.bottomSheetOption,
+                                        selectedTableFilter === table && styles.bottomSheetOptionSelected
+                                    ]}
+                                    onPress={() => {
+                                        setSelectedTableFilter(table);
+                                        setShowTableFilterPicker(false);
+                                    }}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                        <Ionicons name="grid-outline" size={20} color={theme.colors.textSecondary} />
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            selectedTableFilter === table && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {table}
+                                        </Text>
+                                    </View>
+                                    {selectedTableFilter === table && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
                 </Pressable>
             </Modal>
 
-            {/* Download File Modal */}
+            {/* Download File Bottom Sheet */}
             <Modal
                 visible={showDownloadModal}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowDownloadModal(false)}
             >
-                <Pressable 
-                    style={styles.modalOverlay} 
+                <Pressable
+                    style={styles.bottomSheetOverlay}
                     onPress={() => setShowDownloadModal(false)}
                 >
-                    <Pressable style={styles.downloadModalContent} onPress={(e) => e.stopPropagation()}>
-                        <Text style={styles.downloadModalTitle}>Download file</Text>
-
-                        {/* Name Field */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Name</Text>
-                            <TextInput 
-                                style={styles.input}
-                                value={downloadFileName}
-                                onChangeText={setDownloadFileName}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
+                    <Pressable style={styles.largeBottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Text style={styles.bottomSheetTitle}>Download file</Text>
+                                <TouchableOpacity onPress={() => setShowDownloadModal(false)}>
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
                         </View>
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            {/* Name Field */}
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Name</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={downloadFileName}
+                                    onChangeText={setDownloadFileName}
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                />
+                            </View>
 
-                        {/* Recent Section */}
-                        <View style={styles.downloadSection}>
-                            <Text style={styles.downloadSectionTitle}>Recent</Text>
-                            <TouchableOpacity 
-                                style={[styles.locationOption, styles.locationOptionSelected]}
-                                onPress={() => setSelectedLocation('Private folder')}
-                            >
-                                <Ionicons name="folder" size={20} color={theme.colors.secondary} />
-                                <Text style={styles.locationOptionText}>Private folder</Text>
-                            </TouchableOpacity>
-                        </View>
+                            {/* Recent Section */}
+                            <View style={styles.downloadSection}>
+                                <Text style={styles.downloadSectionTitle}>Recent</Text>
+                                <TouchableOpacity
+                                    style={[styles.locationOption, styles.locationOptionSelected]}
+                                    onPress={() => setSelectedLocation('Private folder')}
+                                >
+                                    <Ionicons name="folder" size={20} color={theme.colors.secondary} />
+                                    <Text style={styles.locationOptionText}>Private folder</Text>
+                                </TouchableOpacity>
+                            </View>
 
-                        {/* Location Section */}
-                        <View style={styles.downloadSection}>
-                            <Text style={styles.downloadSectionTitle}>Location</Text>
-                            <TouchableOpacity 
-                                style={styles.locationOption}
-                                onPress={() => setSelectedLocation('Downloads')}
-                            >
-                                <Ionicons name="folder" size={20} color={theme.colors.secondary} />
-                                <Text style={styles.locationOptionText}>Downloads</Text>
-                                <Ionicons name="chevron-up" size={16} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={[styles.locationOption, selectedLocation === 'Private folder' && styles.locationOptionSelected]}
-                                onPress={() => setSelectedLocation('Private folder')}
-                            >
-                                <Ionicons name="folder" size={20} color={theme.colors.secondary} />
-                                <Text style={styles.locationOptionText}>Private folder</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={styles.locationOption}
-                                onPress={() => setSelectedLocation('Device downloads')}
-                            >
-                                <Ionicons name="folder" size={20} color={theme.colors.secondary} />
-                                <Text style={styles.locationOptionText}>Device downloads</Text>
-                                <Ionicons name="star" size={16} color="#ec4899" />
-                            </TouchableOpacity>
-                        </View>
+                            {/* Location Section */}
+                            <View style={styles.downloadSection}>
+                                <Text style={styles.downloadSectionTitle}>Location</Text>
+                                <TouchableOpacity
+                                    style={styles.locationOption}
+                                    onPress={() => setSelectedLocation('Downloads')}
+                                >
+                                    <Ionicons name="folder" size={20} color={theme.colors.secondary} />
+                                    <Text style={styles.locationOptionText}>Downloads</Text>
+                                    <Ionicons name="chevron-up" size={16} color={theme.colors.textSecondary} style={{ marginLeft: 'auto' }} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.locationOption, selectedLocation === 'Private folder' && styles.locationOptionSelected]}
+                                    onPress={() => setSelectedLocation('Private folder')}
+                                >
+                                    <Ionicons name="folder" size={20} color={theme.colors.secondary} />
+                                    <Text style={styles.locationOptionText}>Private folder</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.locationOption}
+                                    onPress={() => setSelectedLocation('Device downloads')}
+                                >
+                                    <Ionicons name="folder" size={20} color={theme.colors.secondary} />
+                                    <Text style={styles.locationOptionText}>Device downloads</Text>
+                                    <Ionicons name="star" size={16} color="#ec4899" style={{ marginLeft: 'auto' }} />
+                                </TouchableOpacity>
+                            </View>
 
-                        {/* Download Button */}
-                        <TouchableOpacity 
-                            style={styles.downloadButton}
-                            onPress={() => {
-                                // TODO: Handle download
-                                setShowDownloadModal(false);
-                            }}
-                        >
-                            <Text style={styles.downloadButtonText}>Download</Text>
-                        </TouchableOpacity>
+                            {/* Download Button */}
+                            <TouchableOpacity
+                                style={styles.downloadButton}
+                                onPress={() => {
+                                    // TODO: Handle download
+                                    setShowDownloadModal(false);
+                                }}
+                            >
+                                <Text style={styles.downloadButtonText}>Download</Text>
+                            </TouchableOpacity>
+                        </ScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
 
-            {/* Add User Modal */}
+            {/* Add User Bottom Sheet */}
             <Modal
                 visible={showAddUserModal}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowAddUserModal(false)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowAddUserModal(false)}>
-                    <Pressable style={styles.addUserModalContent} onPress={(e) => e.stopPropagation()}>
-                        {/* Close Button */}
-                        <TouchableOpacity 
-                            style={styles.closeModalBtn}
-                            onPress={() => setShowAddUserModal(false)}
-                        >
-                            <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
-                        </TouchableOpacity>
-
-                        <Text style={styles.modalTitle}>Add New User</Text>
-                        <Text style={styles.modalSubtitle}>Create a user directly or send an invitation email</Text>
-
-                        {/* Modal Tabs */}
-                        <View style={styles.modalTabs}>
-                            <TouchableOpacity 
-                                style={[styles.modalTab, activeTab === 'create' && styles.modalTabActive]}
-                                onPress={() => setActiveTab('create')}
-                            >
-                                <Text style={[styles.modalTabText, activeTab === 'create' && styles.modalTabTextActive]}>Create User</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={[styles.modalTab, activeTab === 'invite' && styles.modalTabActive]}
-                                onPress={() => setActiveTab('invite')}
-                            >
-                                <Text style={[styles.modalTabText, activeTab === 'invite' && styles.modalTabTextActive]}>Send Invitation</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Form Fields */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Full Name</Text>
-                            <TextInput 
-                                style={styles.input}
-                                placeholder="John Doe"
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Email</Text>
-                            <TextInput 
-                                style={styles.input}
-                                placeholder="user@example.com"
-                                placeholderTextColor={theme.colors.textSecondary}
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                            />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Password</Text>
-                            <TextInput 
-                                style={styles.input}
-                                placeholder="•••••••"
-                                placeholderTextColor={theme.colors.textSecondary}
-                                secureTextEntry
-                            />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Role</Text>
-                            <TouchableOpacity 
-                                style={styles.selectInput}
-                                onPress={() => setShowNewUserRolePicker(!showNewUserRolePicker)}
-                            >
-                                <Text style={styles.selectInputText}>{newUserRole}</Text>
-                                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Role Picker Dropdown (Inside Modal) */}
-                        {showNewUserRolePicker && (
-                            <View style={styles.inlineRolePicker}>
-                                {roles.map((role) => (
-                                    <TouchableOpacity
-                                        key={role}
-                                        style={[
-                                            styles.inlineRoleOption,
-                                            newUserRole === role && styles.inlineRoleOptionSelected
-                                        ]}
-                                        onPress={() => {
-                                            setNewUserRole(role);
-                                            setShowNewUserRolePicker(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.inlineRoleOptionText,
-                                            newUserRole === role && styles.inlineRoleOptionTextSelected
-                                        ]}>{role}</Text>
-                                        {newUserRole === role && (
-                                            <Ionicons name="checkmark" size={16} color={theme.colors.secondary} />
-                                        )}
+                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowAddUserModal(false)}>
+                    <Pressable style={styles.largeBottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            <View style={styles.bottomSheetHeader}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text style={styles.bottomSheetTitle}>Add New User</Text>
+                                    <TouchableOpacity onPress={() => setShowAddUserModal(false)}>
+                                        <Ionicons name="close" size={24} color={theme.colors.text} />
                                     </TouchableOpacity>
-                                ))}
+                                </View>
+                                <Text style={[styles.modalSubtitle, { textAlign: 'left', marginBottom: 10 }]}>Create a user directly or send an invitation email</Text>
                             </View>
-                        )}
 
-                        <TouchableOpacity style={styles.createButton}>
-                            <Text style={styles.createButtonText}>Create User</Text>
-                        </TouchableOpacity>
+                            {/* Modal Tabs */}
+                            <View style={styles.modalTabs}>
+                                <TouchableOpacity
+                                    style={[styles.modalTab, activeTab === 'create' && styles.modalTabActive]}
+                                    onPress={() => setActiveTab('create')}
+                                >
+                                    <Text style={[styles.modalTabText, activeTab === 'create' && styles.modalTabTextActive]}>Create User</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.modalTab, activeTab === 'invite' && styles.modalTabActive]}
+                                    onPress={() => setActiveTab('invite')}
+                                >
+                                    <Text style={[styles.modalTabText, activeTab === 'invite' && styles.modalTabTextActive]}>Send Invitation</Text>
+                                </TouchableOpacity>
+                            </View>
 
+                            {/* Form Fields */}
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Full Name</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="John Doe"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Email</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="user@example.com"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    keyboardType="email-address"
+                                    autoCapitalize="none"
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Password</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="•••••••"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    secureTextEntry
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Role</Text>
+                                <TouchableOpacity
+                                    style={styles.selectInput}
+                                    onPress={() => setShowNewUserRolePicker(!showNewUserRolePicker)}
+                                >
+                                    <Text style={styles.selectInputText}>{newUserRole}</Text>
+                                    <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Role Picker Dropdown (Inside Modal) */}
+                            {showNewUserRolePicker && (
+                                <View style={styles.inlineRolePicker}>
+                                    {roles.map((role) => (
+                                        <TouchableOpacity
+                                            key={role}
+                                            style={[
+                                                styles.inlineRoleOption,
+                                                newUserRole === role && styles.inlineRoleOptionSelected
+                                            ]}
+                                            onPress={() => {
+                                                setNewUserRole(role);
+                                                setShowNewUserRolePicker(false);
+                                            }}
+                                        >
+                                            <Text style={[
+                                                styles.inlineRoleOptionText,
+                                                newUserRole === role && styles.inlineRoleOptionTextSelected
+                                            ]}>{role}</Text>
+                                            {newUserRole === role && (
+                                                <Ionicons name="checkmark" size={16} color={theme.colors.secondary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
+
+                            <TouchableOpacity style={styles.createButton}>
+                                <Text style={styles.createButtonText}>Create User</Text>
+                            </TouchableOpacity>
+                        </ScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
-            {/* Delete User Modal */}
+            {/* Delete User Bottom Sheet */}
             <Modal
                 visible={showDeleteModal}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowDeleteModal(false)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowDeleteModal(false)}>
-                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
-                        <Text style={styles.deleteModalTitle}>Delete User</Text>
-                        <Text style={styles.deleteModalMessage}>
-                            Are you sure you want to delete {userToDelete?.name}? This action cannot be undone.
-                        </Text>
-                        
-                        <View style={styles.deleteModalActions}>
-                            <TouchableOpacity 
-                                style={styles.deleteButton}
-                                onPress={handleDeleteUser}
-                            >
-                                <Text style={styles.deleteButtonText}>Delete</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={styles.cancelButton}
-                                onPress={() => setShowDeleteModal(false)}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
+                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowDeleteModal(false)}>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Delete User</Text>
+                        </View>
+
+                        <View style={{ paddingVertical: 10 }}>
+                            <Text style={styles.deleteModalMessage}>
+                                Are you sure you want to delete {userToDelete?.name}? This action cannot be undone.
+                            </Text>
+
+                            <View style={styles.deleteModalActions}>
+                                <TouchableOpacity
+                                    style={styles.deleteButton}
+                                    onPress={handleDeleteUser}
+                                >
+                                    <Text style={styles.deleteButtonText}>Delete</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.cancelButton}
+                                    onPress={() => setShowDeleteModal(false)}
+                                >
+                                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     </Pressable>
                 </Pressable>
@@ -1599,30 +1656,29 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderRadius: 8,
         alignItems: 'center',
-        marginTop: 8,
+        marginTop: 16,
     },
     createButtonText: {
         color: 'white',
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: '600',
     },
     inlineRolePicker: {
-        backgroundColor: 'white',
         borderWidth: 1,
         borderColor: theme.colors.border,
         borderRadius: 8,
-        marginTop: -8,
+        marginTop: 8,
         marginBottom: 16,
-        maxHeight: 200,
+        overflow: 'hidden',
     },
     inlineRoleOption: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingVertical: 10,
-        paddingHorizontal: 12,
+        padding: 12,
+        backgroundColor: 'white',
         borderBottomWidth: 1,
-        borderBottomColor: '#f1f5f9',
+        borderBottomColor: theme.colors.border,
     },
     inlineRoleOptionSelected: {
         backgroundColor: '#f0f9ff',
@@ -1635,6 +1691,66 @@ const styles = StyleSheet.create({
         color: '#2563eb',
         fontWeight: '500',
     },
+    // Bottom Sheet Styles
+    bottomSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    bottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '50%',
+        width: '100%',
+    },
+    largeBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '90%',
+        width: '100%',
+    },
+    bottomSheetHeader: {
+        marginBottom: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        paddingBottom: theme.spacing.sm,
+    },
+    bottomSheetTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    bottomSheetScroll: {
+        // No specific styles needed for now
+    },
+    bottomSheetOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        gap: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    bottomSheetOptionText: {
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    bottomSheetOptionTextSelected: {
+        color: theme.colors.secondary,
+        fontWeight: '600',
+    },
+    bottomSheetOptionSelected: {
+        backgroundColor: theme.colors.secondary + '10',
+    },
+
     // Delete Modal Styles
     deleteModalContent: {
         backgroundColor: 'white',

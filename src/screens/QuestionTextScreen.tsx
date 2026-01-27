@@ -61,33 +61,46 @@ export const QuestionTextScreen = ({ navigation, route }: any) => {
                             <Text style={styles.dropdownText}>{staffType}</Text>
                             <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
-                        {showStaffTypePicker && (
-                            <View style={styles.dropdown}>
-                                {staffTypes.map((type) => (
-                                    <TouchableOpacity
-                                        key={type}
-                                        style={[
-                                            styles.dropdownOption,
-                                            staffType === type && styles.dropdownOptionSelected
-                                        ]}
-                                        onPress={() => {
-                                            setStaffType(type);
-                                            setShowStaffTypePicker(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.dropdownOptionText,
-                                            staffType === type && styles.dropdownOptionTextSelected
-                                        ]}>
-                                            {type}
-                                        </Text>
-                                        {staffType === type && (
-                                            <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        )}
+                        {/* Staff Type Bottom Sheet */}
+                        <Modal
+                            visible={showStaffTypePicker}
+                            transparent={true}
+                            animationType="slide"
+                            onRequestClose={() => setShowStaffTypePicker(false)}
+                        >
+                            <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowStaffTypePicker(false)}>
+                                <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                                    <View style={styles.bottomSheetHeader}>
+                                        <Text style={styles.bottomSheetTitle}>Select Staff Type</Text>
+                                    </View>
+                                    <ScrollView style={styles.bottomSheetScroll}>
+                                        {staffTypes.map((type) => (
+                                            <TouchableOpacity
+                                                key={type}
+                                                style={[
+                                                    styles.bottomSheetOption,
+                                                    staffType === type && styles.bottomSheetOptionSelected
+                                                ]}
+                                                onPress={() => {
+                                                    setStaffType(type);
+                                                    setShowStaffTypePicker(false);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.bottomSheetOptionText,
+                                                    staffType === type && styles.bottomSheetOptionTextSelected
+                                                ]}>
+                                                    {type}
+                                                </Text>
+                                                {staffType === type && (
+                                                    <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                                )}
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </Pressable>
+                            </Pressable>
+                        </Modal>
                     </View>
 
                     <View style={styles.formField}>
@@ -226,41 +239,54 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
     },
-    dropdown: {
-        position: 'absolute',
-        top: '100%',
-        left: 0,
-        right: 0,
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        marginTop: theme.spacing.xs,
-        zIndex: 1000,
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 1000,
+    // Bottom Sheet Styles
+    bottomSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
     },
-    dropdownOption: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+    bottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
         paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
+        maxHeight: '50%',
+        width: '100%',
+    },
+    bottomSheetHeader: {
+        marginBottom: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        paddingBottom: theme.spacing.sm,
+    },
+    bottomSheetTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    bottomSheetScroll: {
+        // No specific styles needed for now
+    },
+    bottomSheetOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        gap: theme.spacing.md,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
-    dropdownOptionSelected: {
-        backgroundColor: '#fff7ed',
-    },
-    dropdownOptionText: {
-        fontSize: 14,
+    bottomSheetOptionText: {
+        fontSize: 16,
         color: theme.colors.text,
     },
-    dropdownOptionTextSelected: {
-        color: theme.colors.accent,
+    bottomSheetOptionTextSelected: {
+        color: theme.colors.secondary,
         fontWeight: '600',
+    },
+    bottomSheetOptionSelected: {
+        backgroundColor: theme.colors.secondary + '10',
     },
     addButton: {
         backgroundColor: theme.colors.secondary,

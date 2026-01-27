@@ -325,10 +325,10 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
                                 return (
                                     <View key={division.id} style={styles.divisionItem}>
                                         <View style={styles.divisionLeft}>
-                                            <Ionicons 
-                                                name="people-outline" 
-                                                size={20} 
-                                                color={theme.colors.textSecondary} 
+                                            <Ionicons
+                                                name="people-outline"
+                                                size={20}
+                                                color={theme.colors.textSecondary}
                                             />
                                             <Text style={styles.divisionName}>{division.name}</Text>
                                         </View>
