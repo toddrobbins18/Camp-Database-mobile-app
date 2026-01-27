@@ -234,20 +234,20 @@ export const CamperScreen = ({ navigation }: any) => {
                         <Text style={styles.headerSubtitle}>Manage and view all campers in your program</Text>
                     </View>
                     <View style={styles.actionButtonsContainer}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={[styles.actionButton, scannerMode && styles.scannerActiveButton]}
                             onPress={toggleScannerMode}
                         >
-                            <Ionicons 
-                                name={scannerMode ? "radio" : "scan-outline"} 
-                                size={18} 
-                                color={scannerMode ? theme.colors.surface : theme.colors.text} 
+                            <Ionicons
+                                name={scannerMode ? "radio" : "scan-outline"}
+                                size={18}
+                                color={scannerMode ? theme.colors.surface : theme.colors.text}
                             />
                             <Text style={[styles.actionButtonText, scannerMode && styles.scannerActiveButtonText]}>
                                 {scannerMode ? 'Scanner Active' : 'Scan Wristband'}
                             </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.actionButton}
                             onPress={() => setShowAssignWristbandsModal(true)}
                         >
@@ -258,7 +258,7 @@ export const CamperScreen = ({ navigation }: any) => {
                             <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} />
                             <Text style={styles.actionButtonText}>Upload CSV</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.addChildButton}
                             onPress={() => setShowAddChildModal(true)}
                         >
@@ -320,7 +320,7 @@ export const CamperScreen = ({ navigation }: any) => {
 
                 <View style={styles.filterRow2}>
                     <View style={styles.divisionFilterContainer}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.divisionFilter}
                             onPress={() => setShowDivisionDropdown(!showDivisionDropdown)}
                             onLayout={(event) => {
@@ -332,7 +332,7 @@ export const CamperScreen = ({ navigation }: any) => {
                             <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.sortButton}
                         onPress={() => setSortBy(sortBy === 'division' ? 'name' : 'division')}
                     >
@@ -347,53 +347,55 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showDivisionDropdown}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowDivisionDropdown(false)}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setShowDivisionDropdown(false)}
                     >
-                        <View 
-                            style={[
-                                styles.dropdownModalContainer,
-                                { 
-                                    marginTop: divisionButtonLayout.y + divisionButtonLayout.height + 4,
-                                    marginLeft: divisionButtonLayout.x,
-                                    width: divisionButtonLayout.width || '45%'
-                                }
-                            ]}
-                            onStartShouldSetResponder={() => true}
+                        <Pressable
+                            style={styles.bottomSheet}
+                            onPress={(e) => e.stopPropagation()}
                         >
-                            <View style={styles.dropdownModal}>
-                                <ScrollView 
-                                    style={styles.dropdownScroll}
-                                    nestedScrollEnabled={true}
-                                    showsVerticalScrollIndicator={true}
-                                >
-                                    {DIVISIONS.map((division) => (
-                                        <TouchableOpacity
-                                            key={division}
-                                            style={[
-                                                styles.dropdownItem,
-                                                selectedDivision === division && styles.dropdownItemSelected
-                                            ]}
-                                            onPress={() => {
-                                                setSelectedDivision(division);
-                                                setShowDivisionDropdown(false);
-                                            }}
-                                        >
-                                            <Text style={[
-                                                styles.dropdownItemText,
-                                                selectedDivision === division && styles.dropdownItemTextSelected
-                                            ]}>
-                                                {division}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select Division</Text>
                             </View>
-                        </View>
+                            <ScrollView
+                                style={styles.bottomSheetScroll}
+                                nestedScrollEnabled={true}
+                                showsVerticalScrollIndicator={true}
+                            >
+                                {DIVISIONS.map((division) => (
+                                    <TouchableOpacity
+                                        key={division}
+                                        style={[
+                                            styles.bottomSheetOption,
+                                            selectedDivision === division && styles.bottomSheetOptionSelected
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedDivision(division);
+                                            setShowDivisionDropdown(false);
+                                        }}
+                                    >
+                                        <Ionicons
+                                            name="people-outline"
+                                            size={24}
+                                            color={selectedDivision === division ? theme.colors.secondary : theme.colors.textSecondary}
+                                        />
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            selectedDivision === division && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {division}
+                                        </Text>
+                                        {selectedDivision === division && (
+                                            <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </Pressable>
                     </Pressable>
                 </Modal>
 
@@ -401,15 +403,15 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showAssignWristbandsModal}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowAssignWristbandsModal(false)}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setShowAssignWristbandsModal(false)}
                     >
-                        <Pressable 
-                            style={styles.assignWristbandsModal}
+                        <Pressable
+                            style={styles.largeBottomSheet}
                             onPress={(e) => e.stopPropagation()}
                         >
                             {/* Modal Header */}
@@ -473,7 +475,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     onChangeText={setSearchCamperName}
                                                     onSubmitEditing={() => {
                                                         // TODO: Implement search
-                                                        const results = mockCampers.filter(c => 
+                                                        const results = mockCampers.filter(c =>
                                                             c.name.toLowerCase().includes(searchCamperName.toLowerCase())
                                                         ).slice(0, 10);
                                                         setSearchResults(results);
@@ -482,7 +484,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 <TouchableOpacity
                                                     style={styles.searchButton}
                                                     onPress={() => {
-                                                        const results = mockCampers.filter(c => 
+                                                        const results = mockCampers.filter(c =>
                                                             c.name.toLowerCase().includes(searchCamperName.toLowerCase())
                                                         ).slice(0, 10);
                                                         setSearchResults(results);
@@ -598,18 +600,18 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showAddChildModal}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowAddChildModal(false)}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setShowAddChildModal(false)}
                     >
-                        <Pressable 
-                            style={styles.addChildModal}
+                        <Pressable
+                            style={styles.largeBottomSheet}
                             onPress={(e) => e.stopPropagation()}
                         >
-                            <ScrollView 
+                            <ScrollView
                                 style={styles.addChildModalScroll}
                                 showsVerticalScrollIndicator={true}
                                 nestedScrollEnabled={true}
@@ -672,7 +674,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                         </View>
                                         <View style={styles.formFieldHalf}>
                                             <Text style={styles.formLabel}>Gender</Text>
-                                            <TouchableOpacity 
+                                            <TouchableOpacity
                                                 ref={addGenderButtonRef}
                                                 style={styles.formSelect}
                                                 onLayout={(event) => {
@@ -706,7 +708,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                     <View style={styles.formRow}>
                                         <View style={styles.formFieldHalf}>
                                             <Text style={styles.formLabel}>Division</Text>
-                                            <TouchableOpacity 
+                                            <TouchableOpacity
                                                 ref={addDivisionButtonRef}
                                                 style={styles.formSelect}
                                                 onLayout={(event) => {
@@ -775,7 +777,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                     <View style={styles.formRow}>
                                         <View style={styles.formFieldFull}>
                                             <Text style={styles.formLabel}>Assigned Leader</Text>
-                                            <TouchableOpacity 
+                                            <TouchableOpacity
                                                 ref={addLeaderButtonRef}
                                                 style={styles.formSelect}
                                                 onLayout={(event) => {
@@ -945,73 +947,50 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showAddGenderDropdown}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowAddGenderDropdown(false)}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setShowAddGenderDropdown(false)}
                     >
-                        <View 
-                            style={[
-                                styles.dropdownModalContainer,
-                                {
-                                    top: addGenderButtonLayout.y + addGenderButtonLayout.height + 4,
-                                    left: addGenderButtonLayout.x,
-                                    width: addGenderButtonLayout.width > 0 ? addGenderButtonLayout.width : (isSmallScreen ? '45%' : 200),
-                                }
-                            ]}
-                            onStartShouldSetResponder={() => true}
+                        <Pressable
+                            style={styles.bottomSheet}
+                            onPress={(e) => e.stopPropagation()}
                         >
-                            <View style={styles.dropdownModal}>
-                                <ScrollView 
-                                    style={styles.dropdownScroll}
-                                    nestedScrollEnabled={true}
-                                    showsVerticalScrollIndicator={false}
-                                >
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.dropdownItem,
-                                            formData.gender === 'Male' && styles.genderDropdownItemSelected
-                                        ]}
-                                        onPress={() => {
-                                            setFormData({ ...formData, gender: 'Male' });
-                                            setShowAddGenderDropdown(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.dropdownItemText,
-                                            formData.gender === 'Male' && styles.genderDropdownItemTextSelected
-                                        ]}>
-                                            Male
-                                        </Text>
-                                        {formData.gender === 'Male' && (
-                                            <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
-                                        )}
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.dropdownItem,
-                                            formData.gender === 'Female' && styles.genderDropdownItemSelected
-                                        ]}
-                                        onPress={() => {
-                                            setFormData({ ...formData, gender: 'Female' });
-                                            setShowAddGenderDropdown(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.dropdownItemText,
-                                            formData.gender === 'Female' && styles.genderDropdownItemTextSelected
-                                        ]}>
-                                            Female
-                                        </Text>
-                                        {formData.gender === 'Female' && (
-                                            <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
-                                        )}
-                                    </TouchableOpacity>
-                                </ScrollView>
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select Gender</Text>
                             </View>
-                        </View>
+                            <ScrollView
+                                style={styles.bottomSheetScroll}
+                                nestedScrollEnabled={true}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                {['Male', 'Female'].map((gender) => (
+                                    <TouchableOpacity
+                                        key={gender}
+                                        style={[
+                                            styles.bottomSheetOption,
+                                            formData.gender === gender && styles.bottomSheetOptionSelected
+                                        ]}
+                                        onPress={() => {
+                                            setFormData({ ...formData, gender: gender });
+                                            setShowAddGenderDropdown(false);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            formData.gender === gender && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {gender}
+                                        </Text>
+                                        {formData.gender === gender && (
+                                            <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </Pressable>
                     </Pressable>
                 </Modal>
 
@@ -1019,56 +998,50 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showAddDivisionDropdown}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowAddDivisionDropdown(false)}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setShowAddDivisionDropdown(false)}
                     >
-                        <View 
-                            style={[
-                                styles.dropdownModalContainer,
-                                {
-                                    top: addDivisionButtonLayout.y + addDivisionButtonLayout.height + 4,
-                                    left: addDivisionButtonLayout.x,
-                                    width: addDivisionButtonLayout.width > 0 ? addDivisionButtonLayout.width : (isSmallScreen ? '45%' : 200),
-                                }
-                            ]}
-                            onStartShouldSetResponder={() => true}
+                        <Pressable
+                            style={styles.bottomSheet}
+                            onPress={(e) => e.stopPropagation()}
                         >
-                            <View style={styles.dropdownModal}>
-                                <ScrollView 
-                                    style={styles.dropdownScroll}
-                                    nestedScrollEnabled={true}
-                                    showsVerticalScrollIndicator={true}
-                                >
-                                    {DIVISIONS.filter(div => div !== 'All Divisions').map((division) => (
-                                        <TouchableOpacity
-                                            key={division}
-                                            style={[
-                                                styles.dropdownItem,
-                                                formData.division === division && styles.genderDropdownItemSelected
-                                            ]}
-                                            onPress={() => {
-                                                setFormData({ ...formData, division: division });
-                                                setShowAddDivisionDropdown(false);
-                                            }}
-                                        >
-                                            <Text style={[
-                                                styles.dropdownItemText,
-                                                formData.division === division && styles.genderDropdownItemTextSelected
-                                            ]}>
-                                                {division}
-                                            </Text>
-                                            {formData.division === division && (
-                                                <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
-                                            )}
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select Division</Text>
                             </View>
-                        </View>
+                            <ScrollView
+                                style={styles.bottomSheetScroll}
+                                nestedScrollEnabled={true}
+                                showsVerticalScrollIndicator={true}
+                            >
+                                {DIVISIONS.filter(div => div !== 'All Divisions').map((division) => (
+                                    <TouchableOpacity
+                                        key={division}
+                                        style={[
+                                            styles.bottomSheetOption,
+                                            formData.division === division && styles.bottomSheetOptionSelected
+                                        ]}
+                                        onPress={() => {
+                                            setFormData({ ...formData, division: division });
+                                            setShowAddDivisionDropdown(false);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            formData.division === division && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {division}
+                                        </Text>
+                                        {formData.division === division && (
+                                            <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </Pressable>
                     </Pressable>
                 </Modal>
 
@@ -1076,68 +1049,62 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showAddLeaderDropdown}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowAddLeaderDropdown(false)}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setShowAddLeaderDropdown(false)}
                     >
-                        <View 
-                            style={[
-                                styles.dropdownModalContainer,
-                                {
-                                    top: addLeaderButtonLayout.y + addLeaderButtonLayout.height + 4,
-                                    left: addLeaderButtonLayout.x,
-                                    width: addLeaderButtonLayout.width > 0 ? addLeaderButtonLayout.width : (isSmallScreen ? '90%' : 400),
-                                }
-                            ]}
-                            onStartShouldSetResponder={() => true}
+                        <Pressable
+                            style={styles.bottomSheet}
+                            onPress={(e) => e.stopPropagation()}
                         >
-                            <View style={styles.dropdownModal}>
-                                <ScrollView 
-                                    style={styles.dropdownScroll}
-                                    nestedScrollEnabled={true}
-                                    showsVerticalScrollIndicator={true}
-                                >
-                                    {MOCK_LEADERS.map((leader) => {
-                                        const leaderDisplay = `${leader.name} - ${leader.role}`;
-                                        const isSelected = formData.assignedLeader === leaderDisplay;
-                                        return (
-                                            <TouchableOpacity
-                                                key={leader.name}
-                                                style={[
-                                                    styles.dropdownItem,
-                                                    isSelected && styles.genderDropdownItemSelected
-                                                ]}
-                                                onPress={() => {
-                                                    setFormData({ ...formData, assignedLeader: leaderDisplay });
-                                                    setShowAddLeaderDropdown(false);
-                                                }}
-                                            >
-                                                <View style={styles.leaderItemContent}>
-                                                    <Text style={[
-                                                        styles.dropdownItemText,
-                                                        isSelected && styles.genderDropdownItemTextSelected
-                                                    ]}>
-                                                        {leader.name}
-                                                    </Text>
-                                                    <Text style={[
-                                                        styles.leaderRoleText,
-                                                        isSelected && styles.leaderRoleTextSelected
-                                                    ]}>
-                                                        {leader.role}
-                                                    </Text>
-                                                </View>
-                                                {isSelected && (
-                                                    <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
-                                                )}
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </ScrollView>
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select Assigned Leader</Text>
                             </View>
-                        </View>
+                            <ScrollView
+                                style={styles.bottomSheetScroll}
+                                nestedScrollEnabled={true}
+                                showsVerticalScrollIndicator={true}
+                            >
+                                {MOCK_LEADERS.map((leader) => {
+                                    const leaderDisplay = `${leader.name} - ${leader.role}`;
+                                    const isSelected = formData.assignedLeader === leaderDisplay;
+                                    return (
+                                        <TouchableOpacity
+                                            key={leader.name}
+                                            style={[
+                                                styles.bottomSheetOption,
+                                                isSelected && styles.bottomSheetOptionSelected
+                                            ]}
+                                            onPress={() => {
+                                                setFormData({ ...formData, assignedLeader: leaderDisplay });
+                                                setShowAddLeaderDropdown(false);
+                                            }}
+                                        >
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={[
+                                                    styles.bottomSheetOptionText,
+                                                    isSelected && styles.bottomSheetOptionTextSelected
+                                                ]}>
+                                                    {leader.name}
+                                                </Text>
+                                                <Text style={[
+                                                    styles.leaderRoleText,
+                                                    isSelected && styles.leaderRoleTextSelected
+                                                ]}>
+                                                    {leader.role}
+                                                </Text>
+                                            </View>
+                                            {isSelected && (
+                                                <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+                        </Pressable>
                     </Pressable>
                 </Modal>
 
@@ -1151,14 +1118,14 @@ export const CamperScreen = ({ navigation }: any) => {
                         setCamperToDelete(null);
                     }}
                 >
-                    <Pressable 
+                    <Pressable
                         style={styles.modalOverlay}
                         onPress={() => {
                             setShowDeleteModal(false);
                             setCamperToDelete(null);
                         }}
                     >
-                        <Pressable 
+                        <Pressable
                             style={styles.deleteModalContainer}
                             onPress={(e) => e.stopPropagation()}
                         >
@@ -1196,24 +1163,24 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showEditChildModal}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => {
                         setShowEditChildModal(false);
                         setCamperToEdit(null);
                     }}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => {
                             setShowEditChildModal(false);
                             setCamperToEdit(null);
                         }}
                     >
-                        <Pressable 
-                            style={styles.addChildModal}
+                        <Pressable
+                            style={styles.largeBottomSheet}
                             onPress={(e) => e.stopPropagation()}
                         >
-                            <ScrollView 
+                            <ScrollView
                                 style={styles.addChildModalScroll}
                                 showsVerticalScrollIndicator={true}
                                 nestedScrollEnabled={true}
@@ -1310,7 +1277,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                     <View style={styles.formRow}>
                                         <View style={styles.formFieldHalf}>
                                             <Text style={styles.formLabel}>Gender</Text>
-                                            <TouchableOpacity 
+                                            <TouchableOpacity
                                                 ref={genderButtonRef}
                                                 style={styles.formSelect}
                                                 onLayout={(event) => {
@@ -1340,7 +1307,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                         </View>
                                         <View style={styles.formFieldHalf}>
                                             <Text style={styles.formLabel}>Division</Text>
-                                            <TouchableOpacity 
+                                            <TouchableOpacity
                                                 ref={divisionButtonRef}
                                                 style={styles.formSelect}
                                                 onLayout={(event) => {
@@ -1374,7 +1341,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                     <View style={styles.formRow}>
                                         <View style={styles.formFieldHalf}>
                                             <Text style={styles.formLabel}>Bunk</Text>
-                                            <TouchableOpacity 
+                                            <TouchableOpacity
                                                 ref={bunkButtonRef}
                                                 style={styles.formSelect}
                                                 onLayout={(event) => {
@@ -1444,7 +1411,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                     <View style={styles.formRow}>
                                         <View style={styles.formFieldFull}>
                                             <Text style={styles.formLabel}>Assigned Leader</Text>
-                                            <TouchableOpacity 
+                                            <TouchableOpacity
                                                 ref={leaderButtonRef}
                                                 style={styles.formSelect}
                                                 onLayout={(event) => {
@@ -1657,8 +1624,8 @@ export const CamperScreen = ({ navigation }: any) => {
                                                         const newDate = new Date(selectedDate);
                                                         newDate.setDate(day);
                                                         setSelectedDate(newDate);
-                                                        setEditFormData({ 
-                                                            ...editFormData, 
+                                                        setEditFormData({
+                                                            ...editFormData,
                                                             dateOfBirth: newDate.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
                                                         });
                                                         setIsDatePickerVisible(false);
@@ -1686,73 +1653,50 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showEditGenderDropdown}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowEditGenderDropdown(false)}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setShowEditGenderDropdown(false)}
                     >
-                        <View 
-                            style={[
-                                styles.dropdownModalContainer,
-                                {
-                                    top: editGenderButtonLayout.y + editGenderButtonLayout.height + 4,
-                                    left: editGenderButtonLayout.x,
-                                    width: editGenderButtonLayout.width > 0 ? editGenderButtonLayout.width : (isSmallScreen ? '45%' : 200),
-                                }
-                            ]}
-                            onStartShouldSetResponder={() => true}
+                        <Pressable
+                            style={styles.bottomSheet}
+                            onPress={(e) => e.stopPropagation()}
                         >
-                            <View style={styles.dropdownModal}>
-                                <ScrollView 
-                                    style={styles.dropdownScroll}
-                                    nestedScrollEnabled={true}
-                                    showsVerticalScrollIndicator={false}
-                                >
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.dropdownItem,
-                                            editFormData.gender === 'Male' && styles.genderDropdownItemSelected
-                                        ]}
-                                        onPress={() => {
-                                            setEditFormData({ ...editFormData, gender: 'Male' });
-                                            setShowEditGenderDropdown(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.dropdownItemText,
-                                            editFormData.gender === 'Male' && styles.genderDropdownItemTextSelected
-                                        ]}>
-                                            Male
-                                        </Text>
-                                        {editFormData.gender === 'Male' && (
-                                            <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
-                                        )}
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.dropdownItem,
-                                            editFormData.gender === 'Female' && styles.genderDropdownItemSelected
-                                        ]}
-                                        onPress={() => {
-                                            setEditFormData({ ...editFormData, gender: 'Female' });
-                                            setShowEditGenderDropdown(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.dropdownItemText,
-                                            editFormData.gender === 'Female' && styles.genderDropdownItemTextSelected
-                                        ]}>
-                                            Female
-                                        </Text>
-                                        {editFormData.gender === 'Female' && (
-                                            <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
-                                        )}
-                                    </TouchableOpacity>
-                                </ScrollView>
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select Gender</Text>
                             </View>
-                        </View>
+                            <ScrollView
+                                style={styles.bottomSheetScroll}
+                                nestedScrollEnabled={true}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                {['Male', 'Female'].map((gender) => (
+                                    <TouchableOpacity
+                                        key={gender}
+                                        style={[
+                                            styles.bottomSheetOption,
+                                            editFormData.gender === gender && styles.bottomSheetOptionSelected
+                                        ]}
+                                        onPress={() => {
+                                            setEditFormData({ ...editFormData, gender: gender });
+                                            setShowEditGenderDropdown(false);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            editFormData.gender === gender && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {gender}
+                                        </Text>
+                                        {editFormData.gender === gender && (
+                                            <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </Pressable>
                     </Pressable>
                 </Modal>
 
@@ -1760,53 +1704,47 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showEditBunkDropdown}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowEditBunkDropdown(false)}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setShowEditBunkDropdown(false)}
                     >
-                        <View 
-                            style={[
-                                styles.dropdownModalContainer,
-                                {
-                                    top: editBunkButtonLayout.y + editBunkButtonLayout.height + 4,
-                                    left: editBunkButtonLayout.x,
-                                    width: editBunkButtonLayout.width > 0 ? editBunkButtonLayout.width : (isSmallScreen ? '45%' : 200),
-                                }
-                            ]}
-                            onStartShouldSetResponder={() => true}
+                        <Pressable
+                            style={styles.bottomSheet}
+                            onPress={(e) => e.stopPropagation()}
                         >
-                            <View style={styles.dropdownModal}>
-                                <ScrollView 
-                                    style={styles.dropdownScroll}
-                                    nestedScrollEnabled={true}
-                                    showsVerticalScrollIndicator={false}
-                                >
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.dropdownItem,
-                                            editFormData.bunk === 'No Bunk Assigned' && styles.genderDropdownItemSelected
-                                        ]}
-                                        onPress={() => {
-                                            setEditFormData({ ...editFormData, bunk: 'No Bunk Assigned' });
-                                            setShowEditBunkDropdown(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.dropdownItemText,
-                                            editFormData.bunk === 'No Bunk Assigned' && styles.genderDropdownItemTextSelected
-                                        ]}>
-                                            No Bunk Assigned
-                                        </Text>
-                                        {editFormData.bunk === 'No Bunk Assigned' && (
-                                            <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
-                                        )}
-                                    </TouchableOpacity>
-                                </ScrollView>
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select Bunk</Text>
                             </View>
-                        </View>
+                            <ScrollView
+                                style={styles.bottomSheetScroll}
+                                nestedScrollEnabled={true}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                <TouchableOpacity
+                                    style={[
+                                        styles.bottomSheetOption,
+                                        editFormData.bunk === 'No Bunk Assigned' && styles.bottomSheetOptionSelected
+                                    ]}
+                                    onPress={() => {
+                                        setEditFormData({ ...editFormData, bunk: 'No Bunk Assigned' });
+                                        setShowEditBunkDropdown(false);
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.bottomSheetOptionText,
+                                        editFormData.bunk === 'No Bunk Assigned' && styles.bottomSheetOptionTextSelected
+                                    ]}>
+                                        No Bunk Assigned
+                                    </Text>
+                                    {editFormData.bunk === 'No Bunk Assigned' && (
+                                        <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                    )}
+                                </TouchableOpacity>
+                            </ScrollView>
+                        </Pressable>
                     </Pressable>
                 </Modal>
 
@@ -1814,56 +1752,50 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showEditDivisionDropdown}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowEditDivisionDropdown(false)}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setShowEditDivisionDropdown(false)}
                     >
-                        <View 
-                            style={[
-                                styles.dropdownModalContainer,
-                                {
-                                    top: editDivisionButtonLayout.y + editDivisionButtonLayout.height + 4,
-                                    left: editDivisionButtonLayout.x,
-                                    width: editDivisionButtonLayout.width > 0 ? editDivisionButtonLayout.width : (isSmallScreen ? '45%' : 200),
-                                }
-                            ]}
-                            onStartShouldSetResponder={() => true}
+                        <Pressable
+                            style={styles.bottomSheet}
+                            onPress={(e) => e.stopPropagation()}
                         >
-                            <View style={styles.dropdownModal}>
-                                <ScrollView 
-                                    style={styles.dropdownScroll}
-                                    nestedScrollEnabled={true}
-                                    showsVerticalScrollIndicator={true}
-                                >
-                                    {DIVISIONS.filter(div => div !== 'All Divisions').map((division) => (
-                                        <TouchableOpacity
-                                            key={division}
-                                            style={[
-                                                styles.dropdownItem,
-                                                editFormData.division === division && styles.genderDropdownItemSelected
-                                            ]}
-                                            onPress={() => {
-                                                setEditFormData({ ...editFormData, division: division });
-                                                setShowEditDivisionDropdown(false);
-                                            }}
-                                        >
-                                            <Text style={[
-                                                styles.dropdownItemText,
-                                                editFormData.division === division && styles.genderDropdownItemTextSelected
-                                            ]}>
-                                                {division}
-                                            </Text>
-                                            {editFormData.division === division && (
-                                                <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
-                                            )}
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select Division</Text>
                             </View>
-                        </View>
+                            <ScrollView
+                                style={styles.bottomSheetScroll}
+                                nestedScrollEnabled={true}
+                                showsVerticalScrollIndicator={true}
+                            >
+                                {DIVISIONS.filter(div => div !== 'All Divisions').map((division) => (
+                                    <TouchableOpacity
+                                        key={division}
+                                        style={[
+                                            styles.bottomSheetOption,
+                                            editFormData.division === division && styles.bottomSheetOptionSelected
+                                        ]}
+                                        onPress={() => {
+                                            setEditFormData({ ...editFormData, division: division });
+                                            setShowEditDivisionDropdown(false);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            editFormData.division === division && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {division}
+                                        </Text>
+                                        {editFormData.division === division && (
+                                            <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </Pressable>
                     </Pressable>
                 </Modal>
 
@@ -1871,68 +1803,62 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showEditLeaderDropdown}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowEditLeaderDropdown(false)}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setShowEditLeaderDropdown(false)}
                     >
-                        <View 
-                            style={[
-                                styles.dropdownModalContainer,
-                                {
-                                    top: editLeaderButtonLayout.y + editLeaderButtonLayout.height + 4,
-                                    left: editLeaderButtonLayout.x,
-                                    width: editLeaderButtonLayout.width > 0 ? editLeaderButtonLayout.width : (isSmallScreen ? '90%' : 400),
-                                }
-                            ]}
-                            onStartShouldSetResponder={() => true}
+                        <Pressable
+                            style={styles.bottomSheet}
+                            onPress={(e) => e.stopPropagation()}
                         >
-                            <View style={styles.dropdownModal}>
-                                <ScrollView 
-                                    style={styles.dropdownScroll}
-                                    nestedScrollEnabled={true}
-                                    showsVerticalScrollIndicator={true}
-                                >
-                                    {MOCK_LEADERS.map((leader) => {
-                                        const leaderDisplay = `${leader.name} - ${leader.role}`;
-                                        const isSelected = editFormData.assignedLeader === leaderDisplay;
-                                        return (
-                                            <TouchableOpacity
-                                                key={leader.name}
-                                                style={[
-                                                    styles.dropdownItem,
-                                                    isSelected && styles.genderDropdownItemSelected
-                                                ]}
-                                                onPress={() => {
-                                                    setEditFormData({ ...editFormData, assignedLeader: leaderDisplay });
-                                                    setShowEditLeaderDropdown(false);
-                                                }}
-                                            >
-                                                <View style={styles.leaderItemContent}>
-                                                    <Text style={[
-                                                        styles.dropdownItemText,
-                                                        isSelected && styles.genderDropdownItemTextSelected
-                                                    ]}>
-                                                        {leader.name}
-                                                    </Text>
-                                                    <Text style={[
-                                                        styles.leaderRoleText,
-                                                        isSelected && styles.leaderRoleTextSelected
-                                                    ]}>
-                                                        {leader.role}
-                                                    </Text>
-                                                </View>
-                                                {isSelected && (
-                                                    <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
-                                                )}
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </ScrollView>
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select Assigned Leader</Text>
                             </View>
-                        </View>
+                            <ScrollView
+                                style={styles.bottomSheetScroll}
+                                nestedScrollEnabled={true}
+                                showsVerticalScrollIndicator={true}
+                            >
+                                {MOCK_LEADERS.map((leader) => {
+                                    const leaderDisplay = `${leader.name} - ${leader.role}`;
+                                    const isSelected = editFormData.assignedLeader === leaderDisplay;
+                                    return (
+                                        <TouchableOpacity
+                                            key={leader.name}
+                                            style={[
+                                                styles.bottomSheetOption,
+                                                isSelected && styles.bottomSheetOptionSelected
+                                            ]}
+                                            onPress={() => {
+                                                setEditFormData({ ...editFormData, assignedLeader: leaderDisplay });
+                                                setShowEditLeaderDropdown(false);
+                                            }}
+                                        >
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={[
+                                                    styles.bottomSheetOptionText,
+                                                    isSelected && styles.bottomSheetOptionTextSelected
+                                                ]}>
+                                                    {leader.name}
+                                                </Text>
+                                                <Text style={[
+                                                    styles.leaderRoleText,
+                                                    isSelected && styles.leaderRoleTextSelected
+                                                ]}>
+                                                    {leader.role}
+                                                </Text>
+                                            </View>
+                                            {isSelected && (
+                                                <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+                        </Pressable>
                     </Pressable>
                 </Modal>
 
@@ -1949,62 +1875,62 @@ export const CamperScreen = ({ navigation }: any) => {
                             }}
                         >
                             <StyledCard style={styles.camperCard}>
-                            <View style={styles.cardTop}>
-                                <View style={styles.cardTopLeft}>
-                                    <Text style={styles.camperName} numberOfLines={1} ellipsizeMode="tail">{camper.name}</Text>
-                                    <Text style={styles.camperGrade}>{camper.grade || "N/A"}</Text>
+                                <View style={styles.cardTop}>
+                                    <View style={styles.cardTopLeft}>
+                                        <Text style={styles.camperName} numberOfLines={1} ellipsizeMode="tail">{camper.name}</Text>
+                                        <Text style={styles.camperGrade}>{camper.grade || "N/A"}</Text>
+                                    </View>
+                                    <View style={styles.cardTopRight}>
+                                        <TouchableOpacity
+                                            style={styles.cardIconButton}
+                                            onPress={(e) => {
+                                                e.stopPropagation();
+                                                setCamperToEdit(camper);
+                                                // Pre-fill form with camper data
+                                                setEditFormData({
+                                                    name: (camper as any).name || '',
+                                                    person_id: (camper as any).person_id || '12171924',
+                                                    age: (camper as any).age || '',
+                                                    dateOfBirth: (camper as any).dateOfBirth || '08/23/2010',
+                                                    gender: (camper as any).gender || '',
+                                                    division: (camper as any).division || camper.division || '',
+                                                    bunk: (camper as any).bunk || '',
+                                                    grade: (camper as any).grade || camper.grade || '',
+                                                    group: (camper as any).group || '',
+                                                    season: (camper as any).season || '2026',
+                                                    assignedLeader: (camper as any).assignedLeader || '',
+                                                    guardianEmail: (camper as any).guardianEmail || 'abbyw8135@icloud.com',
+                                                    guardianPhone: (camper as any).guardianPhone || '5167880571',
+                                                    emergencyContact: (camper as any).emergencyContact || '',
+                                                    rfid: (camper as any).rfid || '',
+                                                    allergies: (camper as any).allergies || '',
+                                                    medicalNotes: (camper as any).medicalNotes || '',
+                                                });
+                                                setShowEditChildModal(true);
+                                            }}
+                                        >
+                                            <Ionicons name="pencil-outline" size={18} color="#9ca3af" />
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.cardIconButton}
+                                            onPress={(e) => {
+                                                e.stopPropagation();
+                                                setCamperToDelete(camper);
+                                                setShowDeleteModal(true);
+                                            }}
+                                        >
+                                            <Ionicons name="trash-outline" size={18} color="#9ca3af" />
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
-                                <View style={styles.cardTopRight}>
-                                    <TouchableOpacity 
-                                        style={styles.cardIconButton}
-                                        onPress={(e) => {
-                                            e.stopPropagation();
-                                            setCamperToEdit(camper);
-                                            // Pre-fill form with camper data
-                                            setEditFormData({
-                                                name: (camper as any).name || '',
-                                                person_id: (camper as any).person_id || '12171924',
-                                                age: (camper as any).age || '',
-                                                dateOfBirth: (camper as any).dateOfBirth || '08/23/2010',
-                                                gender: (camper as any).gender || '',
-                                                division: (camper as any).division || camper.division || '',
-                                                bunk: (camper as any).bunk || '',
-                                                grade: (camper as any).grade || camper.grade || '',
-                                                group: (camper as any).group || '',
-                                                season: (camper as any).season || '2026',
-                                                assignedLeader: (camper as any).assignedLeader || '',
-                                                guardianEmail: (camper as any).guardianEmail || 'abbyw8135@icloud.com',
-                                                guardianPhone: (camper as any).guardianPhone || '5167880571',
-                                                emergencyContact: (camper as any).emergencyContact || '',
-                                                rfid: (camper as any).rfid || '',
-                                                allergies: (camper as any).allergies || '',
-                                                medicalNotes: (camper as any).medicalNotes || '',
-                                            });
-                                            setShowEditChildModal(true);
-                                        }}
-                                    >
-                                        <Ionicons name="pencil-outline" size={18} color="#9ca3af" />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity 
-                                        style={styles.cardIconButton}
-                                        onPress={(e) => {
-                                            e.stopPropagation();
-                                            setCamperToDelete(camper);
-                                            setShowDeleteModal(true);
-                                        }}
-                                    >
-                                        <Ionicons name="trash-outline" size={18} color="#9ca3af" />
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
 
-                            <View style={styles.cardFooter}>
-                                <Text style={styles.divisionText}>Division: {camper.division || "N/A"}</Text>
-                                <View style={styles.statusBadge}>
-                                    <Text style={styles.statusText}>active</Text>
+                                <View style={styles.cardFooter}>
+                                    <Text style={styles.divisionText}>Division: {camper.division || "N/A"}</Text>
+                                    <View style={styles.statusBadge}>
+                                        <Text style={styles.statusText}>active</Text>
+                                    </View>
                                 </View>
-                            </View>
-                        </StyledCard>
+                            </StyledCard>
                         </TouchableOpacity>
                     ))}
                 </View>
@@ -2403,6 +2329,73 @@ const styles = StyleSheet.create({
         marginTop: 0,
         flexWrap: 'wrap', // Allow wrapping on very small screens
     },
+    leaderRoleText: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    leaderRoleTextSelected: {
+        color: theme.colors.secondary,
+    },
+    // Bottom Sheet Styles
+    bottomSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    bottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '50%',
+        width: '100%',
+    },
+    largeBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '90%',
+        width: '100%',
+    },
+    bottomSheetHeader: {
+        marginBottom: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        paddingBottom: theme.spacing.sm,
+    },
+    bottomSheetTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    bottomSheetScroll: {
+        // No specific styles needed for now
+    },
+    bottomSheetOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        gap: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    bottomSheetOptionText: {
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    bottomSheetOptionTextSelected: {
+        color: theme.colors.secondary,
+        fontWeight: '600',
+    },
+    bottomSheetOptionSelected: {
+        backgroundColor: theme.colors.secondary + '10',
+    },
+
     statusBadge: {
         backgroundColor: '#dcfce7',
         paddingHorizontal: 8,

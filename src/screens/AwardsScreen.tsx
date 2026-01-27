@@ -47,13 +47,26 @@ const STARFISH_VALUES = [
     "Helpfulness"
 ];
 
+// Header Component (Reusable for sub-screens)
+const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
+    <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+            <Ionicons name="menu" size={28} color={theme.colors.primary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{title}</Text>
+        <TouchableOpacity>
+            <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
+        </TouchableOpacity>
+    </View>
+);
+
 export const AwardsScreen = ({ navigation }: any) => {
     const [awards] = useState(MOCK_AWARDS);
     const [isCSVGuideOpen, setIsCSVGuideOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('awards');
     const [isAddAwardModalOpen, setIsAddAwardModalOpen] = useState(false);
     const [isUploadCSVModalOpen, setIsUploadCSVModalOpen] = useState(false);
-    
+
     // Add Award Form State
     const [selectedChild, setSelectedChild] = useState('');
     const [childSearchText, setChildSearchText] = useState('');
@@ -116,8 +129,8 @@ export const AwardsScreen = ({ navigation }: any) => {
     };
 
     const toggleWeeklyStarfish = (value: string) => {
-        setWeeklyStarfishValues(prev => 
-            prev.includes(value) 
+        setWeeklyStarfishValues(prev =>
+            prev.includes(value)
                 ? prev.filter(v => v !== value)
                 : [...prev, value]
         );
@@ -129,9 +142,9 @@ export const AwardsScreen = ({ navigation }: any) => {
     };
 
     const filteredChildren = childSearchText.length > 0
-        ? MOCK_CHILDREN.filter(child => 
+        ? MOCK_CHILDREN.filter(child =>
             child.name.toLowerCase().includes(childSearchText.toLowerCase())
-          )
+        )
         : MOCK_CHILDREN;
 
     const handleUploadCSV = () => {
@@ -144,30 +157,32 @@ export const AwardsScreen = ({ navigation }: any) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView 
-                style={styles.scrollView} 
+            <ScrollView
+                style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
+                <ScreenHeader title="" navigation={navigation} />
+
                 {/* Header Section */}
                 <View style={styles.headerSection}>
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.headerTitle}>
                             Awards & Achievements
                         </Text>
-                    <Text style={styles.headerSubtitle}>
-                        Celebrating success across all children
-                    </Text>
-                </View>
-                    
+                        <Text style={styles.headerSubtitle}>
+                            Celebrating success across all children
+                        </Text>
+                    </View>
+
                     {/* Action Buttons - Below title on small screens, to the right on larger */}
                     <View style={styles.actionButtons}>
-                    <TouchableOpacity
+                        <TouchableOpacity
                             style={styles.helpButton}
-                        onPress={handleHelp}
-                    >
+                            onPress={handleHelp}
+                        >
                             <Ionicons name="help-circle" size={20} color={theme.colors.text} />
-                    </TouchableOpacity>
+                        </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.uploadButton}
                             onPress={handleUploadCSV}
@@ -175,15 +190,15 @@ export const AwardsScreen = ({ navigation }: any) => {
                             <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} style={styles.uploadIcon} />
                             <Text style={styles.uploadButtonText}>Upload CSV</Text>
                         </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={handleAddAward}
-                    >
-                        <Ionicons name="add" size={20} color={theme.colors.surface} style={styles.addIcon} />
+                        <TouchableOpacity
+                            style={styles.addButton}
+                            onPress={handleAddAward}
+                        >
+                            <Ionicons name="add" size={20} color={theme.colors.surface} style={styles.addIcon} />
                             <Text style={styles.addButtonText}>Add Award</Text>
-                    </TouchableOpacity>
+                        </TouchableOpacity>
+                    </View>
                 </View>
-            </View>
 
                 {/* Summary Cards - Three cards in a row */}
                 <View style={styles.summaryCards}>
@@ -203,8 +218,8 @@ export const AwardsScreen = ({ navigation }: any) => {
 
                 {/* Empty State */}
                 <View style={styles.emptyStateContainer}>
-                        <Text style={styles.emptyStateText}>No awards found. Add your first achievement!</Text>
-                    </View>
+                    <Text style={styles.emptyStateText}>No awards found. Add your first achievement!</Text>
+                </View>
             </ScrollView>
 
             {/* Upload CSV Bottom Sheet Modal */}
@@ -214,12 +229,12 @@ export const AwardsScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={() => setIsUploadCSVModalOpen(false)}
             >
-                <Pressable 
-                    style={styles.bottomSheetOverlay} 
+                <Pressable
+                    style={styles.bottomSheetOverlay}
                     onPress={() => setIsUploadCSVModalOpen(false)}
                 >
-                    <Pressable 
-                        style={styles.bottomSheet} 
+                    <Pressable
+                        style={styles.bottomSheet}
                         onPress={(e) => e.stopPropagation()}
                     >
                         {/* Bottom Sheet Header */}
@@ -229,7 +244,7 @@ export const AwardsScreen = ({ navigation }: any) => {
 
                         {/* Bottom Sheet Options */}
                         <View style={styles.bottomSheetContent}>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.bottomSheetOption}
                                 onPress={() => {
                                     // TODO: Handle file selection
@@ -241,7 +256,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                                 <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.bottomSheetOption}
                                 onPress={() => {
                                     // TODO: Handle file selection
@@ -264,7 +279,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={handleCloseAddAward}
             >
-                <Pressable 
+                <Pressable
                     style={styles.bottomSheetOverlay}
                     onPress={handleCloseAddAward}
                 >
@@ -283,7 +298,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView 
+                        <ScrollView
                             style={styles.addAwardBottomSheetScroll}
                             contentContainerStyle={styles.addAwardModalContent}
                             showsVerticalScrollIndicator={true}
@@ -310,7 +325,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                                     />
                                     {showChildDropdown && (
                                         <View style={styles.childDropdown}>
-                                            <ScrollView 
+                                            <ScrollView
                                                 style={styles.childDropdownScroll}
                                                 nestedScrollEnabled={true}
                                                 keyboardShouldPersistTaps="handled"
@@ -424,7 +439,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                                         editable={false}
                                         pointerEvents="none"
                                     />
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         style={styles.dateIconButton}
                                         onPress={() => setShowDatePicker(true)}
                                     >
@@ -577,8 +592,8 @@ export const AwardsScreen = ({ navigation }: any) => {
                         </View>
 
                         {/* Tabs */}
-                        <ScrollView 
-                            horizontal 
+                        <ScrollView
+                            horizontal
                             showsHorizontalScrollIndicator={false}
                             style={styles.tabsContainer}
                             contentContainerStyle={styles.tabsContent}
@@ -616,7 +631,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                         {/* Tab Content */}
                         <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
                             {renderTabContent(activeTab)}
-            </ScrollView>
+                        </ScrollView>
                     </View>
                 </View>
             </Modal>
@@ -763,6 +778,13 @@ const styles = StyleSheet.create({
         paddingTop: theme.spacing.lg,
         paddingBottom: theme.spacing.xl,
     },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: theme.spacing.lg,
+    },
+
     headerSection: {
         marginBottom: theme.spacing.xl,
     },
