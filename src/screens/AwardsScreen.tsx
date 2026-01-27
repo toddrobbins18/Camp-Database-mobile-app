@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -52,6 +52,7 @@ export const AwardsScreen = ({ navigation }: any) => {
     const [isCSVGuideOpen, setIsCSVGuideOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('awards');
     const [isAddAwardModalOpen, setIsAddAwardModalOpen] = useState(false);
+    const [isUploadCSVModalOpen, setIsUploadCSVModalOpen] = useState(false);
     
     // Add Award Form State
     const [selectedChild, setSelectedChild] = useState('');
@@ -134,7 +135,7 @@ export const AwardsScreen = ({ navigation }: any) => {
         : MOCK_CHILDREN;
 
     const handleUploadCSV = () => {
-        // TODO: Open CSV upload functionality
+        setIsUploadCSVModalOpen(true);
     };
 
     const handleHelp = () => {
@@ -206,15 +207,71 @@ export const AwardsScreen = ({ navigation }: any) => {
                     </View>
             </ScrollView>
 
-            {/* Add New Award Modal */}
+            {/* Upload CSV Bottom Sheet Modal */}
+            <Modal
+                visible={isUploadCSVModalOpen}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setIsUploadCSVModalOpen(false)}
+            >
+                <Pressable 
+                    style={styles.bottomSheetOverlay} 
+                    onPress={() => setIsUploadCSVModalOpen(false)}
+                >
+                    <Pressable 
+                        style={styles.bottomSheet} 
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        {/* Bottom Sheet Header */}
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select file</Text>
+                        </View>
+
+                        {/* Bottom Sheet Options */}
+                        <View style={styles.bottomSheetContent}>
+                            <TouchableOpacity 
+                                style={styles.bottomSheetOption}
+                                onPress={() => {
+                                    // TODO: Handle file selection
+                                    console.log('Selected: Aloha downloads');
+                                    setIsUploadCSVModalOpen(false);
+                                }}
+                            >
+                                <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity 
+                                style={styles.bottomSheetOption}
+                                onPress={() => {
+                                    // TODO: Handle file selection
+                                    console.log('Selected: Other files');
+                                    setIsUploadCSVModalOpen(false);
+                                }}
+                            >
+                                <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.bottomSheetOptionText}>Other files</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Add New Award Modal - Bottom Sheet */}
             <Modal
                 visible={isAddAwardModalOpen}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={handleCloseAddAward}
             >
-                <View style={styles.addAwardModalOverlay}>
-                    <View style={styles.addAwardModalContainer}>
+                <Pressable 
+                    style={styles.bottomSheetOverlay}
+                    onPress={handleCloseAddAward}
+                >
+                    <Pressable
+                        style={styles.addAwardBottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
                         {/* Modal Header */}
                         <View style={styles.addAwardModalHeader}>
                             <Text style={styles.addAwardModalTitle}>Add New Award</Text>
@@ -227,7 +284,8 @@ export const AwardsScreen = ({ navigation }: any) => {
                         </View>
 
                         <ScrollView 
-                            style={styles.addAwardModalContent}
+                            style={styles.addAwardBottomSheetScroll}
+                            contentContainerStyle={styles.addAwardModalContent}
                             showsVerticalScrollIndicator={true}
                             keyboardShouldPersistTaps="handled"
                         >
@@ -406,8 +464,8 @@ export const AwardsScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
-                    </View>
-                </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* Date Picker Modal */}
@@ -1290,6 +1348,55 @@ const styles = StyleSheet.create({
     },
     datePickerDayTextDisabled: {
         color: theme.colors.textSecondary,
+    },
+    // Bottom Sheet Styles
+    bottomSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    bottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '40%',
+    },
+    bottomSheetHeader: {
+        marginBottom: theme.spacing.lg,
+    },
+    bottomSheetTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    bottomSheetContent: {
+        gap: theme.spacing.md,
+    },
+    bottomSheetOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        gap: theme.spacing.md,
+    },
+    bottomSheetOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    // Add Award Bottom Sheet
+    addAwardBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '90%',
+        paddingBottom: theme.spacing.xl,
+    },
+    addAwardBottomSheetScroll: {
+        flex: 1,
     },
 });
 

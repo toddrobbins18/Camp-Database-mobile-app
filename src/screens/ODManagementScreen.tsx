@@ -210,21 +210,21 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                 <View key={staff.id} style={styles.staffRow}>
                                     <Text style={[styles.staffCell, { flex: 1.5 }]}>{staff.bank}</Text>
                                     <Text style={[styles.staffCell, { flex: 2 }]}>{staff.name}</Text>
-                                    <View style={[styles.staffCell, { flex: 1, alignItems: 'center' }]}>
+                                    <View style={{ flex: 1, alignItems: 'center' }}>
                                         {staff.isOut ? (
                                             <Ionicons name="checkmark-circle" size={20} color={theme.colors.success} />
                                         ) : (
                                             <Ionicons name="close-circle-outline" size={20} color={theme.colors.textSecondary} />
                                         )}
                                     </View>
-                                    <View style={[styles.staffCell, { flex: 1.5, alignItems: 'center' }]}>
+                                    <View style={{ flex: 1.5, alignItems: 'center' }}>
                                         {staff.isSleepingOut ? (
                                             <Ionicons name="checkmark-circle" size={20} color={theme.colors.success} />
                                         ) : (
                                             <Ionicons name="close-circle-outline" size={20} color={theme.colors.textSecondary} />
                                         )}
                                     </View>
-                                    <View style={[styles.staffCell, { flex: 1, alignItems: 'center' }]}>
+                                    <View style={{ flex: 1, alignItems: 'center' }}>
                                         <TouchableOpacity>
                                             <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textSecondary} />
                                         </TouchableOpacity>
