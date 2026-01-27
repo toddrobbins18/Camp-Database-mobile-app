@@ -189,10 +189,13 @@ export const AppointmentsScreen = ({ navigation }: any) => {
             date: appointment.date || '',
             time: appointment.time || '',
             person: appointment.person || '',
+            personId: appointment.personId || '',
             type: appointment.type || '',
             provider: appointment.provider || '',
+            location: appointment.location || '',
             status: appointment.status || 'Scheduled',
             notes: appointment.notes || '',
+            followUpRequired: appointment.followUpRequired || false,
         });
         setEditingAppointment(appointment);
         setIsEditModalOpen(true);
@@ -316,7 +319,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
 
                             {/* Bottom Sheet Options */}
                             <View style={styles.bottomSheetContent}>
-                                <ScrollView 
+                                <ScrollView
                                     style={styles.typeBottomSheetScroll}
                                     showsVerticalScrollIndicator={false}
                                 >
@@ -332,9 +335,9 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                                 setIsTypeDropdownOpen(false);
                                             }}
                                         >
-                                            <Ionicons 
-                                                name="medical-outline" 
-                                                size={24} 
+                                            <Ionicons
+                                                name="medical-outline"
+                                                size={24}
                                                 color={selectedType === type ? theme.colors.surface : theme.colors.secondary}
                                             />
                                             <Text style={[
@@ -373,7 +376,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
 
                             {/* Bottom Sheet Options */}
                             <View style={styles.bottomSheetContent}>
-                                <ScrollView 
+                                <ScrollView
                                     style={styles.statusBottomSheetScroll}
                                     showsVerticalScrollIndicator={false}
                                 >
@@ -389,9 +392,9 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                                 setIsStatusDropdownOpen(false);
                                             }}
                                         >
-                                            <Ionicons 
-                                                name="checkmark-circle-outline" 
-                                                size={24} 
+                                            <Ionicons
+                                                name="checkmark-circle-outline"
+                                                size={24}
                                                 color={selectedStatus === status ? theme.colors.surface : theme.colors.secondary}
                                             />
                                             <Text style={[
@@ -510,8 +513,8 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                         style={styles.addAppointmentBottomSheet}
                         onPress={(e) => e.stopPropagation()}
                     >
-                        <ScrollView 
-                            style={styles.addAppointmentBottomSheetScroll} 
+                        <ScrollView
+                            style={styles.addAppointmentBottomSheetScroll}
                             contentContainerStyle={styles.addAppointmentBottomSheetContent}
                             showsVerticalScrollIndicator={false}
                         >
