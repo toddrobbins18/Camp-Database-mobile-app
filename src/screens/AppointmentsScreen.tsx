@@ -202,9 +202,16 @@ export const AppointmentsScreen = ({ navigation }: any) => {
         <SafeAreaView style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.openDrawer()}>
-                    <Ionicons name="menu" size={28} color={theme.colors.primary} />
-                </TouchableOpacity>
+                {/* Top Row: Sidebar and Profile */}
+                <View style={styles.headerTopRow}>
+                    <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                        <Ionicons name="menu" size={28} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity>
+                        <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                </View>
+                {/* Title Row */}
                 <View style={styles.headerTitleContainer}>
                     <View style={styles.headerTitleRow}>
                         <Ionicons name="calendar-outline" size={24} color={theme.colors.primary} />
@@ -214,9 +221,6 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                         Manage medical and therapy appointments for campers and staff
                     </Text>
                 </View>
-                <TouchableOpacity>
-                    <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
-                </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -290,88 +294,118 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                     </View>
                 </View>
 
-                {/* Type Dropdown Modal */}
+                {/* Type Dropdown Modal - Bottom Sheet */}
                 <Modal
                     visible={isTypeDropdownOpen}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setIsTypeDropdownOpen(false)}
                 >
-                    <TouchableOpacity
-                        style={styles.modalOverlay}
-                        activeOpacity={1}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setIsTypeDropdownOpen(false)}
                     >
-                        <View style={styles.dropdownModal}>
-                            <ScrollView style={styles.dropdownScroll}>
-                                {APPOINTMENT_TYPES.map((type) => (
-                                    <TouchableOpacity
-                                        key={type}
-                                        style={[
-                                            styles.dropdownItem,
-                                            selectedType === type && styles.dropdownItemSelected
-                                        ]}
-                                        onPress={() => {
-                                            setSelectedType(type);
-                                            setIsTypeDropdownOpen(false);
-                                        }}
-                                    >
-                                        {selectedType === type && (
-                                            <Ionicons name="checkmark" size={18} color={theme.colors.accent} style={styles.checkIcon} />
-                                        )}
-                                        <Text style={[
-                                            styles.dropdownItemText,
-                                            selectedType === type && styles.dropdownItemTextSelected
-                                        ]}>
-                                            {type}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        </View>
-                    </TouchableOpacity>
+                        <Pressable
+                            style={styles.typeBottomSheet}
+                            onPress={(e) => e.stopPropagation()}
+                        >
+                            {/* Bottom Sheet Header */}
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select Type</Text>
+                            </View>
+
+                            {/* Bottom Sheet Options */}
+                            <View style={styles.bottomSheetContent}>
+                                <ScrollView 
+                                    style={styles.typeBottomSheetScroll}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    {APPOINTMENT_TYPES.map((type) => (
+                                        <TouchableOpacity
+                                            key={type}
+                                            style={[
+                                                styles.bottomSheetOption,
+                                                selectedType === type && styles.bottomSheetOptionSelected
+                                            ]}
+                                            onPress={() => {
+                                                setSelectedType(type);
+                                                setIsTypeDropdownOpen(false);
+                                            }}
+                                        >
+                                            <Ionicons 
+                                                name="medical-outline" 
+                                                size={24} 
+                                                color={selectedType === type ? theme.colors.surface : theme.colors.secondary}
+                                            />
+                                            <Text style={[
+                                                styles.bottomSheetOptionText,
+                                                selectedType === type && styles.bottomSheetOptionTextSelected
+                                            ]}>
+                                                {type}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        </Pressable>
+                    </Pressable>
                 </Modal>
 
-                {/* Status Dropdown Modal */}
+                {/* Status Dropdown Modal - Bottom Sheet */}
                 <Modal
                     visible={isStatusDropdownOpen}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setIsStatusDropdownOpen(false)}
                 >
-                    <TouchableOpacity
-                        style={styles.modalOverlay}
-                        activeOpacity={1}
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setIsStatusDropdownOpen(false)}
                     >
-                        <View style={styles.dropdownModal}>
-                            <ScrollView style={styles.dropdownScroll}>
-                                {APPOINTMENT_STATUSES.map((status) => (
-                                    <TouchableOpacity
-                                        key={status}
-                                        style={[
-                                            styles.dropdownItem,
-                                            selectedStatus === status && styles.dropdownItemSelected
-                                        ]}
-                                        onPress={() => {
-                                            setSelectedStatus(status);
-                                            setIsStatusDropdownOpen(false);
-                                        }}
-                                    >
-                                        {selectedStatus === status && (
-                                            <Ionicons name="checkmark" size={18} color={theme.colors.accent} style={styles.checkIcon} />
-                                        )}
-                                        <Text style={[
-                                            styles.dropdownItemText,
-                                            selectedStatus === status && styles.dropdownItemTextSelected
-                                        ]}>
-                                            {status}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        </View>
-                    </TouchableOpacity>
+                        <Pressable
+                            style={styles.statusBottomSheet}
+                            onPress={(e) => e.stopPropagation()}
+                        >
+                            {/* Bottom Sheet Header */}
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select Status</Text>
+                            </View>
+
+                            {/* Bottom Sheet Options */}
+                            <View style={styles.bottomSheetContent}>
+                                <ScrollView 
+                                    style={styles.statusBottomSheetScroll}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    {APPOINTMENT_STATUSES.map((status) => (
+                                        <TouchableOpacity
+                                            key={status}
+                                            style={[
+                                                styles.bottomSheetOption,
+                                                selectedStatus === status && styles.bottomSheetOptionSelected
+                                            ]}
+                                            onPress={() => {
+                                                setSelectedStatus(status);
+                                                setIsStatusDropdownOpen(false);
+                                            }}
+                                        >
+                                            <Ionicons 
+                                                name="checkmark-circle-outline" 
+                                                size={24} 
+                                                color={selectedStatus === status ? theme.colors.surface : theme.colors.secondary}
+                                            />
+                                            <Text style={[
+                                                styles.bottomSheetOptionText,
+                                                selectedStatus === status && styles.bottomSheetOptionTextSelected
+                                            ]}>
+                                                {status}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        </Pressable>
+                    </Pressable>
                 </Modal>
 
                 {/* Appointments List */}
@@ -453,7 +487,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                 </View>
             </ScrollView>
 
-            {/* Add/Edit Appointment Modal */}
+            {/* Add/Edit Appointment Modal - Bottom Sheet */}
             <Modal
                 visible={isAddModalOpen || isEditModalOpen}
                 transparent={true}
@@ -464,9 +498,23 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                     setEditingAppointment(null);
                 }}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.editModalContainer}>
-                        <ScrollView style={styles.editModalScroll} contentContainerStyle={styles.editModalContent}>
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => {
+                        setIsAddModalOpen(false);
+                        setIsEditModalOpen(false);
+                        setEditingAppointment(null);
+                    }}
+                >
+                    <Pressable
+                        style={styles.addAppointmentBottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <ScrollView 
+                            style={styles.addAppointmentBottomSheetScroll} 
+                            contentContainerStyle={styles.addAppointmentBottomSheetContent}
+                            showsVerticalScrollIndicator={false}
+                        >
                             {/* Modal Header */}
                             <View style={styles.editModalHeader}>
                                 <View style={styles.editModalTitleContainer}>
@@ -687,8 +735,8 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
-                    </View>
-                </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* Type Dropdown Modal */}
@@ -849,18 +897,20 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.background,
     },
     header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.sm,
         backgroundColor: theme.colors.surface,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
+    headerTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: theme.spacing.sm,
+    },
     headerTitleContainer: {
-        flex: 1,
-        marginHorizontal: theme.spacing.md,
+        paddingLeft: 0,
     },
     headerTitleRow: {
         flexDirection: 'row',
@@ -1364,6 +1414,84 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
         paddingVertical: 0,
+    },
+    // Bottom Sheet Styles
+    bottomSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    bottomSheetHeader: {
+        marginBottom: theme.spacing.lg,
+    },
+    bottomSheetTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    bottomSheetContent: {
+        gap: theme.spacing.md,
+    },
+    bottomSheetOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        gap: theme.spacing.md,
+    },
+    bottomSheetOptionSelected: {
+        backgroundColor: theme.colors.secondary,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+    },
+    bottomSheetOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    bottomSheetOptionTextSelected: {
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    // Type Bottom Sheet
+    typeBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '60%',
+    },
+    typeBottomSheetScroll: {
+        maxHeight: 400,
+    },
+    // Status Bottom Sheet
+    statusBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '50%',
+    },
+    statusBottomSheetScroll: {
+        maxHeight: 300,
+    },
+    // Add Appointment Bottom Sheet
+    addAppointmentBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '90%',
+        paddingBottom: theme.spacing.xl,
+    },
+    addAppointmentBottomSheetScroll: {
+        flex: 1,
+    },
+    addAppointmentBottomSheetContent: {
+        padding: theme.spacing.lg,
     },
 });
 

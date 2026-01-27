@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -47,12 +47,26 @@ const STARFISH_VALUES = [
     "Helpfulness"
 ];
 
+// Header Component (Reusable for sub-screens)
+const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
+    <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+            <Ionicons name="menu" size={28} color={theme.colors.primary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{title}</Text>
+        <TouchableOpacity>
+            <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
+        </TouchableOpacity>
+    </View>
+);
+
 export const AwardsScreen = ({ navigation }: any) => {
     const [awards] = useState(MOCK_AWARDS);
     const [isCSVGuideOpen, setIsCSVGuideOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('awards');
     const [isAddAwardModalOpen, setIsAddAwardModalOpen] = useState(false);
-    
+    const [isUploadCSVModalOpen, setIsUploadCSVModalOpen] = useState(false);
+
     // Add Award Form State
     const [selectedChild, setSelectedChild] = useState('');
     const [childSearchText, setChildSearchText] = useState('');
@@ -115,8 +129,8 @@ export const AwardsScreen = ({ navigation }: any) => {
     };
 
     const toggleWeeklyStarfish = (value: string) => {
-        setWeeklyStarfishValues(prev => 
-            prev.includes(value) 
+        setWeeklyStarfishValues(prev =>
+            prev.includes(value)
                 ? prev.filter(v => v !== value)
                 : [...prev, value]
         );
@@ -128,13 +142,13 @@ export const AwardsScreen = ({ navigation }: any) => {
     };
 
     const filteredChildren = childSearchText.length > 0
-        ? MOCK_CHILDREN.filter(child => 
+        ? MOCK_CHILDREN.filter(child =>
             child.name.toLowerCase().includes(childSearchText.toLowerCase())
-          )
+        )
         : MOCK_CHILDREN;
 
     const handleUploadCSV = () => {
-        // TODO: Open CSV upload functionality
+        setIsUploadCSVModalOpen(true);
     };
 
     const handleHelp = () => {
@@ -143,30 +157,32 @@ export const AwardsScreen = ({ navigation }: any) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView 
-                style={styles.scrollView} 
+            <ScrollView
+                style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
+                <ScreenHeader title="" navigation={navigation} />
+
                 {/* Header Section */}
                 <View style={styles.headerSection}>
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.headerTitle}>
                             Awards & Achievements
                         </Text>
-                    <Text style={styles.headerSubtitle}>
-                        Celebrating success across all children
-                    </Text>
-                </View>
-                    
+                        <Text style={styles.headerSubtitle}>
+                            Celebrating success across all children
+                        </Text>
+                    </View>
+
                     {/* Action Buttons - Below title on small screens, to the right on larger */}
                     <View style={styles.actionButtons}>
-                    <TouchableOpacity
+                        <TouchableOpacity
                             style={styles.helpButton}
-                        onPress={handleHelp}
-                    >
+                            onPress={handleHelp}
+                        >
                             <Ionicons name="help-circle" size={20} color={theme.colors.text} />
-                    </TouchableOpacity>
+                        </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.uploadButton}
                             onPress={handleUploadCSV}
@@ -174,15 +190,15 @@ export const AwardsScreen = ({ navigation }: any) => {
                             <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} style={styles.uploadIcon} />
                             <Text style={styles.uploadButtonText}>Upload CSV</Text>
                         </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={handleAddAward}
-                    >
-                        <Ionicons name="add" size={20} color={theme.colors.surface} style={styles.addIcon} />
+                        <TouchableOpacity
+                            style={styles.addButton}
+                            onPress={handleAddAward}
+                        >
+                            <Ionicons name="add" size={20} color={theme.colors.surface} style={styles.addIcon} />
                             <Text style={styles.addButtonText}>Add Award</Text>
-                    </TouchableOpacity>
+                        </TouchableOpacity>
+                    </View>
                 </View>
-            </View>
 
                 {/* Summary Cards - Three cards in a row */}
                 <View style={styles.summaryCards}>
@@ -202,19 +218,75 @@ export const AwardsScreen = ({ navigation }: any) => {
 
                 {/* Empty State */}
                 <View style={styles.emptyStateContainer}>
-                        <Text style={styles.emptyStateText}>No awards found. Add your first achievement!</Text>
-                    </View>
+                    <Text style={styles.emptyStateText}>No awards found. Add your first achievement!</Text>
+                </View>
             </ScrollView>
 
-            {/* Add New Award Modal */}
+            {/* Upload CSV Bottom Sheet Modal */}
+            <Modal
+                visible={isUploadCSVModalOpen}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setIsUploadCSVModalOpen(false)}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => setIsUploadCSVModalOpen(false)}
+                >
+                    <Pressable
+                        style={styles.bottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        {/* Bottom Sheet Header */}
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select file</Text>
+                        </View>
+
+                        {/* Bottom Sheet Options */}
+                        <View style={styles.bottomSheetContent}>
+                            <TouchableOpacity
+                                style={styles.bottomSheetOption}
+                                onPress={() => {
+                                    // TODO: Handle file selection
+                                    console.log('Selected: Aloha downloads');
+                                    setIsUploadCSVModalOpen(false);
+                                }}
+                            >
+                                <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.bottomSheetOption}
+                                onPress={() => {
+                                    // TODO: Handle file selection
+                                    console.log('Selected: Other files');
+                                    setIsUploadCSVModalOpen(false);
+                                }}
+                            >
+                                <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.bottomSheetOptionText}>Other files</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Add New Award Modal - Bottom Sheet */}
             <Modal
                 visible={isAddAwardModalOpen}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={handleCloseAddAward}
             >
-                <View style={styles.addAwardModalOverlay}>
-                    <View style={styles.addAwardModalContainer}>
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={handleCloseAddAward}
+                >
+                    <Pressable
+                        style={styles.addAwardBottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
                         {/* Modal Header */}
                         <View style={styles.addAwardModalHeader}>
                             <Text style={styles.addAwardModalTitle}>Add New Award</Text>
@@ -226,8 +298,9 @@ export const AwardsScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView 
-                            style={styles.addAwardModalContent}
+                        <ScrollView
+                            style={styles.addAwardBottomSheetScroll}
+                            contentContainerStyle={styles.addAwardModalContent}
                             showsVerticalScrollIndicator={true}
                             keyboardShouldPersistTaps="handled"
                         >
@@ -252,7 +325,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                                     />
                                     {showChildDropdown && (
                                         <View style={styles.childDropdown}>
-                                            <ScrollView 
+                                            <ScrollView
                                                 style={styles.childDropdownScroll}
                                                 nestedScrollEnabled={true}
                                                 keyboardShouldPersistTaps="handled"
@@ -366,7 +439,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                                         editable={false}
                                         pointerEvents="none"
                                     />
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         style={styles.dateIconButton}
                                         onPress={() => setShowDatePicker(true)}
                                     >
@@ -406,8 +479,8 @@ export const AwardsScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
-                    </View>
-                </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* Date Picker Modal */}
@@ -519,8 +592,8 @@ export const AwardsScreen = ({ navigation }: any) => {
                         </View>
 
                         {/* Tabs */}
-                        <ScrollView 
-                            horizontal 
+                        <ScrollView
+                            horizontal
                             showsHorizontalScrollIndicator={false}
                             style={styles.tabsContainer}
                             contentContainerStyle={styles.tabsContent}
@@ -558,7 +631,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                         {/* Tab Content */}
                         <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
                             {renderTabContent(activeTab)}
-            </ScrollView>
+                        </ScrollView>
                     </View>
                 </View>
             </Modal>
@@ -705,6 +778,13 @@ const styles = StyleSheet.create({
         paddingTop: theme.spacing.lg,
         paddingBottom: theme.spacing.xl,
     },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: theme.spacing.lg,
+    },
+
     headerSection: {
         marginBottom: theme.spacing.xl,
     },
@@ -1290,6 +1370,55 @@ const styles = StyleSheet.create({
     },
     datePickerDayTextDisabled: {
         color: theme.colors.textSecondary,
+    },
+    // Bottom Sheet Styles
+    bottomSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    bottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '40%',
+    },
+    bottomSheetHeader: {
+        marginBottom: theme.spacing.lg,
+    },
+    bottomSheetTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    bottomSheetContent: {
+        gap: theme.spacing.md,
+    },
+    bottomSheetOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        gap: theme.spacing.md,
+    },
+    bottomSheetOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    // Add Award Bottom Sheet
+    addAwardBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '90%',
+        paddingBottom: theme.spacing.xl,
+    },
+    addAwardBottomSheetScroll: {
+        flex: 1,
     },
 });
 

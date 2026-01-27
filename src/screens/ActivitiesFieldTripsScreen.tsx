@@ -108,6 +108,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const [activityToDelete, setActivityToDelete] = useState<any>(null);
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [helpModalTab, setHelpModalTab] = useState<string>('Trips');
+    const [isUploadCSVModalOpen, setIsUploadCSVModalOpen] = useState(false);
+    const [isAddActivityModalOpen, setIsAddActivityModalOpen] = useState(false);
     const [isActivityTypeDropdownOpen, setIsActivityTypeDropdownOpen] = useState(false);
     const [isLocationTypeDropdownOpen, setIsLocationTypeDropdownOpen] = useState(false);
     const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
@@ -454,35 +456,52 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         )}
                     </View>
 
-                    {/* Division Dropdown Modal */}
+                    {/* Division Dropdown Modal - Bottom Sheet */}
                     <Modal
                         visible={isDivisionDropdownOpen}
                         transparent={true}
-                        animationType="fade"
+                        animationType="slide"
                         onRequestClose={() => setIsDivisionDropdownOpen(false)}
                     >
-                        <TouchableOpacity
-                            style={styles.modalOverlay}
-                            activeOpacity={1}
+                        <Pressable
+                            style={styles.bottomSheetOverlay}
                             onPress={() => setIsDivisionDropdownOpen(false)}
                         >
-                            <View style={styles.dropdownModal}>
-                                <ScrollView style={styles.dropdownScroll}>
+                            <Pressable
+                                style={styles.divisionBottomSheet}
+                                onPress={(e) => e.stopPropagation()}
+                            >
+                                {/* Bottom Sheet Header */}
+                                <View style={styles.bottomSheetHeader}>
+                                    <Text style={styles.bottomSheetTitle}>Select Division</Text>
+                                </View>
+
+                                {/* Bottom Sheet Options */}
+                                <View style={styles.bottomSheetContent}>
+                                    <ScrollView 
+                                        style={styles.divisionBottomSheetScroll}
+                                        showsVerticalScrollIndicator={false}
+                                    >
                                     {MOCK_DIVISIONS.map((division) => (
                                         <TouchableOpacity
                                             key={division.id}
                                             style={[
-                                                styles.dropdownItem,
-                                                selectedDivision === division.name && styles.dropdownItemSelected
+                                                    styles.bottomSheetOption,
+                                                    selectedDivision === division.name && styles.bottomSheetOptionSelected
                                             ]}
                                             onPress={() => {
                                                 setSelectedDivision(division.name);
                                                 setIsDivisionDropdownOpen(false);
                                             }}
                                         >
+                                                <Ionicons 
+                                                    name="people-outline" 
+                                                    size={24} 
+                                                    color={selectedDivision === division.name ? theme.colors.surface : theme.colors.secondary}
+                                                />
                                             <Text style={[
-                                                styles.dropdownItemText,
-                                                selectedDivision === division.name && styles.dropdownItemTextSelected
+                                                    styles.bottomSheetOptionText,
+                                                    selectedDivision === division.name && styles.bottomSheetOptionTextSelected
                                             ]}>
                                                 {division.name}
                                             </Text>
@@ -490,7 +509,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     ))}
                                 </ScrollView>
                             </View>
-                        </TouchableOpacity>
+                            </Pressable>
+                        </Pressable>
                     </Modal>
 
                     {/* Action Buttons */}
@@ -534,7 +554,10 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         </TouchableOpacity>
 
                         {/* Upload CSV Button */}
-                        <TouchableOpacity style={styles.uploadButton}>
+                        <TouchableOpacity 
+                            style={styles.uploadButton}
+                            onPress={() => setIsUploadCSVModalOpen(true)}
+                        >
                             <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.surface} />
                             <Text style={styles.uploadButtonText}>Upload CSV</Text>
                         </TouchableOpacity>
@@ -561,7 +584,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     meal_options: [],
                                     meal_notes: '',
                                 });
-                                setIsEditModalOpen(true);
+                                setIsAddActivityModalOpen(true);
                                 setIsActivityTypeDropdownOpen(false);
                                 setIsLocationTypeDropdownOpen(false);
                             }}
@@ -916,7 +939,229 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     </View>
                 )}
 
-                {/* Edit Activity Modal */}
+                {/* Upload CSV Bottom Sheet Modal */}
+                <Modal
+                    visible={isUploadCSVModalOpen}
+                    transparent={true}
+                    animationType="slide"
+                    onRequestClose={() => setIsUploadCSVModalOpen(false)}
+                >
+                    <Pressable 
+                        style={styles.bottomSheetOverlay} 
+                        onPress={() => setIsUploadCSVModalOpen(false)}
+                    >
+                        <Pressable 
+                            style={styles.bottomSheet} 
+                            onPress={(e) => e.stopPropagation()}
+                        >
+                            {/* Bottom Sheet Header */}
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select file</Text>
+                            </View>
+
+                            {/* Bottom Sheet Options */}
+                            <View style={styles.bottomSheetContent}>
+                                <TouchableOpacity 
+                                    style={styles.bottomSheetOption}
+                                    onPress={() => {
+                                        // TODO: Handle file selection
+                                        console.log('Selected: Aloha downloads');
+                                        setIsUploadCSVModalOpen(false);
+                                    }}
+                                >
+                                    <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
+                                    <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity 
+                                    style={styles.bottomSheetOption}
+                                    onPress={() => {
+                                        // TODO: Handle file selection
+                                        console.log('Selected: Other files');
+                                        setIsUploadCSVModalOpen(false);
+                                    }}
+                                >
+                                    <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
+                                    <Text style={styles.bottomSheetOptionText}>Other files</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </Pressable>
+                    </Pressable>
+                </Modal>
+
+                {/* Add Activity Bottom Sheet Modal */}
+                <Modal
+                    visible={isAddActivityModalOpen}
+                    transparent={true}
+                    animationType="slide"
+                    onRequestClose={() => setIsAddActivityModalOpen(false)}
+                >
+                    <Pressable 
+                        style={styles.bottomSheetOverlay} 
+                        onPress={() => setIsAddActivityModalOpen(false)}
+                    >
+                        <Pressable 
+                            style={styles.addActivityBottomSheet} 
+                            onPress={(e) => e.stopPropagation()}
+                        >
+                            <ScrollView 
+                                style={styles.addActivityBottomSheetScroll} 
+                                contentContainerStyle={styles.addActivityBottomSheetContent}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                {/* Modal Header */}
+                                <View style={styles.addActivityBottomSheetHeader}>
+                                    <Text style={styles.addActivityBottomSheetTitle}>Add Activity/Field Trip</Text>
+                                    <TouchableOpacity
+                                        onPress={() => setIsAddActivityModalOpen(false)}
+                                    >
+                                        <Ionicons name="close" size={24} color={theme.colors.text} />
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* Form Content - Reuse the edit form structure */}
+                                <View style={styles.addActivityFormContent}>
+                                    {/* Title Field */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Title *</Text>
+                                        <TextInput
+                                            style={styles.formTextInput}
+                                            placeholder="Enter activity title"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={formData.title}
+                                            onChangeText={(text) => setFormData({ ...formData, title: text })}
+                                        />
+                                    </View>
+
+                                    {/* Event Date */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Event Date *</Text>
+                                        <TouchableOpacity
+                                            style={styles.formInput}
+                                            onPress={() => {
+                                                setDatePickerField('event_date');
+                                                setSelectedDate(formData.event_date ? new Date(formData.event_date) : new Date());
+                                                setIsDatePickerOpen(true);
+                                            }}
+                                        >
+                                            <Text style={[styles.formInputText, !formData.event_date && styles.formInputPlaceholder]}>
+                                                {formData.event_date || 'Select event date'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {/* Multi-day Toggle */}
+                                    <View style={styles.formField}>
+                                        <View style={styles.switchContainer}>
+                                            <Text style={styles.formLabel}>Multi-day Event</Text>
+                                            <Switch
+                                                value={formData.is_multi_day}
+                                                onValueChange={(value) => setFormData({ ...formData, is_multi_day: value })}
+                                                trackColor={{ false: theme.colors.border, true: theme.colors.secondary }}
+                                                thumbColor={theme.colors.surface}
+                                            />
+                                        </View>
+                                    </View>
+
+                                    {/* End Date (if multi-day) */}
+                                    {formData.is_multi_day && (
+                                        <View style={styles.formField}>
+                                            <Text style={styles.formLabel}>End Date</Text>
+                                            <TouchableOpacity
+                                                style={styles.formInput}
+                                                onPress={() => {
+                                                    setDatePickerField('end_date');
+                                                    setSelectedDate(formData.end_date ? new Date(formData.end_date) : new Date());
+                                                    setIsDatePickerOpen(true);
+                                                }}
+                                            >
+                                                <Text style={[styles.formInputText, !formData.end_date && styles.formInputPlaceholder]}>
+                                                    {formData.end_date || 'Select end date'}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
+
+                                    {/* Activity Type */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Activity Type *</Text>
+                                        <TouchableOpacity
+                                            style={styles.formInput}
+                                            onPress={() => setIsActivityTypeDropdownOpen(true)}
+                                        >
+                                            <Text style={[styles.formInputText, !formData.activity_type && styles.formInputPlaceholder]}>
+                                                {formData.activity_type || 'Select activity type'}
+                                            </Text>
+                                            <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {/* Home/Away */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Location Type</Text>
+                                        <TouchableOpacity
+                                            style={styles.formInput}
+                                            onPress={() => setIsLocationTypeDropdownOpen(true)}
+                                        >
+                                            <Text style={[styles.formInputText, !formData.home_away && styles.formInputPlaceholder]}>
+                                                {formData.home_away || 'Select location type'}
+                                            </Text>
+                                            <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {/* Location */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Location</Text>
+                                        <TextInput
+                                            style={styles.formTextInput}
+                                            placeholder="Enter location"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={formData.location}
+                                            onChangeText={(text) => setFormData({ ...formData, location: text })}
+                                        />
+                                    </View>
+
+                                    {/* Description */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Description</Text>
+                                        <TextInput
+                                            style={[styles.formTextInput, styles.formTextArea]}
+                                            placeholder="Enter description"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={formData.description}
+                                            onChangeText={(text) => setFormData({ ...formData, description: text })}
+                                            multiline
+                                            numberOfLines={4}
+                                        />
+                                    </View>
+
+                                    {/* Action Buttons */}
+                                    <View style={styles.addActivityBottomSheetActions}>
+                                        <TouchableOpacity
+                                            style={styles.addActivityCancelButton}
+                                            onPress={() => setIsAddActivityModalOpen(false)}
+                                        >
+                                            <Text style={styles.addActivityCancelButtonText}>Cancel</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.addActivitySaveButton}
+                                            onPress={() => {
+                                                // TODO: Handle save
+                                                console.log('Save activity:', formData);
+                                                setIsAddActivityModalOpen(false);
+                                            }}
+                                        >
+                                            <Text style={styles.addActivitySaveButtonText}>Save</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            </ScrollView>
+                        </Pressable>
+                    </Pressable>
+                </Modal>
+
+                {/* Edit Activity Modal - Bottom Sheet */}
                 <Modal
                     visible={isEditModalOpen}
                     transparent={true}
@@ -928,9 +1173,24 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         setIsLocationTypeDropdownOpen(false);
                     }}
                 >
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.editModalContainer}>
-                            <ScrollView style={styles.editModalScroll} contentContainerStyle={styles.editModalContent}>
+                    <Pressable 
+                        style={styles.bottomSheetOverlay}
+                        onPress={() => {
+                            setIsEditModalOpen(false);
+                            setEditingActivity(null);
+                            setIsActivityTypeDropdownOpen(false);
+                            setIsLocationTypeDropdownOpen(false);
+                        }}
+                    >
+                        <Pressable 
+                            style={styles.editActivityBottomSheet}
+                            onPress={(e) => e.stopPropagation()}
+                        >
+                            <ScrollView 
+                                style={styles.editActivityBottomSheetScroll} 
+                                contentContainerStyle={styles.editActivityBottomSheetContent}
+                                showsVerticalScrollIndicator={false}
+                            >
                                 {/* Modal Header */}
                                 <View style={styles.editModalHeader}>
                                     <Text style={styles.editModalTitle}>
@@ -1377,8 +1637,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     </TouchableOpacity>
                                 </View>
                             </ScrollView>
-                        </View>
-                    </View>
+                        </Pressable>
+                    </Pressable>
                 </Modal>
 
                 {/* Delete Confirmation Modal */}
@@ -2689,10 +2949,26 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         fontWeight: '500',
     },
+    formTextInput: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        minHeight: 40,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
     formTextArea: {
         minHeight: 80,
         textAlignVertical: 'top',
         paddingTop: theme.spacing.sm,
+    },
+    switchContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     durationBadge: {
         alignSelf: 'flex-start',
@@ -3241,5 +3517,144 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.xs,
         paddingLeft: theme.spacing.sm,
         lineHeight: 18,
+    },
+    // Bottom Sheet Styles
+    bottomSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    bottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '40%',
+    },
+    divisionBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '60%',
+    },
+    divisionBottomSheetScroll: {
+        maxHeight: 400,
+    },
+    bottomSheetHeader: {
+        marginBottom: theme.spacing.lg,
+    },
+    bottomSheetTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    bottomSheetContent: {
+        gap: theme.spacing.md,
+    },
+    bottomSheetOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        gap: theme.spacing.md,
+    },
+    bottomSheetOptionSelected: {
+        backgroundColor: theme.colors.secondary,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+    },
+    bottomSheetOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    bottomSheetOptionTextSelected: {
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    // Add Activity Bottom Sheet Styles
+    addActivityBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '90%',
+        paddingBottom: theme.spacing.xl,
+    },
+    addActivityBottomSheetScroll: {
+        flex: 1,
+    },
+    addActivityBottomSheetContent: {
+        paddingHorizontal: theme.spacing.md,
+    },
+    addActivityBottomSheetHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        marginBottom: theme.spacing.md,
+    },
+    addActivityBottomSheetTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    addActivityFormContent: {
+        gap: theme.spacing.md,
+    },
+    addActivityBottomSheetActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: theme.spacing.sm,
+        marginTop: theme.spacing.lg,
+        paddingTop: theme.spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    addActivityCancelButton: {
+        paddingHorizontal: theme.spacing.lg,
+        paddingVertical: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.surface,
+    },
+    addActivityCancelButtonText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    addActivitySaveButton: {
+        paddingHorizontal: theme.spacing.lg,
+        paddingVertical: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.secondary,
+    },
+    addActivitySaveButtonText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    // Edit Activity Bottom Sheet Styles
+    editActivityBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '90%',
+        paddingBottom: theme.spacing.xl,
+    },
+    editActivityBottomSheetScroll: {
+        flex: 1,
+    },
+    editActivityBottomSheetContent: {
+        padding: theme.spacing.lg,
     },
 });
