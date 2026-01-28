@@ -21,7 +21,7 @@ export const MenuScreen = ({ navigation }: any) => {
     const [activeTab, setActiveTab] = useState('Children');
     const [activeSubTab, setActiveSubTab] = useState('Roster');
     const [menuItemsList, setMenuItemsList] = useState<MenuItem[]>([]);
-    
+
     // Add Menu Item form states
     const [menuDate, setMenuDate] = useState(new Date(2026, 0, 22));
     const [mealType, setMealType] = useState('');
@@ -126,17 +126,17 @@ export const MenuScreen = ({ navigation }: any) => {
                                 <Ionicons name="restaurant-outline" size={20} color="white" />
                             </View>
                         </View>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.iconButton}
                             onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
                         >
-                            <Ionicons 
-                                name={viewMode === 'list' ? "list-outline" : "grid-outline"} 
-                                size={20} 
-                                color={theme.colors.text} 
+                            <Ionicons
+                                name={viewMode === 'list' ? "list-outline" : "grid-outline"}
+                                size={20}
+                                color={theme.colors.text}
                             />
                         </TouchableOpacity>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.iconButton}
                             onPress={() => setShowGuideModal(true)}
                         >
@@ -162,8 +162,8 @@ export const MenuScreen = ({ navigation }: any) => {
                     ) : (
                         <View style={viewMode === 'grid' ? styles.gridContainer : styles.listContainer}>
                             {menuItemsList.map((item) => (
-                                <View 
-                                    key={item.id} 
+                                <View
+                                    key={item.id}
                                     style={[
                                         viewMode === 'grid' ? styles.gridItem : styles.listItem,
                                         { backgroundColor: getMealTypeColor(item.mealType) }
@@ -174,7 +174,7 @@ export const MenuScreen = ({ navigation }: any) => {
                                             <Text style={styles.menuItemMealType}>{item.mealType}</Text>
                                             <Text style={styles.menuItemDate}>{formatDate(item.date)}</Text>
                                         </View>
-                                        <TouchableOpacity 
+                                        <TouchableOpacity
                                             onPress={() => handleDeleteMenuItem(item.id)}
                                             style={styles.deleteButton}
                                         >
@@ -251,7 +251,7 @@ export const MenuScreen = ({ navigation }: any) => {
                         )}
 
                         {/* Scrollable Content */}
-                        <ScrollView 
+                        <ScrollView
                             style={styles.guideContent}
                             horizontal={true}
                             showsHorizontalScrollIndicator={true}
@@ -259,30 +259,30 @@ export const MenuScreen = ({ navigation }: any) => {
                         >
                             <View style={styles.guideSection}>
                                 <Text style={styles.sectionTitle}>
-                                    {activeTab === 'Children' && activeSubTab === 'Roster' ? 'Children Roster' : 
-                                     activeTab === 'Children' && activeSubTab === 'Daily Notes' ? 'Daily Notes' :
-                                     activeTab === 'Children' && activeSubTab === 'Medical' ? 'Children Medical' :
-                                     activeTab === 'Staff' ? 'Staff' : 'Medical'}
+                                    {activeTab === 'Children' && activeSubTab === 'Roster' ? 'Children Roster' :
+                                        activeTab === 'Children' && activeSubTab === 'Daily Notes' ? 'Daily Notes' :
+                                            activeTab === 'Children' && activeSubTab === 'Medical' ? 'Children Medical' :
+                                                activeTab === 'Staff' ? 'Staff' : 'Medical'}
                                 </Text>
                                 <Text style={styles.sectionSubtitle}>
                                     {activeTab === 'Children' && activeSubTab === 'Roster' ? 'CSV format for children roster upload' :
-                                     activeTab === 'Children' && activeSubTab === 'Daily Notes' ? 'CSV format for daily notes upload' :
-                                     activeTab === 'Children' && activeSubTab === 'Medical' ? 'CSV format for children medical upload' :
-                                     activeTab === 'Staff' ? 'CSV format for staff upload' : 'CSV format for medical upload'}
+                                        activeTab === 'Children' && activeSubTab === 'Daily Notes' ? 'CSV format for daily notes upload' :
+                                            activeTab === 'Children' && activeSubTab === 'Medical' ? 'CSV format for children medical upload' :
+                                                activeTab === 'Staff' ? 'CSV format for staff upload' : 'CSV format for medical upload'}
                                 </Text>
 
                                 {/* Required Columns */}
                                 <View style={styles.codeBox}>
                                     <Text style={styles.codeText}>
-                                        {activeTab === 'Children' && activeSubTab === 'Roster' 
+                                        {activeTab === 'Children' && activeSubTab === 'Roster'
                                             ? 'first_name, last_name, person_id, age, grade, gender, guardian_phone, guardian_email'
                                             : activeTab === 'Children' && activeSubTab === 'Daily Notes'
-                                            ? 'date, child_id, mood, activities, meals, nap, notes'
-                                            : activeTab === 'Children' && activeSubTab === 'Medical'
-                                            ? 'child_id, medical_notes, allergies, division_id, leader_id, emergency_contact'
-                                            : activeTab === 'Staff'
-                                            ? 'first_name, last_name, email, role, department, phone, hire_date'
-                                            : 'patient_id, condition, medication, notes, date'}
+                                                ? 'date, child_id, mood, activities, meals, nap, notes'
+                                                : activeTab === 'Children' && activeSubTab === 'Medical'
+                                                    ? 'child_id, medical_notes, allergies, division_id, leader_id, emergency_contact'
+                                                    : activeTab === 'Staff'
+                                                        ? 'first_name, last_name, email, role, department, phone, hire_date'
+                                                        : 'patient_id, condition, medication, notes, date'}
                                     </Text>
                                 </View>
 
@@ -292,12 +292,12 @@ export const MenuScreen = ({ navigation }: any) => {
                                         {activeTab === 'Children' && activeSubTab === 'Roster'
                                             ? 'John, Doe, P12345, 10, 5, Male, 555-1234, parent@email.com, None, Peanuts, division'
                                             : activeTab === 'Children' && activeSubTab === 'Daily Notes'
-                                            ? '2026-07-15, child-uuid-123, Happy, Swimming, Breakfast, Yes, Had a great day'
-                                            : activeTab === 'Children' && activeSubTab === 'Medical'
-                                            ? 'child-uuid-123, Asthma, Peanuts, division-uuid, leader-uuid, Jane Doe 555-5678'
-                                            : activeTab === 'Staff'
-                                            ? 'Jane, Smith, jane@email.com, Counselor, Activities, 555-9876, 2026-01-15'
-                                            : 'patient-uuid, Fever, Tylenol, Monitor temperature, 2026-07-15'}
+                                                ? '2026-07-15, child-uuid-123, Happy, Swimming, Breakfast, Yes, Had a great day'
+                                                : activeTab === 'Children' && activeSubTab === 'Medical'
+                                                    ? 'child-uuid-123, Asthma, Peanuts, division-uuid, leader-uuid, Jane Doe 555-5678'
+                                                    : activeTab === 'Staff'
+                                                        ? 'Jane, Smith, jane@email.com, Counselor, Activities, 555-9876, 2026-01-15'
+                                                        : 'patient-uuid, Fever, Tylenol, Monitor temperature, 2026-07-15'}
                                     </Text>
                                 </View>
 
@@ -306,12 +306,12 @@ export const MenuScreen = ({ navigation }: any) => {
                                     {activeTab === 'Children' && activeSubTab === 'Roster'
                                         ? 'REQUIRED: first_name, last_name, and person_id. All other fields are optional.'
                                         : activeTab === 'Children' && activeSubTab === 'Daily Notes'
-                                        ? 'REQUIRED: date, child_id. All other fields are optional.'
-                                        : activeTab === 'Children' && activeSubTab === 'Medical'
-                                        ? 'REQUIRED: child_id. division_id and leader_id must be valid UUIDs from divisions and staff tables if provided.'
-                                        : activeTab === 'Staff'
-                                        ? 'REQUIRED: first_name, last_name, email, role. All other fields are optional.'
-                                        : 'REQUIRED: patient_id, condition, date. All other fields are optional.'}
+                                            ? 'REQUIRED: date, child_id. All other fields are optional.'
+                                            : activeTab === 'Children' && activeSubTab === 'Medical'
+                                                ? 'REQUIRED: child_id. division_id and leader_id must be valid UUIDs from divisions and staff tables if provided.'
+                                                : activeTab === 'Staff'
+                                                    ? 'REQUIRED: first_name, last_name, email, role. All other fields are optional.'
+                                                    : 'REQUIRED: patient_id, condition, date. All other fields are optional.'}
                                 </Text>
 
                                 {/* General Tips */}
@@ -347,7 +347,7 @@ export const MenuScreen = ({ navigation }: any) => {
 
                         {/* Bottom Sheet Options */}
                         <View style={styles.bottomSheetContent}>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.bottomSheetOption}
                                 onPress={() => handleSelectFileOption('Aloha downloads')}
                             >
@@ -355,7 +355,7 @@ export const MenuScreen = ({ navigation }: any) => {
                                 <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.bottomSheetOption}
                                 onPress={() => handleSelectFileOption('Other files')}
                             >
@@ -374,7 +374,7 @@ export const MenuScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={handleCloseAddMenuItem}
             >
-                <Pressable style={styles.modalOverlay} onPress={handleCloseAddMenuItem}>
+                <Pressable style={styles.centerModalOverlay} onPress={handleCloseAddMenuItem}>
                     <Pressable style={styles.addMenuItemModal} onPress={(e) => e.stopPropagation()}>
                         <ScrollView style={styles.addMenuItemScroll} showsVerticalScrollIndicator={false}>
                             {/* Modal Header */}
@@ -391,7 +391,7 @@ export const MenuScreen = ({ navigation }: any) => {
                             {/* Date Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Date</Text>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.inputContainer}
                                     onPress={() => setShowDatePicker(true)}
                                 >
@@ -408,7 +408,7 @@ export const MenuScreen = ({ navigation }: any) => {
                             {/* Meal Type Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Meal Type</Text>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.inputContainer}
                                     onPress={() => setShowMealTypePicker(true)}
                                 >
@@ -562,7 +562,7 @@ export const MenuScreen = ({ navigation }: any) => {
                                 </View>
                             </View>
                         </ScrollView>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.pickerConfirmBtn}
                             onPress={() => setShowDatePicker(false)}
                         >
@@ -787,6 +787,12 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
     },
+    centerModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     guideModal: {
         backgroundColor: theme.colors.surface,
         borderTopLeftRadius: theme.borderRadius.xl,
@@ -928,7 +934,8 @@ const styles = StyleSheet.create({
         paddingTop: theme.spacing.lg,
         paddingBottom: theme.spacing.xl,
         paddingHorizontal: theme.spacing.md,
-        maxHeight: '30%',
+        height: '50%',
+        width: '100%',
     },
     bottomSheetHeader: {
         marginBottom: theme.spacing.lg,
@@ -956,9 +963,9 @@ const styles = StyleSheet.create({
     // Add Menu Item Modal Styles
     addMenuItemModal: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.xl,
-        borderTopRightRadius: theme.borderRadius.xl,
-        maxHeight: '90%',
+        borderRadius: theme.borderRadius.xl,
+        height: '80%',
+        width: '90%',
         paddingBottom: theme.spacing.xl,
     },
     addMenuItemScroll: {

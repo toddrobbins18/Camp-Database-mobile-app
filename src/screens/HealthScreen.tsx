@@ -139,9 +139,9 @@ export const HealthScreen = ({ navigation }: any) => {
         const lastDay = new Date(year, month + 1, 0);
         const daysInMonth = lastDay.getDate();
         const startingDayOfWeek = firstDay.getDay();
-        
+
         const days = [];
-        
+
         // Previous month days
         const prevMonth = new Date(year, month - 1, 0);
         const prevMonthDays = prevMonth.getDate();
@@ -152,7 +152,7 @@ export const HealthScreen = ({ navigation }: any) => {
                 fullDate: new Date(year, month - 1, prevMonthDays - i)
             });
         }
-        
+
         // Current month days
         for (let i = 1; i <= daysInMonth; i++) {
             days.push({
@@ -161,7 +161,7 @@ export const HealthScreen = ({ navigation }: any) => {
                 fullDate: new Date(year, month, i)
             });
         }
-        
+
         // Next month days to fill the grid
         const remainingDays = 42 - days.length;
         for (let i = 1; i <= remainingDays; i++) {
@@ -171,13 +171,13 @@ export const HealthScreen = ({ navigation }: any) => {
                 fullDate: new Date(year, month + 1, i)
             });
         }
-        
+
         return days;
     };
 
     const formatMonthYear = (date: Date) => {
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                       'July', 'August', 'September', 'October', 'November', 'December'];
+        const months = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
         return `${months[date.getMonth()]} ${date.getFullYear()}`;
     };
 
@@ -193,8 +193,8 @@ export const HealthScreen = ({ navigation }: any) => {
 
     const isSameDate = (date1: Date, date2: Date) => {
         return date1.getDate() === date2.getDate() &&
-               date1.getMonth() === date2.getMonth() &&
-               date1.getFullYear() === date2.getFullYear();
+            date1.getMonth() === date2.getMonth() &&
+            date1.getFullYear() === date2.getFullYear();
     };
 
     const isToday = (date: Date) => {
@@ -211,8 +211,8 @@ export const HealthScreen = ({ navigation }: any) => {
     };
 
     const formatSelectedDate = (date: Date) => {
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                       'July', 'August', 'September', 'October', 'November', 'December'];
+        const months = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
         return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
     };
 
@@ -229,14 +229,14 @@ export const HealthScreen = ({ navigation }: any) => {
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Header */}
-    <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.openDrawer()}>
                         <Ionicons name="menu" size={28} color={theme.colors.text} />
-        </TouchableOpacity>
-        <TouchableOpacity>
+                    </TouchableOpacity>
+                    <TouchableOpacity>
                         <Ionicons name="person-circle-outline" size={28} color={theme.colors.text} />
-        </TouchableOpacity>
-    </View>
+                    </TouchableOpacity>
+                </View>
 
                 {/* Title and Description Section */}
                 <View style={styles.titleSection}>
@@ -248,27 +248,27 @@ export const HealthScreen = ({ navigation }: any) => {
 
                 {/* View Controls */}
                 <View style={styles.viewControls}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.viewControlBtn, activeView === 'list' && styles.viewControlBtnActive]}
                         onPress={() => setActiveView('list')}
                     >
-                        <Ionicons 
-                            name="list-outline" 
-                            size={18} 
-                            color={activeView === 'list' ? 'white' : theme.colors.text} 
+                        <Ionicons
+                            name="list-outline"
+                            size={18}
+                            color={activeView === 'list' ? 'white' : theme.colors.text}
                         />
                         <Text style={[styles.viewControlText, activeView === 'list' && styles.viewControlTextActive]}>
                             List
                         </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.viewControlBtn, activeView === 'calendar' && styles.viewControlBtnActive]}
                         onPress={() => setActiveView('calendar')}
                     >
-                        <Ionicons 
-                            name="calendar-outline" 
-                            size={18} 
-                            color={activeView === 'calendar' ? 'white' : theme.colors.text} 
+                        <Ionicons
+                            name="calendar-outline"
+                            size={18}
+                            color={activeView === 'calendar' ? 'white' : theme.colors.text}
                         />
                         <Text style={[styles.viewControlText, activeView === 'calendar' && styles.viewControlTextActive]}>
                             Calendar
@@ -295,7 +295,7 @@ export const HealthScreen = ({ navigation }: any) => {
                             onChangeText={setSearchQuery}
                         />
                     </View>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.dropdownContainer}
                         onPress={() => setShowDivisionPicker(true)}
                     >
@@ -340,8 +340,8 @@ export const HealthScreen = ({ navigation }: any) => {
                                     const isSelected = isSameDate(day.fullDate, selectedDate);
                                     const isTodayDate = isToday(day.fullDate);
                                     const isPast = isPastDate(day.fullDate);
-                                    
-    return (
+
+                                    return (
                                         <TouchableOpacity
                                             key={index}
                                             style={[
@@ -382,13 +382,13 @@ export const HealthScreen = ({ navigation }: any) => {
                             <View style={styles.emptyState}>
                                 <Text style={styles.emptyText}>No medications scheduled for this date</Text>
                             </View>
-                    </StyledCard>
+                        </StyledCard>
                     </>
                 ) : (
                     <>
                         {/* Tabs */}
-                        <ScrollView 
-                            horizontal 
+                        <ScrollView
+                            horizontal
                             showsHorizontalScrollIndicator={false}
                             style={styles.tabsContainer}
                             contentContainerStyle={styles.tabsContent}
@@ -411,7 +411,7 @@ export const HealthScreen = ({ navigation }: any) => {
                             <StyledCard style={styles.todaysMedicationsCard}>
                                 <Text style={styles.todaysMedicationsTitle}>Today's Medications</Text>
                                 <Text style={styles.todaysMedicationsSubtitle}>Track medication administration</Text>
-                                
+
                                 {/* RFID Quick Check-In Card */}
                                 <StyledCard style={styles.rfidCard}>
                                     <View style={styles.rfidHeader}>
@@ -421,7 +421,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     <Text style={styles.rfidDescription}>
                                         Scan camper's RFID bracelet to automatically administer their medications.
                                     </Text>
-                                    
+
                                     <View style={styles.rfidInputContainer}>
                                         <TextInput
                                             style={styles.rfidInput}
@@ -434,21 +434,21 @@ export const HealthScreen = ({ navigation }: any) => {
                                             <Ionicons name="scan-outline" size={18} color="white" />
                                             <Text style={styles.scanButtonText}>Scan</Text>
                                         </TouchableOpacity>
-                                        <TouchableOpacity 
+                                        <TouchableOpacity
                                             style={styles.clearButton}
                                             onPress={() => setRfidInput('')}
                                         >
                                             <Text style={styles.clearButtonText}>Clear</Text>
                                         </TouchableOpacity>
                                     </View>
-                    </StyledCard>
+                                </StyledCard>
 
                                 {/* Empty State */}
                                 <View style={styles.emptyStateRow}>
                                     <Text style={styles.emptyText}>No medications scheduled for today</Text>
                                     <View style={styles.emptyDot} />
                                 </View>
-                    </StyledCard>
+                            </StyledCard>
                         ) : activeTab === 'Health Center' ? (
                             <View style={styles.healthCenterContainer}>
                                 {/* Health Center Admissions Header */}
@@ -460,7 +460,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     <Text style={styles.healthCenterSubtitle}>
                                         Track overnight admissions to the health center
                                     </Text>
-                </View>
+                                </View>
 
                                 {/* RFID Quick Check-in / Check-Out Card */}
                                 <StyledCard style={styles.rfidCard}>
@@ -471,7 +471,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     <Text style={styles.rfidDescription}>
                                         Scan RFID to admit or check out - system auto-detects the action
                                     </Text>
-                                    
+
                                     <View style={styles.rfidInputContainer}>
                                         <TextInput
                                             style={styles.rfidInput}
@@ -483,14 +483,14 @@ export const HealthScreen = ({ navigation }: any) => {
                                         <TouchableOpacity style={styles.scanButton}>
                                             <Ionicons name="scan-outline" size={18} color="white" />
                                             <Text style={styles.scanButtonText}>Scan</Text>
-                    </TouchableOpacity>
-                                        <TouchableOpacity 
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
                                             style={styles.clearButton}
                                             onPress={() => setHealthCenterRfidInput('')}
                                         >
                                             <Text style={styles.clearButtonText}>Clear</Text>
-                    </TouchableOpacity>
-                </View>
+                                        </TouchableOpacity>
+                                    </View>
                                 </StyledCard>
 
                                 {/* Search Children Section */}
@@ -513,9 +513,9 @@ export const HealthScreen = ({ navigation }: any) => {
                                     <View style={styles.availableChildrenHeader}>
                                         <Ionicons name="checkmark-circle" size={20} color="#10b981" />
                                         <Text style={styles.availableChildrenTitle}>Available Children</Text>
-                            </View>
-                                    
-                                    <ScrollView 
+                                    </View>
+
+                                    <ScrollView
                                         style={styles.childrenList}
                                         showsVerticalScrollIndicator={true}
                                     >
@@ -544,9 +544,9 @@ export const HealthScreen = ({ navigation }: any) => {
                                                             ]}>
                                                                 {child.division}
                                                             </Text>
-                        </View>
-                                </View>
-                                                    <TouchableOpacity 
+                                                        </View>
+                                                    </View>
+                                                    <TouchableOpacity
                                                         style={[
                                                             styles.admitButton,
                                                             isSelected && styles.admitButtonSelected
@@ -557,10 +557,10 @@ export const HealthScreen = ({ navigation }: any) => {
                                                             setShowAdmitModal(true);
                                                         }}
                                                     >
-                                                        <Ionicons 
-                                                            name="person-add-outline" 
-                                                            size={16} 
-                                                            color={isSelected ? 'white' : theme.colors.text} 
+                                                        <Ionicons
+                                                            name="person-add-outline"
+                                                            size={16}
+                                                            color={isSelected ? 'white' : theme.colors.text}
                                                         />
                                                         <Text style={[
                                                             styles.admitButtonText,
@@ -573,21 +573,21 @@ export const HealthScreen = ({ navigation }: any) => {
                                             );
                                         })}
                                     </ScrollView>
-                            </View>
+                                </View>
                             </View>
                         ) : activeTab === 'Health Center Log' ? (
                             <StyledCard style={styles.healthCenterLogCard}>
                                 <View style={styles.healthCenterLogHeader}>
                                     <Ionicons name="bar-chart-outline" size={24} color={theme.colors.text} />
                                     <Text style={styles.healthCenterLogTitle}>Health Center Admission History</Text>
-                        </View>
+                                </View>
                                 <Text style={styles.healthCenterLogSubtitle}>
                                     Past health center admissions this season
                                 </Text>
                                 <View style={styles.emptyState}>
                                     <Text style={styles.emptyText}>No admission history found for this season</Text>
                                 </View>
-                    </StyledCard>
+                            </StyledCard>
                         ) : activeTab === 'Add Medication' ? (
                             <StyledCard style={styles.addMedicationCard}>
                                 <View style={styles.addMedicationHeader}>
@@ -603,7 +603,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     {/* Child Selection */}
                                     <View style={styles.formField}>
                                         <Text style={styles.formLabel}>Child</Text>
-                                        <TouchableOpacity 
+                                        <TouchableOpacity
                                             style={styles.childPickerButton}
                                             onPress={() => setShowChildPicker(true)}
                                         >
@@ -615,7 +615,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                             </Text>
                                             <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                                         </TouchableOpacity>
-                            </View>
+                                    </View>
 
                                     {/* Medication Name */}
                                     <View style={styles.formField}>
@@ -627,7 +627,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                             value={medicationName}
                                             onChangeText={setMedicationName}
                                         />
-                        </View>
+                                    </View>
 
                                     {/* Dosage */}
                                     <View style={styles.formField}>
@@ -639,7 +639,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                             value={dosage}
                                             onChangeText={setDosage}
                                         />
-                                </View>
+                                    </View>
 
                                     {/* Meal Time */}
                                     <View style={styles.formField}>
@@ -655,7 +655,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                         mealTime === 'Before Breakfast' && styles.radioCircleSelected
                                                     ]}>
                                                         {mealTime === 'Before Breakfast' && <View style={styles.radioInner} />}
-                            </View>
+                                                    </View>
                                                     <Text style={styles.radioLabel}>Before Breakfast</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity
@@ -667,7 +667,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                         mealTime === 'Before Lunch' && styles.radioCircleSelected
                                                     ]}>
                                                         {mealTime === 'Before Lunch' && <View style={styles.radioInner} />}
-                            </View>
+                                                    </View>
                                                     <Text style={styles.radioLabel}>Before Lunch</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity
@@ -765,7 +765,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </TouchableOpacity>
 
                                     {/* Add Medication Button */}
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         style={styles.addMedicationButton}
                                         onPress={() => {
                                             // Handle add medication
@@ -788,15 +788,15 @@ export const HealthScreen = ({ navigation }: any) => {
                                     >
                                         <Text style={styles.addMedicationButtonText}>Add Medication</Text>
                                     </TouchableOpacity>
-                        </View>
-                    </StyledCard>
+                                </View>
+                            </StyledCard>
                         ) : (
                             <StyledCard style={styles.medicationLogCard}>
                                 <Text style={styles.logTitle}>Daily Medication Log</Text>
                                 <Text style={styles.logDescription}>Mark off medications administered today.</Text>
                                 <View style={styles.emptyState}>
                                     <Text style={styles.emptyText}>No medications scheduled for today.</Text>
-                </View>
+                                </View>
                             </StyledCard>
                         )}
                     </>
@@ -808,40 +808,38 @@ export const HealthScreen = ({ navigation }: any) => {
             <Modal
                 visible={showDivisionPicker}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowDivisionPicker(false)}
             >
                 <Pressable style={styles.modalOverlay} onPress={() => setShowDivisionPicker(false)}>
-                    <View style={styles.dropdownModal}>
-                        <ScrollView 
-                            style={styles.dropdownScrollView}
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Division</Text>
+                            <TouchableOpacity onPress={() => setShowDivisionPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView
+                            style={styles.pickerContent}
                             showsVerticalScrollIndicator={true}
                         >
                             {divisions.map((division) => (
                                 <TouchableOpacity
                                     key={division}
-                                    style={[
-                                        styles.dropdownOption,
-                                        selectedDivision === division && styles.dropdownOptionSelected
-                                    ]}
+                                    style={styles.pickerOption}
                                     onPress={() => {
                                         setSelectedDivision(division);
                                         setShowDivisionPicker(false);
                                     }}
                                 >
-                                    <Text style={[
-                                        styles.dropdownOptionText,
-                                        selectedDivision === division && styles.dropdownOptionTextSelected
-                                    ]}>
-                                        {division}
-                                    </Text>
+                                    <Text style={styles.pickerOptionText}>{division}</Text>
                                     {selectedDivision === division && (
-                                        <Ionicons name="checkmark" size={20} color="#FFA500" />
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
                                     )}
                                 </TouchableOpacity>
                             ))}
                         </ScrollView>
-                    </View>
+                    </Pressable>
                 </Pressable>
             </Modal>
 
@@ -856,21 +854,21 @@ export const HealthScreen = ({ navigation }: any) => {
                     setChildToAdmit(null);
                 }}
             >
-                <Pressable 
-                    style={styles.modalOverlay} 
+                <Pressable
+                    style={styles.modalOverlay}
                     onPress={() => {
                         setShowAdmitModal(false);
                         setAdmitReason('');
                         setChildToAdmit(null);
                     }}
                 >
-                    <Pressable 
-                        style={styles.admitModal} 
+                    <Pressable
+                        style={styles.admitModal}
                         onPress={(e) => e.stopPropagation()}
                     >
                         <Text style={styles.admitModalTitle}>Notice from site thenest.camp</Text>
                         <Text style={styles.admitModalSubtitle}>Reason for admission (optional)</Text>
-                        
+
                         <TextInput
                             style={styles.admitReasonInput}
                             placeholder="Enter reason..."
@@ -880,8 +878,8 @@ export const HealthScreen = ({ navigation }: any) => {
                             multiline={true}
                             numberOfLines={4}
                         />
-                        
-                        <TouchableOpacity 
+
+                        <TouchableOpacity
                             style={styles.confirmButton}
                             onPress={() => {
                                 // Handle confirm action
@@ -893,8 +891,8 @@ export const HealthScreen = ({ navigation }: any) => {
                         >
                             <Text style={styles.confirmButtonText}>Confirm</Text>
                         </TouchableOpacity>
-                        
-                        <TouchableOpacity 
+
+                        <TouchableOpacity
                             style={styles.cancelButton}
                             onPress={() => {
                                 setShowAdmitModal(false);
@@ -915,12 +913,12 @@ export const HealthScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={() => setShowChildPicker(false)}
             >
-                <Pressable 
-                    style={styles.modalOverlay} 
+                <Pressable
+                    style={styles.modalOverlay}
                     onPress={() => setShowChildPicker(false)}
                 >
-                    <Pressable 
-                        style={styles.pickerModal} 
+                    <Pressable
+                        style={styles.pickerModal}
                         onPress={(e) => e.stopPropagation()}
                     >
                         <View style={styles.pickerHeader}>
@@ -957,17 +955,17 @@ export const HealthScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={() => setShowUploadModal(false)}
             >
-                <Pressable 
-                    style={styles.uploadModalOverlay} 
+                <Pressable
+                    style={styles.uploadModalOverlay}
                     onPress={() => setShowUploadModal(false)}
                 >
-                    <Pressable 
-                        style={styles.uploadModal} 
+                    <Pressable
+                        style={styles.uploadModal}
                         onPress={(e) => e.stopPropagation()}
                     >
                         <Text style={styles.uploadModalTitle}>Select file</Text>
-                        
-                        <TouchableOpacity 
+
+                        <TouchableOpacity
                             style={styles.uploadOption}
                             onPress={() => {
                                 // Handle Aloha downloads selection
@@ -978,8 +976,8 @@ export const HealthScreen = ({ navigation }: any) => {
                             <Ionicons name="folder-outline" size={24} color={theme.colors.text} />
                             <Text style={styles.uploadOptionText}>Aloha downloads</Text>
                         </TouchableOpacity>
-                        
-                        <TouchableOpacity 
+
+                        <TouchableOpacity
                             style={styles.uploadOption}
                             onPress={() => {
                                 // Handle Other files selection
@@ -1226,47 +1224,55 @@ const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        justifyContent: 'flex-end',
     },
-    dropdownModal: {
+    pickerModal: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.md,
-        marginHorizontal: theme.spacing.md,
-        marginTop: 180,
-        maxHeight: 400,
-        minWidth: 200,
-        maxWidth: 400,
-        alignSelf: 'flex-start',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 8,
-        elevation: 5,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        height: '50%',
+        paddingBottom: theme.spacing.xl,
+        width: '100%',
     },
-    dropdownScrollView: {
-        maxHeight: 400,
-    },
-    dropdownOption: {
+    pickerHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: theme.spacing.md,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.md,
         paddingHorizontal: theme.spacing.md,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
-    dropdownOptionSelected: {
-        backgroundColor: '#FFF5E6',
+    pickerTitle: {
+        ...theme.typography.h2,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
     },
-    dropdownOptionText: {
+    pickerContent: {
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.md,
+    },
+    pickerOption: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    pickerOptionText: {
         ...theme.typography.body,
         fontSize: 16,
         color: theme.colors.text,
     },
-    dropdownOptionTextSelected: {
-        color: '#FFA500',
-        fontWeight: '600',
+    // Upload CSV Modal Styles
+    uploadModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
     },
-    // Calendar Styles
     calendarCard: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
@@ -1894,48 +1900,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: 'white',
     },
-    pickerModal: {
-        backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.xl,
-        borderTopRightRadius: theme.borderRadius.xl,
-        maxHeight: '70%',
-        paddingBottom: theme.spacing.xl,
-        marginTop: 'auto',
-    },
-    pickerHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingTop: theme.spacing.lg,
-        paddingBottom: theme.spacing.md,
-        paddingHorizontal: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    pickerTitle: {
-        ...theme.typography.h2,
-        fontSize: 18,
-        fontWeight: '700',
-        color: theme.colors.text,
-    },
-    pickerContent: {
-        paddingHorizontal: theme.spacing.md,
-        paddingTop: theme.spacing.md,
-        maxHeight: 400,
-    },
-    pickerOption: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    pickerOptionText: {
-        ...theme.typography.body,
-        fontSize: 16,
-        color: theme.colors.text,
-    },
+
     // Upload CSV Modal Styles
     uploadModalOverlay: {
         flex: 1,
@@ -1943,33 +1908,31 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     uploadModal: {
-        backgroundColor: '#1f2937',
+        backgroundColor: theme.colors.surface,
         borderTopLeftRadius: theme.borderRadius.xl,
         borderTopRightRadius: theme.borderRadius.xl,
         paddingTop: theme.spacing.lg,
         paddingBottom: theme.spacing.xl,
         paddingHorizontal: theme.spacing.md,
+        height: '50%',
     },
     uploadModalTitle: {
         ...theme.typography.h2,
         fontSize: 18,
         fontWeight: '700',
-        color: 'white',
+        color: theme.colors.text,
         marginBottom: theme.spacing.lg,
         textAlign: 'center',
     },
     uploadOption: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#374151',
-        borderRadius: theme.borderRadius.md,
-        padding: theme.spacing.md,
-        marginBottom: theme.spacing.md,
+        paddingVertical: theme.spacing.md,
         gap: theme.spacing.md,
     },
     uploadOptionText: {
         ...theme.typography.body,
         fontSize: 16,
-        color: 'white',
+        color: theme.colors.text,
     },
 });

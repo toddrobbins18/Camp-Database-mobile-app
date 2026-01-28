@@ -333,10 +333,13 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
                                             <Text style={styles.divisionName}>{division.name}</Text>
                                         </View>
                                         <Switch
+                                            key={`${division.id}-${isEnabled}`}
                                             value={isEnabled}
                                             onValueChange={() => handleToggleDivision(user.id, division.id)}
                                             trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
-                                            thumbColor={isEnabled ? 'white' : '#f1f5f9'}
+                                            thumbColor="#ffffff"
+                                            // @ts-ignore
+                                            activeThumbColor="#ffffff"
                                             ios_backgroundColor="#e2e8f0"
                                         />
                                     </View>

@@ -8,10 +8,11 @@ import { StyledCard } from '../components/StyledCard';
 export const IncidentReportsScreen = ({ navigation }: any) => {
     const [showBottomSheet, setShowBottomSheet] = useState(false);
     const [showAddIncidentModal, setShowAddIncidentModal] = useState(false);
+    const [showHelpModal, setShowHelpModal] = useState(false);
     const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState('');
     const [tags, setTags] = useState<string[]>([]);
-    
+
     // Form state
     const [date, setDate] = useState<Date>(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -21,7 +22,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     const [showSeverityPicker, setShowSeverityPicker] = useState(false);
     const [description, setDescription] = useState<string>('');
     const [reportedBy, setReportedBy] = useState<string>('');
-    
+
     // Options
     const incidentTypes = ['Accident', 'Behavior', 'Medical', 'Injury', 'Other'];
     const severityLevels = ['Low', 'Medium', 'High', 'Critical'];
@@ -46,8 +47,8 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
 
 
     const toggleChildSelection = (childName: string) => {
-        setSelectedChildren(prev => 
-            prev.includes(childName) 
+        setSelectedChildren(prev =>
+            prev.includes(childName)
                 ? prev.filter(name => name !== childName)
                 : [...prev, childName]
         );
@@ -122,8 +123,8 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
 
                     {/* Action Buttons */}
                     <View style={styles.actionButtonsContainer}>
-                        <TouchableOpacity style={styles.helpIcon}>
-                            <Ionicons name="help-circle-outline" size={20} color={theme.colors.textSecondary} />
+                        <TouchableOpacity style={styles.helpIcon} onPress={() => setShowHelpModal(true)}>
+                            <Ionicons name="help-circle-outline" size={24} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.uploadBtn} onPress={handleUploadCSV}>
                             <Ionicons name="cloud-upload-outline" size={18} color="white" />
@@ -145,6 +146,38 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
 
             </ScrollView>
 
+            {/* Help Modal */}
+            <Modal
+                visible={showHelpModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowHelpModal(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowHelpModal(false)}>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Help & Support</Text>
+                            <TouchableOpacity onPress={() => setShowHelpModal(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.bottomSheetContent}>
+                            <Text style={styles.bottomSheetOptionText}>
+                                Need assistance? detailed guide on how to report incidents effectively.
+                            </Text>
+                            <TouchableOpacity style={styles.bottomSheetOption}>
+                                <Ionicons name="book-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.bottomSheetOptionText}>View User Guide</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.bottomSheetOption}>
+                                <Ionicons name="call-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.bottomSheetOptionText}>Contact Support</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
             {/* Bottom Sheet Modal */}
             <Modal
                 visible={showBottomSheet}
@@ -161,7 +194,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
 
                         {/* Bottom Sheet Options */}
                         <View style={styles.bottomSheetContent}>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.bottomSheetOption}
                                 onPress={() => handleSelectOption('Aloha downloads')}
                             >
@@ -169,7 +202,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                 <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.bottomSheetOption}
                                 onPress={() => handleSelectOption('Other files')}
                             >
@@ -188,7 +221,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={handleCloseAddIncident}
             >
-                <Pressable style={styles.modalOverlay} onPress={handleCloseAddIncident}>
+                <Pressable style={styles.centerModalOverlay} onPress={handleCloseAddIncident}>
                     <Pressable style={styles.addIncidentModal} onPress={(e) => e.stopPropagation()}>
                         <ScrollView style={styles.addIncidentScroll} showsVerticalScrollIndicator={false}>
                             {/* Modal Header */}
@@ -210,25 +243,25 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                         placeholderTextColor={theme.colors.textSecondary}
                                     />
                                 </View>
-                                <ScrollView 
+                                <ScrollView
                                     style={styles.childrenList}
                                     nestedScrollEnabled={true}
                                     showsVerticalScrollIndicator={true}
                                 >
                                     {[
-                                        'Abby Weiss', 
-                                        'Adam Elliott', 
-                                        'Addison Brewer', 
-                                        'Adrianna Gelb', 
-                                        'Aiden Feld', 
+                                        'Abby Weiss',
+                                        'Adam Elliott',
+                                        'Addison Brewer',
+                                        'Adrianna Gelb',
+                                        'Aiden Feld',
                                         'Aiden Leon',
                                         'Alexandra Stone',
                                         'Amelia Chen',
                                         'Andrew Martinez',
                                         'Anna Johnson'
                                     ].map((child) => (
-                                        <TouchableOpacity 
-                                            key={child} 
+                                        <TouchableOpacity
+                                            key={child}
                                             style={styles.childItem}
                                             onPress={() => toggleChildSelection(child)}
                                         >
@@ -246,7 +279,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             {/* Date Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Date</Text>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.inputContainer}
                                     onPress={() => setShowDatePicker(true)}
                                 >
@@ -263,7 +296,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             {/* Type Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Type</Text>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.inputContainer}
                                     onPress={() => setShowTypePicker(true)}
                                 >
@@ -282,7 +315,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             {/* Severity Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Severity</Text>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.inputContainer}
                                     onPress={() => setShowSeverityPicker(true)}
                                 >
@@ -343,13 +376,13 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Reported By</Text>
                                 <View style={styles.inputContainer}>
-                                <TextInput
-                                    style={styles.inputField}
-                                    placeholder="Enter reporter name"
-                                    placeholderTextColor={theme.colors.textSecondary}
+                                    <TextInput
+                                        style={styles.inputField}
+                                        placeholder="Enter reporter name"
+                                        placeholderTextColor={theme.colors.textSecondary}
                                         value={reportedBy}
                                         onChangeText={setReportedBy}
-                                />
+                                    />
                                 </View>
                             </View>
 
@@ -481,7 +514,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     </View>
                                 </View>
                             </ScrollView>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.pickerConfirmBtn}
                                 onPress={() => setShowDatePicker(false)}
                             >
@@ -663,6 +696,12 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
     },
+    centerModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     bottomSheet: {
         backgroundColor: theme.colors.surface,
         borderTopLeftRadius: theme.borderRadius.xl,
@@ -670,10 +709,14 @@ const styles = StyleSheet.create({
         paddingTop: theme.spacing.lg,
         paddingBottom: theme.spacing.xl,
         paddingHorizontal: theme.spacing.md,
-        maxHeight: '30%',
+        height: '50%',
+        width: '100%',
     },
     bottomSheetHeader: {
         marginBottom: theme.spacing.lg,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     bottomSheetTitle: {
         ...theme.typography.h3,
@@ -698,9 +741,9 @@ const styles = StyleSheet.create({
     // Add Incident Modal Styles
     addIncidentModal: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.xl,
-        borderTopRightRadius: theme.borderRadius.xl,
-        maxHeight: '90%',
+        borderRadius: theme.borderRadius.xl,
+        height: '80%',
+        width: '90%',
         paddingBottom: theme.spacing.xl,
     },
     addIncidentScroll: {

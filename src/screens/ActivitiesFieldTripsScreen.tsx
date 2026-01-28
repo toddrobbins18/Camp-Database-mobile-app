@@ -146,7 +146,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         const startingDayOfWeek = firstDay.getDay();
 
         const days = [];
-        
+
         // Add previous month's trailing days
         const prevMonth = new Date(year, month - 1, 0);
         const prevMonthDays = prevMonth.getDate();
@@ -181,15 +181,15 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
     const isSelectedDate = (date: Date) => {
         return date.getDate() === currentDate.getDate() &&
-               date.getMonth() === currentDate.getMonth() &&
-               date.getFullYear() === currentDate.getFullYear();
+            date.getMonth() === currentDate.getMonth() &&
+            date.getFullYear() === currentDate.getFullYear();
     };
 
     const isToday = (date: Date) => {
         const today = new Date();
         return date.getDate() === today.getDate() &&
-               date.getMonth() === today.getMonth() &&
-               date.getFullYear() === today.getFullYear();
+            date.getMonth() === today.getMonth() &&
+            date.getFullYear() === today.getFullYear();
     };
 
     const formatMonthYear = (date: Date) => {
@@ -201,7 +201,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         const weekStart = new Date(date);
         const day = weekStart.getDay();
         weekStart.setDate(weekStart.getDate() - day); // Go to Sunday
-        
+
         const days = [];
         for (let i = 0; i < 7; i++) {
             const dayDate = new Date(weekStart);
@@ -216,7 +216,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         const weekDays = getWeekDays(date);
         const start = weekDays[0];
         const end = weekDays[6];
-        
+
         if (start.getMonth() === end.getMonth()) {
             return `${start.toLocaleDateString('en-US', { month: 'long' })} ${start.getDate()} – ${end.getDate()}`;
         } else {
@@ -234,10 +234,10 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         const start = new Date(date);
         const end = new Date(date);
         end.setMonth(end.getMonth() + 1);
-        
+
         const startStr = start.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
         const endStr = end.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-        
+
         return `${startStr} – ${endStr}`;
     };
 
@@ -478,37 +478,37 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
                                 {/* Bottom Sheet Options */}
                                 <View style={styles.bottomSheetContent}>
-                                    <ScrollView 
+                                    <ScrollView
                                         style={styles.divisionBottomSheetScroll}
                                         showsVerticalScrollIndicator={false}
                                     >
-                                    {MOCK_DIVISIONS.map((division) => (
-                                        <TouchableOpacity
-                                            key={division.id}
-                                            style={[
+                                        {MOCK_DIVISIONS.map((division) => (
+                                            <TouchableOpacity
+                                                key={division.id}
+                                                style={[
                                                     styles.bottomSheetOption,
                                                     selectedDivision === division.name && styles.bottomSheetOptionSelected
-                                            ]}
-                                            onPress={() => {
-                                                setSelectedDivision(division.name);
-                                                setIsDivisionDropdownOpen(false);
-                                            }}
-                                        >
-                                                <Ionicons 
-                                                    name="people-outline" 
-                                                    size={24} 
+                                                ]}
+                                                onPress={() => {
+                                                    setSelectedDivision(division.name);
+                                                    setIsDivisionDropdownOpen(false);
+                                                }}
+                                            >
+                                                <Ionicons
+                                                    name="people-outline"
+                                                    size={24}
                                                     color={selectedDivision === division.name ? theme.colors.surface : theme.colors.secondary}
                                                 />
-                                            <Text style={[
+                                                <Text style={[
                                                     styles.bottomSheetOptionText,
                                                     selectedDivision === division.name && styles.bottomSheetOptionTextSelected
-                                            ]}>
-                                                {division.name}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
+                                                ]}>
+                                                    {division.name}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
                             </Pressable>
                         </Pressable>
                     </Modal>
@@ -546,7 +546,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         </View>
 
                         {/* Help Icon */}
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.iconButton}
                             onPress={() => setIsHelpModalOpen(true)}
                         >
@@ -554,7 +554,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         </TouchableOpacity>
 
                         {/* Upload CSV Button */}
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.uploadButton}
                             onPress={() => setIsUploadCSVModalOpen(true)}
                         >
@@ -563,7 +563,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         </TouchableOpacity>
 
                         {/* Add Activity Button */}
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.addButton}
                             onPress={() => {
                                 setEditingActivity(null);
@@ -624,19 +624,19 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 </View>
 
                                 <Text style={styles.monthYearText} numberOfLines={1}>
-                                    {calendarView === 'Week' 
+                                    {calendarView === 'Week'
                                         ? formatWeekRange(currentDate)
                                         : calendarView === 'Day'
-                                        ? formatDayDate(currentDate)
-                                        : calendarView === 'Agenda'
-                                        ? formatAgendaRange(currentDate)
-                                        : formatMonthYear(currentMonth)}
+                                            ? formatDayDate(currentDate)
+                                            : calendarView === 'Agenda'
+                                                ? formatAgendaRange(currentDate)
+                                                : formatMonthYear(currentMonth)}
                                 </Text>
                             </View>
 
                             {/* Bottom Row: View Options */}
-                            <ScrollView 
-                                horizontal 
+                            <ScrollView
+                                horizontal
                                 showsHorizontalScrollIndicator={false}
                                 style={styles.viewOptionsScroll}
                                 contentContainerStyle={styles.viewOptionsContainer}
@@ -670,7 +670,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     <View style={styles.weekDayHeadersRow}>
                                         {weekDaysDates.map((dayDate, index) => {
                                             const isCurrentDay = isToday(dayDate);
-                                            
+
                                             return (
                                                 <View
                                                     key={index}
@@ -710,7 +710,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         <View style={styles.weekDayColumns}>
                                             {weekDaysDates.map((dayDate, dayIndex) => {
                                                 const isCurrentDay = isToday(dayDate);
-                                                
+
                                                 return (
                                                     <View
                                                         key={dayIndex}
@@ -815,7 +815,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     {calendarDays.map((day, index) => {
                                         const isSelected = isSelectedDate(day.date);
                                         const isCurrentDay = isToday(day.date);
-                                        
+
                                         return (
                                             <TouchableOpacity
                                                 key={index}
@@ -946,12 +946,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     animationType="slide"
                     onRequestClose={() => setIsUploadCSVModalOpen(false)}
                 >
-                    <Pressable 
-                        style={styles.bottomSheetOverlay} 
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setIsUploadCSVModalOpen(false)}
                     >
-                        <Pressable 
-                            style={styles.bottomSheet} 
+                        <Pressable
+                            style={styles.bottomSheet}
                             onPress={(e) => e.stopPropagation()}
                         >
                             {/* Bottom Sheet Header */}
@@ -961,7 +961,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
                             {/* Bottom Sheet Options */}
                             <View style={styles.bottomSheetContent}>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.bottomSheetOption}
                                     onPress={() => {
                                         // TODO: Handle file selection
@@ -973,7 +973,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.bottomSheetOption}
                                     onPress={() => {
                                         // TODO: Handle file selection
@@ -996,16 +996,16 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     animationType="slide"
                     onRequestClose={() => setIsAddActivityModalOpen(false)}
                 >
-                    <Pressable 
-                        style={styles.bottomSheetOverlay} 
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
                         onPress={() => setIsAddActivityModalOpen(false)}
                     >
-                        <Pressable 
-                            style={styles.addActivityBottomSheet} 
+                        <Pressable
+                            style={styles.addActivityBottomSheet}
                             onPress={(e) => e.stopPropagation()}
                         >
-                            <ScrollView 
-                                style={styles.addActivityBottomSheetScroll} 
+                            <ScrollView
+                                style={styles.addActivityBottomSheetScroll}
                                 contentContainerStyle={styles.addActivityBottomSheetContent}
                                 showsVerticalScrollIndicator={false}
                             >
@@ -1166,14 +1166,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     visible={isEditModalOpen}
                     transparent={true}
                     animationType="slide"
-                                    onRequestClose={() => {
+                    onRequestClose={() => {
                         setIsEditModalOpen(false);
                         setEditingActivity(null);
                         setIsActivityTypeDropdownOpen(false);
                         setIsLocationTypeDropdownOpen(false);
                     }}
                 >
-                    <Pressable 
+                    <Pressable
                         style={styles.bottomSheetOverlay}
                         onPress={() => {
                             setIsEditModalOpen(false);
@@ -1182,12 +1182,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             setIsLocationTypeDropdownOpen(false);
                         }}
                     >
-                        <Pressable 
+                        <Pressable
                             style={styles.editActivityBottomSheet}
                             onPress={(e) => e.stopPropagation()}
                         >
-                            <ScrollView 
-                                style={styles.editActivityBottomSheetScroll} 
+                            <ScrollView
+                                style={styles.editActivityBottomSheetScroll}
                                 contentContainerStyle={styles.editActivityBottomSheetContent}
                                 showsVerticalScrollIndicator={false}
                             >
@@ -1238,7 +1238,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         <TouchableOpacity
                                             style={styles.dateInputContainer}
                                             onPress={() => {
-                                                const currentDate = formData.event_date 
+                                                const currentDate = formData.event_date
                                                     ? new Date(formData.event_date + 'T00:00:00')
                                                     : new Date();
                                                 setSelectedDate(currentDate);
@@ -1247,7 +1247,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             }}
                                         >
                                             <Text style={[styles.dateInputText, !formData.event_date && styles.dateInputPlaceholder]}>
-                                                {formData.event_date 
+                                                {formData.event_date
                                                     ? formatDateForDisplay(formData.event_date)
                                                     : 'mm/dd/yyyy'}
                                             </Text>
@@ -1260,7 +1260,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             <TouchableOpacity
                                                 style={styles.dateInputContainer}
                                                 onPress={() => {
-                                                    const currentDate = formData.end_date 
+                                                    const currentDate = formData.end_date
                                                         ? new Date(formData.end_date + 'T00:00:00')
                                                         : new Date();
                                                     setSelectedDate(currentDate);
@@ -1269,7 +1269,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                                 }}
                                             >
                                                 <Text style={[styles.dateInputText, !formData.end_date && styles.dateInputPlaceholder]}>
-                                                    {formData.end_date 
+                                                    {formData.end_date
                                                         ? formatDateForDisplay(formData.end_date)
                                                         : 'mm/dd/yyyy'}
                                                 </Text>
@@ -1311,14 +1311,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             }}
                                         >
                                             <Text style={formData.activity_type ? styles.formInputText : styles.formInputPlaceholder}>
-                                                {formData.activity_type 
+                                                {formData.activity_type
                                                     ? formData.activity_type.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
                                                     : 'Select activity type'}
                                             </Text>
-                                            <Ionicons 
-                                                name={isActivityTypeDropdownOpen ? "chevron-up" : "chevron-down"} 
-                                                size={20} 
-                                                color={theme.colors.textSecondary} 
+                                            <Ionicons
+                                                name={isActivityTypeDropdownOpen ? "chevron-up" : "chevron-down"}
+                                                size={20}
+                                                color={theme.colors.textSecondary}
                                             />
                                         </TouchableOpacity>
                                         {isActivityTypeDropdownOpen && (
@@ -1371,14 +1371,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             }}
                                         >
                                             <Text style={formData.home_away ? styles.formInputText : styles.formInputPlaceholder}>
-                                                {formData.home_away 
-                                                    ? formData.home_away.toUpperCase() 
+                                                {formData.home_away
+                                                    ? formData.home_away.toUpperCase()
                                                     : 'Select location type (optional)'}
                                             </Text>
-                                            <Ionicons 
-                                                name={isLocationTypeDropdownOpen ? "chevron-up" : "chevron-down"} 
-                                                size={20} 
-                                                color={theme.colors.textSecondary} 
+                                            <Ionicons
+                                                name={isLocationTypeDropdownOpen ? "chevron-up" : "chevron-down"}
+                                                size={20}
+                                                color={theme.colors.textSecondary}
                                             />
                                         </TouchableOpacity>
                                         {isLocationTypeDropdownOpen && (
@@ -1871,8 +1871,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             </View>
 
                             {/* Tabs */}
-                            <ScrollView 
-                                horizontal 
+                            <ScrollView
+                                horizontal
                                 showsHorizontalScrollIndicator={false}
                                 style={styles.helpModalTabs}
                                 contentContainerStyle={styles.helpModalTabsContent}
