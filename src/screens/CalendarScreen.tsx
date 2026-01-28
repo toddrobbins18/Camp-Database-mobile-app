@@ -20,7 +20,7 @@ export const CalendarScreen = ({ navigation }: any) => {
     const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1)); // July 2026
     const [selectedDate, setSelectedDate] = useState(new Date(2026, 6, 1));
     const [showEventList, setShowEventList] = useState(false);
-    
+
     // Search and filter states
     const [eventNameSearch, setEventNameSearch] = useState('');
     const [locationSearch, setLocationSearch] = useState('');
@@ -28,7 +28,7 @@ export const CalendarScreen = ({ navigation }: any) => {
     const [selectedTime, setSelectedTime] = useState('All Times');
     const [selectedLocationType, setSelectedLocationType] = useState('Home & Away');
     const [sortBy, setSortBy] = useState('Sort by Date');
-    
+
     // Picker modals
     const [showDivisionPicker, setShowDivisionPicker] = useState(false);
     const [showTimePicker, setShowTimePicker] = useState(false);
@@ -74,9 +74,9 @@ export const CalendarScreen = ({ navigation }: any) => {
         const lastDay = new Date(year, month + 1, 0);
         const daysInMonth = lastDay.getDate();
         const startingDayOfWeek = firstDay.getDay();
-        
+
         const days = [];
-        
+
         // Previous month days
         const prevMonth = new Date(year, month - 1, 0);
         const prevMonthDays = prevMonth.getDate();
@@ -87,7 +87,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                 fullDate: new Date(year, month - 1, prevMonthDays - i)
             });
         }
-        
+
         // Current month days
         for (let i = 1; i <= daysInMonth; i++) {
             days.push({
@@ -96,7 +96,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                 fullDate: new Date(year, month, i)
             });
         }
-        
+
         // Next month days to fill the grid
         const remainingDays = 42 - days.length;
         for (let i = 1; i <= remainingDays; i++) {
@@ -106,7 +106,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                 fullDate: new Date(year, month + 1, i)
             });
         }
-        
+
         return days;
     };
 
@@ -127,15 +127,15 @@ export const CalendarScreen = ({ navigation }: any) => {
     };
 
     const formatMonthYear = (date: Date) => {
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                       'July', 'August', 'September', 'October', 'November', 'December'];
+        const months = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
         return `${months[date.getMonth()]} ${date.getFullYear()}`;
     };
 
     const isSameDate = (date1: Date, date2: Date) => {
         return date1.getDate() === date2.getDate() &&
-               date1.getMonth() === date2.getMonth() &&
-               date1.getFullYear() === date2.getFullYear();
+            date1.getMonth() === date2.getMonth() &&
+            date1.getFullYear() === date2.getFullYear();
     };
 
     const calendarDays = getDaysInMonth(currentDate);
@@ -204,8 +204,8 @@ export const CalendarScreen = ({ navigation }: any) => {
     }, {} as Record<string, Event[]>);
 
     const formatMonthHeader = (year: number, month: number) => {
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                       'July', 'August', 'September', 'October', 'November', 'December'];
+        const months = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
         return `${months[month]} ${year}`;
     };
 
@@ -215,7 +215,7 @@ export const CalendarScreen = ({ navigation }: any) => {
         const day = weekStart.getDay();
         const diff = weekStart.getDate() - day; // Get Monday
         weekStart.setDate(diff);
-        
+
         const days = [];
         for (let i = 0; i < 7; i++) {
             const dayDate = new Date(weekStart);
@@ -259,11 +259,11 @@ export const CalendarScreen = ({ navigation }: any) => {
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Header */}
-    <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.openDrawer()}>
                         <Ionicons name="menu" size={28} color={theme.colors.text} />
-        </TouchableOpacity>
-        <TouchableOpacity>
+                    </TouchableOpacity>
+                    <TouchableOpacity>
                         <Ionicons name="person-circle-outline" size={28} color={theme.colors.text} />
                     </TouchableOpacity>
                 </View>
@@ -275,7 +275,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                         <Text style={styles.subtitle}>Consolidated view of all events and activities for The Nest</Text>
                     </View>
                     <View style={styles.titleRight}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.calendarIcon}
                             onPress={() => setShowEventList(false)}
                         >
@@ -301,7 +301,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                             />
                         </View>
                     </View>
-                    
+
                     <View style={styles.filterRow}>
                         <View style={styles.searchContainer}>
                             <TextInput
@@ -315,7 +315,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                     </View>
 
                     <View style={styles.filterRow}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.dropdownContainer}
                             onPress={() => setShowDivisionPicker(true)}
                         >
@@ -323,17 +323,17 @@ export const CalendarScreen = ({ navigation }: any) => {
                             <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
 
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.dropdownContainer}
                             onPress={() => setShowTimePicker(true)}
                         >
                             <Text style={styles.dropdownText}>{selectedTime}</Text>
                             <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
-        </TouchableOpacity>
-    </View>
+                        </TouchableOpacity>
+                    </View>
 
                     <View style={styles.filterRow}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.dropdownContainer}
                             onPress={() => setShowLocationTypePicker(true)}
                         >
@@ -341,7 +341,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                             <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
 
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.dropdownContainer}
                             onPress={() => setShowSortPicker(true)}
                         >
@@ -362,10 +362,10 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     {monthEvents.map((event) => (
                                         <StyledCard key={event.id} style={styles.eventCard}>
                                             <View style={styles.eventIconContainer}>
-                                                <Ionicons 
-                                                    name={getEventIcon(event.type)} 
-                                                    size={24} 
-                                                    color={theme.colors.textSecondary} 
+                                                <Ionicons
+                                                    name={getEventIcon(event.type)}
+                                                    size={24}
+                                                    color={theme.colors.textSecondary}
                                                 />
                                             </View>
                                             <View style={styles.eventContent}>
@@ -380,9 +380,9 @@ export const CalendarScreen = ({ navigation }: any) => {
                                                 <View style={styles.eventTags}>
                                                     {event.tags.map((tag, index) => {
                                                         const tagStyle = getTagStyle(tag);
-    return (
-                                                            <View 
-                                                                key={index} 
+                                                        return (
+                                                            <View
+                                                                key={index}
                                                                 style={[styles.eventTag, tagStyle]}
                                                             >
                                                                 <Text style={[styles.eventTagText, { color: tagStyle.color }]}>
@@ -408,253 +408,253 @@ export const CalendarScreen = ({ navigation }: any) => {
                 ) : (
                     /* Calendar Section */
                     <StyledCard style={styles.calendarCard}>
-                    {/* Navigation Buttons */}
-                    <View style={styles.calendarNav}>
-                        <TouchableOpacity 
-                            style={styles.navButton}
-                            onPress={() => navigateMonth('today')}
-                        >
-                            <Text style={styles.navButtonText}>Today</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                            style={styles.navButton}
-                            onPress={() => navigateMonth('prev')}
-                        >
-                            <Text style={styles.navButtonText}>Back</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                            style={styles.navButton}
-                            onPress={() => navigateMonth('next')}
-                        >
-                            <Text style={styles.navButtonText}>Next</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Month and Year */}
-                    <Text style={styles.monthYear}>{formatMonthYear(currentDate)}</Text>
-
-                    {/* View Tabs */}
-                    <View style={styles.viewTabs}>
-                        {['Month', 'Week', 'Day', 'Agenda'].map((view) => (
-                        <TouchableOpacity
-                                key={view}
-                                style={[
-                                    styles.viewTab,
-                                    activeView === view && styles.viewTabActive
-                                ]}
-                                onPress={() => setActiveView(view)}
-                        >
-                                <Text style={[
-                                    styles.viewTabText,
-                                    activeView === view && styles.viewTabTextActive
-                                ]}>
-                                    {view}
-                                </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-
-                    {/* Conditional View Rendering */}
-                    {activeView === 'Month' && (
-                        <View style={styles.calendarGrid}>
-                            {/* Week Day Headers */}
-                            <View style={styles.weekHeader}>
-                                {weekDays.map((day) => (
-                                    <View key={day} style={styles.weekDayHeader}>
-                                        <Text style={styles.weekDayText}>{day}</Text>
-                                    </View>
-                                ))}
-                </View>
-
-                            {/* Calendar Days */}
-                            <View style={styles.daysGrid}>
-                                {calendarDays.map((day, index) => {
-                                    const isSelected = isSameDate(day.fullDate, selectedDate);
-                                    const isToday = isSameDate(day.fullDate, new Date());
-                                    const dayEvents = getEventsForDate(day.fullDate);
-                                    
-                                    return (
-                                        <TouchableOpacity
-                                            key={index}
-                                            style={[
-                                                styles.dayCell,
-                                                !day.isCurrentMonth && styles.dayCellOtherMonth,
-                                                isSelected && styles.dayCellSelected
-                                            ]}
-                                            onPress={() => {
-                                                setSelectedDate(day.fullDate);
-                                                if (!day.isCurrentMonth) {
-                                                    setCurrentDate(day.fullDate);
-                                                }
-                                            }}
-                                        >
-                                            <Text style={[
-                                                styles.dayText,
-                                                !day.isCurrentMonth && styles.dayTextOtherMonth,
-                                                isSelected && styles.dayTextSelected,
-                                                isToday && !isSelected && styles.dayTextToday
-                                            ]}>
-                                                {day.date}
-                                            </Text>
-                                            {/* Event indicator dot */}
-                                            {dayEvents.length > 0 && day.isCurrentMonth && (
-                                                <View style={styles.eventDot} />
-                                            )}
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </View>
+                        {/* Navigation Buttons */}
+                        <View style={styles.calendarNav}>
+                            <TouchableOpacity
+                                style={styles.navButton}
+                                onPress={() => navigateMonth('today')}
+                            >
+                                <Text style={styles.navButtonText}>Today</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.navButton}
+                                onPress={() => navigateMonth('prev')}
+                            >
+                                <Text style={styles.navButtonText}>Back</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.navButton}
+                                onPress={() => navigateMonth('next')}
+                            >
+                                <Text style={styles.navButtonText}>Next</Text>
+                            </TouchableOpacity>
                         </View>
-                    )}
 
-                    {activeView === 'Week' && (() => {
-                        const { weekDays: weekDaysList, weekEvents } = getWeekEvents();
-                        return (
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                <View style={styles.weekViewContainer}>
-                                    {weekDaysList.map((day, index) => {
-                                        const dayEvents = weekEvents[`${day.getDate()}-${day.getMonth()}-${day.getFullYear()}`] || [];
-                                        const isSelected = isSameDate(day, selectedDate);
-                                        const isToday = isSameDate(day, new Date());
-                                        
+                        {/* Month and Year */}
+                        <Text style={styles.monthYear}>{formatMonthYear(currentDate)}</Text>
+
+                        {/* View Tabs */}
+                        <View style={styles.viewTabs}>
+                            {['Month', 'Week', 'Day', 'Agenda'].map((view) => (
+                                <TouchableOpacity
+                                    key={view}
+                                    style={[
+                                        styles.viewTab,
+                                        activeView === view && styles.viewTabActive
+                                    ]}
+                                    onPress={() => setActiveView(view)}
+                                >
+                                    <Text style={[
+                                        styles.viewTabText,
+                                        activeView === view && styles.viewTabTextActive
+                                    ]}>
+                                        {view}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        {/* Conditional View Rendering */}
+                        {activeView === 'Month' && (
+                            <View style={styles.calendarGrid}>
+                                {/* Week Day Headers */}
+                                <View style={styles.weekHeader}>
+                                    {weekDays.map((day) => (
+                                        <View key={day} style={styles.weekDayHeader}>
+                                            <Text style={styles.weekDayText}>{day}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+
+                                {/* Calendar Days */}
+                                <View style={styles.daysGrid}>
+                                    {calendarDays.map((day, index) => {
+                                        const isSelected = isSameDate(day.fullDate, selectedDate);
+                                        const isToday = isSameDate(day.fullDate, new Date());
+                                        const dayEvents = getEventsForDate(day.fullDate);
+
                                         return (
-                                            <View key={index} style={styles.weekDayColumn}>
-                                                <TouchableOpacity
-                                                    style={[
-                                                        styles.weekDayHeaderCell,
-                                                        isSelected && styles.weekDayHeaderCellSelected,
-                                                        isToday && !isSelected && styles.weekDayHeaderCellToday
-                                                    ]}
-                                                    onPress={() => setSelectedDate(day)}
-                                                >
-                                                    <Text style={styles.weekDayName}>{weekDays[day.getDay()]}</Text>
-                                                    <Text style={[
-                                                        styles.weekDayNumber,
-                                                        isSelected && styles.weekDayNumberSelected
-                                                    ]}>
-                                                        {day.getDate()}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                                <ScrollView style={styles.weekEventsList}>
-                                                    {dayEvents.map(event => (
-                                                        <TouchableOpacity key={event.id} style={styles.weekEventItem}>
-                                                            <Text style={styles.weekEventTime}>
-                                                                {event.time || formatTime(event.date)}
-                                                            </Text>
-                                                            <Text style={styles.weekEventTitle}>{event.title}</Text>
-                                                            {event.location && (
-                                                                <Text style={styles.weekEventLocation}>{event.location}</Text>
-                                                            )}
-                        </TouchableOpacity>
-                                                    ))}
-                                                </ScrollView>
-                                            </View>
+                                            <TouchableOpacity
+                                                key={index}
+                                                style={[
+                                                    styles.dayCell,
+                                                    !day.isCurrentMonth && styles.dayCellOtherMonth,
+                                                    isSelected && styles.dayCellSelected
+                                                ]}
+                                                onPress={() => {
+                                                    setSelectedDate(day.fullDate);
+                                                    if (!day.isCurrentMonth) {
+                                                        setCurrentDate(day.fullDate);
+                                                    }
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.dayText,
+                                                    !day.isCurrentMonth && styles.dayTextOtherMonth,
+                                                    isSelected && styles.dayTextSelected,
+                                                    isToday && !isSelected && styles.dayTextToday
+                                                ]}>
+                                                    {day.date}
+                                                </Text>
+                                                {/* Event indicator dot */}
+                                                {dayEvents.length > 0 && day.isCurrentMonth && (
+                                                    <View style={styles.eventDot} />
+                                                )}
+                                            </TouchableOpacity>
                                         );
                                     })}
                                 </View>
-                            </ScrollView>
-                        );
-                    })()}
+                            </View>
+                        )}
 
-                    {activeView === 'Day' && (() => {
-                        const dayEvents = getEventsForDate(selectedDate);
-                        return (
-                            <View style={styles.dayViewContainer}>
-                                <View style={styles.dayHeader}>
-                                    <Text style={styles.dayHeaderDate}>
-                                        {formatEventDate(selectedDate)}
-                                    </Text>
-                                    <Text style={styles.dayHeaderYear}>
-                                        {selectedDate.getFullYear()}
-                                    </Text>
+                        {activeView === 'Week' && (() => {
+                            const { weekDays: weekDaysList, weekEvents } = getWeekEvents();
+                            return (
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                    <View style={styles.weekViewContainer}>
+                                        {weekDaysList.map((day, index) => {
+                                            const dayEvents = weekEvents[`${day.getDate()}-${day.getMonth()}-${day.getFullYear()}`] || [];
+                                            const isSelected = isSameDate(day, selectedDate);
+                                            const isToday = isSameDate(day, new Date());
+
+                                            return (
+                                                <View key={index} style={styles.weekDayColumn}>
+                                                    <TouchableOpacity
+                                                        style={[
+                                                            styles.weekDayHeaderCell,
+                                                            isSelected && styles.weekDayHeaderCellSelected,
+                                                            isToday && !isSelected && styles.weekDayHeaderCellToday
+                                                        ]}
+                                                        onPress={() => setSelectedDate(day)}
+                                                    >
+                                                        <Text style={styles.weekDayName}>{weekDays[day.getDay()]}</Text>
+                                                        <Text style={[
+                                                            styles.weekDayNumber,
+                                                            isSelected && styles.weekDayNumberSelected
+                                                        ]}>
+                                                            {day.getDate()}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                    <ScrollView style={styles.weekEventsList}>
+                                                        {dayEvents.map(event => (
+                                                            <TouchableOpacity key={event.id} style={styles.weekEventItem}>
+                                                                <Text style={styles.weekEventTime}>
+                                                                    {event.time || formatTime(event.date)}
+                                                                </Text>
+                                                                <Text style={styles.weekEventTitle}>{event.title}</Text>
+                                                                {event.location && (
+                                                                    <Text style={styles.weekEventLocation}>{event.location}</Text>
+                                                                )}
+                                                            </TouchableOpacity>
+                                                        ))}
+                                                    </ScrollView>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                </ScrollView>
+                            );
+                        })()}
+
+                        {activeView === 'Day' && (() => {
+                            const dayEvents = getEventsForDate(selectedDate);
+                            return (
+                                <View style={styles.dayViewContainer}>
+                                    <View style={styles.dayHeader}>
+                                        <Text style={styles.dayHeaderDate}>
+                                            {formatEventDate(selectedDate)}
+                                        </Text>
+                                        <Text style={styles.dayHeaderYear}>
+                                            {selectedDate.getFullYear()}
+                                        </Text>
+                                    </View>
+                                    <ScrollView style={styles.dayEventsList}>
+                                        {dayEvents.length > 0 ? (
+                                            dayEvents.map(event => (
+                                                <StyledCard key={event.id} style={styles.dayEventCard}>
+                                                    <View style={styles.dayEventHeader}>
+                                                        <Text style={styles.dayEventTime}>
+                                                            {event.time || formatTime(event.date)}
+                                                        </Text>
+                                                        <Ionicons
+                                                            name={getEventIcon(event.type)}
+                                                            size={20}
+                                                            color={theme.colors.secondary}
+                                                        />
+                                                    </View>
+                                                    <Text style={styles.dayEventTitle}>{event.title}</Text>
+                                                    {event.location && (
+                                                        <View style={styles.dayEventLocation}>
+                                                            <Ionicons name="location" size={14} color="#ef4444" />
+                                                            <Text style={styles.dayEventLocationText}>{event.location}</Text>
+                                                        </View>
+                                                    )}
+                                                    {event.tags && event.tags.length > 0 && (
+                                                        <View style={styles.dayEventTags}>
+                                                            {event.tags.map((tag, idx) => {
+                                                                const tagStyle = getTagStyle(tag);
+                                                                return (
+                                                                    <View key={idx} style={[styles.dayEventTag, tagStyle]}>
+                                                                        <Text style={[styles.dayEventTagText, { color: tagStyle.color }]}>
+                                                                            {tag}
+                                                                        </Text>
+                                                                    </View>
+                                                                );
+                                                            })}
+                                                        </View>
+                                                    )}
+                                                </StyledCard>
+                                            ))
+                                        ) : (
+                                            <View style={styles.emptyDayState}>
+                                                <Text style={styles.emptyDayText}>No events scheduled for this day</Text>
+                                            </View>
+                                        )}
+                                    </ScrollView>
                                 </View>
-                                <ScrollView style={styles.dayEventsList}>
-                                    {dayEvents.length > 0 ? (
-                                        dayEvents.map(event => (
-                                            <StyledCard key={event.id} style={styles.dayEventCard}>
-                                                <View style={styles.dayEventHeader}>
-                                                    <Text style={styles.dayEventTime}>
+                            );
+                        })()}
+
+                        {activeView === 'Agenda' && (
+                            <ScrollView style={styles.agendaViewContainer}>
+                                {getAgendaEvents().length > 0 ? (
+                                    getAgendaEvents().map(event => (
+                                        <StyledCard key={event.id} style={styles.agendaEventCard}>
+                                            <View style={styles.agendaEventDate}>
+                                                <Text style={styles.agendaEventDay}>{event.date.getDate()}</Text>
+                                                <Text style={styles.agendaEventMonth}>
+                                                    {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][event.date.getMonth()]}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.agendaEventContent}>
+                                                <View style={styles.agendaEventHeader}>
+                                                    <Text style={styles.agendaEventTime}>
                                                         {event.time || formatTime(event.date)}
                                                     </Text>
-                                                    <Ionicons 
-                                                        name={getEventIcon(event.type)} 
-                                                        size={20} 
-                                                        color={theme.colors.secondary} 
+                                                    <Ionicons
+                                                        name={getEventIcon(event.type)}
+                                                        size={18}
+                                                        color={theme.colors.secondary}
                                                     />
                                                 </View>
-                                                <Text style={styles.dayEventTitle}>{event.title}</Text>
+                                                <Text style={styles.agendaEventTitle}>{event.title}</Text>
                                                 {event.location && (
-                                                    <View style={styles.dayEventLocation}>
-                                                        <Ionicons name="location" size={14} color="#ef4444" />
-                                                        <Text style={styles.dayEventLocationText}>{event.location}</Text>
-                        </View>
+                                                    <View style={styles.agendaEventLocation}>
+                                                        <Ionicons name="location" size={12} color="#ef4444" />
+                                                        <Text style={styles.agendaEventLocationText}>{event.location}</Text>
+                                                    </View>
                                                 )}
-                                                {event.tags && event.tags.length > 0 && (
-                                                    <View style={styles.dayEventTags}>
-                                                        {event.tags.map((tag, idx) => {
-                                                            const tagStyle = getTagStyle(tag);
-                                                            return (
-                                                                <View key={idx} style={[styles.dayEventTag, tagStyle]}>
-                                                                    <Text style={[styles.dayEventTagText, { color: tagStyle.color }]}>
-                                                                        {tag}
-                                                                    </Text>
-                            </View>
-                                                            );
-                                                        })}
-                        </View>
-                                                )}
+                                            </View>
+                                        </StyledCard>
+                                    ))
+                                ) : (
+                                    <View style={styles.emptyAgendaState}>
+                                        <Text style={styles.emptyAgendaText}>No events found</Text>
+                                    </View>
+                                )}
+                            </ScrollView>
+                        )}
                     </StyledCard>
-                                        ))
-                                    ) : (
-                                        <View style={styles.emptyDayState}>
-                                            <Text style={styles.emptyDayText}>No events scheduled for this day</Text>
-                                        </View>
-                                    )}
-                                </ScrollView>
-                            </View>
-                        );
-                    })()}
-
-                    {activeView === 'Agenda' && (
-                        <ScrollView style={styles.agendaViewContainer}>
-                            {getAgendaEvents().length > 0 ? (
-                                getAgendaEvents().map(event => (
-                                    <StyledCard key={event.id} style={styles.agendaEventCard}>
-                                        <View style={styles.agendaEventDate}>
-                                            <Text style={styles.agendaEventDay}>{event.date.getDate()}</Text>
-                                            <Text style={styles.agendaEventMonth}>
-                                                {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][event.date.getMonth()]}
-                                            </Text>
-                                        </View>
-                                        <View style={styles.agendaEventContent}>
-                                            <View style={styles.agendaEventHeader}>
-                                                <Text style={styles.agendaEventTime}>
-                                                    {event.time || formatTime(event.date)}
-                                                </Text>
-                                                <Ionicons 
-                                                    name={getEventIcon(event.type)} 
-                                                    size={18} 
-                                                    color={theme.colors.secondary} 
-                                                />
-                        </View>
-                                            <Text style={styles.agendaEventTitle}>{event.title}</Text>
-                                            {event.location && (
-                                                <View style={styles.agendaEventLocation}>
-                                                    <Ionicons name="location" size={12} color="#ef4444" />
-                                                    <Text style={styles.agendaEventLocationText}>{event.location}</Text>
-                            </View>
-                                            )}
-                        </View>
-                    </StyledCard>
-                                ))
-                            ) : (
-                                <View style={styles.emptyAgendaState}>
-                                    <Text style={styles.emptyAgendaText}>No events found</Text>
-                </View>
-                            )}
-                        </ScrollView>
-                    )}
-                </StyledCard>
                 )}
 
             </ScrollView>
@@ -662,7 +662,7 @@ export const CalendarScreen = ({ navigation }: any) => {
             {/* Floating Action Button */}
             <TouchableOpacity style={styles.fab}>
                 <Ionicons name="chatbubble" size={24} color="white" />
-                        </TouchableOpacity>
+            </TouchableOpacity>
 
             {/* Division Picker Modal */}
             <Modal
@@ -695,7 +695,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     )}
                                 </TouchableOpacity>
                             ))}
-                            </View>
+                        </View>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -729,7 +729,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     {selectedTime === time && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
                                     )}
-                        </TouchableOpacity>
+                                </TouchableOpacity>
                             ))}
                         </View>
                     </Pressable>
@@ -767,7 +767,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     )}
                                 </TouchableOpacity>
                             ))}
-                            </View>
+                        </View>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -801,9 +801,9 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     {sortBy === sort && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
                                     )}
-                        </TouchableOpacity>
+                                </TouchableOpacity>
                             ))}
-                </View>
+                        </View>
                     </Pressable>
                 </Pressable>
             </Modal>

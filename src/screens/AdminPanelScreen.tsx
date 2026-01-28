@@ -277,10 +277,25 @@ export const AdminPanelScreen = ({ navigation }: any) => {
             <View style={styles.usersList}>
                 {users.map((user) => (
                     <View key={user.id} style={styles.userRow}>
-                        <View style={styles.userInfo}>
+                        <View style={styles.userHeaderRow}>
                             <Text style={styles.userName}>{user.name}</Text>
-                            <Text style={styles.userEmail}>{user.email}</Text>
+                            <View style={styles.userActions}>
+                                <TouchableOpacity style={styles.actionIcon}>
+                                    <Ionicons name="key-outline" size={18} color={theme.colors.text} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.actionIcon}
+                                    onPress={() => {
+                                        setUserToDelete(user);
+                                        setShowDeleteModal(true);
+                                    }}
+                                >
+                                    <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                                </TouchableOpacity>
+                            </View>
                         </View>
+
+                        <Text style={styles.userEmail}>{user.email}</Text>
 
                         <View style={styles.roleContainer}>
                             {/* Role Badge */}
@@ -296,19 +311,6 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                             >
                                 <Text style={styles.roleDropdownText}>{user.role}</Text>
                                 <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.actionIcon}>
-                                <Ionicons name="key-outline" size={18} color={theme.colors.text} />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.actionIcon}
-                                onPress={() => {
-                                    setUserToDelete(user);
-                                    setShowDeleteModal(true);
-                                }}
-                            >
-                                <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -997,7 +999,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     style={styles.bottomSheetOverlay}
                     onPress={() => setShowDownloadModal(false)}
                 >
-                    <Pressable style={styles.largeBottomSheet} onPress={(e) => e.stopPropagation()}>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.bottomSheetHeader}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Text style={styles.bottomSheetTitle}>Download file</Text>
@@ -1073,15 +1075,14 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
-            {/* Add User Bottom Sheet */}
             <Modal
                 visible={showAddUserModal}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowAddUserModal(false)}
             >
-                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowAddUserModal(false)}>
-                    <Pressable style={styles.largeBottomSheet} onPress={(e) => e.stopPropagation()}>
+                <Pressable style={styles.centerModalOverlay} onPress={() => setShowAddUserModal(false)}>
+                    <Pressable style={styles.centerModal} onPress={(e) => e.stopPropagation()}>
                         <ScrollView showsVerticalScrollIndicator={false}>
                             <View style={styles.bottomSheetHeader}>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1151,36 +1152,55 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             </View>
 
-                            {/* Role Picker Dropdown (Inside Modal) */}
-                            {showNewUserRolePicker && (
-                                <View style={styles.inlineRolePicker}>
-                                    {roles.map((role) => (
-                                        <TouchableOpacity
-                                            key={role}
-                                            style={[
-                                                styles.inlineRoleOption,
-                                                newUserRole === role && styles.inlineRoleOptionSelected
-                                            ]}
-                                            onPress={() => {
-                                                setNewUserRole(role);
-                                                setShowNewUserRolePicker(false);
-                                            }}
-                                        >
-                                            <Text style={[
-                                                styles.inlineRoleOptionText,
-                                                newUserRole === role && styles.inlineRoleOptionTextSelected
-                                            ]}>{role}</Text>
-                                            {newUserRole === role && (
-                                                <Ionicons name="checkmark" size={16} color={theme.colors.secondary} />
-                                            )}
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            )}
+                            {/* Role Picker moved to external modal */}
 
                             <TouchableOpacity style={styles.createButton}>
                                 <Text style={styles.createButtonText}>Create User</Text>
                             </TouchableOpacity>
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* New User Role Picker Bottom Sheet */}
+            <Modal
+                visible={showNewUserRolePicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowNewUserRolePicker(false)}
+            >
+                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowNewUserRolePicker(false)}>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Role</Text>
+                        </View>
+                        <ScrollView style={styles.bottomSheetScroll}>
+                            {roles.map((role) => (
+                                <TouchableOpacity
+                                    key={role}
+                                    style={[
+                                        styles.bottomSheetOption,
+                                        newUserRole === role && styles.bottomSheetOptionSelected
+                                    ]}
+                                    onPress={() => {
+                                        setNewUserRole(role);
+                                        setShowNewUserRolePicker(false);
+                                    }}
+                                >
+                                    <Ionicons
+                                        name={role.includes('Admin') ? 'shield-checkmark-outline' : 'person-outline'}
+                                        size={24}
+                                        color={newUserRole === role ? theme.colors.secondary : theme.colors.textSecondary}
+                                    />
+                                    <Text style={[
+                                        styles.bottomSheetOptionText,
+                                        newUserRole === role && styles.bottomSheetOptionTextSelected
+                                    ]}>{role}</Text>
+                                    {newUserRole === role && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
                         </ScrollView>
                     </Pressable>
                 </Pressable>
@@ -1341,6 +1361,17 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.md,
         padding: theme.spacing.md,
         gap: 12,
+    },
+    userHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    userActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
     userCard: {
         backgroundColor: theme.colors.surface,
@@ -1704,19 +1735,10 @@ const styles = StyleSheet.create({
         paddingTop: theme.spacing.lg,
         paddingBottom: theme.spacing.xl,
         paddingHorizontal: theme.spacing.md,
-        maxHeight: '50%',
+        height: '50%',
         width: '100%',
     },
-    largeBottomSheet: {
-        backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.xl,
-        borderTopRightRadius: theme.borderRadius.xl,
-        paddingTop: theme.spacing.lg,
-        paddingBottom: theme.spacing.xl,
-        paddingHorizontal: theme.spacing.md,
-        maxHeight: '90%',
-        width: '100%',
-    },
+
     bottomSheetHeader: {
         marginBottom: theme.spacing.md,
         borderBottomWidth: 1,
@@ -2362,5 +2384,19 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 16,
         fontWeight: '600',
+    },
+    centerModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    centerModal: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.xl,
+        width: '90%',
+        height: '80%',
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
     },
 });

@@ -57,14 +57,14 @@ export const MessagesScreen = ({ navigation }: any) => {
     };
 
     const toggleUserSelection = (userId: string) => {
-        setSelectedUsers(prev => 
-            prev.includes(userId) 
+        setSelectedUsers(prev =>
+            prev.includes(userId)
                 ? prev.filter(id => id !== userId)
                 : [...prev, userId]
         );
     };
 
-    const filteredUsers = users.filter(user => 
+    const filteredUsers = users.filter(user =>
         user.name.toLowerCase().includes(searchUsers.toLowerCase()) ||
         user.email.toLowerCase().includes(searchUsers.toLowerCase())
     );
@@ -86,39 +86,40 @@ export const MessagesScreen = ({ navigation }: any) => {
                 <View style={styles.titleSection}>
                     <View style={styles.titleContainer}>
                         <View style={styles.titleRow}>
-                            <Ionicons name="notifications-outline" size={24} color={theme.colors.text} style={styles.bellIcon} />
                             <Text style={styles.title}>Notifications & Messages</Text>
-                            {/* Action Buttons in Same Row */}
-                            <View style={styles.actionButtonsContainer}>
-                                <TouchableOpacity 
-                                    style={[styles.inboxBtn, activeView === 'inbox' && styles.inboxBtnActive]} 
-                                    onPress={handleInbox}
-                                >
-                                    <Ionicons 
-                                        name="notifications-outline" 
-                                        size={18} 
-                                        color={activeView === 'inbox' ? 'white' : theme.colors.text} 
-                                    />
-                                    <Text style={[styles.inboxBtnText, activeView === 'inbox' && styles.inboxBtnTextActive]}>
-                                        Inbox
-                                    </Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity 
-                                    style={[styles.composeBtn, activeView === 'compose' && styles.composeBtnActive]} 
-                                    onPress={handleCompose}
-                                >
-                                    <Ionicons 
-                                        name="send-outline" 
-                                        size={18} 
-                                        color={activeView === 'compose' ? 'white' : theme.colors.text} 
-                                    />
-                                    <Text style={[styles.composeBtnText, activeView === 'compose' && styles.composeBtnTextActive]}>
-                                        Compose
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
+                            <Ionicons name="notifications-outline" size={28} color={theme.colors.text} />
                         </View>
                         <Text style={styles.subtitle}>Send notifications and view messages</Text>
+                    </View>
+
+                    {/* Action Buttons Row */}
+                    <View style={styles.actionButtonsContainer}>
+                        <TouchableOpacity
+                            style={[styles.inboxBtn, activeView === 'inbox' && styles.inboxBtnActive]}
+                            onPress={handleInbox}
+                        >
+                            <Ionicons
+                                name="notifications-outline"
+                                size={18}
+                                color={activeView === 'inbox' ? 'white' : theme.colors.text}
+                            />
+                            <Text style={[styles.inboxBtnText, activeView === 'inbox' && styles.inboxBtnTextActive]}>
+                                Inbox
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.composeBtn, activeView === 'compose' && styles.composeBtnActive]}
+                            onPress={handleCompose}
+                        >
+                            <Ionicons
+                                name="send-outline"
+                                size={18}
+                                color={activeView === 'compose' ? 'white' : theme.colors.text}
+                            />
+                            <Text style={[styles.composeBtnText, activeView === 'compose' && styles.composeBtnTextActive]}>
+                                Compose
+                            </Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -184,7 +185,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                         <View style={styles.multiChannelCard}>
                             <View style={styles.cardHeader}>
                                 <Ionicons name="notifications-outline" size={20} color={theme.colors.secondary} />
-                                <Text style={styles.cardTitle}>Multi-Channel Notifications</Text>
+                                <Text style={styles.sectionTitle}>Multi-Channel Notifications</Text>
                             </View>
                             <Text style={styles.cardDescription}>
                                 Send notifications via In-app push alerts and/or email. In-app notifications are delivered instantly.
@@ -201,11 +202,11 @@ export const MessagesScreen = ({ navigation }: any) => {
                         <StyledCard style={styles.deliveryCard}>
                             <View style={styles.cardHeader}>
                                 <Ionicons name="notifications-outline" size={20} color={theme.colors.text} />
-                                <Text style={styles.cardTitle}>Delivery Method</Text>
+                                <Text style={styles.sectionTitle}>Delivery Method</Text>
                             </View>
                             <Text style={styles.cardDescription}>Choose how to deliver this notification.</Text>
-                            
-                            <TouchableOpacity 
+
+                            <TouchableOpacity
                                 style={styles.radioOption}
                                 onPress={() => setDeliveryMethod('in-app')}
                             >
@@ -221,7 +222,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                                 </View>
                             </TouchableOpacity>
 
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.radioOption}
                                 onPress={() => setDeliveryMethod('email')}
                             >
@@ -242,10 +243,10 @@ export const MessagesScreen = ({ navigation }: any) => {
                         <StyledCard style={styles.composeCard}>
                             <View style={styles.cardHeader}>
                                 <View style={styles.blueDot} />
-                                <Text style={styles.cardTitle}>Compose Notification</Text>
+                                <Text style={styles.sectionTitle}>Compose Notification</Text>
                             </View>
                             <Text style={styles.cardDescription}>Create and send notifications to selected recipients.</Text>
-                            
+
                             <View style={styles.formField}>
                                 <Text style={styles.fieldLabel}>Subject</Text>
                                 <TextInput
@@ -286,7 +287,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                         <StyledCard style={styles.tagGroupsCard}>
                             <View style={styles.cardHeader}>
                                 <Ionicons name="people-outline" size={20} color={theme.colors.text} />
-                                <Text style={styles.cardTitle}>Tag Groups</Text>
+                                <Text style={styles.sectionTitle}>Tag Groups</Text>
                             </View>
                             <Text style={styles.cardDescription}>Select groups by tag</Text>
                             <Text style={styles.noTagsText}>No tags found</Text>
@@ -296,10 +297,10 @@ export const MessagesScreen = ({ navigation }: any) => {
                         <StyledCard style={styles.usersCard}>
                             <View style={styles.cardHeader}>
                                 <Ionicons name="people-outline" size={20} color={theme.colors.text} />
-                                <Text style={styles.cardTitle}>Individual Users</Text>
+                                <Text style={styles.sectionTitle}>Individual Users</Text>
                             </View>
                             <Text style={styles.cardDescription}>Select specific users</Text>
-                            
+
                             <TextInput
                                 style={styles.searchInput}
                                 placeholder="Search users..."
@@ -308,7 +309,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                                 onChangeText={setSearchUsers}
                             />
 
-                            <ScrollView 
+                            <ScrollView
                                 style={styles.usersList}
                                 nestedScrollEnabled={true}
                                 showsVerticalScrollIndicator={true}
@@ -333,15 +334,15 @@ export const MessagesScreen = ({ navigation }: any) => {
 
                         {/* Recipient Preview Card */}
                         <StyledCard style={styles.recipientCard}>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.recipientHeader}
                                 onPress={() => setShowRecipientPreview(!showRecipientPreview)}
                             >
-                                <Text style={styles.cardTitle}>Recipient Preview</Text>
-                                <Ionicons 
-                                    name={showRecipientPreview ? "chevron-up" : "chevron-down"} 
-                                    size={20} 
-                                    color={theme.colors.textSecondary} 
+                                <Text style={styles.sectionTitle}>Recipient Preview</Text>
+                                <Ionicons
+                                    name={showRecipientPreview ? "chevron-up" : "chevron-down"}
+                                    size={20}
+                                    color={theme.colors.textSecondary}
                                 />
                             </TouchableOpacity>
                             <Text style={styles.recipientCount}>{selectedUsers.length} recipients selected</Text>
@@ -412,7 +413,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: theme.spacing.sm,
-        marginLeft: theme.spacing.sm,
+        marginTop: theme.spacing.md,
     },
     inboxBtn: {
         flexDirection: 'row',
@@ -594,7 +595,7 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.sm,
         gap: theme.spacing.sm,
     },
-    cardTitle: {
+    sectionTitle: {
         ...theme.typography.h3,
         fontSize: 16,
         fontWeight: '700',
