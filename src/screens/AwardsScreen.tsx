@@ -305,66 +305,20 @@ export const AwardsScreen = ({ navigation }: any) => {
                             keyboardShouldPersistTaps="handled"
                         >
                             {/* Child Selection */}
-                            <View style={[styles.formField, styles.childFormField]}>
+                            <View style={styles.formField}>
                                 <Text style={styles.formLabel}>Child</Text>
-                                <View style={styles.childSelectContainer}>
-                                    <TextInput
-                                        style={styles.childInput}
-                                        placeholder="Type to search for a child..."
-                                        placeholderTextColor={theme.colors.textSecondary}
-                                        value={childSearchText}
-                                        onChangeText={(text) => {
-                                            setChildSearchText(text);
-                                            setShowChildDropdown(true);
-                                        }}
-                                        onFocus={() => setShowChildDropdown(true)}
-                                        onBlur={() => {
-                                            // Delay closing to allow item selection
-                                            setTimeout(() => setShowChildDropdown(false), 200);
-                                        }}
-                                    />
-                                    {showChildDropdown && (
-                                        <View style={styles.childDropdown}>
-                                            <ScrollView
-                                                style={styles.childDropdownScroll}
-                                                nestedScrollEnabled={true}
-                                                keyboardShouldPersistTaps="handled"
-                                                showsVerticalScrollIndicator={true}
-                                            >
-                                                {filteredChildren.length > 0 ? (
-                                                    filteredChildren.map((child) => (
-                                                        <TouchableOpacity
-                                                            key={child.id}
-                                                            style={[
-                                                                styles.childDropdownItem,
-                                                                selectedChild === child.id && styles.childDropdownItemSelected
-                                                            ]}
-                                                            onPress={() => {
-                                                                setSelectedChild(child.id);
-                                                                setChildSearchText(child.name);
-                                                                setShowChildDropdown(false);
-                                                            }}
-                                                        >
-                                                            <Text style={[
-                                                                styles.childDropdownText,
-                                                                selectedChild === child.id && styles.childDropdownTextSelected
-                                                            ]}>
-                                                                {child.name}
-                                                            </Text>
-                                                            {selectedChild === child.id && (
-                                                                <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
-                                                            )}
-                                                        </TouchableOpacity>
-                                                    ))
-                                                ) : (
-                                                    <View style={styles.childDropdownItem}>
-                                                        <Text style={styles.childDropdownText}>No children found</Text>
-                                                    </View>
-                                                )}
-                                            </ScrollView>
-                                        </View>
-                                    )}
-                                </View>
+                                <TouchableOpacity
+                                    style={styles.selectInput}
+                                    onPress={() => setShowChildDropdown(true)}
+                                >
+                                    <Text style={[
+                                        styles.selectInputText,
+                                        !selectedChild && styles.selectInputPlaceholder
+                                    ]}>
+                                        {selectedChild ? MOCK_CHILDREN.find(c => c.id === selectedChild)?.name : 'Select a child...'}
+                                    </Text>
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
                             </View>
 
                             {/* Weekly Starfish */}
@@ -396,7 +350,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                                 <Text style={styles.formLabel}>Year End Award</Text>
                                 <TouchableOpacity
                                     style={styles.selectInput}
-                                    onPress={() => setShowYearEndDropdown(!showYearEndDropdown)}
+                                    onPress={() => setShowYearEndDropdown(true)}
                                 >
                                     <Text style={[
                                         styles.selectInputText,
@@ -406,22 +360,6 @@ export const AwardsScreen = ({ navigation }: any) => {
                                     </Text>
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
-                                {showYearEndDropdown && (
-                                    <View style={styles.selectDropdown}>
-                                        {YEAR_END_AWARDS.map((award) => (
-                                            <TouchableOpacity
-                                                key={award}
-                                                style={styles.selectDropdownItem}
-                                                onPress={() => {
-                                                    setYearEndAward(award);
-                                                    setShowYearEndDropdown(false);
-                                                }}
-                                            >
-                                                <Text style={styles.selectDropdownText}>{award}</Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                )}
                             </View>
 
                             {/* Date */}
@@ -483,15 +421,131 @@ export const AwardsScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
+            {/* Child Selection Bottom Sheet */}
+            <Modal
+                visible={showChildDropdown}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowChildDropdown(false)}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => setShowChildDropdown(false)}
+                >
+                    <Pressable
+                        style={[styles.bottomSheet, { maxHeight: '80%' }]}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Child</Text>
+                        </View>
+
+                        {/* Search Input */}
+                        <View style={styles.dateInputContainer}>
+                            <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={{ marginRight: 8 }} />
+                            <TextInput
+                                style={styles.dateInput}
+                                placeholder="Search children..."
+                                placeholderTextColor={theme.colors.textSecondary}
+                                value={childSearchText}
+                                onChangeText={setChildSearchText}
+                                autoFocus={true}
+                            />
+                        </View>
+
+                        {/* List */}
+                        <ScrollView style={{ marginTop: 16 }} showsVerticalScrollIndicator={false}>
+                            {filteredChildren.length > 0 ? (
+                                filteredChildren.map((child) => (
+                                    <TouchableOpacity
+                                        key={child.id}
+                                        style={styles.bottomSheetOption}
+                                        onPress={() => {
+                                            setSelectedChild(child.id);
+                                            setChildSearchText(''); // Reset search on select or keep it? user prefs. resetting for clean next time.
+                                            setShowChildDropdown(false);
+                                        }}
+                                    >
+                                        <Ionicons
+                                            name={selectedChild === child.id ? "radio-button-on" : "radio-button-off"}
+                                            size={24}
+                                            color={selectedChild === child.id ? theme.colors.secondary : theme.colors.textSecondary}
+                                        />
+                                        <Text style={styles.bottomSheetOptionText}>{child.name}</Text>
+                                    </TouchableOpacity>
+                                ))
+                            ) : (
+                                <Text style={{ textAlign: 'center', marginTop: 20, color: theme.colors.textSecondary }}>
+                                    No children found
+                                </Text>
+                            )}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Year End Award Bottom Sheet */}
+            <Modal
+                visible={showYearEndDropdown}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowYearEndDropdown(false)}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => setShowYearEndDropdown(false)}
+                >
+                    <Pressable
+                        style={styles.bottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Award</Text>
+                        </View>
+
+                        {/* List */}
+                        <View style={styles.bottomSheetContent}>
+                            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+                                {YEAR_END_AWARDS.map((award) => (
+                                    <TouchableOpacity
+                                        key={award}
+                                        style={styles.bottomSheetOption}
+                                        onPress={() => {
+                                            setYearEndAward(award);
+                                            setShowYearEndDropdown(false);
+                                        }}
+                                    >
+                                        <Ionicons
+                                            name={yearEndAward === award ? "radio-button-on" : "radio-button-off"}
+                                            size={24}
+                                            color={yearEndAward === award ? theme.colors.secondary : theme.colors.textSecondary}
+                                        />
+                                        <Text style={styles.bottomSheetOptionText}>{award}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
             {/* Date Picker Modal */}
             <Modal
                 visible={showDatePicker}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowDatePicker(false)}
             >
-                <View style={styles.datePickerOverlay}>
-                    <View style={styles.datePickerContainer}>
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => setShowDatePicker(false)}
+                >
+                    <Pressable
+                        style={[styles.bottomSheet, { maxHeight: '80%' }]}
+                        onPress={(e) => e.stopPropagation()}
+                    >
                         <View style={styles.datePickerHeader}>
                             <Text style={styles.datePickerTitle}>Select Date</Text>
                             <TouchableOpacity
@@ -567,8 +621,8 @@ export const AwardsScreen = ({ navigation }: any) => {
                                 })}
                             </View>
                         </View>
-                    </View>
-                </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* CSV Upload Format Guide Modal */}
@@ -635,7 +689,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                     </View>
                 </View>
             </Modal>
-        </SafeAreaView>
+        </SafeAreaView >
     );
 };
 

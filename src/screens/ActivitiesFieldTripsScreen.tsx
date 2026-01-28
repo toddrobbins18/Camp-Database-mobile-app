@@ -411,6 +411,107 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
     const groupedActivities = groupActivitiesByMonth();
 
+    const renderActionSheetModal = () => {
+        const isVisible = isActivityTypeDropdownOpen || isLocationTypeDropdownOpen;
+        const title = isActivityTypeDropdownOpen ? 'Select Activity Type' : 'Select Location Type';
+
+        let options: { value: string, label: string }[] = [];
+        let currentValue = '';
+        let onSelect: (val: string) => void = () => { };
+
+        if (isActivityTypeDropdownOpen) {
+            options = [
+                { value: 'field-trip', label: 'Field Trip' },
+                { value: 'arts-crafts', label: 'Arts & Crafts' },
+                { value: 'nature', label: 'Nature Activity' },
+                { value: 'water', label: 'Water Activity' },
+                { value: 'outdoor', label: 'Outdoor Adventure' },
+                { value: 'cultural', label: 'Cultural Activity' },
+                { value: 'other', label: 'Other' },
+            ];
+            currentValue = formData.activity_type;
+            onSelect = (val) => setFormData({ ...formData, activity_type: val });
+        } else if (isLocationTypeDropdownOpen) {
+            options = [
+                { value: '', label: 'Not Specified' },
+                { value: 'home', label: 'HOME' },
+                { value: 'away', label: 'AWAY' },
+            ];
+            currentValue = formData.home_away;
+            onSelect = (val) => setFormData({ ...formData, home_away: val });
+        }
+
+        return (
+            <Modal
+                visible={isVisible}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => {
+                    setIsActivityTypeDropdownOpen(false);
+                    setIsLocationTypeDropdownOpen(false);
+                }}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => {
+                        setIsActivityTypeDropdownOpen(false);
+                        setIsLocationTypeDropdownOpen(false);
+                    }}
+                >
+                    <Pressable
+                        style={styles.bottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>{title}</Text>
+                        </View>
+                        <ScrollView style={{ maxHeight: 300 }}>
+                            {options.map((option) => (
+                                <TouchableOpacity
+                                    key={option.label}
+                                    style={[
+                                        styles.bottomSheetOption,
+                                        currentValue === option.value && styles.bottomSheetOptionSelected
+                                    ]}
+                                    onPress={() => {
+                                        onSelect(option.value);
+                                        setIsActivityTypeDropdownOpen(false);
+                                        setIsLocationTypeDropdownOpen(false);
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.bottomSheetOptionText,
+                                        currentValue === option.value && styles.bottomSheetOptionTextSelected
+                                    ]}>
+                                        {option.label}
+                                    </Text>
+                                    {currentValue === option.value && (
+                                        <Ionicons name="checkmark" size={20} color={currentValue === option.value ? theme.colors.surface : theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                        <TouchableOpacity
+                            style={{
+                                marginTop: 16,
+                                padding: 12,
+                                alignItems: 'center',
+                                backgroundColor: '#f1f5f9',
+                                borderRadius: 8
+                            }}
+                            onPress={() => {
+                                setIsActivityTypeDropdownOpen(false);
+                                setIsLocationTypeDropdownOpen(false);
+                            }}
+                        >
+                            <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary }}>Cancel</Text>
+                        </TouchableOpacity>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+        );
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             {/* Header */}
@@ -429,6 +530,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
                 </TouchableOpacity>
             </View>
+
+
 
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
                 {/* Controls Bar */}
@@ -1321,41 +1424,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                                 color={theme.colors.textSecondary}
                                             />
                                         </TouchableOpacity>
-                                        {isActivityTypeDropdownOpen && (
-                                            <ScrollView style={styles.dropdownList} nestedScrollEnabled>
-                                                {[
-                                                    { value: 'field-trip', label: 'Field Trip' },
-                                                    { value: 'arts-crafts', label: 'Arts & Crafts' },
-                                                    { value: 'nature', label: 'Nature Activity' },
-                                                    { value: 'water', label: 'Water Activity' },
-                                                    { value: 'outdoor', label: 'Outdoor Adventure' },
-                                                    { value: 'cultural', label: 'Cultural Activity' },
-                                                    { value: 'other', label: 'Other' },
-                                                ].map((option) => (
-                                                    <TouchableOpacity
-                                                        key={option.value}
-                                                        style={[
-                                                            styles.dropdownItemForm,
-                                                            formData.activity_type === option.value && styles.dropdownItemFormSelected
-                                                        ]}
-                                                        onPress={() => {
-                                                            setFormData({ ...formData, activity_type: option.value });
-                                                            setIsActivityTypeDropdownOpen(false);
-                                                        }}
-                                                    >
-                                                        <Text style={[
-                                                            styles.dropdownItemFormText,
-                                                            formData.activity_type === option.value && styles.dropdownItemFormTextSelected
-                                                        ]}>
-                                                            {option.label}
-                                                        </Text>
-                                                        {formData.activity_type === option.value && (
-                                                            <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                                        )}
-                                                    </TouchableOpacity>
-                                                ))}
-                                            </ScrollView>
-                                        )}
+
                                     </View>
                                 </View>
 
@@ -1381,37 +1450,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                                 color={theme.colors.textSecondary}
                                             />
                                         </TouchableOpacity>
-                                        {isLocationTypeDropdownOpen && (
-                                            <ScrollView style={styles.dropdownList} nestedScrollEnabled>
-                                                {[
-                                                    { value: '', label: 'Not Specified' },
-                                                    { value: 'home', label: 'HOME' },
-                                                    { value: 'away', label: 'AWAY' },
-                                                ].map((option) => (
-                                                    <TouchableOpacity
-                                                        key={option.value || 'none'}
-                                                        style={[
-                                                            styles.dropdownItemForm,
-                                                            formData.home_away === option.value && styles.dropdownItemFormSelected
-                                                        ]}
-                                                        onPress={() => {
-                                                            setFormData({ ...formData, home_away: option.value });
-                                                            setIsLocationTypeDropdownOpen(false);
-                                                        }}
-                                                    >
-                                                        <Text style={[
-                                                            styles.dropdownItemFormText,
-                                                            formData.home_away === option.value && styles.dropdownItemFormTextSelected
-                                                        ]}>
-                                                            {option.label}
-                                                        </Text>
-                                                        {formData.home_away === option.value && (
-                                                            <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                                        )}
-                                                    </TouchableOpacity>
-                                                ))}
-                                            </ScrollView>
-                                        )}
+
                                     </View>
                                 </View>
 
@@ -2151,16 +2190,25 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                 <Modal
                     visible={isTimePickerOpen}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => {
                         setIsTimePickerOpen(false);
                         setTimePickerField(null);
                     }}
                 >
-                    <View style={styles.timePickerOverlay}>
-                        <View style={styles.timePickerModal}>
-                            <View style={styles.timePickerHeader}>
-                                <Text style={styles.timePickerTitle}>Select Time</Text>
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
+                        onPress={() => {
+                            setIsTimePickerOpen(false);
+                            setTimePickerField(null);
+                        }}
+                    >
+                        <Pressable
+                            style={styles.bottomSheet}
+                            onPress={(e) => e.stopPropagation()}
+                        >
+                            <View style={[styles.timePickerHeader, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                                <Text style={styles.bottomSheetTitle}>Select Time</Text>
                                 <TouchableOpacity
                                     onPress={() => {
                                         setIsTimePickerOpen(false);
@@ -2175,7 +2223,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 {/* Hour Selection */}
                                 <View style={styles.timePickerColumn}>
                                     <Text style={styles.timePickerLabel}>Hour</Text>
-                                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled>
+                                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                                         {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
                                             <TouchableOpacity
                                                 key={hour}
@@ -2199,7 +2247,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 {/* Minute Selection */}
                                 <View style={styles.timePickerColumn}>
                                     <Text style={styles.timePickerLabel}>Minute</Text>
-                                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled>
+                                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                                         {Array.from({ length: 60 }, (_, i) => i).map((minute) => (
                                             <TouchableOpacity
                                                 key={minute}
@@ -2223,7 +2271,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 {/* AM/PM Selection */}
                                 <View style={styles.timePickerColumn}>
                                     <Text style={styles.timePickerLabel}>Period</Text>
-                                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled>
+                                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                                         {['AM', 'PM'].map((period) => (
                                             <TouchableOpacity
                                                 key={period}
@@ -2270,11 +2318,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     <Text style={styles.timePickerConfirmButtonText}>Confirm</Text>
                                 </TouchableOpacity>
                             </View>
-                        </View>
-                    </View>
+                        </Pressable>
+                    </Pressable>
                 </Modal>
-            </ScrollView>
-        </SafeAreaView>
+            </ScrollView >
+            {renderActionSheetModal()}
+        </SafeAreaView >
     );
 };
 

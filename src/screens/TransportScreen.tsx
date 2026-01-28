@@ -37,6 +37,7 @@ interface Trip {
     meal?: string;
     event_length?: string;
     capacity?: string;
+    location_type?: string;
 }
 
 // Mock Data - Expanded for testing filters
@@ -658,9 +659,10 @@ export const TransportScreen = ({ navigation }: any) => {
 
         switch (activeModal) {
             case 'type':
-                options = ['all', ...uniqueTypes];
-                currentVal = filterType;
-                setVal = setFilterType;
+                // Match screenshot specific options
+                options = ['All Types', 'field_trip', 'sporting_event'];
+                currentVal = filterType === 'all' ? 'All Types' : filterType;
+                setVal = (val) => setFilterType(val === 'All Types' ? 'all' : val);
                 title = 'Select Type';
                 break;
             case 'eventType':
@@ -692,31 +694,31 @@ export const TransportScreen = ({ navigation }: any) => {
         return (
             <Modal
                 transparent
-                animationType="fade"
+                animationType="slide"
                 visible={!!activeModal}
                 onRequestClose={() => setActiveModal(null)}
             >
                 <TouchableWithoutFeedback onPress={() => setActiveModal(null)}>
-                    <View style={styles.modalOverlay}>
+                    <View style={styles.pickerModalOverlay}>
                         <TouchableWithoutFeedback>
-                            <View style={styles.modalContent}>
+                            <View style={styles.pickerModalContent}>
                                 <View style={styles.modalHeader}>
-                                    <Text style={styles.modalTitle}>{title}</Text>
+                                    <Text style={styles.pickerTitle}>{title}</Text>
                                     <TouchableOpacity onPress={() => setActiveModal(null)}>
-                                        <Ionicons name="close" size={24} color={theme.colors.text} />
+                                        <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
                                     </TouchableOpacity>
                                 </View>
                                 <ScrollView style={{ maxHeight: 300 }}>
                                     {options.map((opt) => (
                                         <TouchableOpacity
                                             key={opt}
-                                            style={[styles.modalOption, currentVal === opt && styles.modalOptionActive]}
+                                            style={styles.pickerOption}
                                             onPress={() => {
                                                 setVal(opt);
                                                 setActiveModal(null);
                                             }}
                                         >
-                                            <Text style={[styles.modalOptionText, currentVal === opt && styles.modalOptionTextActive]}>
+                                            <Text style={styles.pickerOptionText}>
                                                 {opt === 'all' ? `All ${title.replace('Select ', '')}s` : opt}
                                             </Text>
                                             {currentVal === opt && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
@@ -1012,7 +1014,8 @@ export const TransportScreen = ({ navigation }: any) => {
         driver: '',
         meal: 'None',
         event_length: '',
-        capacity: ''
+        capacity: '',
+        location_type: 'AWAY'
     };
 
     const [tripFormData, setTripFormData] = useState<Trip>(initialTripData);
@@ -1037,7 +1040,7 @@ export const TransportScreen = ({ navigation }: any) => {
     };
 
     // Picker State
-    const [activePicker, setActivePicker] = useState<'startDate' | 'endDate' | 'departureTime' | 'returnTime' | 'type' | 'status' | 'transportation_type' | 'meal' | null>(null);
+    const [activePicker, setActivePicker] = useState<'startDate' | 'endDate' | 'departureTime' | 'returnTime' | 'type' | 'locationType' | 'status' | 'transportation_type' | 'meal' | null>(null);
 
     const handlePickerSelect = (value: string) => {
         if (!activePicker) return;
@@ -1061,6 +1064,25 @@ export const TransportScreen = ({ navigation }: any) => {
         }
         setActivePicker(null);
     };
+
+    const renderActionSheet = (title: string, options: string[], currentValue: string | undefined, displayModifier?: (val: string) => React.ReactNode, onSelect?: (val: string) => void) => (
+        <View style={{ padding: 16 }}>
+            <Text style={styles.pickerTitle}>{title}</Text>
+            {options.map(opt => (
+                <TouchableOpacity
+                    key={opt}
+                    style={styles.pickerOption}
+                    onPress={() => onSelect ? onSelect(opt) : handlePickerSelect(opt)}
+                >
+                    <Text style={styles.pickerOptionText}>{displayModifier ? displayModifier(opt) : opt}</Text>
+                    {currentValue === opt && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
+                </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.closePickerBtn} onPress={() => setActivePicker(null)}>
+                <Text style={styles.closePickerText}>Cancel</Text>
+            </TouchableOpacity>
+        </View>
+    );
 
     const renderPickerModalContent = () => {
         if (!activePicker) return null;
@@ -1117,103 +1139,54 @@ export const TransportScreen = ({ navigation }: any) => {
         }
 
         if (activePicker === 'type') {
-            const types = ['Field Trip', 'Sporting Event', 'Other'];
-            return (
-                <View style={{ padding: 16 }}>
-                    <Text style={styles.pickerTitle}>Select Type</Text>
-                    {types.map(type => (
-                        <TouchableOpacity
-                            key={type}
-                            style={styles.pickerOption}
-                            onPress={() => handlePickerSelect(type)}
-                        >
-                            <Text style={styles.pickerOptionText}>{type}</Text>
-                            {tripFormData.type === type && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
-                        </TouchableOpacity>
-                    ))}
-                    <TouchableOpacity style={styles.closePickerBtn} onPress={() => setActivePicker(null)}>
-                        <Text style={styles.closePickerText}>Cancel</Text>
-                    </TouchableOpacity>
-                </View>
+            const typeOptions = [
+                { label: 'Field Trip', value: 'field_trip' },
+                { label: 'Sporting Event', value: 'sporting_event' },
+                { label: 'Other', value: 'other' }
+            ];
+            return renderActionSheet(
+                'Select Type',
+                typeOptions.map(t => t.label),
+                typeOptions.find(t => t.value === tripFormData.type)?.label || tripFormData.type,
+                undefined,
+                (label) => {
+                    const val = typeOptions.find(t => t.label === label)?.value || label;
+                    setTripFormData({ ...tripFormData, type: val });
+                    setActivePicker(null);
+                }
             );
+        }
+
+        if (activePicker === 'locationType') {
+            return renderActionSheet('Select Location Type', ['AWAY', 'ON SITE'], tripFormData.location_type || 'AWAY', undefined, (val) => {
+                setTripFormData({ ...tripFormData, location_type: val });
+                setActivePicker(null);
+            });
         }
 
         if (activePicker === 'status') {
-            const statuses = ['pending', 'approved', 'confirmed'];
-            return (
-                <View style={{ padding: 16 }}>
-                    <Text style={styles.pickerTitle}>Select Status</Text>
-                    {statuses.map(status => (
-                        <TouchableOpacity
-                            key={status}
-                            style={styles.pickerOption}
-                            onPress={() => handlePickerSelect(status)}
-                        >
-                            <Text style={styles.pickerOptionText}><StatusBadge status={status} /></Text>
-                            {tripFormData.status === status && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
-                        </TouchableOpacity>
-                    ))}
-                    <TouchableOpacity style={styles.closePickerBtn} onPress={() => setActivePicker(null)}>
-                        <Text style={styles.closePickerText}>Cancel</Text>
-                    </TouchableOpacity>
-                </View>
-            );
+            return renderActionSheet('Select Status', ['pending', 'approved', 'confirmed'], tripFormData.status, (status) => <StatusBadge status={status as any} />);
         }
 
         if (activePicker === 'transportation_type') {
-            const options = ['Bus', 'Van', 'None'];
-            return (
-                <View style={{ padding: 16 }}>
-                    <Text style={styles.pickerTitle}>Select Transportation</Text>
-                    {options.map(opt => (
-                        <TouchableOpacity
-                            key={opt}
-                            style={styles.pickerOption}
-                            onPress={() => handlePickerSelect(opt)}
-                        >
-                            <Text style={styles.pickerOptionText}>{opt}</Text>
-                            {tripFormData.transportation_type === opt && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
-                        </TouchableOpacity>
-                    ))}
-                    <TouchableOpacity style={styles.closePickerBtn} onPress={() => setActivePicker(null)}>
-                        <Text style={styles.closePickerText}>Cancel</Text>
-                    </TouchableOpacity>
-                </View>
-            );
+            return renderActionSheet('Select Transportation', ['Bus', 'Van', 'None'], tripFormData.transportation_type);
         }
 
         if (activePicker === 'meal') {
-            const options = ['None', 'Packed Lunch', 'Cafeteria', 'Restaurant'];
-            return (
-                <View style={{ padding: 16 }}>
-                    <Text style={styles.pickerTitle}>Select Meal</Text>
-                    {options.map(opt => (
-                        <TouchableOpacity
-                            key={opt}
-                            style={styles.pickerOption}
-                            onPress={() => handlePickerSelect(opt)}
-                        >
-                            <Text style={styles.pickerOptionText}>{opt}</Text>
-                            {tripFormData.meal === opt && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
-                        </TouchableOpacity>
-                    ))}
-                    <TouchableOpacity style={styles.closePickerBtn} onPress={() => setActivePicker(null)}>
-                        <Text style={styles.closePickerText}>Cancel</Text>
-                    </TouchableOpacity>
-                </View>
-            );
+            return renderActionSheet('Select Meal', ['None', 'Packed Lunch', 'Cafeteria', 'Restaurant'], tripFormData.meal);
         }
     };
+
 
     const renderPickerModal = () => (
         <Modal
             transparent
-            animationType="fade"
+            animationType="slide"
             visible={!!activePicker}
             onRequestClose={() => setActivePicker(null)}
         >
             <TouchableWithoutFeedback onPress={() => setActivePicker(null)}>
-                <View style={styles.modalOverlay}>
+                <View style={styles.pickerModalOverlay}>
                     <TouchableWithoutFeedback>
                         <View style={styles.pickerModalContent}>
                             {renderPickerModalContent()}
@@ -1227,64 +1200,29 @@ export const TransportScreen = ({ navigation }: any) => {
     const renderTripFormModal = () => (
         <Modal
             transparent
-            animationType="fade"
+            animationType="slide"
             visible={modalState.visible}
             onRequestClose={() => setModalState({ ...modalState, visible: false })}
         >
-            <View style={styles.modalOverlay}>
-                <View style={[styles.helpModalContent, isLargeScreen && styles.helpModalContentLarge]}>
-                    <View style={styles.helpModalHeader}>
-                        <Text style={styles.helpModalTitle}>{modalState.mode === 'add' ? 'Add New Trip' : 'Edit Trip'}</Text>
-                        <TouchableOpacity onPress={() => setModalState({ ...modalState, visible: false })}>
+            <View style={styles.tripFormModalOverlay}>
+                <View style={styles.tripFormModalContent}>
+                    <View style={styles.tripFormModalHeader}>
+                        <Text style={styles.tripFormModalTitle} numberOfLines={1}>{modalState.mode === 'add' ? 'New Activity/Field Trip' : 'Edit Activity/Field Trip'}</Text>
+                        <TouchableOpacity onPress={() => setModalState({ ...modalState, visible: false })} style={styles.closeButton}>
                             <Ionicons name="close" size={24} color={theme.colors.text} />
                         </TouchableOpacity>
                     </View>
 
-                    <ScrollView style={styles.helpModalBody} showsVerticalScrollIndicator={false}>
-                        <Text style={styles.helperText}>Fields marked with <Text style={{ color: theme.colors.danger }}>*</Text> are required</Text>
+                    <ScrollView style={styles.tripFormModalBody} contentContainerStyle={styles.tripFormScrollContent} showsVerticalScrollIndicator={false}>
 
-                        {/* Trip Name */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Trip Name <Text style={{ color: theme.colors.danger }}>*</Text></Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g., Science Museum Visit"
-                                value={tripFormData.name}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, name: text })}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                            <Text style={styles.helperTextSmall}>Descriptive name for this trip or event</Text>
-                        </View>
-
-                        {/* Type */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Type <Text style={{ color: theme.colors.danger }}>*</Text></Text>
-                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('type')}>
-                                <Text style={styles.typeSelectorText}>{tripFormData.type}</Text>
-                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Destination */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Destination</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Where are you going?"
-                                value={tripFormData.destination}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, destination: text })}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                        </View>
-
-                        {/* Multi-Day Toggle */}
+                        {/* Multi-Day Toggle - Top as per screenshot */}
                         <View style={styles.toggleRow}>
                             <View style={{ flex: 1 }}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                     <MaterialCommunityIcons name="calendar-range" size={20} color={theme.colors.text} />
-                                    <Text style={styles.toggleLabel}>Multi-Day Trip</Text>
+                                    <Text style={styles.toggleLabel}>Multi-Day Event</Text>
                                 </View>
-                                <Text style={styles.toggleHelper}>Enable this for trips spanning multiple days</Text>
+                                <Text style={styles.toggleHelper}>Enable this for events spanning multiple days</Text>
                             </View>
                             <Switch
                                 value={tripFormData.is_multi_day}
@@ -1294,7 +1232,7 @@ export const TransportScreen = ({ navigation }: any) => {
                             />
                         </View>
 
-                        {/* Dates */}
+                        {/* Dates Row */}
                         <View style={styles.row}>
                             <View style={[styles.formGroup, { flex: 1 }]}>
                                 <Text style={styles.label}>Start Date</Text>
@@ -1318,113 +1256,57 @@ export const TransportScreen = ({ navigation }: any) => {
                             </View>
                         </View>
 
-                        {/* Times */}
-                        <View style={styles.row}>
-                            <View style={[styles.formGroup, { flex: 1 }]}>
-                                <Text style={styles.label}>Departure Time</Text>
-                                <TouchableOpacity style={styles.dateInputContainer} onPress={() => setActivePicker('departureTime')}>
-                                    <Text style={styles.dateInputText}>{tripFormData.departure_time || '--:-- --'}</Text>
-                                    <Ionicons name="time-outline" size={20} color={theme.colors.text} />
-                                </TouchableOpacity>
+                        {tripFormData.is_multi_day && (
+                            <View style={styles.selectedBadge}>
+                                <Text style={styles.selectedBadgeText}>2-Day Event</Text>
                             </View>
-                            <View style={[styles.formGroup, { flex: 1 }]}>
-                                <Text style={styles.label}>Return Time</Text>
-                                <TouchableOpacity style={styles.dateInputContainer} onPress={() => setActivePicker('returnTime')}>
-                                    <Text style={styles.dateInputText}>{tripFormData.return_time || '--:-- --'}</Text>
-                                    <Ionicons name="time-outline" size={20} color={theme.colors.text} />
-                                </TouchableOpacity>
+                        )}
+
+                        {/* Title */}
+                        <View style={[styles.formGroup, { marginTop: 16 }]}>
+                            <Text style={styles.label}>Title</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Junior Hershey/Dorney Trip"
+                                value={tripFormData.name}
+                                onChangeText={(text) => setTripFormData({ ...tripFormData, name: text })}
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                        </View>
+
+                        {/* Activity Type */}
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Activity Type</Text>
+                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('type')}>
+                                <Text style={styles.typeSelectorText}>{tripFormData.type}</Text>
+                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Location Type (New Field) */}
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Location Type</Text>
+                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('locationType')}>
+                                <Text style={styles.typeSelectorText}>{tripFormData.location_type || 'AWAY'}</Text>
+                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Divisions (Select Multiple) */}
+                        <View style={styles.formGroup}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <Text style={[styles.label, { marginBottom: 0 }]}>Divisions (select multiple)</Text>
+                                <View style={{ flexDirection: 'row', gap: 8 }}>
+                                    <TouchableOpacity style={styles.actionButtonSecondary}>
+                                        <Text style={styles.actionButtonTextSecondary}>Select All</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.actionButtonSecondary}>
+                                        <Text style={styles.actionButtonTextSecondary}>Deselect All</Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                         </View>
 
-                        {/* Chaperone */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Chaperone</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Who will supervise?"
-                                value={tripFormData.chaperone}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, chaperone: text })}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                        </View>
-
-                        {/* Capacity */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Capacity</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Maximum number of children"
-                                value={tripFormData.capacity}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, capacity: text })}
-                                keyboardType="numeric"
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                        </View>
-
-                        {/* Status */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Status</Text>
-                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('status')}>
-                                <Text style={styles.typeSelectorText}>
-                                    {tripFormData.status ? tripFormData.status.charAt(0).toUpperCase() + tripFormData.status.slice(1) : 'Select Status'}
-                                </Text>
-                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Meal */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Meal</Text>
-                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('meal')}>
-                                <Text style={styles.typeSelectorText}>{tripFormData.meal}</Text>
-                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Event Type */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Event Type</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. field-trip"
-                                value={tripFormData.event_type}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, event_type: text })}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                        </View>
-
-                        {/* Event Length */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Event Length</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g., 2 hours, Half day, Full day"
-                                value={tripFormData.event_length}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, event_length: text })}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                        </View>
-
-                        {/* Transportation Type */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Transportation Type</Text>
-                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('transportation_type')}>
-                                <Text style={styles.typeSelectorText}>{tripFormData.transportation_type}</Text>
-                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Driver */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Driver</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Driver name"
-                                value={tripFormData.driver}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, driver: text })}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                        </View>
 
                         {/* Footer Buttons */}
                         <View style={styles.modalFooter}>
@@ -1453,15 +1335,15 @@ export const TransportScreen = ({ navigation }: any) => {
         return (
             <Modal
                 transparent
-                animationType="fade"
+                animationType="slide"
                 visible={rosterModalVisible}
                 onRequestClose={() => setRosterModalVisible(false)}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={[styles.helpModalContent, isLargeScreen && styles.helpModalContentLarge]}>
-                        <View style={styles.helpModalHeader}>
-                            <Text style={styles.helpModalTitle}>Manage Roster for {rosterTrip?.name}</Text>
-                            <TouchableOpacity onPress={() => setRosterModalVisible(false)}>
+                <View style={styles.rosterModalOverlay}>
+                    <View style={styles.rosterModalContent}>
+                        <View style={styles.rosterModalHeader}>
+                            <Text style={styles.rosterModalTitle} numberOfLines={2}>Manage Roster for {rosterTrip?.name}</Text>
+                            <TouchableOpacity onPress={() => setRosterModalVisible(false)} style={styles.closeButton}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
@@ -1516,45 +1398,15 @@ export const TransportScreen = ({ navigation }: any) => {
                             ) : (
                                 <View>
                                     <Text style={styles.filterLabel}>Filter by Division</Text>
-                                    <View style={{ zIndex: 1000 }}>
-                                        <TouchableOpacity
-                                            style={styles.filterDropdown}
-                                            onPress={() => setIsDropdownOpen(!isDropdownOpen)}
-                                        >
-                                            <Text style={styles.filterDropdownText}>
-                                                {rosterFilterDivision === 'all' ? 'All Divisions' : MOCK_DIVISIONS.find(d => d.id === rosterFilterDivision)?.name}
-                                            </Text>
-                                            <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                                        </TouchableOpacity>
-
-                                        {isDropdownOpen && (
-                                            <View style={styles.dropdownListContainer}>
-                                                <ScrollView style={styles.dropdownList} nestedScrollEnabled>
-                                                    <TouchableOpacity
-                                                        style={[styles.dropdownItem, rosterFilterDivision === 'all' && styles.dropdownItemActive]}
-                                                        onPress={() => {
-                                                            setRosterFilterDivision('all');
-                                                            setIsDropdownOpen(false);
-                                                        }}
-                                                    >
-                                                        <Text style={[styles.dropdownItemText, rosterFilterDivision === 'all' && styles.dropdownItemTextActive]}>All Divisions</Text>
-                                                    </TouchableOpacity>
-                                                    {MOCK_DIVISIONS.map(division => (
-                                                        <TouchableOpacity
-                                                            key={division.id}
-                                                            style={[styles.dropdownItem, rosterFilterDivision === division.id && styles.dropdownItemActive]}
-                                                            onPress={() => {
-                                                                setRosterFilterDivision(division.id);
-                                                                setIsDropdownOpen(false);
-                                                            }}
-                                                        >
-                                                            <Text style={[styles.dropdownItemText, rosterFilterDivision === division.id && styles.dropdownItemTextActive]}>{division.name}</Text>
-                                                        </TouchableOpacity>
-                                                    ))}
-                                                </ScrollView>
-                                            </View>
-                                        )}
-                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.filterDropdown}
+                                        onPress={() => setIsDropdownOpen(true)}
+                                    >
+                                        <Text style={styles.filterDropdownText}>
+                                            {rosterFilterDivision === 'all' ? 'All Divisions' : MOCK_DIVISIONS.find(d => d.id === rosterFilterDivision)?.name}
+                                        </Text>
+                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                    </TouchableOpacity>
 
                                     <View style={styles.selectedHeader}>
                                         <Text style={styles.selectedLabel}>Selected Campers</Text>
@@ -1617,6 +1469,53 @@ export const TransportScreen = ({ navigation }: any) => {
         );
     };
 
+    const renderDivisionFilterModal = () => (
+        <Modal
+            transparent
+            animationType="slide"
+            visible={isDropdownOpen}
+            onRequestClose={() => setIsDropdownOpen(false)}
+        >
+            <TouchableWithoutFeedback onPress={() => setIsDropdownOpen(false)}>
+                <View style={styles.pickerModalOverlay}>
+                    <TouchableWithoutFeedback>
+                        <View style={styles.pickerModalContent}>
+                            <Text style={styles.pickerTitle}>Select Division</Text>
+                            <ScrollView style={{ maxHeight: 400 }}>
+                                <TouchableOpacity
+                                    style={[styles.pickerOption, rosterFilterDivision === 'all' && styles.modalOptionActive]}
+                                    onPress={() => {
+                                        setRosterFilterDivision('all');
+                                        setIsDropdownOpen(false);
+                                    }}
+                                >
+                                    <Text style={[styles.pickerOptionText, rosterFilterDivision === 'all' && styles.modalOptionTextActive]}>All Divisions</Text>
+                                    {rosterFilterDivision === 'all' && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
+                                </TouchableOpacity>
+                                {MOCK_DIVISIONS.map(division => (
+                                    <TouchableOpacity
+                                        key={division.id}
+                                        style={[styles.pickerOption, rosterFilterDivision === division.id && styles.modalOptionActive]}
+                                        onPress={() => {
+                                            setRosterFilterDivision(division.id);
+                                            setIsDropdownOpen(false);
+                                        }}
+                                    >
+                                        <Text style={[styles.pickerOptionText, rosterFilterDivision === division.id && styles.modalOptionTextActive]}>{division.name}</Text>
+                                        {rosterFilterDivision === division.id && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                            <TouchableOpacity style={styles.closePickerBtn} onPress={() => setIsDropdownOpen(false)}>
+                                <Text style={styles.closePickerText}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </TouchableWithoutFeedback>
+                </View>
+            </TouchableWithoutFeedback>
+        </Modal>
+    );
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             {renderDeleteConfirmationModal()}
@@ -1625,6 +1524,7 @@ export const TransportScreen = ({ navigation }: any) => {
             {renderTripFormModal()}
             {renderRosterModal()}
             {renderPickerModal()}
+            {renderDivisionFilterModal()}
             {renderHeader()}
             {viewMode === 'list' ? (
                 <FlatList
@@ -2053,6 +1953,78 @@ const styles = StyleSheet.create({
     rosterFooterButtons: {
         flexDirection: 'row',
         gap: 12,
+    },
+    // Roster Modal Bottom Sheet Styles
+    rosterModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    rosterModalContent: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.lg,
+        borderTopRightRadius: theme.borderRadius.lg,
+        width: '100%',
+        maxHeight: '90%',
+        ...theme.shadows.card,
+    },
+    rosterModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        padding: theme.spacing.md,
+        paddingBottom: theme.spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        gap: 12,
+    },
+    rosterModalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: theme.colors.text,
+        flex: 1,
+        flexWrap: 'wrap',
+    },
+    closeButton: {
+        padding: 4,
+        marginTop: -4,
+    },
+    // Trip Form Modal Bottom Sheet Styles
+    tripFormModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    tripFormModalContent: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.lg,
+        borderTopRightRadius: theme.borderRadius.lg,
+        width: '100%',
+        maxHeight: '90%',
+        ...theme.shadows.card,
+    },
+    tripFormModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        padding: theme.spacing.md,
+        paddingBottom: theme.spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        gap: 12,
+    },
+    tripFormModalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: theme.colors.text,
+        flex: 1,
+    },
+    tripFormModalBody: {
+        flex: 1,
+    },
+    tripFormScrollContent: {
+        padding: theme.spacing.md,
+        paddingBottom: theme.spacing.xl,
     },
     filterContentPlaceholder: {
         padding: 20,
@@ -2572,15 +2544,20 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     // Picker Modal Styles
+    pickerModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
     pickerModalContent: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: 0,
-        width: '80%',
-        maxWidth: 400,
-        alignSelf: 'center',
+        borderTopLeftRadius: theme.borderRadius.lg,
+        borderTopRightRadius: theme.borderRadius.lg,
+        padding: theme.spacing.md,
+        paddingBottom: theme.spacing.xl,
+        width: '100%',
+        maxHeight: '70%',
         ...theme.shadows.card,
-        overflow: 'hidden',
     },
     pickerTitle: {
         fontSize: 18,
