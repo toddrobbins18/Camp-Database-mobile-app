@@ -102,6 +102,37 @@ export const AppointmentsScreen = ({ navigation }: any) => {
         followUpRequired: false,
     });
 
+    // Date/Time Picker State
+    const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+    const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [selectedTime, setSelectedTime] = useState({ hour: 12, minute: 0, ampm: 'PM' });
+
+    // Helper to format date for display in the picker header
+    const formatDateForPickerDisplay = (date: Date) => {
+        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
+    // Helper to format date for storage (YYYY-MM-DD)
+    const formatDateForStorage = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const confirmDateSelection = () => {
+        const dateString = formatDateForStorage(selectedDate);
+        setFormData({ ...formData, date: dateString });
+        setIsDatePickerOpen(false);
+    };
+
+    const confirmTimeSelection = () => {
+        const timeString = `${selectedTime.hour}:${String(selectedTime.minute).padStart(2, '0')} ${selectedTime.ampm}`;
+        setFormData({ ...formData, time: timeString });
+        setIsTimePickerOpen(false);
+    };
+
     // Filter appointments based on active tab, search, type, and status
     const filteredAppointments = MOCK_APPOINTMENTS.filter((appointment) => {
         // Tab filter
@@ -326,24 +357,18 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                     {APPOINTMENT_TYPES.map((type) => (
                                         <TouchableOpacity
                                             key={type}
-                                            style={[
-                                                styles.bottomSheetOption,
-                                                selectedType === type && styles.bottomSheetOptionSelected
-                                            ]}
+                                            style={styles.bottomSheetOption}
                                             onPress={() => {
                                                 setSelectedType(type);
                                                 setIsTypeDropdownOpen(false);
                                             }}
                                         >
                                             <Ionicons
-                                                name="medical-outline"
+                                                name={selectedType === type ? "radio-button-on" : "radio-button-off"}
                                                 size={24}
-                                                color={selectedType === type ? theme.colors.surface : theme.colors.secondary}
+                                                color={selectedType === type ? theme.colors.secondary : theme.colors.textSecondary}
                                             />
-                                            <Text style={[
-                                                styles.bottomSheetOptionText,
-                                                selectedType === type && styles.bottomSheetOptionTextSelected
-                                            ]}>
+                                            <Text style={styles.bottomSheetOptionText}>
                                                 {type}
                                             </Text>
                                         </TouchableOpacity>
@@ -383,24 +408,18 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                     {APPOINTMENT_STATUSES.map((status) => (
                                         <TouchableOpacity
                                             key={status}
-                                            style={[
-                                                styles.bottomSheetOption,
-                                                selectedStatus === status && styles.bottomSheetOptionSelected
-                                            ]}
+                                            style={styles.bottomSheetOption}
                                             onPress={() => {
                                                 setSelectedStatus(status);
                                                 setIsStatusDropdownOpen(false);
                                             }}
                                         >
                                             <Ionicons
-                                                name="checkmark-circle-outline"
+                                                name={selectedStatus === status ? "radio-button-on" : "radio-button-off"}
                                                 size={24}
-                                                color={selectedStatus === status ? theme.colors.surface : theme.colors.secondary}
+                                                color={selectedStatus === status ? theme.colors.secondary : theme.colors.textSecondary}
                                             />
-                                            <Text style={[
-                                                styles.bottomSheetOptionText,
-                                                selectedStatus === status && styles.bottomSheetOptionTextSelected
-                                            ]}>
+                                            <Text style={styles.bottomSheetOptionText}>
                                                 {status}
                                             </Text>
                                         </TouchableOpacity>
@@ -618,31 +637,36 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                 <Text style={styles.formLabel}>
                                     Date <Text style={styles.requiredStar}>*</Text>
                                 </Text>
-                                <View style={styles.formInputWithIcon}>
+                                <TouchableOpacity
+                                    style={styles.formInputWithIcon}
+                                    onPress={() => {
+                                        if (formData.date) {
+                                            setSelectedDate(new Date(formData.date));
+                                        } else {
+                                            setSelectedDate(new Date());
+                                        }
+                                        setIsDatePickerOpen(true);
+                                    }}
+                                >
                                     <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                    <TextInput
-                                        style={styles.formInputText}
-                                        placeholder="Pick a date"
-                                        placeholderTextColor={theme.colors.textSecondary}
-                                        value={formData.date}
-                                        onChangeText={(text) => setFormData({ ...formData, date: text })}
-                                    />
-                                </View>
+                                    <Text style={formData.date ? styles.formInputText : styles.formInputPlaceholder}>
+                                        {formData.date ? formatDate(formData.date) : 'Pick a date'}
+                                    </Text>
+                                </TouchableOpacity>
                             </View>
 
                             {/* Time */}
                             <View style={styles.formField}>
                                 <Text style={styles.formLabel}>Time</Text>
-                                <View style={styles.formInputWithIconRight}>
-                                    <TextInput
-                                        style={styles.formInputText}
-                                        placeholder="--:-- --"
-                                        placeholderTextColor={theme.colors.textSecondary}
-                                        value={formData.time}
-                                        onChangeText={(text) => setFormData({ ...formData, time: text })}
-                                    />
+                                <TouchableOpacity
+                                    style={styles.formInputWithIconRight}
+                                    onPress={() => setIsTimePickerOpen(true)}
+                                >
+                                    <Text style={formData.time ? styles.formInputText : styles.formInputPlaceholder}>
+                                        {formData.time || '--:-- --'}
+                                    </Text>
                                     <Ionicons name="time-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIconRight} />
-                                </View>
+                                </TouchableOpacity>
                             </View>
 
                             {/* Status */}
@@ -746,115 +770,137 @@ export const AppointmentsScreen = ({ navigation }: any) => {
             <Modal
                 visible={isFormTypeDropdownOpen}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setIsFormTypeDropdownOpen(false)}
             >
-                <TouchableOpacity
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
+                <Pressable
+                    style={styles.bottomSheetOverlay}
                     onPress={() => setIsFormTypeDropdownOpen(false)}
                 >
-                    <View style={styles.dropdownModal}>
-                        <ScrollView style={styles.dropdownScroll}>
-                            {APPOINTMENT_TYPE_OPTIONS.map((type) => (
-                                <TouchableOpacity
-                                    key={type}
-                                    style={[
-                                        styles.dropdownItem,
-                                        formData.type === type && styles.dropdownItemSelected
-                                    ]}
-                                    onPress={() => {
-                                        setFormData({ ...formData, type });
-                                        setIsFormTypeDropdownOpen(false);
-                                    }}
-                                >
-                                    {formData.type === type && (
-                                        <Ionicons name="checkmark" size={18} color={theme.colors.accent} style={styles.checkIcon} />
-                                    )}
-                                    <Text style={[
-                                        styles.dropdownItemText,
-                                        formData.type === type && styles.dropdownItemTextSelected
-                                    ]}>
-                                        {type}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-                </TouchableOpacity>
+                    <Pressable
+                        style={styles.typeBottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Type</Text>
+                        </View>
+                        <View style={styles.bottomSheetContent}>
+                            <ScrollView style={styles.typeBottomSheetScroll} showsVerticalScrollIndicator={false}>
+                                {APPOINTMENT_TYPE_OPTIONS.map((type) => (
+                                    <TouchableOpacity
+                                        key={type}
+                                        style={[
+                                            styles.bottomSheetOption,
+                                            formData.type === type && styles.bottomSheetOptionSelected
+                                        ]}
+                                        onPress={() => {
+                                            setFormData({ ...formData, type });
+                                            setIsFormTypeDropdownOpen(false);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            formData.type === type && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {type}
+                                        </Text>
+                                        {formData.type === type && (
+                                            <Ionicons name="checkmark" size={20} color={theme.colors.surface} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* Status Dropdown Modal */}
             <Modal
                 visible={isFormStatusDropdownOpen}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setIsFormStatusDropdownOpen(false)}
             >
-                <TouchableOpacity
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
+                <Pressable
+                    style={styles.bottomSheetOverlay}
                     onPress={() => setIsFormStatusDropdownOpen(false)}
                 >
-                    <View style={styles.dropdownModal}>
-                        <ScrollView style={styles.dropdownScroll}>
-                            {APPOINTMENT_STATUS_OPTIONS.map((status) => (
-                                <TouchableOpacity
-                                    key={status}
-                                    style={[
-                                        styles.dropdownItem,
-                                        formData.status === status && styles.dropdownItemSelected
-                                    ]}
-                                    onPress={() => {
-                                        setFormData({ ...formData, status });
-                                        setIsFormStatusDropdownOpen(false);
-                                    }}
-                                >
-                                    {formData.status === status && (
-                                        <Ionicons name="checkmark" size={18} color={theme.colors.accent} style={styles.checkIcon} />
-                                    )}
-                                    <Text style={[
-                                        styles.dropdownItemText,
-                                        formData.status === status && styles.dropdownItemTextSelected
-                                    ]}>
-                                        {status}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-                </TouchableOpacity>
+                    <Pressable
+                        style={styles.statusBottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Status</Text>
+                        </View>
+                        <View style={styles.bottomSheetContent}>
+                            <ScrollView style={styles.statusBottomSheetScroll} showsVerticalScrollIndicator={false}>
+                                {APPOINTMENT_STATUS_OPTIONS.map((status) => (
+                                    <TouchableOpacity
+                                        key={status}
+                                        style={[
+                                            styles.bottomSheetOption,
+                                            formData.status === status && styles.bottomSheetOptionSelected
+                                        ]}
+                                        onPress={() => {
+                                            setFormData({ ...formData, status });
+                                            setIsFormStatusDropdownOpen(false);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            formData.status === status && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {status}
+                                        </Text>
+                                        {formData.status === status && (
+                                            <Ionicons name="checkmark" size={20} color={theme.colors.surface} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* Person Dropdown Modal */}
             <Modal
                 visible={isPersonDropdownOpen}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => {
                     setIsPersonDropdownOpen(false);
                     setPersonSearchText('');
                 }}
             >
                 <Pressable
-                    style={styles.modalOverlay}
+                    style={styles.bottomSheetOverlay}
                     onPress={() => {
                         setIsPersonDropdownOpen(false);
                         setPersonSearchText('');
                     }}
                 >
-                    <View style={styles.dropdownModal} onStartShouldSetResponder={() => true}>
-                        <View style={styles.dropdownSearchContainer}>
-                            <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.dropdownSearchIcon} />
-                            <TextInput
-                                style={styles.dropdownSearchInput}
-                                placeholder={`Search ${appointmentFor.toLowerCase()}s...`}
-                                placeholderTextColor={theme.colors.textSecondary}
-                                value={personSearchText}
-                                onChangeText={setPersonSearchText}
-                            />
+                    <Pressable
+                        style={styles.typeBottomSheet} // Reusing typeBottomSheet for similar height
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select {appointmentFor}</Text>
                         </View>
-                        <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                        <View style={{ paddingBottom: 16, paddingHorizontal: 16 }}>
+                            <View style={styles.dropdownSearchContainer}>
+                                <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.dropdownSearchIcon} />
+                                <TextInput
+                                    style={styles.dropdownSearchInput}
+                                    placeholder={`Search ${appointmentFor.toLowerCase()}s...`}
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    value={personSearchText}
+                                    onChangeText={setPersonSearchText}
+                                />
+                            </View>
+                        </View>
+                        <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true} showsVerticalScrollIndicator={false}>
                             {(appointmentFor === 'Camper' ? MOCK_CAMPERS : MOCK_STAFF)
                                 .filter((person) =>
                                     person.name.toLowerCase().includes(personSearchText.toLowerCase())
@@ -865,8 +911,8 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                         <TouchableOpacity
                                             key={person.id}
                                             style={[
-                                                styles.dropdownItem,
-                                                isSelected && styles.personDropdownItemSelected
+                                                styles.bottomSheetOption,
+                                                isSelected && styles.bottomSheetOptionSelected
                                             ]}
                                             onPress={() => {
                                                 setFormData({ ...formData, person: person.name, personId: person.id });
@@ -875,19 +921,258 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                             }}
                                         >
                                             <Text style={[
-                                                styles.dropdownItemText,
-                                                isSelected && styles.personDropdownItemTextSelected
+                                                styles.bottomSheetOptionText,
+                                                isSelected && styles.bottomSheetOptionTextSelected
                                             ]}>
                                                 {person.name}
                                             </Text>
                                             {isSelected && (
-                                                <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
+                                                <Ionicons name="checkmark" size={20} color={theme.colors.surface} />
                                             )}
                                         </TouchableOpacity>
                                     );
                                 })}
                         </ScrollView>
-                    </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Date Picker Modal */}
+            <Modal
+                visible={isDatePickerOpen}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setIsDatePickerOpen(false)}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => setIsDatePickerOpen(false)}
+                >
+                    <Pressable
+                        style={styles.bottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Date</Text>
+                            <TouchableOpacity onPress={() => setIsDatePickerOpen(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.pickerContent}>
+                            {/* Month */}
+                            <View style={styles.pickerColumn}>
+                                <Text style={styles.pickerLabel}>Month</Text>
+                                <ScrollView
+                                    style={styles.pickerScroll}
+                                    contentContainerStyle={{ alignItems: 'center' }}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
+                                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                        const isSelected = selectedDate.getMonth() + 1 === month;
+                                        return (
+                                            <TouchableOpacity
+                                                key={month}
+                                                style={[styles.pickerOption, isSelected && styles.pickerOptionSelected]}
+                                                onPress={() => {
+                                                    const newDate = new Date(selectedDate);
+                                                    newDate.setMonth(month - 1);
+                                                    setSelectedDate(newDate);
+                                                }}
+                                            >
+                                                <Text style={[styles.pickerOptionText, isSelected && styles.pickerOptionTextSelected]}>
+                                                    {monthNames[month - 1]}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
+
+                            {/* Day */}
+                            <View style={styles.pickerColumn}>
+                                <Text style={styles.pickerLabel}>Day</Text>
+                                <ScrollView
+                                    style={styles.pickerScroll}
+                                    contentContainerStyle={{ alignItems: 'center' }}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
+                                        const daysInMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate();
+                                        const isSelected = selectedDate.getDate() === day;
+                                        const isValid = day <= daysInMonth;
+                                        if (!isValid) return null;
+                                        return (
+                                            <TouchableOpacity
+                                                key={day}
+                                                style={[styles.pickerOption, isSelected && styles.pickerOptionSelected]}
+                                                onPress={() => {
+                                                    const newDate = new Date(selectedDate);
+                                                    newDate.setDate(day);
+                                                    setSelectedDate(newDate);
+                                                }}
+                                            >
+                                                <Text style={[styles.pickerOptionText, isSelected && styles.pickerOptionTextSelected]}>
+                                                    {day}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
+
+                            {/* Year */}
+                            <View style={styles.pickerColumn}>
+                                <Text style={styles.pickerLabel}>Year</Text>
+                                <ScrollView
+                                    style={styles.pickerScroll}
+                                    contentContainerStyle={{ alignItems: 'center' }}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 1 + i).map((year) => {
+                                        const isSelected = selectedDate.getFullYear() === year;
+                                        return (
+                                            <TouchableOpacity
+                                                key={year}
+                                                style={[styles.pickerOption, isSelected && styles.pickerOptionSelected]}
+                                                onPress={() => {
+                                                    const newDate = new Date(selectedDate);
+                                                    newDate.setFullYear(year);
+                                                    setSelectedDate(newDate);
+                                                }}
+                                            >
+                                                <Text style={[styles.pickerOptionText, isSelected && styles.pickerOptionTextSelected]}>
+                                                    {year}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
+                        </View>
+
+                        <View style={styles.pickerDisplay}>
+                            <Text style={styles.pickerDisplayText}>{formatDateForPickerDisplay(selectedDate)}</Text>
+                        </View>
+
+                        <View style={styles.pickerActions}>
+                            <TouchableOpacity style={styles.pickerCancelButton} onPress={() => setIsDatePickerOpen(false)}>
+                                <Text style={styles.pickerCancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.pickerConfirmButton} onPress={confirmDateSelection}>
+                                <Text style={styles.pickerConfirmButtonText}>Confirm</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Time Picker Modal */}
+            <Modal
+                visible={isTimePickerOpen}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setIsTimePickerOpen(false)}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => setIsTimePickerOpen(false)}
+                >
+                    <Pressable
+                        style={styles.bottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Time</Text>
+                            <TouchableOpacity onPress={() => setIsTimePickerOpen(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.pickerContent}>
+                            {/* Hour */}
+                            <View style={styles.pickerColumn}>
+                                <Text style={styles.pickerLabel}>Hour</Text>
+                                <ScrollView
+                                    style={styles.pickerScroll}
+                                    contentContainerStyle={{ alignItems: 'center' }}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
+                                        <TouchableOpacity
+                                            key={hour}
+                                            style={[styles.pickerOption, selectedTime.hour === hour && styles.pickerOptionSelected]}
+                                            onPress={() => setSelectedTime({ ...selectedTime, hour })}
+                                        >
+                                            <Text style={[styles.pickerOptionText, selectedTime.hour === hour && styles.pickerOptionTextSelected]}>
+                                                {hour}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+
+                            {/* Minute */}
+                            <View style={styles.pickerColumn}>
+                                <Text style={styles.pickerLabel}>Minute</Text>
+                                <ScrollView
+                                    style={styles.pickerScroll}
+                                    contentContainerStyle={{ alignItems: 'center' }}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    {Array.from({ length: 12 }, (_, i) => i * 5).map((minute) => (
+                                        <TouchableOpacity
+                                            key={minute}
+                                            style={[styles.pickerOption, selectedTime.minute === minute && styles.pickerOptionSelected]}
+                                            onPress={() => setSelectedTime({ ...selectedTime, minute })}
+                                        >
+                                            <Text style={[styles.pickerOptionText, selectedTime.minute === minute && styles.pickerOptionTextSelected]}>
+                                                {minute.toString().padStart(2, '0')}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+
+                            {/* AM/PM */}
+                            <View style={styles.pickerColumn}>
+                                <Text style={styles.pickerLabel}>Period</Text>
+                                <ScrollView
+                                    style={styles.pickerScroll}
+                                    contentContainerStyle={{ alignItems: 'center' }}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    {['AM', 'PM'].map((period) => (
+                                        <TouchableOpacity
+                                            key={period}
+                                            style={[styles.pickerOption, selectedTime.ampm === period && styles.pickerOptionSelected]}
+                                            onPress={() => setSelectedTime({ ...selectedTime, ampm: period })}
+                                        >
+                                            <Text style={[styles.pickerOptionText, selectedTime.ampm === period && styles.pickerOptionTextSelected]}>
+                                                {period}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        </View>
+
+                        <View style={styles.pickerDisplay}>
+                            <Text style={styles.pickerDisplayText}>
+                                {selectedTime.hour}:{selectedTime.minute.toString().padStart(2, '0')} {selectedTime.ampm}
+                            </Text>
+                        </View>
+
+                        <View style={styles.pickerActions}>
+                            <TouchableOpacity style={styles.pickerCancelButton} onPress={() => setIsTimePickerOpen(false)}>
+                                <Text style={styles.pickerCancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.pickerConfirmButton} onPress={confirmTimeSelection}>
+                                <Text style={styles.pickerConfirmButtonText}>Confirm</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
                 </Pressable>
             </Modal>
         </SafeAreaView>
@@ -1425,6 +1710,9 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     bottomSheetHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         marginBottom: theme.spacing.lg,
     },
     bottomSheetTitle: {
@@ -1495,6 +1783,103 @@ const styles = StyleSheet.create({
     },
     addAppointmentBottomSheetContent: {
         padding: theme.spacing.lg,
+    },
+    // Generic Bottom Sheet Styles for Pickers
+    bottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.lg,
+        maxHeight: '80%',
+    },
+    pickerContent: {
+        flexDirection: 'row',
+        height: 200,
+    },
+    pickerColumn: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    pickerLabel: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.sm,
+        fontWeight: '600',
+    },
+    pickerScroll: {
+        width: '100%',
+    },
+    pickerOption: {
+        width: 70,
+        height: 50,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginVertical: 4,
+        borderRadius: 12,
+    },
+    pickerOptionSelected: {
+        backgroundColor: theme.colors.secondary,
+    },
+    pickerOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    pickerOptionTextSelected: {
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    pickerDisplay: {
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        marginVertical: theme.spacing.md,
+        backgroundColor: theme.colors.background,
+    },
+    pickerDisplayText: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        color: theme.colors.text,
+    },
+    pickerActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: theme.spacing.md,
+    },
+    pickerCancelButton: {
+        flex: 1,
+        paddingVertical: theme.spacing.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+    },
+    pickerCancelButtonText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    pickerConfirmButton: {
+        flex: 1,
+        paddingVertical: theme.spacing.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.secondary,
+        borderRadius: theme.borderRadius.md,
+    },
+    pickerConfirmButtonText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.surface,
     },
 });
 

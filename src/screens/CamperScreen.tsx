@@ -1568,11 +1568,11 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={isDatePickerVisible}
                     transparent={true}
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setIsDatePickerVisible(false)}
                 >
-                    <Pressable style={styles.datePickerOverlay} onPress={() => setIsDatePickerVisible(false)}>
-                        <View style={styles.datePickerContainer}>
+                    <Pressable style={styles.bottomSheetOverlay} onPress={() => setIsDatePickerVisible(false)}>
+                        <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
                             {/* Header */}
                             <View style={styles.datePickerHeader}>
                                 <Text style={styles.datePickerTitle}>Select Date</Text>
@@ -1645,7 +1645,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                     })}
                                 </ScrollView>
                             </View>
-                        </View>
+                        </Pressable>
                     </Pressable>
                 </Modal>
 
