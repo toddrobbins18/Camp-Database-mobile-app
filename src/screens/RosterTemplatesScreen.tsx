@@ -258,64 +258,79 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                             onChangeText={setSearchQuery}
                                         />
                                     </View>
-                                    <View style={styles.divisionDropdownContainer}>
+                                    <TouchableOpacity
+                                        style={styles.divisionDropdownButton}
+                                        onPress={() => setShowDivisionDropdown(true)}
+                                    >
+                                        <Text style={styles.divisionDropdownText}>
+                                            {selectedDivision}
+                                        </Text>
+                                        <Ionicons
+                                            name="chevron-down"
+                                            size={20}
+                                            color={theme.colors.textSecondary}
+                                        />
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* Division Picker Modal */}
+                                <Modal
+                                    visible={showDivisionDropdown}
+                                    transparent
+                                    animationType="slide"
+                                    onRequestClose={() => setShowDivisionDropdown(false)}
+                                >
+                                    <TouchableOpacity
+                                        style={styles.modalOverlay}
+                                        activeOpacity={1}
+                                        onPress={() => setShowDivisionDropdown(false)}
+                                    >
                                         <TouchableOpacity
-                                            style={styles.divisionDropdownButton}
-                                            onPress={() =>
-                                                setShowDivisionDropdown(!showDivisionDropdown)
-                                            }
+                                            activeOpacity={1}
+                                            style={[styles.modalContainer, { maxHeight: '80%' }]}
+                                            onPress={(e) => e.stopPropagation()}
                                         >
-                                            <Text style={styles.divisionDropdownText}>
-                                                {selectedDivision}
-                                            </Text>
-                                            <Ionicons
-                                                name="chevron-down"
-                                                size={20}
-                                                color={theme.colors.textSecondary}
-                                            />
-                                        </TouchableOpacity>
-                                        {showDivisionDropdown && (
-                                            <View style={styles.divisionDropdownMenu}>
+                                            <View style={[styles.modalScrollContent, { flexShrink: 1 }]}>
+                                                <View style={styles.bottomSheetHeader}>
+                                                    <Text style={styles.bottomSheetTitle}>Select Division</Text>
+                                                    <TouchableOpacity onPress={() => setShowDivisionDropdown(false)}>
+                                                        <Ionicons name="close" size={24} color={theme.colors.text} />
+                                                    </TouchableOpacity>
+                                                </View>
                                                 <FlatList
                                                     data={DIVISIONS}
                                                     keyExtractor={(item) => item}
                                                     renderItem={({ item }) => (
                                                         <TouchableOpacity
-                                                            style={[
-                                                                styles.divisionDropdownItem,
-                                                                selectedDivision === item &&
-                                                                    styles.divisionDropdownItemSelected,
-                                                            ]}
+                                                            style={styles.bottomSheetItem}
                                                             onPress={() => {
                                                                 setSelectedDivision(item);
                                                                 setShowDivisionDropdown(false);
                                                             }}
                                                         >
+                                                            <Text
+                                                                style={[
+                                                                    styles.bottomSheetItemText,
+                                                                    selectedDivision === item &&
+                                                                    styles.bottomSheetItemTextSelected,
+                                                                ]}
+                                                            >
+                                                                {item}
+                                                            </Text>
                                                             {selectedDivision === item && (
                                                                 <Ionicons
                                                                     name="checkmark"
                                                                     size={20}
                                                                     color={theme.colors.secondary}
-                                                                    style={styles.checkIcon}
                                                                 />
                                                             )}
-                                                            <Text
-                                                                style={[
-                                                                    styles.divisionDropdownItemText,
-                                                                    selectedDivision === item &&
-                                                                        styles.divisionDropdownItemTextSelected,
-                                                                ]}
-                                                            >
-                                                                {item}
-                                                            </Text>
                                                         </TouchableOpacity>
                                                     )}
-                                                    nestedScrollEnabled={true}
                                                 />
                                             </View>
-                                        )}
-                                    </View>
-                                </View>
+                                        </TouchableOpacity>
+                                    </TouchableOpacity>
+                                </Modal>
 
                                 {/* Campers List */}
                                 <View style={[styles.campersListContainer, showDivisionDropdown && styles.campersListSectionWithDropdown]}>
@@ -348,7 +363,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                                         style={[
                                                             styles.divisionTag,
                                                             item.division === 'CIT Girls' &&
-                                                                styles.divisionTagHighlighted,
+                                                            styles.divisionTagHighlighted,
                                                         ]}
                                                     >
                                                         <Text style={styles.divisionTagText}>
@@ -431,8 +446,8 @@ const styles = StyleSheet.create({
         gap: theme.spacing.xs,
     },
     createButtonText: {
-        color: theme.colors.surface,
         ...theme.typography.body,
+        color: theme.colors.surface,
         fontWeight: '600',
     },
     emptyStateCard: {
@@ -482,20 +497,21 @@ const styles = StyleSheet.create({
         gap: theme.spacing.xs,
     },
     createFirstButtonText: {
-        color: theme.colors.surface,
         ...theme.typography.body,
+        color: theme.colors.surface,
         fontWeight: '600',
     },
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
+        justifyContent: 'flex-end',
         alignItems: 'center',
     },
     modalContainer: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        width: '90%',
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
         maxWidth: 600,
         maxHeight: '90%',
         ...theme.shadows.card,
@@ -749,6 +765,33 @@ const styles = StyleSheet.create({
     submitButtonText: {
         ...theme.typography.body,
         color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    bottomSheetHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: theme.spacing.md,
+        paddingBottom: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    bottomSheetTitle: {
+        ...theme.typography.h3,
+    },
+    bottomSheetItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    bottomSheetItemText: {
+        ...theme.typography.body,
+        flex: 1,
+    },
+    bottomSheetItemTextSelected: {
+        color: theme.colors.secondary,
         fontWeight: '600',
     },
 });
