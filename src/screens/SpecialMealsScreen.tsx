@@ -92,7 +92,7 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
         }
 
         return (
-            <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+            <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
                 <TouchableOpacity
                     style={styles.modalOverlay}
                     activeOpacity={1}
@@ -352,41 +352,62 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                             {/* Meal Type */}
                             <View style={styles.formSection}>
                                 <Text style={styles.label}>Meal Type</Text>
-                                <View style={styles.mealTypeContainer}>
-                                    <TouchableOpacity
-                                        style={styles.mealTypeDropdown}
-                                        onPress={() =>
-                                            setShowMealTypeDropdown(!showMealTypeDropdown)
-                                        }
+                                <TouchableOpacity
+                                    style={styles.mealTypeDropdown}
+                                    onPress={() => setShowMealTypeDropdown(true)}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.mealTypeDropdownText,
+                                            !mealType && styles.placeholder,
+                                        ]}
+                                        numberOfLines={1}
+                                        ellipsizeMode="tail"
                                     >
-                                        <Text
-                                            style={[
-                                                styles.mealTypeDropdownText,
-                                                !mealType && styles.placeholder,
-                                            ]}
-                                            numberOfLines={1}
-                                            ellipsizeMode="tail"
-                                        >
-                                            {mealType || 'Select meal type'}
-                                        </Text>
-                                        <Ionicons
-                                            name="chevron-down"
-                                            size={20}
-                                            color={theme.colors.textSecondary}
-                                        />
-                                    </TouchableOpacity>
-                                </View>
-                                {showMealTypeDropdown && (
-                                    <View style={styles.mealTypeDropdownMenu}>
+                                        {mealType || 'Select meal type'}
+                                    </Text>
+                                    <Ionicons
+                                        name="chevron-down"
+                                        size={20}
+                                        color={theme.colors.textSecondary}
+                                    />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Meal Type Modal */}
+                            <Modal
+                                visible={showMealTypeDropdown}
+                                transparent
+                                animationType="slide"
+                                onRequestClose={() => setShowMealTypeDropdown(false)}
+                            >
+                                <TouchableOpacity
+                                    style={styles.modalOverlay}
+                                    activeOpacity={1}
+                                    onPress={() => setShowMealTypeDropdown(false)}
+                                >
+                                    <View
+                                        style={styles.mealTypeModalContainer}
+                                        onStartShouldSetResponder={() => true}
+                                    >
+                                        <View style={styles.mealTypeModalHeader}>
+                                            <Text style={styles.mealTypeModalTitle}>Select Meal Type</Text>
+                                            <TouchableOpacity
+                                                onPress={() => setShowMealTypeDropdown(false)}
+                                                style={styles.closeButton}
+                                            >
+                                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                                            </TouchableOpacity>
+                                        </View>
                                         <FlatList
                                             data={MEAL_TYPES}
                                             keyExtractor={(item) => item}
                                             renderItem={({ item }) => (
                                                 <TouchableOpacity
                                                     style={[
-                                                        styles.mealTypeDropdownItem,
+                                                        styles.mealTypeModalItem,
                                                         mealType === item &&
-                                                            styles.mealTypeDropdownItemSelected,
+                                                        styles.mealTypeModalItemSelected,
                                                     ]}
                                                     onPress={() => {
                                                         setMealType(item);
@@ -395,23 +416,29 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                                                 >
                                                     <Text
                                                         style={[
-                                                            styles.mealTypeDropdownItemText,
+                                                            styles.mealTypeModalItemText,
                                                             mealType === item &&
-                                                                styles.mealTypeDropdownItemTextSelected,
+                                                            styles.mealTypeModalItemTextSelected,
                                                         ]}
                                                     >
                                                         {item}
                                                     </Text>
+                                                    {mealType === item && (
+                                                        <Ionicons
+                                                            name="checkmark"
+                                                            size={20}
+                                                            color={theme.colors.secondary}
+                                                        />
+                                                    )}
                                                 </TouchableOpacity>
                                             )}
-                                            nestedScrollEnabled={true}
                                         />
                                     </View>
-                                )}
-                            </View>
+                                </TouchableOpacity>
+                            </Modal>
 
                             {/* Menu Items */}
-                            <View style={[styles.formSection, showMealTypeDropdown && styles.formSectionWithDropdown]}>
+                            <View style={styles.formSection}>
                                 <Text style={styles.label}>Menu Items</Text>
                                 <TextInput
                                     style={styles.textArea}
@@ -566,15 +593,16 @@ const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
+        justifyContent: 'flex-end',
         alignItems: 'center',
     },
     datePickerContainer: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
         padding: theme.spacing.md,
-        width: '90%',
-        maxWidth: 400,
+        width: '100%',
+        maxWidth: 600,
         ...theme.shadows.card,
     },
     datePickerHeader: {
@@ -640,8 +668,9 @@ const styles = StyleSheet.create({
     },
     addMealModalContainer: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        width: '90%',
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
         maxWidth: 600,
         maxHeight: '90%',
         ...theme.shadows.card,
@@ -726,38 +755,42 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         flex: 1,
     },
-    mealTypeDropdownMenu: {
-        position: 'absolute',
-        top: '100%',
-        left: 0,
-        right: 0,
-        marginTop: theme.spacing.xs,
+    mealTypeModalContainer: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        maxHeight: 300,
-        zIndex: 1001,
-        elevation: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        marginBottom: theme.spacing.md,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
+        maxWidth: 600,
+        maxHeight: '60%',
+        ...theme.shadows.card,
     },
-    mealTypeDropdownItem: {
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
+    mealTypeModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: theme.spacing.lg,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
-    mealTypeDropdownItemSelected: {
+    mealTypeModalTitle: {
+        ...theme.typography.h3,
+    },
+    mealTypeModalItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: theme.spacing.lg,
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    mealTypeModalItemSelected: {
         backgroundColor: '#fff7ed',
     },
-    mealTypeDropdownItemText: {
+    mealTypeModalItemText: {
         ...theme.typography.body,
     },
-    mealTypeDropdownItemTextSelected: {
+    mealTypeModalItemTextSelected: {
         color: theme.colors.secondary,
         fontWeight: '600',
     },

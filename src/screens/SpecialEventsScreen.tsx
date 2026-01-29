@@ -52,13 +52,89 @@ const EVENT_TYPES = [
     'Other',
 ];
 
+const HELP_CONTENT: Record<string, { title: string, subtitle: string, columns: string, example: string, notes?: string }> = {
+    'Children': {
+        title: 'Children Directory',
+        subtitle: 'CSV format for children/camper directory upload',
+        columns: 'first_name, last_name, dob, grade, division, parent_email, emergency_contact, allergies, medications',
+        example: 'John, Doe, 2015-05-20, 5th, Junior Boys, parent@example.com, 555-0123, Peanuts, None',
+        notes: 'dob format: YYYY-MM-DD'
+    },
+    'Staff': {
+        title: 'Staff Directory',
+        subtitle: 'CSV format for staff directory upload',
+        columns: 'name, email, phone, role, department, hire_date, leader_id, status, season',
+        example: 'Jane Smith, jane@thenest.com, 555-9876, Counselor, Activities, 2024-01-15, <leader_id>, active, Summer 2024',
+        notes: 'leader_id must be a valid UUID from staff table. hire_date format: YYYY-MM-DD'
+    },
+    'Medications': {
+        title: 'Medications List',
+        subtitle: 'CSV format for camper medications',
+        columns: 'camper_id, medication_name, dosage, frequency, time_of_day, instructions',
+        example: '<camper_uuid>, Ibuprofen, 200mg, As needed, Morning, Take with food',
+        notes: 'camper_id must be valid UUID'
+    },
+    'Trips': {
+        title: 'Field Trips',
+        subtitle: 'CSV format for scheduled trips',
+        columns: 'trip_name, destination, date, division, cost, transport_mode, max_capacity',
+        example: 'Zoo Visit, City Zoo, 2026-07-15, Junior Girls, 25.00, Bus, 40',
+        notes: 'date format: YYYY-MM-DD'
+    },
+    'Menu': {
+        title: 'Dining Menu',
+        subtitle: 'CSV format for daily meals',
+        columns: 'date, meal_type, main_dish, side_dish, vegetarian_option, dessert',
+        example: '2026-07-10, Lunch, Grilled Chicken, Rice, Tofu Stir-fry, Brownie',
+    },
+    'Awards': {
+        title: 'Awards & Achievements',
+        subtitle: 'CSV format for camper awards',
+        columns: 'award_name, description, criteria, date_awarded, recipient_id',
+        example: 'Best Swimmer, Completed 10 laps, Swimming proficiency, 2026-07-20, <camper_uuid>',
+    },
+    'Daily Notes': {
+        title: 'Daily Notes',
+        subtitle: 'CSV format for daily camper/cabin notes',
+        columns: 'date, division, cabin, note_text, author, importance',
+        example: '2026-07-11, Junior Boys, Cabin 3, Everyone brushed teeth, Counselor Bob, Normal',
+    },
+    'Incidents': {
+        title: 'Incident Reports',
+        subtitle: 'CSV format for incident logging',
+        columns: 'date, time, location, persons_involved, description, action_taken, staff_witness',
+        example: '2026-07-12, 14:30, Pool, Billy Doe, Slipped on deck, First aid applied, Lifeguard Sarah',
+    },
+    'Calendar': {
+        title: 'Camp Calendar',
+        subtitle: 'CSV format for general calendar events',
+        columns: 'event_name, start_date, end_date, location, description, is_all_day',
+        example: 'Color War, 2026-08-01, 2026-08-03, Campgrounds, Annual Color War competition, true',
+    },
+    'Sports': {
+        title: 'Sports Schedule',
+        subtitle: 'CSV format for sports matches and practices',
+        columns: 'sport_name, team_a, team_b, date, time, location, referee',
+        example: 'Soccer, Cabin 1, Cabin 2, 2026-07-14, 15:00, Field A, Coach Mike',
+    },
+};
+
 export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) => {
+    const [showHelpModal, setShowHelpModal] = useState(false);
+    const [selectedHelpTab, setSelectedHelpTab] = useState('Staff');
+
+    const HELP_TABS = [
+        'Children', 'Staff', 'Medications', 'Trips', 'Menu', 'Awards', 'Daily Notes', 'Incidents', 'Calendar', 'Sports'
+    ];
     const [selectedDate, setSelectedDate] = useState('01/22/2026');
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
     const [showAddEventModal, setShowAddEventModal] = useState(false);
     const [showUploadCSVModal, setShowUploadCSVModal] = useState(false);
+    const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
+    const [timePickerField, setTimePickerField] = useState<'startTime' | 'endTime' | null>(null);
+    const [selectedTime, setSelectedTime] = useState({ hour: 12, minute: 0, ampm: 'PM' });
 
     // Add Event Modal States
     const [eventDate, setEventDate] = useState('01/22/2026');
@@ -138,12 +214,12 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         }
 
         return (
-            <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+            <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
                 <Pressable
-                    style={styles.modalOverlay}
+                    style={styles.bottomSheetOverlay}
                     onPress={onClose}
                 >
-                    <View style={styles.datePickerContainer} onStartShouldSetResponder={() => true}>
+                    <View style={styles.datePickerBottomSheet} onStartShouldSetResponder={() => true}>
                         <View style={styles.datePickerHeader}>
                             <TouchableOpacity
                                 onPress={() => {
@@ -326,12 +402,14 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                     </TouchableOpacity>
                 </View>
 
-                {/* Action Buttons */}
                 <View style={styles.actionButtons}>
-                    <TouchableOpacity style={styles.helpButton}>
+                    <TouchableOpacity
+                        style={styles.helpButton}
+                        onPress={() => setShowHelpModal(true)}
+                    >
                         <Ionicons name="help-circle-outline" size={24} color={theme.colors.text} />
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.uploadButton}
                         onPress={() => setShowUploadCSVModal(true)}
                     >
@@ -370,7 +448,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                         <View style={styles.divisionDropdownContainer}>
                             <TouchableOpacity
                                 style={styles.divisionDropdownButton}
-                                onPress={() => setShowDivisionDropdown(!showDivisionDropdown)}
+                                onPress={() => setShowDivisionDropdown(true)}
                             >
                                 <Text style={styles.divisionDropdownText}>{selectedDivision}</Text>
                                 <Ionicons
@@ -379,46 +457,6 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                     color={theme.colors.textSecondary}
                                 />
                             </TouchableOpacity>
-                            {showDivisionDropdown && (
-                                <View style={styles.divisionDropdownMenu}>
-                                    <FlatList
-                                        data={DIVISIONS}
-                                        keyExtractor={(item) => item}
-                                        renderItem={({ item }) => (
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.divisionDropdownItem,
-                                                    selectedDivision === item &&
-                                                        styles.divisionDropdownItemSelected,
-                                                ]}
-                                                onPress={() => {
-                                                    setSelectedDivision(item);
-                                                    setShowDivisionDropdown(false);
-                                                }}
-                                            >
-                                                {selectedDivision === item && (
-                                                    <Ionicons
-                                                        name="checkmark"
-                                                        size={20}
-                                                        color={theme.colors.secondary}
-                                                        style={styles.checkIcon}
-                                                    />
-                                                )}
-                                                <Text
-                                                    style={[
-                                                        styles.divisionDropdownItemText,
-                                                        selectedDivision === item &&
-                                                            styles.divisionDropdownItemTextSelected,
-                                                    ]}
-                                                >
-                                                    {item}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        )}
-                                        nestedScrollEnabled={true}
-                                    />
-                                </View>
-                            )}
                         </View>
                     </View>
                 </View>
@@ -440,7 +478,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                 animationType="slide"
                 onRequestClose={handleCloseAddEventModal}
             >
-                <Pressable style={styles.modalOverlay} onPress={handleCloseAddEventModal}>
+                <Pressable style={styles.bottomSheetOverlay} onPress={handleCloseAddEventModal}>
                     <View style={styles.addEventModalContainer}>
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
@@ -493,7 +531,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                     <TouchableOpacity
                                         style={styles.eventTypeDropdown}
                                         onPress={() =>
-                                            setShowEventTypeDropdown(!showEventTypeDropdown)
+                                            setShowEventTypeDropdown(true)
                                         }
                                     >
                                         <Text
@@ -513,44 +551,18 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                         />
                                     </TouchableOpacity>
                                 </View>
-                                {showEventTypeDropdown && (
-                                    <View style={styles.eventTypeDropdownMenu}>
-                                        <FlatList
-                                            data={EVENT_TYPES}
-                                            keyExtractor={(item) => item}
-                                            renderItem={({ item }) => (
-                                                <TouchableOpacity
-                                                    style={[
-                                                        styles.eventTypeDropdownItem,
-                                                        eventType === item &&
-                                                            styles.eventTypeDropdownItemSelected,
-                                                    ]}
-                                                    onPress={() => {
-                                                        setEventType(item);
-                                                        setShowEventTypeDropdown(false);
-                                                    }}
-                                                >
-                                                    <Text
-                                                        style={[
-                                                            styles.eventTypeDropdownItemText,
-                                                            eventType === item &&
-                                                                styles.eventTypeDropdownItemTextSelected,
-                                                        ]}
-                                                    >
-                                                        {item}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            )}
-                                            nestedScrollEnabled={true}
-                                        />
-                                    </View>
-                                )}
                             </View>
 
                             {/* Start Time */}
                             <View style={[styles.formSection, showEventTypeDropdown && styles.formSectionWithDropdown]}>
                                 <Text style={styles.label}>Start Time</Text>
-                                <View style={styles.timeInput}>
+                                <TouchableOpacity
+                                    style={styles.timeInput}
+                                    onPress={() => {
+                                        setTimePickerField('startTime');
+                                        setIsTimePickerOpen(true);
+                                    }}
+                                >
                                     <Text
                                         style={[
                                             styles.timeInputText,
@@ -564,13 +576,19 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                         size={20}
                                         color={theme.colors.textSecondary}
                                     />
-                                </View>
+                                </TouchableOpacity>
                             </View>
 
                             {/* End Time */}
                             <View style={styles.formSection}>
                                 <Text style={styles.label}>End Time</Text>
-                                <View style={styles.timeInput}>
+                                <TouchableOpacity
+                                    style={styles.timeInput}
+                                    onPress={() => {
+                                        setTimePickerField('endTime');
+                                        setIsTimePickerOpen(true);
+                                    }}
+                                >
                                     <Text
                                         style={[
                                             styles.timeInputText,
@@ -584,7 +602,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                         size={20}
                                         color={theme.colors.textSecondary}
                                     />
-                                </View>
+                                </TouchableOpacity>
                             </View>
 
                             {/* Divisions */}
@@ -688,20 +706,20 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                 animationType="slide"
                 onRequestClose={() => setShowUploadCSVModal(false)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowUploadCSVModal(false)}>
+                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowUploadCSVModal(false)}>
                     <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.bottomSheetHeader}>
                             <Text style={styles.bottomSheetTitle}>Select file</Text>
                         </View>
                         <View style={styles.bottomSheetContent}>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.bottomSheetOption}
                                 onPress={() => handleSelectFileOption('Aloha downloads')}
                             >
                                 <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
                                 <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.bottomSheetOption}
                                 onPress={() => handleSelectFileOption('Other files')}
                             >
@@ -709,6 +727,334 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 <Text style={styles.bottomSheetOptionText}>Other files</Text>
                             </TouchableOpacity>
                         </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+
+            {/* Help Modal (CSV Guide) */}
+            <Modal
+                visible={showHelpModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowHelpModal(false)}
+            >
+                <View style={[styles.bottomSheetOverlay, { justifyContent: 'center', alignItems: 'center' }]}>
+                    <View style={styles.helpModalContainer}>
+                        {/* Header */}
+                        <View style={styles.helpModalHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <Ionicons name="document-text-outline" size={24} color={theme.colors.text} />
+                                <Text style={styles.helpModalTitle}>CSV Upload Format Guide</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setShowHelpModal(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Tabs */}
+                        <View style={styles.tabsContainer}>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }}>
+                                {HELP_TABS.map((tab) => (
+                                    <TouchableOpacity
+                                        key={tab}
+                                        style={[
+                                            styles.tabButton,
+                                            selectedHelpTab === tab && styles.tabButtonSelected
+                                        ]}
+                                        onPress={() => setSelectedHelpTab(tab)}
+                                    >
+                                        <Text style={[
+                                            styles.tabButtonText,
+                                            selectedHelpTab === tab && styles.tabButtonTextSelected
+                                        ]}>{tab}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+
+                        {/* Content */}
+                        <ScrollView style={styles.helpModalContent}>
+                            {HELP_CONTENT[selectedHelpTab] ? (
+                                <>
+                                    <Text style={styles.helpContentTitle}>{HELP_CONTENT[selectedHelpTab].title}</Text>
+                                    <Text style={styles.helpContentSubtitle}>{HELP_CONTENT[selectedHelpTab].subtitle}</Text>
+
+                                    <Text style={styles.sectionTitle}>Required Columns (first row):</Text>
+                                    <View style={styles.codeBlock}>
+                                        <Text style={styles.codeText}>{HELP_CONTENT[selectedHelpTab].columns}</Text>
+                                    </View>
+
+                                    <Text style={styles.sectionTitle}>Example Data Row:</Text>
+                                    <View style={styles.codeBlock}>
+                                        <Text style={styles.codeText}>{HELP_CONTENT[selectedHelpTab].example}</Text>
+                                    </View>
+
+                                    {HELP_CONTENT[selectedHelpTab].notes && (
+                                        <View style={styles.infoBoxBlue}>
+                                            <Text style={styles.infoBoxText}>
+                                                <Text style={{ fontWeight: 'bold' }}>Important Notes:</Text> {HELP_CONTENT[selectedHelpTab].notes}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </>
+                            ) : null}
+
+                            <View style={styles.infoBoxYellow}>
+                                <Text style={styles.infoBoxTitle}>General Tips:</Text>
+                                <View style={styles.bulletList}>
+                                    <Text style={styles.bulletPoint}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.bulletPoint}>• Use commas to separate values</Text>
+                                    <Text style={styles.bulletPoint}>• Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
+                                    <Text style={styles.bulletPoint}>• Leave fields empty for optional columns</Text>
+                                    <Text style={styles.bulletPoint}>• Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.bulletPoint}>• Dates must be in YYYY-MM-DD format</Text>
+                                    <Text style={styles.bulletPoint}>• UUIDs can be obtained from the backend for existing records</Text>
+                                </View>
+                            </View>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Division Filter Modal */}
+            <Modal
+                visible={showDivisionDropdown}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowDivisionDropdown(false)}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => setShowDivisionDropdown(false)}
+                >
+                    <Pressable
+                        style={styles.bottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Division</Text>
+                            <TouchableOpacity onPress={() => setShowDivisionDropdown(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <FlatList
+                            data={DIVISIONS}
+                            keyExtractor={(item) => item}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={styles.bottomSheetOption}
+                                    onPress={() => {
+                                        setSelectedDivision(item);
+                                        setShowDivisionDropdown(false);
+                                    }}
+                                >
+                                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            selectedDivision === item && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {item}
+                                        </Text>
+                                        {selectedDivision === item && (
+                                            <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                        )}
+                                    </View>
+                                </TouchableOpacity>
+                            )}
+                            showsVerticalScrollIndicator={false}
+                        />
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Time Picker Modal */}
+            <Modal
+                visible={isTimePickerOpen}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => {
+                    setIsTimePickerOpen(false);
+                    setTimePickerField(null);
+                }}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => {
+                        setIsTimePickerOpen(false);
+                        setTimePickerField(null);
+                    }}
+                >
+                    <Pressable
+                        style={styles.bottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={[styles.bottomSheetHeader, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                            <Text style={styles.bottomSheetTitle}>Select Time</Text>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setIsTimePickerOpen(false);
+                                    setTimePickerField(null);
+                                }}
+                            >
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.timePickerContent}>
+                            {/* Hour Selection */}
+                            <View style={styles.timePickerColumn}>
+                                <Text style={styles.timePickerLabel}>Hour</Text>
+                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
+                                        <TouchableOpacity
+                                            key={hour}
+                                            style={[
+                                                styles.timePickerOption,
+                                                selectedTime.hour === hour && styles.timePickerOptionSelected
+                                            ]}
+                                            onPress={() => setSelectedTime({ ...selectedTime, hour })}
+                                        >
+                                            <Text style={[
+                                                styles.timePickerOptionText,
+                                                selectedTime.hour === hour && styles.timePickerOptionTextSelected
+                                            ]}>
+                                                {hour}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+
+                            {/* Minute Selection */}
+                            <View style={styles.timePickerColumn}>
+                                <Text style={styles.timePickerLabel}>Minute</Text>
+                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                    {Array.from({ length: 60 }, (_, i) => i).map((minute) => (
+                                        <TouchableOpacity
+                                            key={minute}
+                                            style={[
+                                                styles.timePickerOption,
+                                                selectedTime.minute === minute && styles.timePickerOptionSelected
+                                            ]}
+                                            onPress={() => setSelectedTime({ ...selectedTime, minute })}
+                                        >
+                                            <Text style={[
+                                                styles.timePickerOptionText,
+                                                selectedTime.minute === minute && styles.timePickerOptionTextSelected
+                                            ]}>
+                                                {minute.toString().padStart(2, '0')}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+
+                            {/* AM/PM Selection */}
+                            <View style={styles.timePickerColumn}>
+                                <Text style={styles.timePickerLabel}>Period</Text>
+                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                    {['AM', 'PM'].map((period) => (
+                                        <TouchableOpacity
+                                            key={period}
+                                            style={[
+                                                styles.timePickerOption,
+                                                selectedTime.ampm === period && styles.timePickerOptionSelected
+                                            ]}
+                                            onPress={() => setSelectedTime({ ...selectedTime, ampm: period })}
+                                        >
+                                            <Text style={[
+                                                styles.timePickerOptionText,
+                                                selectedTime.ampm === period && styles.timePickerOptionTextSelected
+                                            ]}>
+                                                {period}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        </View>
+
+                        {/* Selected Time Display */}
+                        <View style={styles.timePickerDisplay}>
+                            <Text style={styles.timePickerDisplayText}>
+                                {selectedTime.hour}:{selectedTime.minute.toString().padStart(2, '0')} {selectedTime.ampm}
+                            </Text>
+                        </View>
+
+                        {/* Action Buttons */}
+                        <View style={styles.modalFooter}>
+                            <TouchableOpacity
+                                style={styles.cancelButton}
+                                onPress={() => {
+                                    setIsTimePickerOpen(false);
+                                    setTimePickerField(null);
+                                }}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.submitButton}
+                                onPress={() => {
+                                    if (timePickerField) {
+                                        const timeString = `${selectedTime.hour}:${selectedTime.minute.toString().padStart(2, '0')} ${selectedTime.ampm}`;
+                                        if (timePickerField === 'startTime') setStartTime(timeString);
+                                        else setEndTime(timeString);
+                                    }
+                                    setIsTimePickerOpen(false);
+                                    setTimePickerField(null);
+                                }}
+                            >
+                                <Text style={styles.submitButtonText}>Confirm</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Event Type Bottom Sheet Modal */}
+            <Modal
+                visible={showEventTypeDropdown}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowEventTypeDropdown(false)}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => setShowEventTypeDropdown(false)}
+                >
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Event Type</Text>
+                        </View>
+                        <FlatList
+                            data={EVENT_TYPES}
+                            keyExtractor={(item) => item}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={styles.bottomSheetOption}
+                                    onPress={() => {
+                                        setEventType(item);
+                                        setShowEventTypeDropdown(false);
+                                    }}
+                                >
+                                    {eventType === item ? (
+                                        <Ionicons name="checkmark" size={24} color={theme.colors.secondary} />
+                                    ) : (
+                                        <View style={{ width: 24 }} />
+                                    )}
+                                    <Text
+                                        style={[
+                                            styles.bottomSheetOptionText,
+                                            eventType === item && styles.bottomSheetOptionTextSelected,
+                                        ]}
+                                    >
+                                        {item}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                        />
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -913,12 +1259,27 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    bottomSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+    },
     datePickerContainer: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
         padding: theme.spacing.md,
         width: '90%',
         maxWidth: 400,
+        ...theme.shadows.card,
+    },
+    datePickerBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        padding: theme.spacing.md,
+        width: '100%',
+        maxWidth: 600,
         ...theme.shadows.card,
     },
     datePickerHeader: {
@@ -984,8 +1345,9 @@ const styles = StyleSheet.create({
     },
     addEventModalContainer: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        width: '90%',
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
         maxWidth: 600,
         maxHeight: '90%',
         ...theme.shadows.card,
@@ -1186,8 +1548,8 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.secondary,
     },
     submitButtonDisabled: {
-        backgroundColor: theme.colors.textSecondary,
-        opacity: 0.5,
+        backgroundColor: theme.colors.secondary,
+        // No opacity to keep it solid blue as requested
     },
     submitButtonText: {
         ...theme.typography.body,
@@ -1198,13 +1560,25 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.surface,
         borderTopLeftRadius: theme.borderRadius.xl,
         borderTopRightRadius: theme.borderRadius.xl,
-        paddingTop: theme.spacing.lg,
-        paddingBottom: theme.spacing.xl,
+        paddingTop: theme.spacing.md,
+        paddingBottom: theme.spacing.lg,
         paddingHorizontal: theme.spacing.md,
-        maxHeight: '30%',
+        width: '100%',
+        maxHeight: '80%', // Allow taller sheet for long lists
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 10,
     },
     bottomSheetHeader: {
-        marginBottom: theme.spacing.lg,
+        marginBottom: theme.spacing.md,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingBottom: theme.spacing.sm, // Add padding for better spacing
+        borderBottomWidth: 1, // Separator for header
+        borderBottomColor: theme.colors.border,
     },
     bottomSheetTitle: {
         ...theme.typography.h3,
@@ -1220,10 +1594,189 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: theme.spacing.md,
         gap: theme.spacing.md,
+        borderBottomWidth: 1, // Add separator lines between items
+        borderBottomColor: theme.colors.border,
     },
     bottomSheetOptionText: {
         ...theme.typography.body,
         fontSize: 16,
         color: theme.colors.text,
+    },
+    bottomSheetOptionTextSelected: {
+        color: theme.colors.secondary,
+        fontWeight: '600',
+    },
+    timePickerContent: {
+        flexDirection: 'row',
+        paddingHorizontal: theme.spacing.sm,
+        maxHeight: 200, // Reduced from 250
+        justifyContent: 'space-between',
+    },
+    timePickerColumn: {
+        flex: 1,
+        alignItems: 'center',
+        marginHorizontal: 4,
+    },
+    timePickerLabel: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.xs, // Reduced margin
+    },
+    timePickerScroll: {
+        width: '100%',
+        maxHeight: 150, // Reduced from 200
+    },
+    timePickerOption: {
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        borderRadius: theme.borderRadius.sm,
+        marginVertical: theme.spacing.xs,
+        alignItems: 'center',
+        minWidth: 60,
+    },
+    timePickerOptionSelected: {
+        backgroundColor: theme.colors.secondary,
+    },
+    timePickerOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    timePickerOptionTextSelected: {
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    timePickerDisplay: {
+        padding: theme.spacing.md,
+        alignItems: 'center',
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    timePickerDisplayText: {
+        ...theme.typography.h2,
+        fontSize: 24,
+        color: theme.colors.text,
+    },
+    // Help Modal Styles
+    helpModalContainer: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        width: '90%',
+        maxWidth: 800,
+        maxHeight: '90%',
+        ...theme.shadows.card,
+    },
+    helpModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: theme.spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    helpModalTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: theme.colors.text,
+    },
+    tabsContainer: {
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        backgroundColor: theme.colors.background,
+        paddingVertical: theme.spacing.sm,
+    },
+    tabButton: {
+        paddingHorizontal: theme.spacing.lg,
+        paddingVertical: theme.spacing.sm,
+        borderRadius: 20,
+        marginRight: theme.spacing.sm,
+        backgroundColor: 'transparent',
+    },
+    tabButtonSelected: {
+        backgroundColor: theme.colors.surface,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    tabButtonText: {
+        ...theme.typography.body,
+        color: theme.colors.textSecondary,
+        fontWeight: '600',
+    },
+    tabButtonTextSelected: {
+        color: theme.colors.text,
+        fontWeight: 'bold',
+    },
+    helpModalContent: {
+        padding: theme.spacing.lg,
+    },
+    helpContentTitle: {
+        ...theme.typography.h2,
+        marginBottom: theme.spacing.xs,
+        color: theme.colors.text,
+    },
+    helpContentSubtitle: {
+        ...theme.typography.body,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.xl,
+    },
+    sectionTitle: {
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: theme.spacing.sm,
+        color: theme.colors.text,
+    },
+    codeBlock: {
+        backgroundColor: theme.colors.background,
+        padding: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        marginBottom: theme.spacing.lg,
+    },
+    codeText: {
+        fontFamily: 'monospace',
+        fontSize: 13,
+        color: theme.colors.text,
+    },
+    infoBoxBlue: {
+        backgroundColor: '#e0f2fe', // Light blue
+        padding: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        marginBottom: theme.spacing.lg,
+        borderLeftWidth: 4,
+        borderLeftColor: '#0284c7', // Darker blue
+    },
+    infoBoxText: {
+        ...theme.typography.body,
+        color: '#0c4a6e', // Dark blue text
+        fontSize: 14,
+    },
+    infoBoxYellow: {
+        backgroundColor: '#fef9c3', // Light yellow
+        padding: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        marginBottom: theme.spacing.lg,
+        borderLeftWidth: 4,
+        borderLeftColor: '#ca8a04', // Darker yellow/gold
+    },
+    infoBoxTitle: {
+        fontWeight: 'bold',
+        marginBottom: theme.spacing.sm,
+        color: '#713f12', // Brownish text
+    },
+    bulletList: {
+        gap: 4,
+    },
+    bulletPoint: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: '#713f12',
     },
 });

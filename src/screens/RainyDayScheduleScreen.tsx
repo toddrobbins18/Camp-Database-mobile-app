@@ -6,11 +6,13 @@ import {
     StyleSheet,
     TouchableOpacity,
     Modal,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import * as DocumentPicker from 'expo-document-picker';
 
 interface RainyDayScheduleScreenProps {
     navigation: any;
@@ -19,7 +21,7 @@ interface RainyDayScheduleScreenProps {
 export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenProps) => {
     const [date, setDate] = useState('01/24/2026');
     const [fileName, setFileName] = useState('');
-    
+
     // Date Picker State
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [datePickerMonth, setDatePickerMonth] = useState(new Date().getMonth());
@@ -37,9 +39,21 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
         return `${month}/${day}/${year}`;
     };
 
-    const handleFileUpload = () => {
-        // Mock file upload
-        setFileName('schedule.pdf');
+    const handleFileUpload = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: 'application/pdf',
+                copyToCacheDirectory: true,
+            });
+
+            if (result.assets && result.assets[0]) {
+                setFileName(result.assets[0].name);
+                // Here you would typically handle the file upload to your backend
+                // const fileUri = result.assets[0].uri;
+            }
+        } catch (err) {
+            console.error('Error picking document:', err);
+        }
     };
 
     const renderDatePicker = () => {
@@ -61,104 +75,108 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
             <Modal
                 visible={showDatePicker}
                 transparent
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowDatePicker(false)}
             >
-                <TouchableOpacity
+                <Pressable
                     style={styles.modalOverlay}
-                    activeOpacity={1}
                     onPress={() => setShowDatePicker(false)}
                 >
-                    <View style={styles.datePickerContainer} onStartShouldSetResponder={() => true}>
-                        <View style={styles.datePickerHeader}>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (datePickerMonth === 0) {
-                                        setDatePickerMonth(11);
-                                        setDatePickerYear(datePickerYear - 1);
-                                    } else {
-                                        setDatePickerMonth(datePickerMonth - 1);
-                                    }
-                                }}
-                            >
-                                <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
-                            </TouchableOpacity>
-                            <Text style={styles.datePickerMonth}>
-                                {monthNames[datePickerMonth]} {datePickerYear}
-                            </Text>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (datePickerMonth === 11) {
-                                        setDatePickerMonth(0);
-                                        setDatePickerYear(datePickerYear + 1);
-                                    } else {
-                                        setDatePickerMonth(datePickerMonth + 1);
-                                    }
-                                }}
-                            >
-                                <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <View style={styles.datePickerWeekdays}>
-                            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-                                <Text key={day} style={styles.weekdayText}>
-                                    {day}
+                    <Pressable
+                        style={styles.datePickerContainer}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.dragger} />
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            <View style={styles.datePickerHeader}>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        if (datePickerMonth === 0) {
+                                            setDatePickerMonth(11);
+                                            setDatePickerYear(datePickerYear - 1);
+                                        } else {
+                                            setDatePickerMonth(datePickerMonth - 1);
+                                        }
+                                    }}
+                                >
+                                    <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                                <Text style={styles.datePickerMonth}>
+                                    {monthNames[datePickerMonth]} {datePickerYear}
                                 </Text>
-                            ))}
-                        </View>
-                        <View style={styles.datePickerGrid}>
-                            {monthDates.map((d, index) => {
-                                if (!d) {
-                                    return <View key={index} style={styles.dateCell} />;
-                                }
-                                const dateStr = formatDate(d);
-                                const isToday = formatDate(d) === formatDate(today);
-                                const isSelected = date && formatDate(d) === date;
-                                return (
-                                    <TouchableOpacity
-                                        key={index}
-                                        style={[
-                                            styles.dateCell,
-                                            isToday && styles.todayCell,
-                                            isSelected && styles.selectedDateCell,
-                                        ]}
-                                        onPress={() => {
-                                            setDate(dateStr);
-                                            setShowDatePicker(false);
-                                        }}
-                                    >
-                                        <Text
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        if (datePickerMonth === 11) {
+                                            setDatePickerMonth(0);
+                                            setDatePickerYear(datePickerYear + 1);
+                                        } else {
+                                            setDatePickerMonth(datePickerMonth + 1);
+                                        }
+                                    }}
+                                >
+                                    <Ionicons name="chevron-forward" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                            <View style={styles.datePickerWeekdays}>
+                                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
+                                    <Text key={day} style={styles.weekdayText}>
+                                        {day}
+                                    </Text>
+                                ))}
+                            </View>
+                            <View style={styles.datePickerGrid}>
+                                {monthDates.map((d, index) => {
+                                    if (!d) {
+                                        return <View key={index} style={styles.dateCell} />;
+                                    }
+                                    const dateStr = formatDate(d);
+                                    const isToday = formatDate(d) === formatDate(today);
+                                    const isSelected = date && formatDate(d) === date;
+                                    return (
+                                        <TouchableOpacity
+                                            key={index}
                                             style={[
-                                                styles.dateCellText,
-                                                isSelected && styles.selectedDateText,
+                                                styles.dateCell,
+                                                isSelected && styles.selectedDateCell,
                                             ]}
+                                            onPress={() => {
+                                                setDate(dateStr);
+                                                setShowDatePicker(false);
+                                            }}
                                         >
-                                            {d.getDate()}
-                                        </Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
-                        <View style={styles.datePickerActions}>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    setDate('');
-                                    setShowDatePicker(false);
-                                }}
-                            >
-                                <Text style={styles.datePickerActionText}>Clear</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    setDate(formatDate(today));
-                                    setShowDatePicker(false);
-                                }}
-                            >
-                                <Text style={styles.datePickerActionText}>Today</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </TouchableOpacity>
+                                            <Text
+                                                style={[
+                                                    styles.dateCellText,
+                                                    isSelected && styles.selectedDateText,
+                                                ]}
+                                            >
+                                                {d.getDate()}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                            <View style={styles.datePickerActions}>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setDate('');
+                                        setShowDatePicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.datePickerActionText}>Clear</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setDate(formatDate(today));
+                                        setShowDatePicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.datePickerActionText}>Today</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
             </Modal>
         );
     };
@@ -228,7 +246,7 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                         <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.text} />
                         <Text style={styles.uploadedTitle}>Uploaded Schedules</Text>
                     </View>
-                    
+
                     <StyledCard style={styles.emptyStateCard}>
                         <Text style={styles.emptyStateText}>No schedules uploaded yet</Text>
                     </StyledCard>
@@ -408,16 +426,27 @@ const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
+        justifyContent: 'flex-end',
+        alignItems: 'center', // Center on large screens
     },
     datePickerContainer: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.md,
-        width: '90%',
-        maxWidth: 400,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        padding: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl + 20, // Add extra padding for bottom safe area
+        width: '100%',
+        maxWidth: 600, // Max width for responsive design
+        maxHeight: '80%', // Allow more height for calendar content
         ...theme.shadows.card,
+    },
+    dragger: {
+        width: 40,
+        height: 4,
+        backgroundColor: theme.colors.border,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: theme.spacing.lg,
     },
     datePickerHeader: {
         flexDirection: 'row',
@@ -458,13 +487,18 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
     },
-    todayCell: {
-        backgroundColor: theme.colors.background,
-        borderRadius: 20,
+    todayDateCell: {
+        borderWidth: 1,
+        borderColor: theme.colors.primary,
+        borderRadius: 999,
+    },
+    todayDateText: {
+        color: theme.colors.primary,
+        fontWeight: 'bold',
     },
     selectedDateCell: {
         backgroundColor: theme.colors.secondary,
-        borderRadius: 20,
+        borderRadius: 999,
     },
     selectedDateText: {
         color: theme.colors.surface,

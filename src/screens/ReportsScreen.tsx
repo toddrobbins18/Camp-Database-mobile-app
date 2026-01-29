@@ -8,6 +8,7 @@ import {
     TextInput,
     Modal,
     FlatList,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -108,116 +109,129 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
         }
 
         return (
-            <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-                <TouchableOpacity
+            <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+                <Pressable
                     style={styles.modalOverlay}
-                    activeOpacity={1}
                     onPress={onClose}
                 >
-                    <View style={styles.datePickerContainer} onStartShouldSetResponder={() => true}>
-                        <View style={styles.datePickerHeader}>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (type === 'start') {
-                                        if (startDatePickerMonth === 0) {
-                                            setStartDatePickerMonth(11);
-                                            setStartDatePickerYear(startDatePickerYear - 1);
+                    <Pressable style={styles.bottomSheetContainer} onPress={e => e.stopPropagation()}>
+                        <View style={styles.dragger} />
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            <View style={styles.datePickerHeader}>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        if (type === 'start') {
+                                            if (startDatePickerMonth === 0) {
+                                                setStartDatePickerMonth(11);
+                                                setStartDatePickerYear(startDatePickerYear - 1);
+                                            } else {
+                                                setStartDatePickerMonth(startDatePickerMonth - 1);
+                                            }
                                         } else {
-                                            setStartDatePickerMonth(startDatePickerMonth - 1);
+                                            if (endDatePickerMonth === 0) {
+                                                setEndDatePickerMonth(11);
+                                                setEndDatePickerYear(endDatePickerYear - 1);
+                                            } else {
+                                                setEndDatePickerMonth(endDatePickerMonth - 1);
+                                            }
                                         }
-                                    } else {
-                                        if (endDatePickerMonth === 0) {
-                                            setEndDatePickerMonth(11);
-                                            setEndDatePickerYear(endDatePickerYear - 1);
-                                        } else {
-                                            setEndDatePickerMonth(endDatePickerMonth - 1);
-                                        }
-                                    }
-                                }}
-                            >
-                                <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
-                            </TouchableOpacity>
-                            <Text style={styles.datePickerMonth}>
-                                {monthNames[currentMonth]} {currentYear}
-                            </Text>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (type === 'start') {
-                                        if (startDatePickerMonth === 11) {
-                                            setStartDatePickerMonth(0);
-                                            setStartDatePickerYear(startDatePickerYear + 1);
-                                        } else {
-                                            setStartDatePickerMonth(startDatePickerMonth + 1);
-                                        }
-                                    } else {
-                                        if (endDatePickerMonth === 11) {
-                                            setEndDatePickerMonth(0);
-                                            setEndDatePickerYear(endDatePickerYear + 1);
-                                        } else {
-                                            setEndDatePickerMonth(endDatePickerMonth + 1);
-                                        }
-                                    }
-                                }}
-                            >
-                                <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <View style={styles.datePickerWeekdays}>
-                            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-                                <Text key={day} style={styles.weekdayText}>
-                                    {day}
+                                    }}
+                                >
+                                    <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                                <Text style={styles.modalTitle}>
+                                    {monthNames[currentMonth]} {currentYear}
                                 </Text>
-                            ))}
-                        </View>
-                        <View style={styles.datePickerGrid}>
-                            {monthDates.map((date, index) => {
-                                if (!date) {
-                                    return <View key={index} style={styles.dateCell} />;
-                                }
-                                const isToday = formatDate(date) === formatDate(today);
-                                const isSelected = selectedDate && formatDate(date) === selectedDate;
-                                return (
-                                    <TouchableOpacity
-                                        key={index}
-                                        style={[
-                                            styles.dateCell,
-                                            isToday && styles.todayCell,
-                                            isSelected && styles.selectedDateCell,
-                                        ]}
-                                        onPress={() => handleDateSelect(date, type)}
-                                    >
-                                        <Text
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        if (type === 'start') {
+                                            if (startDatePickerMonth === 11) {
+                                                setStartDatePickerMonth(0);
+                                                setStartDatePickerYear(startDatePickerYear + 1);
+                                            } else {
+                                                setStartDatePickerMonth(startDatePickerMonth + 1);
+                                            }
+                                        } else {
+                                            if (endDatePickerMonth === 11) {
+                                                setEndDatePickerMonth(0);
+                                                setEndDatePickerYear(endDatePickerYear + 1);
+                                            } else {
+                                                setEndDatePickerMonth(endDatePickerMonth + 1);
+                                            }
+                                        }
+                                    }}
+                                >
+                                    <Ionicons name="chevron-forward" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                            <View style={styles.datePickerWeekdays}>
+                                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
+                                    <Text key={day} style={styles.weekdayText}>
+                                        {day}
+                                    </Text>
+                                ))}
+                            </View>
+                            <View style={styles.datePickerGrid}>
+                                {monthDates.map((date, index) => {
+                                    if (!date) {
+                                        return <View key={index} style={styles.dateCell} />;
+                                    }
+                                    const isToday = formatDate(date) === formatDate(today);
+                                    const isSelected = selectedDate === formatDate(date);
+
+                                    return (
+                                        <TouchableOpacity
+                                            key={index}
                                             style={[
-                                                styles.dateCellText,
-                                                isSelected && styles.selectedDateText,
+                                                styles.dateCell,
+                                                isSelected && styles.selectedDateCell,
                                             ]}
+                                            onPress={() => {
+                                                const formatted = formatDate(date);
+                                                if (type === 'start') {
+                                                    setStartDate(formatted);
+                                                } else {
+                                                    setEndDate(formatted);
+                                                }
+                                                onClose();
+                                            }}
                                         >
-                                            {date.getDate()}
-                                        </Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
-                        <View style={styles.datePickerActions}>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (type === 'start') setStartDate('');
-                                    else setEndDate('');
-                                    onClose();
-                                }}
-                            >
-                                <Text style={styles.datePickerActionText}>Clear</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    handleDateSelect(today, type);
-                                }}
-                            >
-                                <Text style={styles.datePickerActionText}>Today</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </TouchableOpacity>
+                                            <Text
+                                                style={[
+                                                    styles.dateText,
+                                                    isSelected && styles.selectedDateText,
+                                                ]}
+                                            >
+                                                {date.getDate()}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                            <View style={styles.datePickerActions}>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        if (type === 'start') setStartDate('');
+                                        else setEndDate('');
+                                        onClose();
+                                    }}
+                                >
+                                    <Text style={styles.datePickerActionText}>Clear</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        const formatted = formatDate(today);
+                                        if (type === 'start') setStartDate(formatted);
+                                        else setEndDate(formatted);
+                                        onClose();
+                                    }}
+                                >
+                                    <Text style={styles.datePickerActionText}>Today</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
             </Modal>
         );
     };
@@ -262,43 +276,58 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                                 <Text style={styles.dropdownText}>{reportType}</Text>
                                 <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                             </TouchableOpacity>
-                            {showReportTypeDropdown && (
-                                <View style={styles.dropdownMenu}>
-                                    <FlatList
-                                        data={REPORT_TYPES}
-                                        keyExtractor={(item) => item}
-                                        renderItem={({ item }) => (
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.dropdownItem,
-                                                    reportType === item && styles.dropdownItemSelected,
-                                                ]}
-                                                onPress={() => {
-                                                    setReportType(item);
-                                                    setShowReportTypeDropdown(false);
-                                                }}
-                                            >
-                                                {reportType === item && (
-                                                    <Ionicons
-                                                        name="checkmark"
-                                                        size={20}
-                                                        color={theme.colors.secondary}
-                                                        style={styles.checkIcon}
-                                                    />
-                                                )}
-                                                <Text
+                            {/* Report Type Dropdown Modal */}
+                            <Modal
+                                visible={showReportTypeDropdown}
+                                transparent
+                                animationType="slide"
+                                onRequestClose={() => setShowReportTypeDropdown(false)}
+                            >
+                                <Pressable
+                                    style={styles.modalOverlay}
+                                    onPress={() => setShowReportTypeDropdown(false)}
+                                >
+                                    <Pressable style={styles.bottomSheetContainer} onPress={e => e.stopPropagation()}>
+                                        <View style={styles.dragger} />
+                                        <View style={styles.bottomSheetHeader}>
+                                            <Text style={styles.modalTitle}>Select Report Type</Text>
+                                        </View>
+                                        <FlatList
+                                            data={REPORT_TYPES}
+                                            keyExtractor={(item) => item}
+                                            renderItem={({ item }) => (
+                                                <TouchableOpacity
                                                     style={[
-                                                        styles.dropdownItemText,
-                                                        reportType === item && styles.dropdownItemTextSelected,
+                                                        styles.dropdownItem,
+                                                        reportType === item && styles.dropdownItemSelected,
                                                     ]}
+                                                    onPress={() => {
+                                                        setReportType(item);
+                                                        setShowReportTypeDropdown(false);
+                                                    }}
                                                 >
-                                                    {item}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        )}
-                                    />
-                                </View>
-                            )}
+                                                    <Text
+                                                        style={[
+                                                            styles.dropdownItemText,
+                                                            reportType === item && styles.dropdownItemTextSelected,
+                                                        ]}
+                                                    >
+                                                        {item}
+                                                    </Text>
+                                                    {reportType === item && (
+                                                        <Ionicons
+                                                            name="checkmark"
+                                                            size={20}
+                                                            color={theme.colors.secondary}
+                                                            style={styles.checkIcon}
+                                                        />
+                                                    )}
+                                                </TouchableOpacity>
+                                            )}
+                                        />
+                                    </Pressable>
+                                </Pressable>
+                            </Modal>
                         </View>
 
                         {/* Start Date */}
@@ -342,31 +371,46 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                                 <Text style={styles.divisionButtonText}>{selectedDivision}</Text>
                                 <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                             </TouchableOpacity>
-                            {showDivisionDropdown && (
-                                <View style={styles.divisionDropdown}>
-                                    <Text style={styles.divisionDropdownTitle}>Select Divisions</Text>
-                                    <FlatList
-                                        data={DIVISIONS}
-                                        keyExtractor={(item) => item}
-                                        renderItem={({ item }) => (
-                                            <TouchableOpacity
-                                                style={styles.divisionItem}
-                                                onPress={() => {
-                                                    setSelectedDivision(item);
-                                                    setShowDivisionDropdown(false);
-                                                }}
-                                            >
-                                                <View style={styles.radioButton}>
+                            {/* Division Dropdown Modal */}
+                            <Modal
+                                visible={showDivisionDropdown}
+                                transparent
+                                animationType="slide"
+                                onRequestClose={() => setShowDivisionDropdown(false)}
+                            >
+                                <Pressable
+                                    style={styles.modalOverlay}
+                                    onPress={() => setShowDivisionDropdown(false)}
+                                >
+                                    <Pressable style={styles.bottomSheetContainer} onPress={e => e.stopPropagation()}>
+                                        <View style={styles.dragger} />
+                                        <View style={styles.bottomSheetHeader}>
+                                            <Text style={styles.modalTitle}>Select Divisions</Text>
+                                        </View>
+                                        <FlatList
+                                            data={DIVISIONS}
+                                            keyExtractor={(item) => item}
+                                            renderItem={({ item }) => (
+                                                <TouchableOpacity
+                                                    style={styles.dropdownItem}
+                                                    onPress={() => {
+                                                        setSelectedDivision(item);
+                                                        setShowDivisionDropdown(false);
+                                                    }}
+                                                >
+                                                    <Text style={[
+                                                        styles.dropdownItemText,
+                                                        selectedDivision === item && styles.dropdownItemTextSelected
+                                                    ]}>{item}</Text>
                                                     {selectedDivision === item && (
-                                                        <View style={styles.radioButtonSelected} />
+                                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={styles.checkIcon} />
                                                     )}
-                                                </View>
-                                                <Text style={styles.divisionItemText}>{item}</Text>
-                                            </TouchableOpacity>
-                                        )}
-                                    />
-                                </View>
-                            )}
+                                                </TouchableOpacity>
+                                            )}
+                                        />
+                                    </Pressable>
+                                </Pressable>
+                            </Modal>
                         </View>
 
                         {/* Generate Report Button */}
@@ -481,28 +525,7 @@ const styles = StyleSheet.create({
         maxHeight: 200,
         ...theme.shadows.card,
     },
-    dropdownItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    dropdownItemSelected: {
-        backgroundColor: '#fff7ed',
-    },
-    checkIcon: {
-        marginRight: theme.spacing.xs,
-    },
-    dropdownItemText: {
-        ...theme.typography.body,
-        flex: 1,
-    },
-    dropdownItemTextSelected: {
-        color: theme.colors.secondary,
-        fontWeight: '600',
-    },
+
     dateInput: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -590,8 +613,8 @@ const styles = StyleSheet.create({
         marginTop: theme.spacing.sm,
     },
     generateButtonText: {
-        color: theme.colors.surface,
         ...theme.typography.body,
+        color: theme.colors.surface,
         fontWeight: '600',
     },
     summaryCards: {
@@ -640,16 +663,61 @@ const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
+        justifyContent: 'flex-end',
+        alignItems: 'center', // Center the bottom sheet on large screens
     },
-    datePickerContainer: {
+    bottomSheetContainer: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.md,
-        width: '90%',
-        maxWidth: 400,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: '80%',
+        width: '100%',
+        maxWidth: 600, // prevent full width on large screens
         ...theme.shadows.card,
+    },
+    dragger: {
+        width: 40,
+        height: 4,
+        backgroundColor: theme.colors.border,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: theme.spacing.lg,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: theme.colors.text,
+    },
+    bottomSheetHeader: {
+        marginBottom: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        paddingBottom: theme.spacing.sm,
+    },
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        gap: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    dropdownItemSelected: {
+        backgroundColor: theme.colors.secondary + '10',
+    },
+    checkIcon: {
+        marginLeft: 'auto',
+    },
+    dropdownItemText: {
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    dropdownItemTextSelected: {
+        color: theme.colors.secondary,
+        fontWeight: '600',
     },
     datePickerHeader: {
         flexDirection: 'row',
@@ -683,33 +751,37 @@ const styles = StyleSheet.create({
         aspectRatio: 1,
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    dateCellText: {
-        ...theme.typography.body,
-        fontSize: 14,
-    },
-    todayCell: {
-        borderRadius: 20,
-        backgroundColor: theme.colors.background,
+        borderRadius: 999, // full circle
     },
     selectedDateCell: {
-        borderRadius: 20,
-        backgroundColor: theme.colors.secondary,
+        backgroundColor: theme.colors.primary,
+    },
+    todayDateCell: {
+        borderWidth: 1,
+        borderColor: theme.colors.primary,
+    },
+    dateText: {
+        fontSize: 14,
+        color: theme.colors.text,
     },
     selectedDateText: {
-        color: theme.colors.surface,
-        fontWeight: '600',
+        color: 'white',
+        fontWeight: 'bold',
+    },
+    todayDateText: {
+        color: theme.colors.primary,
+        fontWeight: 'bold',
     },
     datePickerActions: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
-        paddingTop: theme.spacing.md,
+        marginTop: theme.spacing.md,
+        paddingHorizontal: theme.spacing.sm,
     },
     datePickerActionText: {
-        ...theme.typography.body,
-        color: theme.colors.secondary,
+        color: theme.colors.primary,
+        fontSize: 16,
         fontWeight: '600',
     },
+
 });

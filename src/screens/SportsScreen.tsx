@@ -101,6 +101,10 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
     const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
 
+    // Help modal state
+    const [showHelpModal, setShowHelpModal] = useState(false);
+    const [activeHelpTab, setActiveHelpTab] = useState('Children');
+
     // Reuse date formatting function
     const formatDate = (date: Date) => {
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -182,7 +186,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         }
 
         return (
-            <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+            <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
                 <TouchableOpacity
                     style={styles.modalOverlay}
                     activeOpacity={1}
@@ -365,13 +369,23 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         const today = new Date();
         const selectedDateObj = selectedDate
             ? (() => {
-                  const [month, day, year] = selectedDate.split('/').map(Number);
-                  return new Date(year, month - 1, day);
-              })()
+                const [month, day, year] = selectedDate.split('/').map(Number);
+                return new Date(year, month - 1, day);
+            })()
             : null;
 
         return (
             <View style={styles.calendarViewContainer}>
+                {/* Daily Schedule View - Above Calendar */}
+                <StyledCard style={styles.scheduleCard}>
+                    <Text style={styles.scheduleDate}>
+                        {selectedDateObj ? formatDateLong(selectedDateObj) : 'Select a date'}
+                    </Text>
+                    <Text style={styles.scheduleEmptyText}>
+                        No activities scheduled for this date
+                    </Text>
+                </StyledCard>
+
                 {/* Calendar Widget */}
                 <StyledCard style={styles.calendarCard}>
                     <View style={styles.calendarHeader}>
@@ -445,16 +459,6 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                             );
                         })}
                     </View>
-                </StyledCard>
-
-                {/* Daily Schedule View - Below Calendar */}
-                <StyledCard style={styles.scheduleCard}>
-                    <Text style={styles.scheduleDate}>
-                        {selectedDateObj ? formatDateLong(selectedDateObj) : 'Select a date'}
-                    </Text>
-                    <Text style={styles.scheduleEmptyText}>
-                        No activities scheduled for this date
-                    </Text>
                 </StyledCard>
             </View>
         );
@@ -543,7 +547,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                             </Text>
                         </TouchableOpacity>
                     </View>
-                    <TouchableOpacity style={styles.helpButton}>
+                    <TouchableOpacity style={styles.helpButton} onPress={() => setShowHelpModal(true)}>
                         <Ionicons name="help-circle-outline" size={24} color={theme.colors.text} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.uploadButton}>
@@ -664,7 +668,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                 <Modal
                     visible={showDivisionDropdown}
                     transparent
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowDivisionDropdown(false)}
                 >
                     <TouchableOpacity
@@ -672,8 +676,17 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         activeOpacity={1}
                         onPress={() => setShowDivisionDropdown(false)}
                     >
-                        <View style={styles.dropdownModalContent}>
+                        <View style={styles.dropdownModalContent} onStartShouldSetResponder={() => true}>
                             <View style={styles.filterDropdownMenuModal}>
+                                <View style={styles.filterDropdownHeader}>
+                                    <Text style={styles.filterDropdownTitle}>Select Division</Text>
+                                    <TouchableOpacity
+                                        onPress={() => setShowDivisionDropdown(false)}
+                                        style={styles.closeButton}
+                                    >
+                                        <Ionicons name="close" size={24} color={theme.colors.text} />
+                                    </TouchableOpacity>
+                                </View>
                                 <FlatList
                                     data={DIVISIONS}
                                     keyExtractor={(item) => item}
@@ -682,13 +695,22 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                             style={[
                                                 styles.filterDropdownItem,
                                                 selectedDivision === item &&
-                                                    styles.filterDropdownItemSelected,
+                                                styles.filterDropdownItemSelected,
                                             ]}
                                             onPress={() => {
                                                 setSelectedDivision(item);
                                                 setShowDivisionDropdown(false);
                                             }}
                                         >
+                                            <Text
+                                                style={[
+                                                    styles.filterDropdownItemText,
+                                                    selectedDivision === item &&
+                                                    styles.filterDropdownItemTextSelected,
+                                                ]}
+                                            >
+                                                {item}
+                                            </Text>
                                             {selectedDivision === item && (
                                                 <Ionicons
                                                     name="checkmark"
@@ -697,15 +719,6 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                                     style={styles.checkIcon}
                                                 />
                                             )}
-                                            <Text
-                                                style={[
-                                                    styles.filterDropdownItemText,
-                                                    selectedDivision === item &&
-                                                        styles.filterDropdownItemTextSelected,
-                                                ]}
-                                            >
-                                                {item}
-                                            </Text>
                                         </TouchableOpacity>
                                     )}
                                     nestedScrollEnabled={true}
@@ -720,7 +733,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                 <Modal
                     visible={showGenderDropdown}
                     transparent
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowGenderDropdown(false)}
                 >
                     <TouchableOpacity
@@ -728,8 +741,17 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         activeOpacity={1}
                         onPress={() => setShowGenderDropdown(false)}
                     >
-                        <View style={styles.dropdownModalContent}>
+                        <View style={styles.dropdownModalContent} onStartShouldSetResponder={() => true}>
                             <View style={styles.filterDropdownMenuModal}>
+                                <View style={styles.filterDropdownHeader}>
+                                    <Text style={styles.filterDropdownTitle}>Select Gender</Text>
+                                    <TouchableOpacity
+                                        onPress={() => setShowGenderDropdown(false)}
+                                        style={styles.closeButton}
+                                    >
+                                        <Ionicons name="close" size={24} color={theme.colors.text} />
+                                    </TouchableOpacity>
+                                </View>
                                 <FlatList
                                     data={GENDERS}
                                     keyExtractor={(item) => item}
@@ -738,13 +760,22 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                             style={[
                                                 styles.filterDropdownItem,
                                                 selectedGender === item &&
-                                                    styles.filterDropdownItemSelected,
+                                                styles.filterDropdownItemSelected,
                                             ]}
                                             onPress={() => {
                                                 setSelectedGender(item);
                                                 setShowGenderDropdown(false);
                                             }}
                                         >
+                                            <Text
+                                                style={[
+                                                    styles.filterDropdownItemText,
+                                                    selectedGender === item &&
+                                                    styles.filterDropdownItemTextSelected,
+                                                ]}
+                                            >
+                                                {item}
+                                            </Text>
                                             {selectedGender === item && (
                                                 <Ionicons
                                                     name="checkmark"
@@ -753,15 +784,6 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                                     style={styles.checkIcon}
                                                 />
                                             )}
-                                            <Text
-                                                style={[
-                                                    styles.filterDropdownItemText,
-                                                    selectedGender === item &&
-                                                        styles.filterDropdownItemTextSelected,
-                                                ]}
-                                            >
-                                                {item}
-                                            </Text>
                                         </TouchableOpacity>
                                     )}
                                     nestedScrollEnabled={true}
@@ -776,7 +798,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                 <Modal
                     visible={showSportDropdown}
                     transparent
-                    animationType="fade"
+                    animationType="slide"
                     onRequestClose={() => setShowSportDropdown(false)}
                 >
                     <TouchableOpacity
@@ -784,8 +806,17 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         activeOpacity={1}
                         onPress={() => setShowSportDropdown(false)}
                     >
-                        <View style={styles.dropdownModalContent}>
+                        <View style={styles.dropdownModalContent} onStartShouldSetResponder={() => true}>
                             <View style={styles.filterDropdownMenuModal}>
+                                <View style={styles.filterDropdownHeader}>
+                                    <Text style={styles.filterDropdownTitle}>Select Sport</Text>
+                                    <TouchableOpacity
+                                        onPress={() => setShowSportDropdown(false)}
+                                        style={styles.closeButton}
+                                    >
+                                        <Ionicons name="close" size={24} color={theme.colors.text} />
+                                    </TouchableOpacity>
+                                </View>
                                 <FlatList
                                     data={SPORTS}
                                     keyExtractor={(item) => item}
@@ -794,13 +825,22 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                             style={[
                                                 styles.filterDropdownItem,
                                                 selectedSport === item &&
-                                                    styles.filterDropdownItemSelected,
+                                                styles.filterDropdownItemSelected,
                                             ]}
                                             onPress={() => {
                                                 setSelectedSport(item);
                                                 setShowSportDropdown(false);
                                             }}
                                         >
+                                            <Text
+                                                style={[
+                                                    styles.filterDropdownItemText,
+                                                    selectedSport === item &&
+                                                    styles.filterDropdownItemTextSelected,
+                                                ]}
+                                            >
+                                                {item}
+                                            </Text>
                                             {selectedSport === item && (
                                                 <Ionicons
                                                     name="checkmark"
@@ -809,15 +849,6 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                                     style={styles.checkIcon}
                                                 />
                                             )}
-                                            <Text
-                                                style={[
-                                                    styles.filterDropdownItemText,
-                                                    selectedSport === item &&
-                                                        styles.filterDropdownItemTextSelected,
-                                                ]}
-                                            >
-                                                {item}
-                                            </Text>
                                         </TouchableOpacity>
                                     )}
                                     nestedScrollEnabled={true}
@@ -872,41 +903,62 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 <Text style={styles.label}>
                                     Sport Name <Text style={styles.required}>*</Text>
                                 </Text>
-                                <View style={styles.sportNameContainer}>
-                                    <TouchableOpacity
-                                        style={styles.sportNameDropdown}
-                                        onPress={() =>
-                                            setShowSportNameDropdown(!showSportNameDropdown)
-                                        }
+                                <TouchableOpacity
+                                    style={styles.sportNameDropdown}
+                                    onPress={() => setShowSportNameDropdown(true)}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.sportNameDropdownText,
+                                            !sportName && styles.placeholder,
+                                        ]}
+                                        numberOfLines={1}
+                                        ellipsizeMode="tail"
                                     >
-                                        <Text
-                                            style={[
-                                                styles.sportNameDropdownText,
-                                                !sportName && styles.placeholder,
-                                            ]}
-                                            numberOfLines={1}
-                                            ellipsizeMode="tail"
-                                        >
-                                            {sportName || 'Select sport'}
-                                        </Text>
-                                        <Ionicons
-                                            name="chevron-down"
-                                            size={20}
-                                            color={theme.colors.textSecondary}
-                                        />
-                                    </TouchableOpacity>
-                                </View>
-                                {showSportNameDropdown && (
-                                    <View style={styles.sportNameDropdownMenu}>
+                                        {sportName || 'Select sport'}
+                                    </Text>
+                                    <Ionicons
+                                        name="chevron-down"
+                                        size={20}
+                                        color={theme.colors.textSecondary}
+                                    />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Sport Name Modal */}
+                            <Modal
+                                visible={showSportNameDropdown}
+                                transparent
+                                animationType="slide"
+                                onRequestClose={() => setShowSportNameDropdown(false)}
+                            >
+                                <TouchableOpacity
+                                    style={styles.modalOverlay}
+                                    activeOpacity={1}
+                                    onPress={() => setShowSportNameDropdown(false)}
+                                >
+                                    <View
+                                        style={styles.sportNameModalContainer}
+                                        onStartShouldSetResponder={() => true}
+                                    >
+                                        <View style={styles.sportNameModalHeader}>
+                                            <Text style={styles.sportNameModalTitle}>Select Sport</Text>
+                                            <TouchableOpacity
+                                                onPress={() => setShowSportNameDropdown(false)}
+                                                style={styles.closeButton}
+                                            >
+                                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                                            </TouchableOpacity>
+                                        </View>
                                         <FlatList
                                             data={ENROLLMENT_SPORTS}
                                             keyExtractor={(item) => item}
                                             renderItem={({ item }) => (
                                                 <TouchableOpacity
                                                     style={[
-                                                        styles.sportNameDropdownItem,
+                                                        styles.sportNameModalItem,
                                                         sportName === item &&
-                                                            styles.sportNameDropdownItemSelected,
+                                                        styles.sportNameModalItemSelected,
                                                     ]}
                                                     onPress={() => {
                                                         setSportName(item);
@@ -915,20 +967,26 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                                 >
                                                     <Text
                                                         style={[
-                                                            styles.sportNameDropdownItemText,
+                                                            styles.sportNameModalItemText,
                                                             sportName === item &&
-                                                                styles.sportNameDropdownItemTextSelected,
+                                                            styles.sportNameModalItemTextSelected,
                                                         ]}
                                                     >
                                                         {item}
                                                     </Text>
+                                                    {sportName === item && (
+                                                        <Ionicons
+                                                            name="checkmark"
+                                                            size={20}
+                                                            color={theme.colors.secondary}
+                                                        />
+                                                    )}
                                                 </TouchableOpacity>
                                             )}
-                                            nestedScrollEnabled={true}
                                         />
                                     </View>
-                                )}
-                            </View>
+                                </TouchableOpacity>
+                            </Modal>
 
                             {/* Instructor */}
                             <View style={[styles.formSection, showSportNameDropdown && styles.formSectionWithDropdown]}>
@@ -960,7 +1018,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                                 style={[
                                                     styles.radioButton,
                                                     schedulePeriod === period &&
-                                                        styles.radioButtonSelected,
+                                                    styles.radioButtonSelected,
                                                 ]}
                                             >
                                                 {schedulePeriod === period && (
@@ -1064,6 +1122,610 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 <Text style={styles.submitButtonText}>Add Enrollment</Text>
                             </TouchableOpacity>
                         </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* CSV Upload Help Modal */}
+            <Modal
+                visible={showHelpModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowHelpModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.helpModalContainer}>
+                        {/* Modal Header */}
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>CSV Upload Format Guide</Text>
+                            <TouchableOpacity
+                                onPress={() => setShowHelpModal(false)}
+                                style={styles.closeButton}
+                            >
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Tabs - Horizontal Scrollable */}
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.tabScrollContainer}
+                            contentContainerStyle={styles.tabScrollContent}
+                        >
+                            <TouchableOpacity
+                                style={[styles.tabScrollable, activeHelpTab === 'Children' && styles.activeTab]}
+                                onPress={() => setActiveHelpTab('Children')}
+                            >
+                                <Text style={[styles.tabText, activeHelpTab === 'Children' && styles.activeTabText]}>
+                                    Children
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tabScrollable, activeHelpTab === 'Staff' && styles.activeTab]}
+                                onPress={() => setActiveHelpTab('Staff')}
+                            >
+                                <Text style={[styles.tabText, activeHelpTab === 'Staff' && styles.activeTabText]}>
+                                    Staff
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tabScrollable, activeHelpTab === 'Medications' && styles.activeTab]}
+                                onPress={() => setActiveHelpTab('Medications')}
+                            >
+                                <Text style={[styles.tabText, activeHelpTab === 'Medications' && styles.activeTabText]}>
+                                    Medications
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tabScrollable, activeHelpTab === 'Trips' && styles.activeTab]}
+                                onPress={() => setActiveHelpTab('Trips')}
+                            >
+                                <Text style={[styles.tabText, activeHelpTab === 'Trips' && styles.activeTabText]}>
+                                    Trips
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tabScrollable, activeHelpTab === 'Menus' && styles.activeTab]}
+                                onPress={() => setActiveHelpTab('Menus')}
+                            >
+                                <Text style={[styles.tabText, activeHelpTab === 'Menus' && styles.activeTabText]}>
+                                    Menus
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tabScrollable, activeHelpTab === 'Awards' && styles.activeTab]}
+                                onPress={() => setActiveHelpTab('Awards')}
+                            >
+                                <Text style={[styles.tabText, activeHelpTab === 'Awards' && styles.activeTabText]}>
+                                    Awards
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tabScrollable, activeHelpTab === 'Daily Notes' && styles.activeTab]}
+                                onPress={() => setActiveHelpTab('Daily Notes')}
+                            >
+                                <Text style={[styles.tabText, activeHelpTab === 'Daily Notes' && styles.activeTabText]}>
+                                    Daily Notes
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tabScrollable, activeHelpTab === 'Incidents' && styles.activeTab]}
+                                onPress={() => setActiveHelpTab('Incidents')}
+                            >
+                                <Text style={[styles.tabText, activeHelpTab === 'Incidents' && styles.activeTabText]}>
+                                    Incidents
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tabScrollable, activeHelpTab === 'Calendar' && styles.activeTab]}
+                                onPress={() => setActiveHelpTab('Calendar')}
+                            >
+                                <Text style={[styles.tabText, activeHelpTab === 'Calendar' && styles.activeTabText]}>
+                                    Calendar
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tabScrollable, activeHelpTab === 'Sports' && styles.activeTab]}
+                                onPress={() => setActiveHelpTab('Sports')}
+                            >
+                                <Text style={[styles.tabText, activeHelpTab === 'Sports' && styles.activeTabText]}>
+                                    Sports
+                                </Text>
+                            </TouchableOpacity>
+                        </ScrollView>
+
+                        <ScrollView style={styles.helpModalContent}>
+                            {activeHelpTab === 'Children' && (
+                                <>
+                                    <Text style={styles.helpSectionTitle}>Children Directory</Text>
+                                    <Text style={styles.helpSectionSubtitle}>
+                                        CSV format for children/camper directory upload
+                                    </Text>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Required Columns (first row):</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                first_name, last_name, dob, grade, division, parentEmail, emergencyContact, medicalInfo
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Example Data Row:</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                John, Doe, 2015-07-20, 4th, Junior Boys, parent@example.com, 555-0123, Peanuts, None
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Important Notes:</Text>
+                                        <View style={styles.noteBoxBlue}>
+                                            <Text style={styles.noteTextBlue}>
+                                                dob format: YYYY-MM-DD
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>General Tips:</Text>
+                                        <View style={styles.tipBox}>
+                                            <Text style={styles.tipText}>• First row must have column headers exactly as shown</Text>
+                                            <Text style={styles.tipText}>• Use commas to separate values</Text>
+                                            <Text style={styles.tipText}>• Use "double quotes" for text containing commas (e.g. "Smith, Jr.")</Text>
+                                            <Text style={styles.tipText}>• Leave fields empty for optional columns</Text>
+                                            <Text style={styles.tipText}>• Maximum 1000 rows per upload</Text>
+                                            <Text style={styles.tipText}>• UTF-8 encoding recommended</Text>
+                                            <Text style={styles.tipText}>• JUUIDs can be obtained from the backend for existing records</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+
+                            {activeHelpTab === 'Staff' && (
+                                <>
+                                    <Text style={styles.helpSectionTitle}>Staff Directory</Text>
+                                    <Text style={styles.helpSectionSubtitle}>
+                                        CSV format for staff directory upload
+                                    </Text>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Required Columns (first row):</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                _new, email, phone, role, department, hire_date, leader_id, status, exacti
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Example Data Row:</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                Jane Smith, jane@camp.com, 555-0124, Counselor, Activities, 2024-06-15, leader-14, active, Summer 2024
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Important Notes:</Text>
+                                        <View style={styles.noteBoxBlue}>
+                                            <Text style={styles.noteTextBlue}>
+                                                leader_id must be a valid UUID from staff table. hire_date format: YYYY-MM-DD
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>General Tips:</Text>
+                                        <View style={styles.tipBox}>
+                                            <Text style={styles.tipText}>• First row must have column headers exactly as shown</Text>
+                                            <Text style={styles.tipText}>• Use commas to separate values</Text>
+                                            <Text style={styles.tipText}>• Use "double quotes" for text containing commas (e.g. "item 1")</Text>
+                                            <Text style={styles.tipText}>• Leave fields empty for optional columns</Text>
+                                            <Text style={styles.tipText}>• Maximum 1000 rows per upload</Text>
+                                            <Text style={styles.tipText}>• UTF-8 encoding recommended</Text>
+                                            <Text style={styles.tipText}>• JUUIDs can be obtained from the backend for existing records</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+
+                            {activeHelpTab === 'Medications' && (
+                                <>
+                                    <Text style={styles.helpSectionTitle}>Medications</Text>
+                                    <Text style={styles.helpSectionSubtitle}>
+                                        CSV format for medication records upload
+                                    </Text>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Required Columns (first row):</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                camper_name, medication_name, dosage, frequency, prescribing_doctor, notes
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Example Data Row:</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                John Doe, Advil, 200mg, Twice daily, Dr. Johnson, Take with food
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Important Notes:</Text>
+                                        <View style={styles.noteBoxBlue}>
+                                            <Text style={styles.noteTextBlue}>
+                                                camper_name must match existing camper records
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>General Tips:</Text>
+                                        <View style={styles.tipBox}>
+                                            <Text style={styles.tipText}>• First row must have column headers exactly as shown</Text>
+                                            <Text style={styles.tipText}>• Use commas to separate values</Text>
+                                            <Text style={styles.tipText}>• Use "double quotes" for text containing commas</Text>
+                                            <Text style={styles.tipText}>• Leave fields empty for optional columns</Text>
+                                            <Text style={styles.tipText}>• Maximum 1000 rows per upload</Text>
+                                            <Text style={styles.tipText}>• UTF-8 encoding recommended</Text>
+                                            <Text style={styles.tipText}>• JUUIDs can be obtained from the backend for existing records</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+
+                            {activeHelpTab === 'Trips' && (
+                                <>
+                                    <Text style={styles.helpSectionTitle}>Trips</Text>
+                                    <Text style={styles.helpSectionSubtitle}>
+                                        CSV format for field trips/activities upload
+                                    </Text>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Required Columns (first row):</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                trip_name, trip_type, start_date, end_date, departure_time, return_time, notes
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Example Data Row:</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                Museum Visit, Field Trip, 2026-07-15, 2026-07-15, 09:00, 15:00, Bring packed lunch
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Important Notes:</Text>
+                                        <View style={styles.noteBoxBlue}>
+                                            <Text style={styles.noteTextBlue}>
+                                                Date format: YYYY-MM-DD. Time format: HH:MM
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>General Tips:</Text>
+                                        <View style={styles.tipBox}>
+                                            <Text style={styles.tipText}>• First row must have column headers exactly as shown</Text>
+                                            <Text style={styles.tipText}>• Use commas to separate values</Text>
+                                            <Text style={styles.tipText}>• Use "double quotes" for text containing commas</Text>
+                                            <Text style={styles.tipText}>• Leave fields empty for optional columns</Text>
+                                            <Text style={styles.tipText}>• Maximum 1000 rows per upload</Text>
+                                            <Text style={styles.tipText}>• UTF-8 encoding recommended</Text>
+                                            <Text style={styles.tipText}>• JUUIDs can be obtained from the backend for existing records</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+
+                            {activeHelpTab === 'Menus' && (
+                                <>
+                                    <Text style={styles.helpSectionTitle}>Menus</Text>
+                                    <Text style={styles.helpSectionSubtitle}>
+                                        CSV format for menu/meals upload
+                                    </Text>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Required Columns (first row):</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                date, meal_type, menu_items, dietary_notes
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Example Data Row:</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                2026-07-20, Lunch, Pizza | Salad | Fruit, Vegetarian options available
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Important Notes:</Text>
+                                        <View style={styles.noteBoxBlue}>
+                                            <Text style={styles.noteTextBlue}>
+                                                Date format: YYYY-MM-DD. Use | (pipe) to separate multiple menu items
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>General Tips:</Text>
+                                        <View style={styles.tipBox}>
+                                            <Text style={styles.tipText}>• First row must have column headers exactly as shown</Text>
+                                            <Text style={styles.tipText}>• Use commas to separate values</Text>
+                                            <Text style={styles.tipText}>• Use "double quotes" for text containing commas</Text>
+                                            <Text style={styles.tipText}>• Leave fields empty for optional columns</Text>
+                                            <Text style={styles.tipText}>• Maximum 1000 rows per upload</Text>
+                                            <Text style={styles.tipText}>• UTF-8 encoding recommended</Text>
+                                            <Text style={styles.tipText}>• JUUIDs can be obtained from the backend for existing records</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+
+                            {activeHelpTab === 'Awards' && (
+                                <>
+                                    <Text style={styles.helpSectionTitle}>Awards</Text>
+                                    <Text style={styles.helpSectionSubtitle}>
+                                        CSV format for camper awards upload
+                                    </Text>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Required Columns (first row):</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                camper_name, award_name, award_type, date_awarded, notes
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Example Data Row:</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                John Doe, Best Swimmer, Sports, 2026-07-25, Outstanding performance
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Important Notes:</Text>
+                                        <View style={styles.noteBoxBlue}>
+                                            <Text style={styles.noteTextBlue}>
+                                                camper_name must match existing records. date_awarded format: YYYY-MM-DD
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>General Tips:</Text>
+                                        <View style={styles.tipBox}>
+                                            <Text style={styles.tipText}>• First row must have column headers exactly as shown</Text>
+                                            <Text style={styles.tipText}>• Use commas to separate values</Text>
+                                            <Text style={styles.tipText}>• Use "double quotes" for text containing commas</Text>
+                                            <Text style={styles.tipText}>• Leave fields empty for optional columns</Text>
+                                            <Text style={styles.tipText}>• Maximum 1000 rows per upload</Text>
+                                            <Text style={styles.tipText}>• UTF-8 encoding recommended</Text>
+                                            <Text style={styles.tipText}>• JUUIDs can be obtained from the backend for existing records</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+
+                            {activeHelpTab === 'Daily Notes' && (
+                                <>
+                                    <Text style={styles.helpSectionTitle}>Daily Notes</Text>
+                                    <Text style={styles.helpSectionSubtitle}>
+                                        CSV format for daily camper notes upload
+                                    </Text>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Required Columns (first row):</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                camper_name, date, note_type, note_content, staff_name
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Example Data Row:</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                John Doe, 2026-07-15, Behavior, Great participation today, Jane Smith
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Important Notes:</Text>
+                                        <View style={styles.noteBoxBlue}>
+                                            <Text style={styles.noteTextBlue}>
+                                                date format: YYYY-MM-DD. staff_name must match existing staff records
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>General Tips:</Text>
+                                        <View style={styles.tipBox}>
+                                            <Text style={styles.tipText}>• First row must have column headers exactly as shown</Text>
+                                            <Text style={styles.tipText}>• Use commas to separate values</Text>
+                                            <Text style={styles.tipText}>• Use "double quotes" for text containing commas</Text>
+                                            <Text style={styles.tipText}>• Leave fields empty for optional columns</Text>
+                                            <Text style={styles.tipText}>• Maximum 1000 rows per upload</Text>
+                                            <Text style={styles.tipText}>• UTF-8 encoding recommended</Text>
+                                            <Text style={styles.tipText}>• JUUIDs can be obtained from the backend for existing records</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+
+                            {activeHelpTab === 'Incidents' && (
+                                <>
+                                    <Text style={styles.helpSectionTitle}>Incidents</Text>
+                                    <Text style={styles.helpSectionSubtitle}>
+                                        CSV format for incident reports upload
+                                    </Text>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Required Columns (first row):</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                camper_name, incident_date, incident_type, description, action_taken, reported_by
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Example Data Row:</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                John Doe, 2026-07-15, Minor Injury, Scraped knee during sports, First aid applied, Nurse Kelly
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Important Notes:</Text>
+                                        <View style={styles.noteBoxBlue}>
+                                            <Text style={styles.noteTextBlue}>
+                                                incident_date format: YYYY-MM-DD. All incidents must be documented
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>General Tips:</Text>
+                                        <View style={styles.tipBox}>
+                                            <Text style={styles.tipText}>• First row must have column headers exactly as shown</Text>
+                                            <Text style={styles.tipText}>• Use commas to separate values</Text>
+                                            <Text style={styles.tipText}>• Use "double quotes" for text containing commas</Text>
+                                            <Text style={styles.tipText}>• Leave fields empty for optional columns</Text>
+                                            <Text style={styles.tipText}>• Maximum 1000 rows per upload</Text>
+                                            <Text style={styles.tipText}>• UTF-8 encoding recommended</Text>
+                                            <Text style={styles.tipText}>• JUUIDs can be obtained from the backend for existing records</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+
+                            {activeHelpTab === 'Calendar' && (
+                                <>
+                                    <Text style={styles.helpSectionTitle}>Calendar</Text>
+                                    <Text style={styles.helpSectionSubtitle}>
+                                        CSV format for calendar events upload
+                                    </Text>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Required Columns (first row):</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                event_name, event_type, start_date, end_date, start_time, end_time, location, notes
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Example Data Row:</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                Campfire Night, Activity, 2026-07-20, 2026-07-20, 19:00, 21:00, Main Field, Bring blankets
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Important Notes:</Text>
+                                        <View style={styles.noteBoxBlue}>
+                                            <Text style={styles.noteTextBlue}>
+                                                Date format: YYYY-MM-DD. Time format: HH:MM (24-hour)
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>General Tips:</Text>
+                                        <View style={styles.tipBox}>
+                                            <Text style={styles.tipText}>• First row must have column headers exactly as shown</Text>
+                                            <Text style={styles.tipText}>• Use commas to separate values</Text>
+                                            <Text style={styles.tipText}>• Use "double quotes" for text containing commas</Text>
+                                            <Text style={styles.tipText}>• Leave fields empty for optional columns</Text>
+                                            <Text style={styles.tipText}>• Maximum 1000 rows per upload</Text>
+                                            <Text style={styles.tipText}>• UTF-8 encoding recommended</Text>
+                                            <Text style={styles.tipText}>• JUUIDs can be obtained from the backend for existing records</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+
+                            {activeHelpTab === 'Sports' && (
+                                <>
+                                    <Text style={styles.helpSectionTitle}>Sports</Text>
+                                    <Text style={styles.helpSectionSubtitle}>
+                                        CSV format for sports academy enrollments
+                                    </Text>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Required Columns (first row):</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                camper_name, sport, instructor, schedule_period, start_date, end_date, notes
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Example Data Row:</Text>
+                                        <View style={styles.codeBlock}>
+                                            <Text style={styles.codeText}>
+                                                John Doe, Basketball, Coach Johnson, Period 1, 2026-06-15, 2026-08-15, Advanced group
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>Important Notes:</Text>
+                                        <View style={styles.noteBoxBlue}>
+                                            <Text style={styles.noteTextBlue}>
+                                                camper_name must match existing camper. Date format: YYYY-MM-DD
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.helpSection}>
+                                        <Text style={styles.helpLabel}>General Tips:</Text>
+                                        <View style={styles.tipBox}>
+                                            <Text style={styles.tipText}>• First row must have column headers exactly as shown</Text>
+                                            <Text style={styles.tipText}>• Use commas to separate values</Text>
+                                            <Text style={styles.tipText}>• Use "double quotes" for text containing commas</Text>
+                                            <Text style={styles.tipText}>• Leave fields empty for optional columns</Text>
+                                            <Text style={styles.tipText}>• Maximum 1000 rows per upload</Text>
+                                            <Text style={styles.tipText}>• UTF-8 encoding recommended</Text>
+                                            <Text style={styles.tipText}>• JUUIDs can be obtained from the backend for existing records</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+                        </ScrollView>
                     </View>
                 </View>
             </Modal>
@@ -1235,43 +1897,52 @@ const styles = StyleSheet.create({
     },
     dropdownModalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
     },
     dropdownModalContent: {
         flex: 1,
-        justifyContent: 'flex-start',
-        alignItems: 'stretch',
-        paddingTop: 280,
-        paddingHorizontal: theme.spacing.md,
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        paddingTop: 0,
+        paddingHorizontal: 0,
     },
     filterDropdownMenuModal: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        maxHeight: 300,
-        elevation: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
+        maxWidth: 600,
+        maxHeight: '60%',
+        ...theme.shadows.card,
+    },
+    filterDropdownHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: theme.spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    filterDropdownTitle: {
+        ...theme.typography.h3,
     },
     filterDropdownItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: theme.spacing.xs,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
+        paddingHorizontal: theme.spacing.lg,
+        paddingVertical: theme.spacing.md,
+        justifyContent: 'space-between',
     },
     filterDropdownItemSelected: {
         backgroundColor: '#fff7ed',
     },
     checkIcon: {
-        marginRight: theme.spacing.xs,
+        // marginRight removed as icon is now on the right
     },
     filterDropdownItemText: {
-        ...theme.typography.bodySmall,
+        ...theme.typography.body,
         flex: 1,
     },
     filterDropdownItemTextSelected: {
@@ -1283,11 +1954,10 @@ const styles = StyleSheet.create({
     },
     calendarViewContainer: {
         flexDirection: 'column',
-        gap: theme.spacing.md,
+        gap: theme.spacing.xs,
     },
     calendarCard: {
         padding: theme.spacing.md,
-        marginBottom: theme.spacing.md,
     },
     calendarHeader: {
         flexDirection: 'row',
@@ -1349,7 +2019,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     scheduleCard: {
-        padding: theme.spacing.lg,
+        padding: theme.spacing.md,
     },
     scheduleDate: {
         ...theme.typography.h3,
@@ -1365,13 +2035,14 @@ const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
+        justifyContent: 'flex-end',
         alignItems: 'center',
     },
     addEnrollmentModalContainer: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        width: '90%',
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
         maxWidth: 600,
         maxHeight: '90%',
         ...theme.shadows.card,
@@ -1443,38 +2114,42 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         flex: 1,
     },
-    sportNameDropdownMenu: {
-        position: 'absolute',
-        top: '100%',
-        left: 0,
-        right: 0,
-        marginTop: theme.spacing.xs,
+    sportNameModalContainer: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        maxHeight: 300,
-        zIndex: 1001,
-        elevation: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        marginBottom: theme.spacing.md,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
+        maxWidth: 600,
+        maxHeight: '60%',
+        ...theme.shadows.card,
     },
-    sportNameDropdownItem: {
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
+    sportNameModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: theme.spacing.lg,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
-    sportNameDropdownItemSelected: {
+    sportNameModalTitle: {
+        ...theme.typography.h3,
+    },
+    sportNameModalItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: theme.spacing.lg,
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    sportNameModalItemSelected: {
         backgroundColor: '#fff7ed',
     },
-    sportNameDropdownItemText: {
+    sportNameModalItemText: {
         ...theme.typography.body,
     },
-    sportNameDropdownItemTextSelected: {
+    sportNameModalItemTextSelected: {
         color: theme.colors.secondary,
         fontWeight: '600',
     },
@@ -1544,10 +2219,11 @@ const styles = StyleSheet.create({
     },
     datePickerContainer: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
         padding: theme.spacing.md,
-        width: '90%',
-        maxWidth: 400,
+        width: '100%',
+        maxWidth: 600,
         ...theme.shadows.card,
     },
     datePickerHeader: {
@@ -1656,5 +2332,126 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         color: theme.colors.textSecondary,
         textAlign: 'center',
+    },
+    // Help Modal Styles
+    helpModalContainer: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
+        maxWidth: 600,
+        maxHeight: '90%',
+        ...theme.shadows.card,
+    },
+    tabContainer: {
+        flexDirection: 'row',
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+    },
+    tab: {
+        flex: 1,
+        paddingVertical: theme.spacing.md,
+        alignItems: 'center',
+        borderBottomWidth: 2,
+        borderBottomColor: 'transparent',
+    },
+    activeTab: {
+        borderBottomColor: theme.colors.secondary,
+    },
+    tabText: {
+        ...theme.typography.body,
+        color: theme.colors.textSecondary,
+    },
+    activeTabText: {
+        color: theme.colors.secondary,
+        fontWeight: '600',
+    },
+    tabScrollContainer: {
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+    },
+    tabScrollContent: {
+        paddingHorizontal: theme.spacing.xs,
+    },
+    tabScrollable: {
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.md,
+        alignItems: 'center',
+        borderBottomWidth: 2,
+        borderBottomColor: 'transparent',
+        minWidth: 80,
+    },
+    activeTab: {
+        backgroundColor: theme.colors.primaryLight,
+        borderRadius: theme.borderRadius.sm,
+        borderBottomWidth: 0,
+    },
+    helpModalContent: {
+        padding: theme.spacing.lg,
+    },
+    helpSectionTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        marginBottom: theme.spacing.xs,
+    },
+    helpSectionSubtitle: {
+        ...theme.typography.body,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.lg,
+    },
+    helpSection: {
+        marginBottom: theme.spacing.lg,
+    },
+    helpLabel: {
+        ...theme.typography.body,
+        fontWeight: '600',
+        marginBottom: theme.spacing.sm,
+    },
+    codeBlock: {
+        backgroundColor: theme.colors.background,
+        borderRadius: theme.borderRadius.sm,
+        padding: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    codeText: {
+        ...theme.typography.bodySmall,
+        fontFamily: 'monospace',
+        color: theme.colors.text,
+    },
+    noteBox: {
+        backgroundColor: '#FFF8E1',
+        borderRadius: theme.borderRadius.sm,
+        padding: theme.spacing.md,
+        borderLeftWidth: 4,
+        borderLeftColor: '#FFC107',
+    },
+    noteText: {
+        ...theme.typography.bodySmall,
+        color: '#7A6800',
+        marginBottom: theme.spacing.xs,
+    },
+    noteBoxBlue: {
+        backgroundColor: '#E3F2FD',
+        borderRadius: theme.borderRadius.sm,
+        padding: theme.spacing.md,
+        borderLeftWidth: 4,
+        borderLeftColor: '#2196F3',
+    },
+    noteTextBlue: {
+        ...theme.typography.bodySmall,
+        color: '#0D47A1',
+    },
+    tipBox: {
+        backgroundColor: theme.colors.background,
+        borderRadius: theme.borderRadius.sm,
+        padding: theme.spacing.md,
+    },
+    tipText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
     },
 });
