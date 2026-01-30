@@ -272,19 +272,19 @@ export const AwardsScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
-            {/* Add New Award Modal - Bottom Sheet */}
+            {/* Add New Award Modal - Centered Popup */}
             <Modal
                 visible={isAddAwardModalOpen}
                 transparent={true}
-                animationType="slide"
+                animationType="fade"
                 onRequestClose={handleCloseAddAward}
             >
                 <Pressable
-                    style={styles.bottomSheetOverlay}
+                    style={styles.centeredOverlay}
                     onPress={handleCloseAddAward}
                 >
                     <Pressable
-                        style={styles.addAwardBottomSheet}
+                        style={styles.centeredModal}
                         onPress={(e) => e.stopPropagation()}
                     >
                         {/* Modal Header */}
@@ -632,8 +632,8 @@ export const AwardsScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={() => setIsCSVGuideOpen(false)}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContainer}>
+                <View style={styles.helpModalOverlay}>
+                    <View style={styles.helpModalContainer}>
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>CSV Upload Format Guide</Text>
@@ -957,6 +957,38 @@ const styles = StyleSheet.create({
         borderTopRightRadius: theme.borderRadius.xl,
         width: '100%',
         maxHeight: '90%',
+        overflow: 'hidden',
+    },
+    // Help Modal Styles (50% height bottom sheet)
+    helpModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    helpModalContainer: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
+        height: '50%',
+        overflow: 'hidden',
+    },
+    // Centered Modal Styles
+    centeredOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: theme.spacing.md,
+    },
+    centeredModal: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        width: '100%',
+        maxWidth: 600,
+        maxHeight: '90%',
+        ...theme.shadows.card,
+        elevation: 5,
         overflow: 'hidden',
     },
     modalHeader: {

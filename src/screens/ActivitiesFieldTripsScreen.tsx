@@ -559,62 +559,6 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         )}
                     </View>
 
-                    {/* Division Dropdown Modal - Bottom Sheet */}
-                    <Modal
-                        visible={isDivisionDropdownOpen}
-                        transparent={true}
-                        animationType="slide"
-                        onRequestClose={() => setIsDivisionDropdownOpen(false)}
-                    >
-                        <Pressable
-                            style={styles.bottomSheetOverlay}
-                            onPress={() => setIsDivisionDropdownOpen(false)}
-                        >
-                            <Pressable
-                                style={styles.divisionBottomSheet}
-                                onPress={(e) => e.stopPropagation()}
-                            >
-                                {/* Bottom Sheet Header */}
-                                <View style={styles.bottomSheetHeader}>
-                                    <Text style={styles.bottomSheetTitle}>Select Division</Text>
-                                </View>
-
-                                {/* Bottom Sheet Options */}
-                                <View style={styles.bottomSheetContent}>
-                                    <ScrollView
-                                        style={styles.divisionBottomSheetScroll}
-                                        showsVerticalScrollIndicator={false}
-                                    >
-                                        {MOCK_DIVISIONS.map((division) => (
-                                            <TouchableOpacity
-                                                key={division.id}
-                                                style={[
-                                                    styles.bottomSheetOption,
-                                                    selectedDivision === division.name && styles.bottomSheetOptionSelected
-                                                ]}
-                                                onPress={() => {
-                                                    setSelectedDivision(division.name);
-                                                    setIsDivisionDropdownOpen(false);
-                                                }}
-                                            >
-                                                <Ionicons
-                                                    name="people-outline"
-                                                    size={24}
-                                                    color={selectedDivision === division.name ? theme.colors.surface : theme.colors.secondary}
-                                                />
-                                                <Text style={[
-                                                    styles.bottomSheetOptionText,
-                                                    selectedDivision === division.name && styles.bottomSheetOptionTextSelected
-                                                ]}>
-                                                    {division.name}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </ScrollView>
-                                </View>
-                            </Pressable>
-                        </Pressable>
-                    </Modal>
 
                     {/* Action Buttons */}
                     <View style={styles.actionButtons}>
@@ -1042,234 +986,302 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     </View>
                 )}
 
-                {/* Upload CSV Bottom Sheet Modal */}
-                <Modal
-                    visible={isUploadCSVModalOpen}
-                    transparent={true}
-                    animationType="slide"
-                    onRequestClose={() => setIsUploadCSVModalOpen(false)}
+            </ScrollView >
+
+            {/* Division Dropdown Modal - Bottom Sheet */}
+            <Modal
+                visible={isDivisionDropdownOpen}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setIsDivisionDropdownOpen(false)}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => setIsDivisionDropdownOpen(false)}
                 >
                     <Pressable
-                        style={styles.bottomSheetOverlay}
-                        onPress={() => setIsUploadCSVModalOpen(false)}
+                        style={styles.divisionBottomSheet}
+                        onPress={(e) => e.stopPropagation()}
                     >
-                        <Pressable
-                            style={styles.bottomSheet}
-                            onPress={(e) => e.stopPropagation()}
-                        >
-                            {/* Bottom Sheet Header */}
-                            <View style={styles.bottomSheetHeader}>
-                                <Text style={styles.bottomSheetTitle}>Select file</Text>
-                            </View>
+                        {/* Bottom Sheet Header */}
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select Division</Text>
+                        </View>
 
-                            {/* Bottom Sheet Options */}
-                            <View style={styles.bottomSheetContent}>
-                                <TouchableOpacity
-                                    style={styles.bottomSheetOption}
-                                    onPress={() => {
-                                        // TODO: Handle file selection
-                                        console.log('Selected: Aloha downloads');
-                                        setIsUploadCSVModalOpen(false);
-                                    }}
-                                >
-                                    <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
-                                    <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.bottomSheetOption}
-                                    onPress={() => {
-                                        // TODO: Handle file selection
-                                        console.log('Selected: Other files');
-                                        setIsUploadCSVModalOpen(false);
-                                    }}
-                                >
-                                    <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
-                                    <Text style={styles.bottomSheetOptionText}>Other files</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </Pressable>
-                    </Pressable>
-                </Modal>
-
-                {/* Add Activity Bottom Sheet Modal */}
-                <Modal
-                    visible={isAddActivityModalOpen}
-                    transparent={true}
-                    animationType="slide"
-                    onRequestClose={() => setIsAddActivityModalOpen(false)}
-                >
-                    <Pressable
-                        style={styles.bottomSheetOverlay}
-                        onPress={() => setIsAddActivityModalOpen(false)}
-                    >
-                        <Pressable
-                            style={styles.addActivityBottomSheet}
-                            onPress={(e) => e.stopPropagation()}
-                        >
+                        {/* Bottom Sheet Options */}
+                        <View style={styles.bottomSheetContent}>
                             <ScrollView
-                                style={styles.addActivityBottomSheetScroll}
-                                contentContainerStyle={styles.addActivityBottomSheetContent}
+                                style={styles.divisionBottomSheetScroll}
                                 showsVerticalScrollIndicator={false}
                             >
-                                {/* Modal Header */}
-                                <View style={styles.addActivityBottomSheetHeader}>
-                                    <Text style={styles.addActivityBottomSheetTitle}>Add Activity/Field Trip</Text>
+                                {MOCK_DIVISIONS.map((division) => (
                                     <TouchableOpacity
-                                        onPress={() => setIsAddActivityModalOpen(false)}
+                                        key={division.id}
+                                        style={[
+                                            styles.bottomSheetOption,
+                                            selectedDivision === division.name && styles.bottomSheetOptionSelected
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedDivision(division.name);
+                                            setIsDivisionDropdownOpen(false);
+                                        }}
                                     >
-                                        <Ionicons name="close" size={24} color={theme.colors.text} />
+                                        <Ionicons
+                                            name="people-outline"
+                                            size={24}
+                                            color={selectedDivision === division.name ? theme.colors.surface : theme.colors.secondary}
+                                        />
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            selectedDivision === division.name && styles.bottomSheetOptionTextSelected
+                                        ]}>
+                                            {division.name}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Upload CSV Bottom Sheet Modal */}
+            <Modal
+                visible={isUploadCSVModalOpen}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setIsUploadCSVModalOpen(false)}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => setIsUploadCSVModalOpen(false)}
+                >
+                    <Pressable
+                        style={styles.bottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        {/* Bottom Sheet Header */}
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select file</Text>
+                        </View>
+
+                        {/* Bottom Sheet Options */}
+                        <View style={styles.bottomSheetContent}>
+                            <TouchableOpacity
+                                style={styles.bottomSheetOption}
+                                onPress={() => {
+                                    // TODO: Handle file selection
+                                    console.log('Selected: Aloha downloads');
+                                    setIsUploadCSVModalOpen(false);
+                                }}
+                            >
+                                <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.bottomSheetOption}
+                                onPress={() => {
+                                    // TODO: Handle file selection
+                                    console.log('Selected: Other files');
+                                    setIsUploadCSVModalOpen(false);
+                                }}
+                            >
+                                <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
+                                <Text style={styles.bottomSheetOptionText}>Other files</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Add Activity Bottom Sheet Modal */}
+            <Modal
+                visible={isAddActivityModalOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsAddActivityModalOpen(false)}
+            >
+                <Pressable
+                    style={styles.centeredOverlay}
+                    onPress={() => setIsAddActivityModalOpen(false)}
+                >
+                    <Pressable
+                        style={styles.centeredModal}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <ScrollView
+                            style={styles.addActivityBottomSheetScroll}
+                            contentContainerStyle={styles.addActivityBottomSheetContent}
+                            showsVerticalScrollIndicator={false}
+                        >
+                            {/* Modal Header */}
+                            <View style={styles.addActivityBottomSheetHeader}>
+                                <Text style={styles.addActivityBottomSheetTitle}>Add Activity/Field Trip</Text>
+                                <TouchableOpacity
+                                    onPress={() => setIsAddActivityModalOpen(false)}
+                                >
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Form Content - Reuse the edit form structure */}
+                            <View style={styles.addActivityFormContent}>
+                                {/* Title Field */}
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Title *</Text>
+                                    <TextInput
+                                        style={styles.formTextInput}
+                                        placeholder="Enter activity title"
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        value={formData.title}
+                                        onChangeText={(text) => setFormData({ ...formData, title: text })}
+                                    />
+                                </View>
+
+                                {/* Event Date */}
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Event Date *</Text>
+                                    <TouchableOpacity
+                                        style={styles.formInput}
+                                        onPress={() => {
+                                            setDatePickerField('event_date');
+                                            setSelectedDate(formData.event_date ? new Date(formData.event_date) : new Date());
+                                            setIsDatePickerOpen(true);
+                                        }}
+                                    >
+                                        <Text style={[styles.formInputText, !formData.event_date && styles.formInputPlaceholder]}>
+                                            {formData.event_date || 'Select event date'}
+                                        </Text>
                                     </TouchableOpacity>
                                 </View>
 
-                                {/* Form Content - Reuse the edit form structure */}
-                                <View style={styles.addActivityFormContent}>
-                                    {/* Title Field */}
-                                    <View style={styles.formField}>
-                                        <Text style={styles.formLabel}>Title *</Text>
-                                        <TextInput
-                                            style={styles.formTextInput}
-                                            placeholder="Enter activity title"
-                                            placeholderTextColor={theme.colors.textSecondary}
-                                            value={formData.title}
-                                            onChangeText={(text) => setFormData({ ...formData, title: text })}
+                                {/* Multi-day Toggle */}
+                                <View style={styles.formField}>
+                                    <View style={styles.switchContainer}>
+                                        <Text style={styles.formLabel}>Multi-day Event</Text>
+                                        <Switch
+                                            value={formData.is_multi_day}
+                                            onValueChange={(value) => setFormData({ ...formData, is_multi_day: value })}
+                                            trackColor={{ false: theme.colors.border, true: theme.colors.secondary }}
+                                            thumbColor={theme.colors.surface}
                                         />
                                     </View>
+                                </View>
 
-                                    {/* Event Date */}
+                                {/* End Date (if multi-day) */}
+                                {formData.is_multi_day && (
                                     <View style={styles.formField}>
-                                        <Text style={styles.formLabel}>Event Date *</Text>
+                                        <Text style={styles.formLabel}>End Date</Text>
                                         <TouchableOpacity
                                             style={styles.formInput}
                                             onPress={() => {
-                                                setDatePickerField('event_date');
-                                                setSelectedDate(formData.event_date ? new Date(formData.event_date) : new Date());
+                                                setDatePickerField('end_date');
+                                                setSelectedDate(formData.end_date ? new Date(formData.end_date) : new Date());
                                                 setIsDatePickerOpen(true);
                                             }}
                                         >
-                                            <Text style={[styles.formInputText, !formData.event_date && styles.formInputPlaceholder]}>
-                                                {formData.event_date || 'Select event date'}
+                                            <Text style={[styles.formInputText, !formData.end_date && styles.formInputPlaceholder]}>
+                                                {formData.end_date || 'Select end date'}
                                             </Text>
                                         </TouchableOpacity>
                                     </View>
+                                )}
 
-                                    {/* Multi-day Toggle */}
-                                    <View style={styles.formField}>
-                                        <View style={styles.switchContainer}>
-                                            <Text style={styles.formLabel}>Multi-day Event</Text>
-                                            <Switch
-                                                value={formData.is_multi_day}
-                                                onValueChange={(value) => setFormData({ ...formData, is_multi_day: value })}
-                                                trackColor={{ false: theme.colors.border, true: theme.colors.secondary }}
-                                                thumbColor={theme.colors.surface}
-                                            />
-                                        </View>
-                                    </View>
-
-                                    {/* End Date (if multi-day) */}
-                                    {formData.is_multi_day && (
-                                        <View style={styles.formField}>
-                                            <Text style={styles.formLabel}>End Date</Text>
-                                            <TouchableOpacity
-                                                style={styles.formInput}
-                                                onPress={() => {
-                                                    setDatePickerField('end_date');
-                                                    setSelectedDate(formData.end_date ? new Date(formData.end_date) : new Date());
-                                                    setIsDatePickerOpen(true);
-                                                }}
-                                            >
-                                                <Text style={[styles.formInputText, !formData.end_date && styles.formInputPlaceholder]}>
-                                                    {formData.end_date || 'Select end date'}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    )}
-
-                                    {/* Activity Type */}
-                                    <View style={styles.formField}>
-                                        <Text style={styles.formLabel}>Activity Type *</Text>
-                                        <TouchableOpacity
-                                            style={styles.formInput}
-                                            onPress={() => setIsActivityTypeDropdownOpen(true)}
-                                        >
-                                            <Text style={[styles.formInputText, !formData.activity_type && styles.formInputPlaceholder]}>
-                                                {formData.activity_type || 'Select activity type'}
-                                            </Text>
-                                            <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                                        </TouchableOpacity>
-                                    </View>
-
-                                    {/* Home/Away */}
-                                    <View style={styles.formField}>
-                                        <Text style={styles.formLabel}>Location Type</Text>
-                                        <TouchableOpacity
-                                            style={styles.formInput}
-                                            onPress={() => setIsLocationTypeDropdownOpen(true)}
-                                        >
-                                            <Text style={[styles.formInputText, !formData.home_away && styles.formInputPlaceholder]}>
-                                                {formData.home_away || 'Select location type'}
-                                            </Text>
-                                            <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                                        </TouchableOpacity>
-                                    </View>
-
-                                    {/* Location */}
-                                    <View style={styles.formField}>
-                                        <Text style={styles.formLabel}>Location</Text>
-                                        <TextInput
-                                            style={styles.formTextInput}
-                                            placeholder="Enter location"
-                                            placeholderTextColor={theme.colors.textSecondary}
-                                            value={formData.location}
-                                            onChangeText={(text) => setFormData({ ...formData, location: text })}
-                                        />
-                                    </View>
-
-                                    {/* Description */}
-                                    <View style={styles.formField}>
-                                        <Text style={styles.formLabel}>Description</Text>
-                                        <TextInput
-                                            style={[styles.formTextInput, styles.formTextArea]}
-                                            placeholder="Enter description"
-                                            placeholderTextColor={theme.colors.textSecondary}
-                                            value={formData.description}
-                                            onChangeText={(text) => setFormData({ ...formData, description: text })}
-                                            multiline
-                                            numberOfLines={4}
-                                        />
-                                    </View>
-
-                                    {/* Action Buttons */}
-                                    <View style={styles.addActivityBottomSheetActions}>
-                                        <TouchableOpacity
-                                            style={styles.addActivityCancelButton}
-                                            onPress={() => setIsAddActivityModalOpen(false)}
-                                        >
-                                            <Text style={styles.addActivityCancelButtonText}>Cancel</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={styles.addActivitySaveButton}
-                                            onPress={() => {
-                                                // TODO: Handle save
-                                                console.log('Save activity:', formData);
-                                                setIsAddActivityModalOpen(false);
-                                            }}
-                                        >
-                                            <Text style={styles.addActivitySaveButtonText}>Save</Text>
-                                        </TouchableOpacity>
-                                    </View>
+                                {/* Activity Type */}
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Activity Type *</Text>
+                                    <TouchableOpacity
+                                        style={styles.formInput}
+                                        onPress={() => setIsActivityTypeDropdownOpen(true)}
+                                    >
+                                        <Text style={[styles.formInputText, !formData.activity_type && styles.formInputPlaceholder]}>
+                                            {formData.activity_type || 'Select activity type'}
+                                        </Text>
+                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                    </TouchableOpacity>
                                 </View>
-                            </ScrollView>
-                        </Pressable>
-                    </Pressable>
-                </Modal>
 
-                {/* Edit Activity Modal - Bottom Sheet */}
-                <Modal
-                    visible={isEditModalOpen}
-                    transparent={true}
-                    animationType="slide"
-                    onRequestClose={() => {
+                                {/* Home/Away */}
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Location Type</Text>
+                                    <TouchableOpacity
+                                        style={styles.formInput}
+                                        onPress={() => setIsLocationTypeDropdownOpen(true)}
+                                    >
+                                        <Text style={[styles.formInputText, !formData.home_away && styles.formInputPlaceholder]}>
+                                            {formData.home_away || 'Select location type'}
+                                        </Text>
+                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* Location */}
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Location</Text>
+                                    <TextInput
+                                        style={styles.formTextInput}
+                                        placeholder="Enter location"
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        value={formData.location}
+                                        onChangeText={(text) => setFormData({ ...formData, location: text })}
+                                    />
+                                </View>
+
+                                {/* Description */}
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Description</Text>
+                                    <TextInput
+                                        style={[styles.formTextInput, styles.formTextArea]}
+                                        placeholder="Enter description"
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        value={formData.description}
+                                        onChangeText={(text) => setFormData({ ...formData, description: text })}
+                                        multiline
+                                        numberOfLines={4}
+                                    />
+                                </View>
+
+                                {/* Action Buttons */}
+                                <View style={styles.addActivityBottomSheetActions}>
+                                    <TouchableOpacity
+                                        style={styles.addActivityCancelButton}
+                                        onPress={() => setIsAddActivityModalOpen(false)}
+                                    >
+                                        <Text style={styles.addActivityCancelButtonText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.addActivitySaveButton}
+                                        onPress={() => {
+                                            // TODO: Handle save
+                                            console.log('Save activity:', formData);
+                                            setIsAddActivityModalOpen(false);
+                                        }}
+                                    >
+                                        <Text style={styles.addActivitySaveButtonText}>Save</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Edit Activity Modal - Bottom Sheet */}
+            <Modal
+                visible={isEditModalOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => {
+                    setIsEditModalOpen(false);
+                    setEditingActivity(null);
+                    setIsActivityTypeDropdownOpen(false);
+                    setIsLocationTypeDropdownOpen(false);
+                }}
+            >
+                <Pressable
+                    style={styles.centeredOverlay}
+                    onPress={() => {
                         setIsEditModalOpen(false);
                         setEditingActivity(null);
                         setIsActivityTypeDropdownOpen(false);
@@ -1277,1051 +1289,1041 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     }}
                 >
                     <Pressable
-                        style={styles.bottomSheetOverlay}
-                        onPress={() => {
-                            setIsEditModalOpen(false);
-                            setEditingActivity(null);
-                            setIsActivityTypeDropdownOpen(false);
-                            setIsLocationTypeDropdownOpen(false);
-                        }}
+                        style={styles.centeredModal}
+                        onPress={(e) => e.stopPropagation()}
                     >
-                        <Pressable
-                            style={styles.editActivityBottomSheet}
-                            onPress={(e) => e.stopPropagation()}
+                        <ScrollView
+                            style={styles.editActivityBottomSheetScroll}
+                            contentContainerStyle={styles.editActivityBottomSheetContent}
+                            showsVerticalScrollIndicator={false}
                         >
-                            <ScrollView
-                                style={styles.editActivityBottomSheetScroll}
-                                contentContainerStyle={styles.editActivityBottomSheetContent}
-                                showsVerticalScrollIndicator={false}
-                            >
-                                {/* Modal Header */}
-                                <View style={styles.editModalHeader}>
-                                    <Text style={styles.editModalTitle}>
-                                        {editingActivity ? 'Edit Activity/Field Trip' : 'Add Activity/Field Trip'}
+                            {/* Modal Header */}
+                            <View style={styles.editModalHeader}>
+                                <Text style={styles.editModalTitle}>
+                                    {editingActivity ? 'Edit Activity/Field Trip' : 'Add Activity/Field Trip'}
+                                </Text>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setIsEditModalOpen(false);
+                                        setEditingActivity(null);
+                                    }}
+                                >
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Multi-Day Toggle */}
+                            <View style={styles.multiDayToggle}>
+                                <View style={styles.multiDayToggleContent}>
+                                    <Ionicons name="calendar-outline" size={20} color={theme.colors.text} />
+                                    <View style={styles.multiDayToggleText}>
+                                        <Text style={styles.multiDayToggleLabel}>Multi-Day Event</Text>
+                                        <Text style={styles.multiDayToggleDescription}>
+                                            Enable this for events spanning multiple days
+                                        </Text>
+                                    </View>
+                                </View>
+                                <Switch
+                                    value={formData.is_multi_day}
+                                    onValueChange={(checked) => {
+                                        setFormData({
+                                            ...formData,
+                                            is_multi_day: checked,
+                                            end_date: checked ? formData.end_date : '',
+                                        });
+                                    }}
+                                />
+                            </View>
+
+                            {/* Date Fields */}
+                            <View style={formData.is_multi_day ? styles.dateFieldsRow : {}}>
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>
+                                        {formData.is_multi_day ? 'Start Date' : 'Event Date'}
                                     </Text>
                                     <TouchableOpacity
+                                        style={styles.dateInputContainer}
                                         onPress={() => {
-                                            setIsEditModalOpen(false);
-                                            setEditingActivity(null);
+                                            const currentDate = formData.event_date
+                                                ? new Date(formData.event_date + 'T00:00:00')
+                                                : new Date();
+                                            setSelectedDate(currentDate);
+                                            setDatePickerField('event_date');
+                                            setIsDatePickerOpen(true);
                                         }}
                                     >
-                                        <Ionicons name="close" size={24} color={theme.colors.text} />
+                                        <Text style={[styles.dateInputText, !formData.event_date && styles.dateInputPlaceholder]}>
+                                            {formData.event_date
+                                                ? formatDateForDisplay(formData.event_date)
+                                                : 'mm/dd/yyyy'}
+                                        </Text>
+                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
                                     </TouchableOpacity>
                                 </View>
-
-                                {/* Multi-Day Toggle */}
-                                <View style={styles.multiDayToggle}>
-                                    <View style={styles.multiDayToggleContent}>
-                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.text} />
-                                        <View style={styles.multiDayToggleText}>
-                                            <Text style={styles.multiDayToggleLabel}>Multi-Day Event</Text>
-                                            <Text style={styles.multiDayToggleDescription}>
-                                                Enable this for events spanning multiple days
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <Switch
-                                        value={formData.is_multi_day}
-                                        onValueChange={(checked) => {
-                                            setFormData({
-                                                ...formData,
-                                                is_multi_day: checked,
-                                                end_date: checked ? formData.end_date : '',
-                                            });
-                                        }}
-                                    />
-                                </View>
-
-                                {/* Date Fields */}
-                                <View style={formData.is_multi_day ? styles.dateFieldsRow : {}}>
+                                {formData.is_multi_day && (
                                     <View style={styles.formField}>
-                                        <Text style={styles.formLabel}>
-                                            {formData.is_multi_day ? 'Start Date' : 'Event Date'}
-                                        </Text>
+                                        <Text style={styles.formLabel}>End Date</Text>
                                         <TouchableOpacity
                                             style={styles.dateInputContainer}
                                             onPress={() => {
-                                                const currentDate = formData.event_date
-                                                    ? new Date(formData.event_date + 'T00:00:00')
+                                                const currentDate = formData.end_date
+                                                    ? new Date(formData.end_date + 'T00:00:00')
                                                     : new Date();
                                                 setSelectedDate(currentDate);
-                                                setDatePickerField('event_date');
+                                                setDatePickerField('end_date');
                                                 setIsDatePickerOpen(true);
                                             }}
                                         >
-                                            <Text style={[styles.dateInputText, !formData.event_date && styles.dateInputPlaceholder]}>
-                                                {formData.event_date
-                                                    ? formatDateForDisplay(formData.event_date)
+                                            <Text style={[styles.dateInputText, !formData.end_date && styles.dateInputPlaceholder]}>
+                                                {formData.end_date
+                                                    ? formatDateForDisplay(formData.end_date)
                                                     : 'mm/dd/yyyy'}
                                             </Text>
                                             <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
                                         </TouchableOpacity>
                                     </View>
-                                    {formData.is_multi_day && (
-                                        <View style={styles.formField}>
-                                            <Text style={styles.formLabel}>End Date</Text>
-                                            <TouchableOpacity
-                                                style={styles.dateInputContainer}
-                                                onPress={() => {
-                                                    const currentDate = formData.end_date
-                                                        ? new Date(formData.end_date + 'T00:00:00')
-                                                        : new Date();
-                                                    setSelectedDate(currentDate);
-                                                    setDatePickerField('end_date');
-                                                    setIsDatePickerOpen(true);
-                                                }}
-                                            >
-                                                <Text style={[styles.dateInputText, !formData.end_date && styles.dateInputPlaceholder]}>
-                                                    {formData.end_date
-                                                        ? formatDateForDisplay(formData.end_date)
-                                                        : 'mm/dd/yyyy'}
-                                                </Text>
-                                                <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
-                                            </TouchableOpacity>
-                                        </View>
-                                    )}
-                                </View>
-
-                                {/* Duration Badge */}
-                                {formData.is_multi_day && formData.event_date && formData.end_date && (
-                                    <View style={[styles.badge, styles.badgePrimary, styles.durationBadge]}>
-                                        <Text style={styles.badgeText}>
-                                            {calculateDays(formData.event_date, formData.end_date)}-Day Event
-                                        </Text>
-                                    </View>
                                 )}
+                            </View>
 
-                                {/* Title */}
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Title</Text>
-                                    <TextInput
-                                        style={styles.formInput}
-                                        value={formData.title}
-                                        onChangeText={(text) => setFormData({ ...formData, title: text })}
-                                        placeholder="Activity title"
-                                    />
+                            {/* Duration Badge */}
+                            {formData.is_multi_day && formData.event_date && formData.end_date && (
+                                <View style={[styles.badge, styles.badgePrimary, styles.durationBadge]}>
+                                    <Text style={styles.badgeText}>
+                                        {calculateDays(formData.event_date, formData.end_date)}-Day Event
+                                    </Text>
                                 </View>
+                            )}
 
-                                {/* Activity Type */}
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Activity Type</Text>
-                                    <View style={styles.dropdownContainer}>
-                                        <TouchableOpacity
-                                            style={styles.formInput}
-                                            onPress={() => {
-                                                setIsActivityTypeDropdownOpen(!isActivityTypeDropdownOpen);
-                                                setIsLocationTypeDropdownOpen(false);
-                                            }}
-                                        >
-                                            <Text style={formData.activity_type ? styles.formInputText : styles.formInputPlaceholder}>
-                                                {formData.activity_type
-                                                    ? formData.activity_type.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-                                                    : 'Select activity type'}
-                                            </Text>
-                                            <Ionicons
-                                                name={isActivityTypeDropdownOpen ? "chevron-up" : "chevron-down"}
-                                                size={20}
-                                                color={theme.colors.textSecondary}
-                                            />
-                                        </TouchableOpacity>
+                            {/* Title */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Title</Text>
+                                <TextInput
+                                    style={styles.formInput}
+                                    value={formData.title}
+                                    onChangeText={(text) => setFormData({ ...formData, title: text })}
+                                    placeholder="Activity title"
+                                />
+                            </View>
 
-                                    </View>
-                                </View>
-
-                                {/* Location Type */}
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Location Type</Text>
-                                    <View style={styles.dropdownContainer}>
-                                        <TouchableOpacity
-                                            style={styles.formInput}
-                                            onPress={() => {
-                                                setIsLocationTypeDropdownOpen(!isLocationTypeDropdownOpen);
-                                                setIsActivityTypeDropdownOpen(false);
-                                            }}
-                                        >
-                                            <Text style={formData.home_away ? styles.formInputText : styles.formInputPlaceholder}>
-                                                {formData.home_away
-                                                    ? formData.home_away.toUpperCase()
-                                                    : 'Select location type (optional)'}
-                                            </Text>
-                                            <Ionicons
-                                                name={isLocationTypeDropdownOpen ? "chevron-up" : "chevron-down"}
-                                                size={20}
-                                                color={theme.colors.textSecondary}
-                                            />
-                                        </TouchableOpacity>
-
-                                    </View>
-                                </View>
-
-                                {/* Divisions */}
-                                <View style={styles.formField}>
-                                    <View style={styles.divisionsHeader}>
-                                        <Text style={styles.formLabel}>Divisions (select multiple)</Text>
-                                        <View style={styles.divisionsActions}>
-                                            <TouchableOpacity
-                                                style={styles.selectAllButton}
-                                                onPress={() => {
-                                                    setFormData({
-                                                        ...formData,
-                                                        division_ids: MOCK_DIVISIONS.filter(d => d.id !== '1').map(d => d.id),
-                                                    });
-                                                }}
-                                            >
-                                                <Text style={styles.selectAllButtonText}>Select All</Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                                style={styles.selectAllButton}
-                                                onPress={() => {
-                                                    setFormData({ ...formData, division_ids: [] });
-                                                }}
-                                            >
-                                                <Text style={styles.selectAllButtonText}>Deselect All</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-                                    <ScrollView style={styles.divisionsList} nestedScrollEnabled>
-                                        {MOCK_DIVISIONS.filter(d => d.id !== '1').map((division) => (
-                                            <TouchableOpacity
-                                                key={division.id}
-                                                style={styles.divisionCheckbox}
-                                                onPress={() => {
-                                                    const isSelected = formData.division_ids.includes(division.id);
-                                                    setFormData({
-                                                        ...formData,
-                                                        division_ids: isSelected
-                                                            ? formData.division_ids.filter(id => id !== division.id)
-                                                            : [...formData.division_ids, division.id],
-                                                    });
-                                                }}
-                                            >
-                                                <Ionicons
-                                                    name={formData.division_ids.includes(division.id) ? 'checkbox' : 'checkbox-outline'}
-                                                    size={20}
-                                                    color={formData.division_ids.includes(division.id) ? theme.colors.secondary : theme.colors.textSecondary}
-                                                />
-                                                <Text style={styles.divisionCheckboxText}>{division.name}</Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </ScrollView>
-                                </View>
-
-                                {/* Optional Fields */}
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Depart from Camp (optional)</Text>
+                            {/* Activity Type */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Activity Type</Text>
+                                <View style={styles.dropdownContainer}>
                                     <TouchableOpacity
                                         style={styles.formInput}
-                                        onPress={() => openTimePicker('depart_from_camp')}
+                                        onPress={() => {
+                                            setIsActivityTypeDropdownOpen(!isActivityTypeDropdownOpen);
+                                            setIsLocationTypeDropdownOpen(false);
+                                        }}
                                     >
-                                        <Text style={formData.depart_from_camp ? styles.formInputText : styles.formInputPlaceholder}>
-                                            {formData.depart_from_camp ? formatTime(formData.depart_from_camp) : '--:-- --'}
+                                        <Text style={formData.activity_type ? styles.formInputText : styles.formInputPlaceholder}>
+                                            {formData.activity_type
+                                                ? formData.activity_type.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                                                : 'Select activity type'}
                                         </Text>
-                                        <Ionicons name="time-outline" size={20} color={theme.colors.textSecondary} />
-                                    </TouchableOpacity>
-                                </View>
-
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Depart from Activity (optional)</Text>
-                                    <TouchableOpacity
-                                        style={styles.formInput}
-                                        onPress={() => openTimePicker('depart_from_activity')}
-                                    >
-                                        <Text style={formData.depart_from_activity ? styles.formInputText : styles.formInputPlaceholder}>
-                                            {formData.depart_from_activity ? formatTime(formData.depart_from_activity) : '--:-- --'}
-                                        </Text>
-                                        <Ionicons name="time-outline" size={20} color={theme.colors.textSecondary} />
-                                    </TouchableOpacity>
-                                </View>
-
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Location (optional)</Text>
-                                    <TextInput
-                                        style={styles.formInput}
-                                        value={formData.location}
-                                        onChangeText={(text) => setFormData({ ...formData, location: text })}
-                                        placeholder="Location"
-                                    />
-                                </View>
-
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Capacity (optional)</Text>
-                                    <View style={styles.capacityStepper}>
-                                        <TextInput
-                                            style={styles.capacityInput}
-                                            value={formData.capacity}
-                                            onChangeText={(text) => {
-                                                // Only allow numbers
-                                                const numericValue = text.replace(/[^0-9]/g, '');
-                                                setFormData({ ...formData, capacity: numericValue });
-                                            }}
-                                            placeholder="Maximum number of participants"
-                                            keyboardType="numeric"
+                                        <Ionicons
+                                            name={isActivityTypeDropdownOpen ? "chevron-up" : "chevron-down"}
+                                            size={20}
+                                            color={theme.colors.textSecondary}
                                         />
-                                        <View style={styles.capacityButtons}>
-                                            <TouchableOpacity
-                                                style={[styles.capacityButton, styles.capacityButtonTop]}
-                                                onPress={() => {
-                                                    const current = parseInt(formData.capacity) || 0;
-                                                    setFormData({ ...formData, capacity: (current + 1).toString() });
-                                                }}
-                                            >
-                                                <Ionicons name="chevron-up" size={16} color={theme.colors.textSecondary} />
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                                style={styles.capacityButton}
-                                                onPress={() => {
-                                                    const current = parseInt(formData.capacity) || 0;
-                                                    if (current > 0) {
-                                                        setFormData({ ...formData, capacity: (current - 1).toString() });
-                                                    }
-                                                }}
-                                            >
-                                                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-                                </View>
+                                    </TouchableOpacity>
 
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Chaperone (optional)</Text>
-                                    <TextInput
+                                </View>
+                            </View>
+
+                            {/* Location Type */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Location Type</Text>
+                                <View style={styles.dropdownContainer}>
+                                    <TouchableOpacity
                                         style={styles.formInput}
-                                        value={formData.chaperone}
-                                        onChangeText={(text) => setFormData({ ...formData, chaperone: text })}
-                                        placeholder="Staff member name"
-                                    />
-                                </View>
+                                        onPress={() => {
+                                            setIsLocationTypeDropdownOpen(!isLocationTypeDropdownOpen);
+                                            setIsActivityTypeDropdownOpen(false);
+                                        }}
+                                    >
+                                        <Text style={formData.home_away ? styles.formInputText : styles.formInputPlaceholder}>
+                                            {formData.home_away
+                                                ? formData.home_away.toUpperCase()
+                                                : 'Select location type (optional)'}
+                                        </Text>
+                                        <Ionicons
+                                            name={isLocationTypeDropdownOpen ? "chevron-up" : "chevron-down"}
+                                            size={20}
+                                            color={theme.colors.textSecondary}
+                                        />
+                                    </TouchableOpacity>
 
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Description (optional)</Text>
-                                    <TextInput
-                                        style={[styles.formInput, styles.formTextArea]}
-                                        value={formData.description}
-                                        onChangeText={(text) => setFormData({ ...formData, description: text })}
-                                        placeholder="Description"
-                                        multiline
-                                        numberOfLines={3}
-                                    />
                                 </View>
+                            </View>
 
-                                {/* Meal Options */}
-                                <View style={styles.mealOptionsSection}>
-                                    <Text style={styles.mealOptionsTitle}>Meal Options</Text>
-                                    {['Breakfast', 'Snack', 'Lunch', 'Dinner', 'Other'].map((meal) => (
+                            {/* Divisions */}
+                            <View style={styles.formField}>
+                                <View style={styles.divisionsHeader}>
+                                    <Text style={styles.formLabel}>Divisions (select multiple)</Text>
+                                    <View style={styles.divisionsActions}>
                                         <TouchableOpacity
-                                            key={meal}
-                                            style={styles.mealOption}
+                                            style={styles.selectAllButton}
                                             onPress={() => {
-                                                const isSelected = formData.meal_options.includes(meal);
                                                 setFormData({
                                                     ...formData,
-                                                    meal_options: isSelected
-                                                        ? formData.meal_options.filter(m => m !== meal)
-                                                        : [...formData.meal_options, meal],
+                                                    division_ids: MOCK_DIVISIONS.filter(d => d.id !== '1').map(d => d.id),
+                                                });
+                                            }}
+                                        >
+                                            <Text style={styles.selectAllButtonText}>Select All</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.selectAllButton}
+                                            onPress={() => {
+                                                setFormData({ ...formData, division_ids: [] });
+                                            }}
+                                        >
+                                            <Text style={styles.selectAllButtonText}>Deselect All</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                                <ScrollView style={styles.divisionsList} nestedScrollEnabled>
+                                    {MOCK_DIVISIONS.filter(d => d.id !== '1').map((division) => (
+                                        <TouchableOpacity
+                                            key={division.id}
+                                            style={styles.divisionCheckbox}
+                                            onPress={() => {
+                                                const isSelected = formData.division_ids.includes(division.id);
+                                                setFormData({
+                                                    ...formData,
+                                                    division_ids: isSelected
+                                                        ? formData.division_ids.filter(id => id !== division.id)
+                                                        : [...formData.division_ids, division.id],
                                                 });
                                             }}
                                         >
                                             <Ionicons
-                                                name={formData.meal_options.includes(meal) ? 'checkbox' : 'checkbox-outline'}
+                                                name={formData.division_ids.includes(division.id) ? 'checkbox' : 'checkbox-outline'}
                                                 size={20}
-                                                color={formData.meal_options.includes(meal) ? theme.colors.secondary : theme.colors.textSecondary}
+                                                color={formData.division_ids.includes(division.id) ? theme.colors.secondary : theme.colors.textSecondary}
                                             />
-                                            <Text style={styles.mealOptionText}>{meal}</Text>
+                                            <Text style={styles.divisionCheckboxText}>{division.name}</Text>
                                         </TouchableOpacity>
                                     ))}
-                                    {formData.meal_options.includes('Other') && (
-                                        <View style={styles.formField}>
-                                            <Text style={styles.formLabel}>Meal Notes</Text>
-                                            <TextInput
-                                                style={[styles.formInput, styles.formTextArea]}
-                                                value={formData.meal_notes}
-                                                onChangeText={(text) => setFormData({ ...formData, meal_notes: text })}
-                                                placeholder="e.g., Other location serves lunch"
-                                                multiline
-                                                numberOfLines={2}
-                                            />
-                                        </View>
-                                    )}
-                                </View>
+                                </ScrollView>
+                            </View>
 
-                                {/* Action Buttons */}
-                                <View style={styles.modalActions}>
-                                    <Pressable
-                                        style={({ pressed }) => [
-                                            styles.cancelButton,
-                                            pressed && styles.cancelButtonPressed
-                                        ]}
-                                        onPress={() => {
-                                            setIsEditModalOpen(false);
-                                            setEditingActivity(null);
-                                            setIsActivityTypeDropdownOpen(false);
-                                            setIsLocationTypeDropdownOpen(false);
+                            {/* Optional Fields */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Depart from Camp (optional)</Text>
+                                <TouchableOpacity
+                                    style={styles.formInput}
+                                    onPress={() => openTimePicker('depart_from_camp')}
+                                >
+                                    <Text style={formData.depart_from_camp ? styles.formInputText : styles.formInputPlaceholder}>
+                                        {formData.depart_from_camp ? formatTime(formData.depart_from_camp) : '--:-- --'}
+                                    </Text>
+                                    <Ionicons name="time-outline" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Depart from Activity (optional)</Text>
+                                <TouchableOpacity
+                                    style={styles.formInput}
+                                    onPress={() => openTimePicker('depart_from_activity')}
+                                >
+                                    <Text style={formData.depart_from_activity ? styles.formInputText : styles.formInputPlaceholder}>
+                                        {formData.depart_from_activity ? formatTime(formData.depart_from_activity) : '--:-- --'}
+                                    </Text>
+                                    <Ionicons name="time-outline" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Location (optional)</Text>
+                                <TextInput
+                                    style={styles.formInput}
+                                    value={formData.location}
+                                    onChangeText={(text) => setFormData({ ...formData, location: text })}
+                                    placeholder="Location"
+                                />
+                            </View>
+
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Capacity (optional)</Text>
+                                <View style={styles.capacityStepper}>
+                                    <TextInput
+                                        style={styles.capacityInput}
+                                        value={formData.capacity}
+                                        onChangeText={(text) => {
+                                            // Only allow numbers
+                                            const numericValue = text.replace(/[^0-9]/g, '');
+                                            setFormData({ ...formData, capacity: numericValue });
                                         }}
-                                    >
-                                        <Text style={styles.cancelButtonText}>Cancel</Text>
-                                    </Pressable>
+                                        placeholder="Maximum number of participants"
+                                        keyboardType="numeric"
+                                    />
+                                    <View style={styles.capacityButtons}>
+                                        <TouchableOpacity
+                                            style={[styles.capacityButton, styles.capacityButtonTop]}
+                                            onPress={() => {
+                                                const current = parseInt(formData.capacity) || 0;
+                                                setFormData({ ...formData, capacity: (current + 1).toString() });
+                                            }}
+                                        >
+                                            <Ionicons name="chevron-up" size={16} color={theme.colors.textSecondary} />
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.capacityButton}
+                                            onPress={() => {
+                                                const current = parseInt(formData.capacity) || 0;
+                                                if (current > 0) {
+                                                    setFormData({ ...formData, capacity: (current - 1).toString() });
+                                                }
+                                            }}
+                                        >
+                                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            </View>
+
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Chaperone (optional)</Text>
+                                <TextInput
+                                    style={styles.formInput}
+                                    value={formData.chaperone}
+                                    onChangeText={(text) => setFormData({ ...formData, chaperone: text })}
+                                    placeholder="Staff member name"
+                                />
+                            </View>
+
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Description (optional)</Text>
+                                <TextInput
+                                    style={[styles.formInput, styles.formTextArea]}
+                                    value={formData.description}
+                                    onChangeText={(text) => setFormData({ ...formData, description: text })}
+                                    placeholder="Description"
+                                    multiline
+                                    numberOfLines={3}
+                                />
+                            </View>
+
+                            {/* Meal Options */}
+                            <View style={styles.mealOptionsSection}>
+                                <Text style={styles.mealOptionsTitle}>Meal Options</Text>
+                                {['Breakfast', 'Snack', 'Lunch', 'Dinner', 'Other'].map((meal) => (
                                     <TouchableOpacity
-                                        style={styles.updateButton}
+                                        key={meal}
+                                        style={styles.mealOption}
                                         onPress={() => {
-                                            // Handle update
-                                            setIsEditModalOpen(false);
-                                            setEditingActivity(null);
-                                            setIsActivityTypeDropdownOpen(false);
-                                            setIsLocationTypeDropdownOpen(false);
+                                            const isSelected = formData.meal_options.includes(meal);
+                                            setFormData({
+                                                ...formData,
+                                                meal_options: isSelected
+                                                    ? formData.meal_options.filter(m => m !== meal)
+                                                    : [...formData.meal_options, meal],
+                                            });
                                         }}
                                     >
-                                        <Text style={styles.updateButtonText}>
-                                            {editingActivity ? 'Update' : 'Add'} Activity
-                                        </Text>
+                                        <Ionicons
+                                            name={formData.meal_options.includes(meal) ? 'checkbox' : 'checkbox-outline'}
+                                            size={20}
+                                            color={formData.meal_options.includes(meal) ? theme.colors.secondary : theme.colors.textSecondary}
+                                        />
+                                        <Text style={styles.mealOptionText}>{meal}</Text>
                                     </TouchableOpacity>
-                                </View>
-                            </ScrollView>
-                        </Pressable>
-                    </Pressable>
-                </Modal>
-
-                {/* Delete Confirmation Modal */}
-                <Modal
-                    visible={isDeleteModalOpen}
-                    transparent={true}
-                    animationType="fade"
-                    onRequestClose={() => setIsDeleteModalOpen(false)}
-                >
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.deleteModalContainer}>
-                            <Text style={styles.deleteModalTitle}>Delete Activity/Field Trip</Text>
-                            <Text style={styles.deleteModalMessage}>
-                                Are you sure you want to delete this activity? This action cannot be undone.
-                            </Text>
-                            <View style={styles.deleteModalActions}>
-                                <Pressable
-                                    style={({ pressed }) => [
-                                        styles.deleteCancelButton,
-                                        pressed && styles.deleteCancelButtonPressed
-                                    ]}
-                                    onPress={() => {
-                                        setIsDeleteModalOpen(false);
-                                        setActivityToDelete(null);
-                                    }}
-                                >
-                                    <Text style={styles.deleteCancelButtonText}>Cancel</Text>
-                                </Pressable>
-                                <TouchableOpacity
-                                    style={styles.deleteConfirmButton}
-                                    onPress={() => {
-                                        // Handle delete
-                                        setIsDeleteModalOpen(false);
-                                        setActivityToDelete(null);
-                                    }}
-                                >
-                                    <Text style={styles.deleteConfirmButtonText}>Delete</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    </View>
-                </Modal>
-
-                {/* Date Picker Modal */}
-                <Modal
-                    visible={isDatePickerOpen}
-                    transparent={true}
-                    animationType="fade"
-                    onRequestClose={() => {
-                        setIsDatePickerOpen(false);
-                        setDatePickerField(null);
-                    }}
-                >
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.datePickerModal}>
-                            <View style={styles.datePickerHeader}>
-                                <Text style={styles.datePickerTitle}>Select Date</Text>
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        setIsDatePickerOpen(false);
-                                        setDatePickerField(null);
-                                    }}
-                                >
-                                    <Ionicons name="close" size={24} color={theme.colors.text} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.datePickerContent}>
-                                {/* Month Selection */}
-                                <View style={styles.datePickerColumn}>
-                                    <Text style={styles.datePickerLabel}>Month</Text>
-                                    <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
-                                        {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
-                                            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                                            const isSelected = selectedDate.getMonth() + 1 === month;
-                                            return (
-                                                <TouchableOpacity
-                                                    key={month}
-                                                    style={[
-                                                        styles.datePickerOption,
-                                                        isSelected && styles.datePickerOptionSelected
-                                                    ]}
-                                                    onPress={() => {
-                                                        const newDate = new Date(selectedDate);
-                                                        newDate.setMonth(month - 1);
-                                                        setSelectedDate(newDate);
-                                                    }}
-                                                >
-                                                    <Text style={[
-                                                        styles.datePickerOptionText,
-                                                        isSelected && styles.datePickerOptionTextSelected
-                                                    ]}>
-                                                        {monthNames[month - 1]}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            );
-                                        })}
-                                    </ScrollView>
-                                </View>
-
-                                {/* Day Selection */}
-                                <View style={styles.datePickerColumn}>
-                                    <Text style={styles.datePickerLabel}>Day</Text>
-                                    <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
-                                        {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
-                                            const daysInMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate();
-                                            const isSelected = selectedDate.getDate() === day;
-                                            const isValid = day <= daysInMonth;
-                                            return (
-                                                <TouchableOpacity
-                                                    key={day}
-                                                    style={[
-                                                        styles.datePickerOption,
-                                                        isSelected && styles.datePickerOptionSelected,
-                                                        !isValid && styles.datePickerOptionDisabled
-                                                    ]}
-                                                    onPress={() => {
-                                                        if (isValid) {
-                                                            const newDate = new Date(selectedDate);
-                                                            newDate.setDate(day);
-                                                            setSelectedDate(newDate);
-                                                        }
-                                                    }}
-                                                    disabled={!isValid}
-                                                >
-                                                    <Text style={[
-                                                        styles.datePickerOptionText,
-                                                        isSelected && styles.datePickerOptionTextSelected,
-                                                        !isValid && styles.datePickerOptionTextDisabled
-                                                    ]}>
-                                                        {day}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            );
-                                        })}
-                                    </ScrollView>
-                                </View>
-
-                                {/* Year Selection */}
-                                <View style={styles.datePickerColumn}>
-                                    <Text style={styles.datePickerLabel}>Year</Text>
-                                    <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
-                                        {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => {
-                                            const isSelected = selectedDate.getFullYear() === year;
-                                            return (
-                                                <TouchableOpacity
-                                                    key={year}
-                                                    style={[
-                                                        styles.datePickerOption,
-                                                        isSelected && styles.datePickerOptionSelected
-                                                    ]}
-                                                    onPress={() => {
-                                                        const newDate = new Date(selectedDate);
-                                                        newDate.setFullYear(year);
-                                                        // Adjust day if it's invalid for the new year/month
-                                                        const daysInMonth = new Date(year, newDate.getMonth() + 1, 0).getDate();
-                                                        if (newDate.getDate() > daysInMonth) {
-                                                            newDate.setDate(daysInMonth);
-                                                        }
-                                                        setSelectedDate(newDate);
-                                                    }}
-                                                >
-                                                    <Text style={[
-                                                        styles.datePickerOptionText,
-                                                        isSelected && styles.datePickerOptionTextSelected
-                                                    ]}>
-                                                        {year}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            );
-                                        })}
-                                    </ScrollView>
-                                </View>
-                            </View>
-
-                            {/* Selected Date Display */}
-                            <View style={styles.datePickerDisplay}>
-                                <Text style={styles.datePickerDisplayText}>
-                                    {formatDateForDisplay(formatDateForStorage(selectedDate))}
-                                </Text>
+                                ))}
+                                {formData.meal_options.includes('Other') && (
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Meal Notes</Text>
+                                        <TextInput
+                                            style={[styles.formInput, styles.formTextArea]}
+                                            value={formData.meal_notes}
+                                            onChangeText={(text) => setFormData({ ...formData, meal_notes: text })}
+                                            placeholder="e.g., Other location serves lunch"
+                                            multiline
+                                            numberOfLines={2}
+                                        />
+                                    </View>
+                                )}
                             </View>
 
                             {/* Action Buttons */}
-                            <View style={styles.datePickerActions}>
-                                <TouchableOpacity
-                                    style={styles.datePickerCancelButton}
+                            <View style={styles.modalActions}>
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.cancelButton,
+                                        pressed && styles.cancelButtonPressed
+                                    ]}
                                     onPress={() => {
-                                        setIsDatePickerOpen(false);
-                                        setDatePickerField(null);
+                                        setIsEditModalOpen(false);
+                                        setEditingActivity(null);
+                                        setIsActivityTypeDropdownOpen(false);
+                                        setIsLocationTypeDropdownOpen(false);
                                     }}
                                 >
-                                    <Text style={styles.datePickerCancelButtonText}>Cancel</Text>
-                                </TouchableOpacity>
+                                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                                </Pressable>
                                 <TouchableOpacity
-                                    style={styles.datePickerConfirmButton}
+                                    style={styles.updateButton}
                                     onPress={() => {
-                                        if (datePickerField) {
-                                            const dateString = formatDateForStorage(selectedDate);
-                                            setFormData({ ...formData, [datePickerField]: dateString });
-                                        }
-                                        setIsDatePickerOpen(false);
-                                        setDatePickerField(null);
+                                        // Handle update
+                                        setIsEditModalOpen(false);
+                                        setEditingActivity(null);
+                                        setIsActivityTypeDropdownOpen(false);
+                                        setIsLocationTypeDropdownOpen(false);
                                     }}
                                 >
-                                    <Text style={styles.datePickerConfirmButtonText}>Confirm</Text>
+                                    <Text style={styles.updateButtonText}>
+                                        {editingActivity ? 'Update' : 'Add'} Activity
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
-                        </View>
-                    </View>
-                </Modal>
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
 
-                {/* CSV Upload Format Guide Modal */}
-                <Modal
-                    visible={isHelpModalOpen}
-                    transparent={true}
-                    animationType="fade"
-                    onRequestClose={() => setIsHelpModalOpen(false)}
-                >
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.helpModalContainer}>
-                            {/* Header */}
-                            <View style={styles.helpModalHeader}>
-                                <Text style={styles.helpModalTitle}>CSV Upload Format Guide</Text>
-                                <TouchableOpacity
-                                    style={styles.helpModalCloseButton}
-                                    onPress={() => setIsHelpModalOpen(false)}
-                                >
-                                    <Ionicons name="close" size={24} color={theme.colors.text} />
-                                </TouchableOpacity>
-                            </View>
-
-                            {/* Tabs */}
-                            <ScrollView
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                style={styles.helpModalTabs}
-                                contentContainerStyle={styles.helpModalTabsContent}
+            {/* Delete Confirmation Modal */}
+            <Modal
+                visible={isDeleteModalOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsDeleteModalOpen(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.deleteModalContainer}>
+                        <Text style={styles.deleteModalTitle}>Delete Activity/Field Trip</Text>
+                        <Text style={styles.deleteModalMessage}>
+                            Are you sure you want to delete this activity? This action cannot be undone.
+                        </Text>
+                        <View style={styles.deleteModalActions}>
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.deleteCancelButton,
+                                    pressed && styles.deleteCancelButtonPressed
+                                ]}
+                                onPress={() => {
+                                    setIsDeleteModalOpen(false);
+                                    setActivityToDelete(null);
+                                }}
                             >
-                                {['Children', 'Staff', 'Medications', 'Trips', 'Menu', 'Awards', 'Daily Notes', 'Incidents', 'Calendar', 'Sports'].map((tab) => (
-                                    <TouchableOpacity
-                                        key={tab}
-                                        style={[
-                                            styles.helpModalTab,
-                                            helpModalTab === tab && styles.helpModalTabActive
-                                        ]}
-                                        onPress={() => setHelpModalTab(tab)}
-                                    >
-                                        <Text style={[
-                                            styles.helpModalTabText,
-                                            helpModalTab === tab && styles.helpModalTabTextActive
-                                        ]}>
-                                            {tab}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-
-                            {/* Content */}
-                            <ScrollView style={styles.helpModalContent}>
-                                {helpModalTab === 'Trips' && (
-                                    <View>
-                                        <Text style={styles.helpModalHeading}>Activities & Field Trips</Text>
-                                        <Text style={styles.helpModalDescription}>
-                                            CSV format for activities and field trips upload
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            title, event_date, end_date, is_multi_day, activity_type, home_away, division_ids, depart_from_camp, depart_from_activity, location, capacity, chaperone, description, meal_options
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Example Data Row:</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            Junior Hershey Trip, 2026-07-28, 2026-07-29, true, field-trip, away, ["1","2"], 08:00, 18:00, Hershey Park, 50, John Doe, Fun trip to Hershey Park, ["Lunch","Dinner"]
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                        <Text style={styles.helpModalBullet}>• division_ids must be an array of valid division IDs</Text>
-                                        <Text style={styles.helpModalBullet}>• event_date and end_date format: YYYY-MM-DD</Text>
-                                        <Text style={styles.helpModalBullet}>• is_multi_day: true or false</Text>
-                                        <Text style={styles.helpModalBullet}>• home_away: "home" or "away"</Text>
-                                        <Text style={styles.helpModalBullet}>• meal_options must be an array (e.g., ["Breakfast","Lunch"])</Text>
-                                        <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                        <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                        <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                        <Text style={styles.helpModalBullet}>• Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
-                                        <Text style={styles.helpModalBullet}>• Leave fields empty for optional columns</Text>
-                                        <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                        <Text style={styles.helpModalBullet}>• Dates must be in YYYY-MM-DD format</Text>
-                                        <Text style={styles.helpModalBullet}>• Time format: HH:MM (24-hour format)</Text>
-                                    </View>
-                                )}
-                                {helpModalTab === 'Staff' && (
-                                    <View>
-                                        <Text style={styles.helpModalHeading}>Staff Directory</Text>
-                                        <Text style={styles.helpModalDescription}>
-                                            CSV format for staff directory upload
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            name, email, phone, role, department, hire_date, leader_id, status, season
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Example Data Row:</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            Jane Smith, jane@thenest.com, 555-9876, Counselor, Activities, 2024-01-15, {"<leader_id>"}, active, Summer 2024
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                        <Text style={styles.helpModalBullet}>• leader_id must be a valid UUID from staff table</Text>
-                                        <Text style={styles.helpModalBullet}>• hire_date format: YYYY-MM-DD</Text>
-                                        <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                        <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                        <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                        <Text style={styles.helpModalBullet}>• Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
-                                        <Text style={styles.helpModalBullet}>• Leave fields empty for optional columns</Text>
-                                        <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                        <Text style={styles.helpModalBullet}>• Dates must be in YYYY-MM-DD format</Text>
-                                        <Text style={styles.helpModalBullet}>• UUIDs can be obtained from the backend for existing records</Text>
-                                    </View>
-                                )}
-                                {helpModalTab === 'Children' && (
-                                    <View>
-                                        <Text style={styles.helpModalHeading}>Children Directory</Text>
-                                        <Text style={styles.helpModalDescription}>
-                                            CSV format for children/camper directory upload
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            name, date_of_birth, gender, division_id, parent_name, parent_email, parent_phone, medical_notes, dietary_restrictions
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Example Data Row:</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            John Doe, 2010-05-15, male, 1, Jane Doe, jane@example.com, 555-1234, None, Vegetarian
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                        <Text style={styles.helpModalBullet}>• division_id must be a valid division ID</Text>
-                                        <Text style={styles.helpModalBullet}>• date_of_birth format: YYYY-MM-DD</Text>
-                                        <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                        <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                        <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                        <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                        <Text style={styles.helpModalBullet}>• Dates must be in YYYY-MM-DD format</Text>
-                                    </View>
-                                )}
-                                {helpModalTab === 'Medications' && (
-                                    <View>
-                                        <Text style={styles.helpModalHeading}>Medications</Text>
-                                        <Text style={styles.helpModalDescription}>
-                                            CSV format for medications upload
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            camper_id, medication_name, dosage, frequency, start_date, end_date, notes
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Example Data Row:</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            1, Advil, 200mg, Twice daily, 2024-07-01, 2024-08-31, Take with food
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                        <Text style={styles.helpModalBullet}>• camper_id must be a valid camper ID</Text>
-                                        <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
-                                        <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                        <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                        <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                        <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                    </View>
-                                )}
-                                {helpModalTab === 'Menu' && (
-                                    <View>
-                                        <Text style={styles.helpModalHeading}>Menu</Text>
-                                        <Text style={styles.helpModalDescription}>
-                                            CSV format for menu upload
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            date, meal_type, item_name, description, dietary_tags
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Example Data Row:</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            2024-07-15, Lunch, Grilled Chicken, Delicious grilled chicken with sides, ["Gluten-Free","Dairy-Free"]
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                        <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
-                                        <Text style={styles.helpModalBullet}>• meal_type: Breakfast, Lunch, Dinner, or Snack</Text>
-                                        <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                        <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                        <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                        <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                    </View>
-                                )}
-                                {helpModalTab === 'Awards' && (
-                                    <View>
-                                        <Text style={styles.helpModalHeading}>Awards</Text>
-                                        <Text style={styles.helpModalDescription}>
-                                            CSV format for awards upload
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            camper_id, award_name, award_date, category, description
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Example Data Row:</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            1, Camper of the Week, 2024-07-20, Recognition, Outstanding behavior
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                        <Text style={styles.helpModalBullet}>• camper_id must be a valid camper ID</Text>
-                                        <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
-                                        <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                        <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                        <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                        <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                    </View>
-                                )}
-                                {helpModalTab === 'Daily Notes' && (
-                                    <View>
-                                        <Text style={styles.helpModalHeading}>Daily Notes</Text>
-                                        <Text style={styles.helpModalDescription}>
-                                            CSV format for daily notes upload
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            camper_id, date, note_type, content, staff_id
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Example Data Row:</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            1, 2024-07-15, General, Had a great day at the pool, 5
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                        <Text style={styles.helpModalBullet}>• camper_id and staff_id must be valid IDs</Text>
-                                        <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
-                                        <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                        <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                        <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                        <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                    </View>
-                                )}
-                                {helpModalTab === 'Incidents' && (
-                                    <View>
-                                        <Text style={styles.helpModalHeading}>Incidents</Text>
-                                        <Text style={styles.helpModalDescription}>
-                                            CSV format for incident reports upload
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            date, time, camper_id, incident_type, description, severity, staff_id
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Example Data Row:</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            2024-07-15, 14:30, 1, Minor Injury, Scraped knee during activity, Low, 5
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                        <Text style={styles.helpModalBullet}>• camper_id and staff_id must be valid IDs</Text>
-                                        <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
-                                        <Text style={styles.helpModalBullet}>• Time format: HH:MM</Text>
-                                        <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                        <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                        <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                        <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                    </View>
-                                )}
-                                {helpModalTab === 'Calendar' && (
-                                    <View>
-                                        <Text style={styles.helpModalHeading}>Calendar Events</Text>
-                                        <Text style={styles.helpModalDescription}>
-                                            CSV format for calendar events upload
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            title, event_date, end_date, event_type, description, location
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Example Data Row:</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            Camp Fire, 2024-07-20, 2024-07-20, Event, Evening campfire with songs, Main Field
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                        <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
-                                        <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                        <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                        <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                        <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                    </View>
-                                )}
-                                {helpModalTab === 'Sports' && (
-                                    <View>
-                                        <Text style={styles.helpModalHeading}>Sports</Text>
-                                        <Text style={styles.helpModalDescription}>
-                                            CSV format for sports activities upload
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            sport_name, date, time, location, division_ids, coach_id
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Example Data Row:</Text>
-                                        <Text style={styles.helpModalCode}>
-                                            Basketball, 2024-07-15, 10:00, Gym, ["1","2"], 5
-                                        </Text>
-                                        <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                        <Text style={styles.helpModalBullet}>• division_ids must be an array of valid division IDs</Text>
-                                        <Text style={styles.helpModalBullet}>• coach_id must be a valid staff ID</Text>
-                                        <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
-                                        <Text style={styles.helpModalBullet}>• Time format: HH:MM</Text>
-                                        <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                        <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                        <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                        <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                    </View>
-                                )}
-                            </ScrollView>
+                                <Text style={styles.deleteCancelButtonText}>Cancel</Text>
+                            </Pressable>
+                            <TouchableOpacity
+                                style={styles.deleteConfirmButton}
+                                onPress={() => {
+                                    // Handle delete
+                                    setIsDeleteModalOpen(false);
+                                    setActivityToDelete(null);
+                                }}
+                            >
+                                <Text style={styles.deleteConfirmButtonText}>Delete</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
-                </Modal>
+                </View>
+            </Modal>
 
-                {/* Time Picker Modal */}
-                <Modal
-                    visible={isTimePickerOpen}
-                    transparent={true}
-                    animationType="slide"
-                    onRequestClose={() => {
+            {/* Date Picker Modal */}
+            <Modal
+                visible={isDatePickerOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => {
+                    setIsDatePickerOpen(false);
+                    setDatePickerField(null);
+                }}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.datePickerModal}>
+                        <View style={styles.datePickerHeader}>
+                            <Text style={styles.datePickerTitle}>Select Date</Text>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setIsDatePickerOpen(false);
+                                    setDatePickerField(null);
+                                }}
+                            >
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.datePickerContent}>
+                            {/* Month Selection */}
+                            <View style={styles.datePickerColumn}>
+                                <Text style={styles.datePickerLabel}>Month</Text>
+                                <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
+                                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                                        const isSelected = selectedDate.getMonth() + 1 === month;
+                                        return (
+                                            <TouchableOpacity
+                                                key={month}
+                                                style={[
+                                                    styles.datePickerOption,
+                                                    isSelected && styles.datePickerOptionSelected
+                                                ]}
+                                                onPress={() => {
+                                                    const newDate = new Date(selectedDate);
+                                                    newDate.setMonth(month - 1);
+                                                    setSelectedDate(newDate);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.datePickerOptionText,
+                                                    isSelected && styles.datePickerOptionTextSelected
+                                                ]}>
+                                                    {monthNames[month - 1]}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
+
+                            {/* Day Selection */}
+                            <View style={styles.datePickerColumn}>
+                                <Text style={styles.datePickerLabel}>Day</Text>
+                                <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
+                                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
+                                        const daysInMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate();
+                                        const isSelected = selectedDate.getDate() === day;
+                                        const isValid = day <= daysInMonth;
+                                        return (
+                                            <TouchableOpacity
+                                                key={day}
+                                                style={[
+                                                    styles.datePickerOption,
+                                                    isSelected && styles.datePickerOptionSelected,
+                                                    !isValid && styles.datePickerOptionDisabled
+                                                ]}
+                                                onPress={() => {
+                                                    if (isValid) {
+                                                        const newDate = new Date(selectedDate);
+                                                        newDate.setDate(day);
+                                                        setSelectedDate(newDate);
+                                                    }
+                                                }}
+                                                disabled={!isValid}
+                                            >
+                                                <Text style={[
+                                                    styles.datePickerOptionText,
+                                                    isSelected && styles.datePickerOptionTextSelected,
+                                                    !isValid && styles.datePickerOptionTextDisabled
+                                                ]}>
+                                                    {day}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
+
+                            {/* Year Selection */}
+                            <View style={styles.datePickerColumn}>
+                                <Text style={styles.datePickerLabel}>Year</Text>
+                                <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
+                                    {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => {
+                                        const isSelected = selectedDate.getFullYear() === year;
+                                        return (
+                                            <TouchableOpacity
+                                                key={year}
+                                                style={[
+                                                    styles.datePickerOption,
+                                                    isSelected && styles.datePickerOptionSelected
+                                                ]}
+                                                onPress={() => {
+                                                    const newDate = new Date(selectedDate);
+                                                    newDate.setFullYear(year);
+                                                    // Adjust day if it's invalid for the new year/month
+                                                    const daysInMonth = new Date(year, newDate.getMonth() + 1, 0).getDate();
+                                                    if (newDate.getDate() > daysInMonth) {
+                                                        newDate.setDate(daysInMonth);
+                                                    }
+                                                    setSelectedDate(newDate);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.datePickerOptionText,
+                                                    isSelected && styles.datePickerOptionTextSelected
+                                                ]}>
+                                                    {year}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
+                        </View>
+
+                        {/* Selected Date Display */}
+                        <View style={styles.datePickerDisplay}>
+                            <Text style={styles.datePickerDisplayText}>
+                                {formatDateForDisplay(formatDateForStorage(selectedDate))}
+                            </Text>
+                        </View>
+
+                        {/* Action Buttons */}
+                        <View style={styles.datePickerActions}>
+                            <TouchableOpacity
+                                style={styles.datePickerCancelButton}
+                                onPress={() => {
+                                    setIsDatePickerOpen(false);
+                                    setDatePickerField(null);
+                                }}
+                            >
+                                <Text style={styles.datePickerCancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.datePickerConfirmButton}
+                                onPress={() => {
+                                    if (datePickerField) {
+                                        const dateString = formatDateForStorage(selectedDate);
+                                        setFormData({ ...formData, [datePickerField]: dateString });
+                                    }
+                                    setIsDatePickerOpen(false);
+                                    setDatePickerField(null);
+                                }}
+                            >
+                                <Text style={styles.datePickerConfirmButtonText}>Confirm</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* CSV Upload Format Guide Modal */}
+            <Modal
+                visible={isHelpModalOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsHelpModalOpen(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.helpModalContainer}>
+                        {/* Header */}
+                        <View style={styles.helpModalHeader}>
+                            <Text style={styles.helpModalTitle}>CSV Upload Format Guide</Text>
+                            <TouchableOpacity
+                                style={styles.helpModalCloseButton}
+                                onPress={() => setIsHelpModalOpen(false)}
+                            >
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Tabs */}
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.helpModalTabs}
+                            contentContainerStyle={styles.helpModalTabsContent}
+                        >
+                            {['Children', 'Staff', 'Medications', 'Trips', 'Menu', 'Awards', 'Daily Notes', 'Incidents', 'Calendar', 'Sports'].map((tab) => (
+                                <TouchableOpacity
+                                    key={tab}
+                                    style={[
+                                        styles.helpModalTab,
+                                        helpModalTab === tab && styles.helpModalTabActive
+                                    ]}
+                                    onPress={() => setHelpModalTab(tab)}
+                                >
+                                    <Text style={[
+                                        styles.helpModalTabText,
+                                        helpModalTab === tab && styles.helpModalTabTextActive
+                                    ]}>
+                                        {tab}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
+                        {/* Content */}
+                        <ScrollView style={styles.helpModalContent}>
+                            {helpModalTab === 'Trips' && (
+                                <View>
+                                    <Text style={styles.helpModalHeading}>Activities & Field Trips</Text>
+                                    <Text style={styles.helpModalDescription}>
+                                        CSV format for activities and field trips upload
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        title, event_date, end_date, is_multi_day, activity_type, home_away, division_ids, depart_from_camp, depart_from_activity, location, capacity, chaperone, description, meal_options
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Example Data Row:</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        Junior Hershey Trip, 2026-07-28, 2026-07-29, true, field-trip, away, ["1","2"], 08:00, 18:00, Hershey Park, 50, John Doe, Fun trip to Hershey Park, ["Lunch","Dinner"]
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Important Notes:</Text>
+                                    <Text style={styles.helpModalBullet}>• division_ids must be an array of valid division IDs</Text>
+                                    <Text style={styles.helpModalBullet}>• event_date and end_date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>• is_multi_day: true or false</Text>
+                                    <Text style={styles.helpModalBullet}>• home_away: "home" or "away"</Text>
+                                    <Text style={styles.helpModalBullet}>• meal_options must be an array (e.g., ["Breakfast","Lunch"])</Text>
+                                    <Text style={styles.helpModalLabel}>General Tips:</Text>
+                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>• Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
+                                    <Text style={styles.helpModalBullet}>• Leave fields empty for optional columns</Text>
+                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>• Dates must be in YYYY-MM-DD format</Text>
+                                    <Text style={styles.helpModalBullet}>• Time format: HH:MM (24-hour format)</Text>
+                                </View>
+                            )}
+                            {helpModalTab === 'Staff' && (
+                                <View>
+                                    <Text style={styles.helpModalHeading}>Staff Directory</Text>
+                                    <Text style={styles.helpModalDescription}>
+                                        CSV format for staff directory upload
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        name, email, phone, role, department, hire_date, leader_id, status, season
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Example Data Row:</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        Jane Smith, jane@thenest.com, 555-9876, Counselor, Activities, 2024-01-15, {"<leader_id>"}, active, Summer 2024
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Important Notes:</Text>
+                                    <Text style={styles.helpModalBullet}>• leader_id must be a valid UUID from staff table</Text>
+                                    <Text style={styles.helpModalBullet}>• hire_date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalLabel}>General Tips:</Text>
+                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>• Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
+                                    <Text style={styles.helpModalBullet}>• Leave fields empty for optional columns</Text>
+                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>• Dates must be in YYYY-MM-DD format</Text>
+                                    <Text style={styles.helpModalBullet}>• UUIDs can be obtained from the backend for existing records</Text>
+                                </View>
+                            )}
+                            {helpModalTab === 'Children' && (
+                                <View>
+                                    <Text style={styles.helpModalHeading}>Children Directory</Text>
+                                    <Text style={styles.helpModalDescription}>
+                                        CSV format for children/camper directory upload
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        name, date_of_birth, gender, division_id, parent_name, parent_email, parent_phone, medical_notes, dietary_restrictions
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Example Data Row:</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        John Doe, 2010-05-15, male, 1, Jane Doe, jane@example.com, 555-1234, None, Vegetarian
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Important Notes:</Text>
+                                    <Text style={styles.helpModalBullet}>• division_id must be a valid division ID</Text>
+                                    <Text style={styles.helpModalBullet}>• date_of_birth format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalLabel}>General Tips:</Text>
+                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>• Dates must be in YYYY-MM-DD format</Text>
+                                </View>
+                            )}
+                            {helpModalTab === 'Medications' && (
+                                <View>
+                                    <Text style={styles.helpModalHeading}>Medications</Text>
+                                    <Text style={styles.helpModalDescription}>
+                                        CSV format for medications upload
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        camper_id, medication_name, dosage, frequency, start_date, end_date, notes
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Example Data Row:</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        1, Advil, 200mg, Twice daily, 2024-07-01, 2024-08-31, Take with food
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Important Notes:</Text>
+                                    <Text style={styles.helpModalBullet}>• camper_id must be a valid camper ID</Text>
+                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalLabel}>General Tips:</Text>
+                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                </View>
+                            )}
+                            {helpModalTab === 'Menu' && (
+                                <View>
+                                    <Text style={styles.helpModalHeading}>Menu</Text>
+                                    <Text style={styles.helpModalDescription}>
+                                        CSV format for menu upload
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        date, meal_type, item_name, description, dietary_tags
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Example Data Row:</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        2024-07-15, Lunch, Grilled Chicken, Delicious grilled chicken with sides, ["Gluten-Free","Dairy-Free"]
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Important Notes:</Text>
+                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>• meal_type: Breakfast, Lunch, Dinner, or Snack</Text>
+                                    <Text style={styles.helpModalLabel}>General Tips:</Text>
+                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                </View>
+                            )}
+                            {helpModalTab === 'Awards' && (
+                                <View>
+                                    <Text style={styles.helpModalHeading}>Awards</Text>
+                                    <Text style={styles.helpModalDescription}>
+                                        CSV format for awards upload
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        camper_id, award_name, award_date, category, description
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Example Data Row:</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        1, Camper of the Week, 2024-07-20, Recognition, Outstanding behavior
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Important Notes:</Text>
+                                    <Text style={styles.helpModalBullet}>• camper_id must be a valid camper ID</Text>
+                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalLabel}>General Tips:</Text>
+                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                </View>
+                            )}
+                            {helpModalTab === 'Daily Notes' && (
+                                <View>
+                                    <Text style={styles.helpModalHeading}>Daily Notes</Text>
+                                    <Text style={styles.helpModalDescription}>
+                                        CSV format for daily notes upload
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        camper_id, date, note_type, content, staff_id
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Example Data Row:</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        1, 2024-07-15, General, Had a great day at the pool, 5
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Important Notes:</Text>
+                                    <Text style={styles.helpModalBullet}>• camper_id and staff_id must be valid IDs</Text>
+                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalLabel}>General Tips:</Text>
+                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                </View>
+                            )}
+                            {helpModalTab === 'Incidents' && (
+                                <View>
+                                    <Text style={styles.helpModalHeading}>Incidents</Text>
+                                    <Text style={styles.helpModalDescription}>
+                                        CSV format for incident reports upload
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        date, time, camper_id, incident_type, description, severity, staff_id
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Example Data Row:</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        2024-07-15, 14:30, 1, Minor Injury, Scraped knee during activity, Low, 5
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Important Notes:</Text>
+                                    <Text style={styles.helpModalBullet}>• camper_id and staff_id must be valid IDs</Text>
+                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>• Time format: HH:MM</Text>
+                                    <Text style={styles.helpModalLabel}>General Tips:</Text>
+                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                </View>
+                            )}
+                            {helpModalTab === 'Calendar' && (
+                                <View>
+                                    <Text style={styles.helpModalHeading}>Calendar Events</Text>
+                                    <Text style={styles.helpModalDescription}>
+                                        CSV format for calendar events upload
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        title, event_date, end_date, event_type, description, location
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Example Data Row:</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        Camp Fire, 2024-07-20, 2024-07-20, Event, Evening campfire with songs, Main Field
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Important Notes:</Text>
+                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalLabel}>General Tips:</Text>
+                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                </View>
+                            )}
+                            {helpModalTab === 'Sports' && (
+                                <View>
+                                    <Text style={styles.helpModalHeading}>Sports</Text>
+                                    <Text style={styles.helpModalDescription}>
+                                        CSV format for sports activities upload
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Required Columns (first row):</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        sport_name, date, time, location, division_ids, coach_id
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Example Data Row:</Text>
+                                    <Text style={styles.helpModalCode}>
+                                        Basketball, 2024-07-15, 10:00, Gym, ["1","2"], 5
+                                    </Text>
+                                    <Text style={styles.helpModalLabel}>Important Notes:</Text>
+                                    <Text style={styles.helpModalBullet}>• division_ids must be an array of valid division IDs</Text>
+                                    <Text style={styles.helpModalBullet}>• coach_id must be a valid staff ID</Text>
+                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>• Time format: HH:MM</Text>
+                                    <Text style={styles.helpModalLabel}>General Tips:</Text>
+                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                </View>
+                            )}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Time Picker Modal */}
+            <Modal
+                visible={isTimePickerOpen}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => {
+                    setIsTimePickerOpen(false);
+                    setTimePickerField(null);
+                }}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => {
                         setIsTimePickerOpen(false);
                         setTimePickerField(null);
                     }}
                 >
                     <Pressable
-                        style={styles.bottomSheetOverlay}
-                        onPress={() => {
-                            setIsTimePickerOpen(false);
-                            setTimePickerField(null);
-                        }}
+                        style={styles.bottomSheet}
+                        onPress={(e) => e.stopPropagation()}
                     >
-                        <Pressable
-                            style={styles.bottomSheet}
-                            onPress={(e) => e.stopPropagation()}
-                        >
-                            <View style={[styles.timePickerHeader, { borderBottomWidth: 0, paddingBottom: 0 }]}>
-                                <Text style={styles.bottomSheetTitle}>Select Time</Text>
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        setIsTimePickerOpen(false);
-                                        setTimePickerField(null);
-                                    }}
-                                >
-                                    <Ionicons name="close" size={24} color={theme.colors.text} />
-                                </TouchableOpacity>
+                        <View style={[styles.timePickerHeader, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                            <Text style={styles.bottomSheetTitle}>Select Time</Text>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setIsTimePickerOpen(false);
+                                    setTimePickerField(null);
+                                }}
+                            >
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.timePickerContent}>
+                            {/* Hour Selection */}
+                            <View style={styles.timePickerColumn}>
+                                <Text style={styles.timePickerLabel}>Hour</Text>
+                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
+                                        <TouchableOpacity
+                                            key={hour}
+                                            style={[
+                                                styles.timePickerOption,
+                                                selectedTime.hour === hour && styles.timePickerOptionSelected
+                                            ]}
+                                            onPress={() => setSelectedTime({ ...selectedTime, hour })}
+                                        >
+                                            <Text style={[
+                                                styles.timePickerOptionText,
+                                                selectedTime.hour === hour && styles.timePickerOptionTextSelected
+                                            ]}>
+                                                {hour}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
                             </View>
 
-                            <View style={styles.timePickerContent}>
-                                {/* Hour Selection */}
-                                <View style={styles.timePickerColumn}>
-                                    <Text style={styles.timePickerLabel}>Hour</Text>
-                                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                        {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
-                                            <TouchableOpacity
-                                                key={hour}
-                                                style={[
-                                                    styles.timePickerOption,
-                                                    selectedTime.hour === hour && styles.timePickerOptionSelected
-                                                ]}
-                                                onPress={() => setSelectedTime({ ...selectedTime, hour })}
-                                            >
-                                                <Text style={[
-                                                    styles.timePickerOptionText,
-                                                    selectedTime.hour === hour && styles.timePickerOptionTextSelected
-                                                ]}>
-                                                    {hour}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </ScrollView>
-                                </View>
-
-                                {/* Minute Selection */}
-                                <View style={styles.timePickerColumn}>
-                                    <Text style={styles.timePickerLabel}>Minute</Text>
-                                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                        {Array.from({ length: 60 }, (_, i) => i).map((minute) => (
-                                            <TouchableOpacity
-                                                key={minute}
-                                                style={[
-                                                    styles.timePickerOption,
-                                                    selectedTime.minute === minute && styles.timePickerOptionSelected
-                                                ]}
-                                                onPress={() => setSelectedTime({ ...selectedTime, minute })}
-                                            >
-                                                <Text style={[
-                                                    styles.timePickerOptionText,
-                                                    selectedTime.minute === minute && styles.timePickerOptionTextSelected
-                                                ]}>
-                                                    {minute.toString().padStart(2, '0')}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </ScrollView>
-                                </View>
-
-                                {/* AM/PM Selection */}
-                                <View style={styles.timePickerColumn}>
-                                    <Text style={styles.timePickerLabel}>Period</Text>
-                                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                        {['AM', 'PM'].map((period) => (
-                                            <TouchableOpacity
-                                                key={period}
-                                                style={[
-                                                    styles.timePickerOption,
-                                                    selectedTime.ampm === period && styles.timePickerOptionSelected
-                                                ]}
-                                                onPress={() => setSelectedTime({ ...selectedTime, ampm: period })}
-                                            >
-                                                <Text style={[
-                                                    styles.timePickerOptionText,
-                                                    selectedTime.ampm === period && styles.timePickerOptionTextSelected
-                                                ]}>
-                                                    {period}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </ScrollView>
-                                </View>
+                            {/* Minute Selection */}
+                            <View style={styles.timePickerColumn}>
+                                <Text style={styles.timePickerLabel}>Minute</Text>
+                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                    {Array.from({ length: 60 }, (_, i) => i).map((minute) => (
+                                        <TouchableOpacity
+                                            key={minute}
+                                            style={[
+                                                styles.timePickerOption,
+                                                selectedTime.minute === minute && styles.timePickerOptionSelected
+                                            ]}
+                                            onPress={() => setSelectedTime({ ...selectedTime, minute })}
+                                        >
+                                            <Text style={[
+                                                styles.timePickerOptionText,
+                                                selectedTime.minute === minute && styles.timePickerOptionTextSelected
+                                            ]}>
+                                                {minute.toString().padStart(2, '0')}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
                             </View>
 
-                            {/* Selected Time Display */}
-                            <View style={styles.timePickerDisplay}>
-                                <Text style={styles.timePickerDisplayText}>
-                                    {selectedTime.hour}:{selectedTime.minute.toString().padStart(2, '0')} {selectedTime.ampm}
-                                </Text>
+                            {/* AM/PM Selection */}
+                            <View style={styles.timePickerColumn}>
+                                <Text style={styles.timePickerLabel}>Period</Text>
+                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                    {['AM', 'PM'].map((period) => (
+                                        <TouchableOpacity
+                                            key={period}
+                                            style={[
+                                                styles.timePickerOption,
+                                                selectedTime.ampm === period && styles.timePickerOptionSelected
+                                            ]}
+                                            onPress={() => setSelectedTime({ ...selectedTime, ampm: period })}
+                                        >
+                                            <Text style={[
+                                                styles.timePickerOptionText,
+                                                selectedTime.ampm === period && styles.timePickerOptionTextSelected
+                                            ]}>
+                                                {period}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
                             </View>
+                        </View>
 
-                            {/* Action Buttons */}
-                            <View style={styles.timePickerActions}>
-                                <TouchableOpacity
-                                    style={styles.timePickerCancelButton}
-                                    onPress={() => {
-                                        setIsTimePickerOpen(false);
-                                        setTimePickerField(null);
-                                    }}
-                                >
-                                    <Text style={styles.timePickerCancelButtonText}>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.timePickerConfirmButton}
-                                    onPress={confirmTimeSelection}
-                                >
-                                    <Text style={styles.timePickerConfirmButtonText}>Confirm</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </Pressable>
+                        {/* Selected Time Display */}
+                        <View style={styles.timePickerDisplay}>
+                            <Text style={styles.timePickerDisplayText}>
+                                {selectedTime.hour}:{selectedTime.minute.toString().padStart(2, '0')} {selectedTime.ampm}
+                            </Text>
+                        </View>
+
+                        {/* Action Buttons */}
+                        <View style={styles.timePickerActions}>
+                            <TouchableOpacity
+                                style={styles.timePickerCancelButton}
+                                onPress={() => {
+                                    setIsTimePickerOpen(false);
+                                    setTimePickerField(null);
+                                }}
+                            >
+                                <Text style={styles.timePickerCancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.timePickerConfirmButton}
+                                onPress={confirmTimeSelection}
+                            >
+                                <Text style={styles.timePickerConfirmButtonText}>Confirm</Text>
+                            </TouchableOpacity>
+                        </View>
                     </Pressable>
-                </Modal>
-            </ScrollView >
+                </Pressable>
+            </Modal>
             {renderActionSheetModal()}
         </SafeAreaView >
     );
@@ -3705,5 +3707,23 @@ const styles = StyleSheet.create({
     },
     editActivityBottomSheetContent: {
         padding: theme.spacing.lg,
+    },
+    // Centered Modal Styles
+    centeredOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: theme.spacing.md,
+    },
+    centeredModal: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        width: '100%',
+        maxWidth: 600,
+        maxHeight: '80%',
+        ...theme.shadows.card,
+        elevation: 5,
+        overflow: 'hidden',
     },
 });

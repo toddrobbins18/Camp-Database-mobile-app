@@ -509,11 +509,11 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                 </View>
             </ScrollView>
 
-            {/* Add/Edit Appointment Modal - Bottom Sheet */}
+            {/* Add/Edit Appointment Modal - Centered Popup */}
             <Modal
                 visible={isAddModalOpen || isEditModalOpen}
                 transparent={true}
-                animationType="slide"
+                animationType="fade"
                 onRequestClose={() => {
                     setIsAddModalOpen(false);
                     setIsEditModalOpen(false);
@@ -521,7 +521,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                 }}
             >
                 <Pressable
-                    style={styles.bottomSheetOverlay}
+                    style={styles.centeredOverlay}
                     onPress={() => {
                         setIsAddModalOpen(false);
                         setIsEditModalOpen(false);
@@ -529,7 +529,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                     }}
                 >
                     <Pressable
-                        style={styles.addAppointmentBottomSheet}
+                        style={styles.centeredModal}
                         onPress={(e) => e.stopPropagation()}
                     >
                         <ScrollView
@@ -1880,6 +1880,24 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: theme.colors.surface,
+    },
+    // Centered Modal Styles
+    centeredOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: theme.spacing.md,
+    },
+    centeredModal: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        width: '100%',
+        maxWidth: 600,
+        maxHeight: '90%',
+        ...theme.shadows.card,
+        elevation: 5,
+        overflow: 'hidden',
     },
 });
 
