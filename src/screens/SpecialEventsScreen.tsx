@@ -478,7 +478,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                 animationType="slide"
                 onRequestClose={handleCloseAddEventModal}
             >
-                <Pressable style={styles.bottomSheetOverlay} onPress={handleCloseAddEventModal}>
+                <Pressable style={styles.modalOverlay} onPress={handleCloseAddEventModal}>
                     <View style={styles.addEventModalContainer}>
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
@@ -677,7 +677,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                         </ScrollView>
 
                         {/* Modal Footer */}
-                        <View style={styles.modalFooter}>
+                        <View style={styles.centeredModalFooter}>
                             <TouchableOpacity
                                 style={styles.cancelButton}
                                 onPress={handleCloseAddEventModal}
@@ -1345,9 +1345,8 @@ const styles = StyleSheet.create({
     },
     addEventModalContainer: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.xl,
-        borderTopRightRadius: theme.borderRadius.xl,
-        width: '100%',
+        borderRadius: theme.borderRadius.xl,
+        width: '90%',
         maxWidth: 600,
         maxHeight: '90%',
         ...theme.shadows.card,
@@ -1524,6 +1523,14 @@ const styles = StyleSheet.create({
     modalFooter: {
         flexDirection: 'row',
         justifyContent: 'flex-end',
+        gap: theme.spacing.md,
+        padding: theme.spacing.lg,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    centeredModalFooter: {
+        flexDirection: 'row',
+        justifyContent: 'center',
         gap: theme.spacing.md,
         padding: theme.spacing.lg,
         borderTopWidth: 1,

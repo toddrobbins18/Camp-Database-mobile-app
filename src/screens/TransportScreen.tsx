@@ -1993,13 +1993,14 @@ const styles = StyleSheet.create({
     tripFormModalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'flex-end',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     tripFormModalContent: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.lg,
-        borderTopRightRadius: theme.borderRadius.lg,
-        width: '100%',
+        borderRadius: 24,
+        width: '90%',
+        maxWidth: 600,
         maxHeight: '90%',
         ...theme.shadows.card,
     },

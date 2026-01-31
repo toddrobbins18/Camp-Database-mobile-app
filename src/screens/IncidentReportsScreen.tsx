@@ -12,6 +12,8 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState('');
     const [tags, setTags] = useState<string[]>([]);
+    const [activeTab, setActiveTab] = useState('Children');
+    const [activeSubTab, setActiveSubTab] = useState('Roster');
 
     // Form state
     const [date, setDate] = useState<Date>(new Date());
@@ -146,7 +148,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
 
             </ScrollView>
 
-            {/* Help Modal */}
+            {/* CSV Upload Format Guide Modal */}
             <Modal
                 visible={showHelpModal}
                 transparent={true}
@@ -154,26 +156,129 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                 onRequestClose={() => setShowHelpModal(false)}
             >
                 <Pressable style={styles.modalOverlay} onPress={() => setShowHelpModal(false)}>
-                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Help & Support</Text>
+                    <Pressable style={styles.guideModal} onPress={(e) => e.stopPropagation()}>
+                        {/* Modal Header */}
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>CSV Upload Format Guide</Text>
                             <TouchableOpacity onPress={() => setShowHelpModal(false)}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
-                        <View style={styles.bottomSheetContent}>
-                            <Text style={styles.bottomSheetOptionText}>
-                                Need assistance? detailed guide on how to report incidents effectively.
-                            </Text>
-                            <TouchableOpacity style={styles.bottomSheetOption}>
-                                <Ionicons name="book-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>View User Guide</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.bottomSheetOption}>
-                                <Ionicons name="call-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Contact Support</Text>
-                            </TouchableOpacity>
+
+                        {/* Main Tabs */}
+                        <View style={styles.mainTabs}>
+                            {['Children', 'Staff', 'Medical'].map((tab) => (
+                                <TouchableOpacity
+                                    key={tab}
+                                    style={[styles.mainTab, activeTab === tab && styles.mainTabActive]}
+                                    onPress={() => {
+                                        setActiveTab(tab);
+                                        if (tab === 'Children') {
+                                            setActiveSubTab('Roster');
+                                        }
+                                    }}
+                                >
+                                    <Text style={[styles.mainTabText, activeTab === tab && styles.mainTabTextActive]}>
+                                        {tab}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
                         </View>
+
+                        {/* Sub Tabs (only for Children) */}
+                        {activeTab === 'Children' && (
+                            <View style={styles.subTabs}>
+                                {['Roster', 'Daily Notes', 'Medical'].map((subTab) => (
+                                    <TouchableOpacity
+                                        key={subTab}
+                                        style={[styles.subTab, activeSubTab === subTab && styles.subTabActive]}
+                                        onPress={() => setActiveSubTab(subTab)}
+                                    >
+                                        <Text style={[styles.subTabText, activeSubTab === subTab && styles.subTabTextActive]}>
+                                            {subTab}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+
+                        {/* Scrollable Content */}
+                        <ScrollView
+                            style={styles.guideContent}
+                            horizontal={true}
+                            showsHorizontalScrollIndicator={true}
+                            contentContainerStyle={styles.guideContentContainer}
+                        >
+                            <View style={styles.guideSection}>
+                                <Text style={styles.sectionTitle}>
+                                    {activeTab === 'Children' && activeSubTab === 'Roster' ? 'Children Roster' :
+                                        activeTab === 'Children' && activeSubTab === 'Daily Notes' ? 'Daily Notes' :
+                                            activeTab === 'Children' && activeSubTab === 'Medical' ? 'Children Medical' :
+                                                activeTab === 'Staff' ? 'Staff' : 'Medical'}
+                                </Text>
+                                <Text style={styles.sectionSubtitle}>
+                                    {activeTab === 'Children' && activeSubTab === 'Roster' ? 'CSV format for children roster upload' :
+                                        activeTab === 'Children' && activeSubTab === 'Daily Notes' ? 'CSV format for daily notes upload' :
+                                            activeTab === 'Children' && activeSubTab === 'Medical' ? 'CSV format for children medical upload' :
+                                                activeTab === 'Staff' ? 'CSV format for staff upload' : 'CSV format for medical upload'}
+                                </Text>
+
+                                {/* Required Columns */}
+                                <View style={styles.codeBox}>
+                                    <Text style={styles.codeText}>
+                                        {activeTab === 'Children' && activeSubTab === 'Roster'
+                                            ? 'first_name, last_name, person_id, age, grade, gender, guardian_phone, guardian_email'
+                                            : activeTab === 'Children' && activeSubTab === 'Daily Notes'
+                                                ? 'date, child_id, mood, activities, meals, nap, notes'
+                                                : activeTab === 'Children' && activeSubTab === 'Medical'
+                                                    ? 'child_id, medical_notes, allergies, division_id, leader_id, emergency_contact'
+                                                    : activeTab === 'Staff'
+                                                        ? 'first_name, last_name, email, role, department, phone, hire_date'
+                                                        : 'patient_id, condition, medication, notes, date'}
+                                    </Text>
+                                </View>
+
+                                {/* Example Data */}
+                                <View style={styles.codeBox}>
+                                    <Text style={styles.codeText}>
+                                        {activeTab === 'Children' && activeSubTab === 'Roster'
+                                            ? 'John, Doe, P12345, 10, 5, Male, 555-1234, parent@email.com, None, Peanuts, division'
+                                            : activeTab === 'Children' && activeSubTab === 'Daily Notes'
+                                                ? '2026-07-15, child-uuid-123, Happy, Swimming, Breakfast, Yes, Had a great day'
+                                                : activeTab === 'Children' && activeSubTab === 'Medical'
+                                                    ? 'child-uuid-123, Asthma, Peanuts, division-uuid, leader-uuid, Jane Doe 555-5678'
+                                                    : activeTab === 'Staff'
+                                                        ? 'Jane, Smith, jane@email.com, Counselor, Activities, 555-9876, 2026-01-15'
+                                                        : 'patient-uuid, Fever, Tylenol, Monitor temperature, 2026-07-15'}
+                                    </Text>
+                                </View>
+
+                                {/* Important Notes */}
+                                <Text style={styles.importantNote}>
+                                    {activeTab === 'Children' && activeSubTab === 'Roster'
+                                        ? 'REQUIRED: first_name, last_name, and person_id. All other fields are optional.'
+                                        : activeTab === 'Children' && activeSubTab === 'Daily Notes'
+                                            ? 'REQUIRED: date, child_id. All other fields are optional.'
+                                            : activeTab === 'Children' && activeSubTab === 'Medical'
+                                                ? 'REQUIRED: child_id. division_id and leader_id must be valid UUIDs from divisions and staff tables if provided.'
+                                                : activeTab === 'Staff'
+                                                    ? 'REQUIRED: first_name, last_name, email, role. All other fields are optional.'
+                                                    : 'REQUIRED: patient_id, condition, date. All other fields are optional.'}
+                                </Text>
+
+                                {/* General Tips */}
+                                <View style={styles.tipsBox}>
+                                    <Text style={styles.tipsTitle}>General Tips:</Text>
+                                    <Text style={styles.tipItem}>• First row must contain column names exactly as shown.</Text>
+                                    <Text style={styles.tipItem}>• Use commas to separate values.</Text>
+                                    <Text style={styles.tipItem}>• Use backslash before commas within text fields (e.g., "Item 1\, Item 2").</Text>
+                                    <Text style={styles.tipItem}>• Leave fields empty for optional columns.</Text>
+                                    <Text style={styles.tipItem}>• Maximum 1000 rows per upload.</Text>
+                                    <Text style={styles.tipItem}>• Dates must be in YYYY-MM-DD format.</Text>
+                                    <Text style={styles.tipItem}>• UUIDs can be obtained from the backend for existing records.</Text>
+                                </View>
+                            </View>
+                        </ScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -695,6 +800,139 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
+    },
+    guideModal: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '90%',
+        paddingBottom: theme.spacing.xl,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.md,
+        paddingHorizontal: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    modalTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    mainTabs: {
+        flexDirection: 'row',
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    mainTab: {
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        marginRight: theme.spacing.sm,
+        borderBottomWidth: 2,
+        borderBottomColor: 'transparent',
+    },
+    mainTabActive: {
+        borderBottomColor: theme.colors.secondary,
+    },
+    mainTabText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+    },
+    mainTabTextActive: {
+        color: theme.colors.secondary,
+    },
+    subTabs: {
+        flexDirection: 'row',
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    subTab: {
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        marginRight: theme.spacing.sm,
+        borderBottomWidth: 2,
+        borderBottomColor: 'transparent',
+    },
+    subTabActive: {
+        borderBottomColor: theme.colors.secondary,
+    },
+    subTabText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+    },
+    subTabTextActive: {
+        color: theme.colors.secondary,
+    },
+    guideContent: {
+        flex: 1,
+    },
+    guideContentContainer: {
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.md,
+        paddingBottom: theme.spacing.xl,
+    },
+    guideSection: {
+        minWidth: 600,
+    },
+    sectionTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
+    },
+    sectionSubtitle: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.md,
+    },
+    codeBox: {
+        backgroundColor: '#f3f4f6',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    codeText: {
+        fontFamily: 'monospace',
+        fontSize: 12,
+        color: theme.colors.text,
+    },
+    importantNote: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.text,
+        fontWeight: '600',
+        marginBottom: theme.spacing.md,
+    },
+    tipsBox: {
+        backgroundColor: '#fef3c7',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+    },
+    tipsTitle: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.sm,
+    },
+    tipItem: {
+        ...theme.typography.bodySmall,
+        fontSize: 13,
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
     },
     centerModalOverlay: {
         flex: 1,

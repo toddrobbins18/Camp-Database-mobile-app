@@ -840,13 +840,17 @@ const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'flex-end',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: theme.spacing.md,
     },
     modalContainer: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.lg,
-        borderTopRightRadius: theme.borderRadius.lg,
+        borderRadius: theme.borderRadius.xl,
+        width: '90%',
+        maxWidth: 600,
         maxHeight: '90%',
+        ...theme.shadows.card,
     },
     modalHeader: {
         flexDirection: 'row',

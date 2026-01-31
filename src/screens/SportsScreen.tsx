@@ -866,7 +866,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                 animationType="slide"
                 onRequestClose={handleCloseAddEnrollmentModal}
             >
-                <View style={styles.modalOverlay}>
+                <View style={styles.centeredModalOverlay}>
                     <View style={styles.addEnrollmentModalContainer}>
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
@@ -1104,7 +1104,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         </ScrollView>
 
                         {/* Modal Footer */}
-                        <View style={styles.modalFooter}>
+                        <View style={styles.centeredModalFooter}>
                             <TouchableOpacity
                                 style={styles.cancelButton}
                                 onPress={handleCloseAddEnrollmentModal}
@@ -2038,11 +2038,16 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
         alignItems: 'center',
     },
+    centeredModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     addEnrollmentModalContainer: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.xl,
-        borderTopRightRadius: theme.borderRadius.xl,
-        width: '100%',
+        borderRadius: theme.borderRadius.xl,
+        width: '90%',
         maxWidth: 600,
         maxHeight: '90%',
         ...theme.shadows.card,
@@ -2290,6 +2295,14 @@ const styles = StyleSheet.create({
     modalFooter: {
         flexDirection: 'row',
         justifyContent: 'flex-end',
+        gap: theme.spacing.md,
+        padding: theme.spacing.lg,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    centeredModalFooter: {
+        flexDirection: 'row',
+        justifyContent: 'center',
         gap: theme.spacing.md,
         padding: theme.spacing.lg,
         borderTopWidth: 1,
