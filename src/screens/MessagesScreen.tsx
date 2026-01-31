@@ -346,6 +346,23 @@ export const MessagesScreen = ({ navigation }: any) => {
                                 />
                             </TouchableOpacity>
                             <Text style={styles.recipientCount}>{selectedUsers.length} recipients selected</Text>
+
+                            {showRecipientPreview && selectedUsers.length > 0 && (
+                                <View style={styles.previewList}>
+                                    {selectedUsers.map(userId => {
+                                        const user = users.find(u => u.id === userId);
+                                        if (!user) return null;
+                                        return (
+                                            <View key={userId} style={styles.previewItem}>
+                                                <Text style={styles.previewName}>{user.name}</Text>
+                                                <TouchableOpacity onPress={() => toggleUserSelection(userId)}>
+                                                    <Ionicons name="close-circle" size={20} color={theme.colors.textSecondary} />
+                                                </TouchableOpacity>
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            )}
                         </StyledCard>
 
                         {/* Email Integration Pending Banner */}
@@ -834,6 +851,23 @@ const styles = StyleSheet.create({
         ...theme.typography.bodySmall,
         fontSize: 12,
         color: 'white',
+        lineHeight: 18,
+    },
+    previewList: {
+        marginTop: theme.spacing.md,
+        gap: theme.spacing.sm,
+    },
+    previewItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: theme.spacing.sm,
+        backgroundColor: '#f3f4f6',
+        borderRadius: theme.borderRadius.md,
+    },
+    previewName: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.text,
     },
 });
-

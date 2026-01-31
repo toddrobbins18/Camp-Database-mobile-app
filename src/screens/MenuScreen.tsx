@@ -934,7 +934,6 @@ const styles = StyleSheet.create({
         paddingTop: theme.spacing.lg,
         paddingBottom: theme.spacing.xl,
         paddingHorizontal: theme.spacing.md,
-        height: '50%',
         width: '100%',
     },
     bottomSheetHeader: {

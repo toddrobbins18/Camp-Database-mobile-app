@@ -1205,38 +1205,36 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
-            {/* Delete User Bottom Sheet */}
+            {/* Delete User Modal */}
             <Modal
                 visible={showDeleteModal}
                 transparent={true}
-                animationType="slide"
+                animationType="fade"
                 onRequestClose={() => setShowDeleteModal(false)}
             >
-                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowDeleteModal(false)}>
-                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Delete User</Text>
+                <Pressable style={styles.modalOverlay} onPress={() => setShowDeleteModal(false)}>
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <View style={{ width: '100%', borderBottomWidth: 1, borderBottomColor: theme.colors.border, marginBottom: 20, paddingBottom: 12 }}>
+                            <Text style={styles.deleteModalTitle}>Delete User</Text>
                         </View>
 
-                        <View style={{ paddingVertical: 10 }}>
-                            <Text style={styles.deleteModalMessage}>
-                                Are you sure you want to delete {userToDelete?.name}? This action cannot be undone.
-                            </Text>
+                        <Text style={styles.deleteModalMessage}>
+                            Are you sure you want to delete {userToDelete?.name}? This action cannot be undone.
+                        </Text>
 
-                            <View style={styles.deleteModalActions}>
-                                <TouchableOpacity
-                                    style={styles.deleteButton}
-                                    onPress={handleDeleteUser}
-                                >
-                                    <Text style={styles.deleteButtonText}>Delete</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.cancelButton}
-                                    onPress={() => setShowDeleteModal(false)}
-                                >
-                                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                                </TouchableOpacity>
-                            </View>
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity
+                                style={styles.deleteButton}
+                                onPress={handleDeleteUser}
+                            >
+                                <Text style={styles.deleteButtonText}>Delete</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.cancelButton}
+                                onPress={() => setShowDeleteModal(false)}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
                         </View>
                     </Pressable>
                 </Pressable>
@@ -1776,11 +1774,11 @@ const styles = StyleSheet.create({
     // Delete Modal Styles
     deleteModalContent: {
         backgroundColor: 'white',
-        borderRadius: 12,
+        borderRadius: theme.borderRadius.lg,
         padding: 24,
         width: '90%',
         maxWidth: 340,
-        alignItems: 'center',
+        // alignItems: 'center', // Removed to allow full width header
         shadowColor: "#000",
         shadowOffset: {
             width: 0,
@@ -1792,10 +1790,10 @@ const styles = StyleSheet.create({
     },
     deleteModalTitle: {
         fontSize: 18,
-        fontWeight: '600',
+        fontWeight: '700',
         color: theme.colors.text,
-        marginBottom: 12,
-        textAlign: 'center',
+        marginBottom: 16,
+        // textAlign: 'center', // Removed to default to left
     },
     deleteModalMessage: {
         fontSize: 14,

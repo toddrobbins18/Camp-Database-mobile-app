@@ -600,15 +600,15 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showAddChildModal}
                     transparent={true}
-                    animationType="slide"
+                    animationType="fade"
                     onRequestClose={() => setShowAddChildModal(false)}
                 >
                     <Pressable
-                        style={styles.bottomSheetOverlay}
+                        style={styles.centeredOverlay}
                         onPress={() => setShowAddChildModal(false)}
                     >
                         <Pressable
-                            style={styles.largeBottomSheet}
+                            style={styles.addChildModal}
                             onPress={(e) => e.stopPropagation()}
                         >
                             <ScrollView
@@ -1163,21 +1163,21 @@ export const CamperScreen = ({ navigation }: any) => {
                 <Modal
                     visible={showEditChildModal}
                     transparent={true}
-                    animationType="slide"
+                    animationType="fade"
                     onRequestClose={() => {
                         setShowEditChildModal(false);
                         setCamperToEdit(null);
                     }}
                 >
                     <Pressable
-                        style={styles.bottomSheetOverlay}
+                        style={styles.centeredOverlay}
                         onPress={() => {
                             setShowEditChildModal(false);
                             setCamperToEdit(null);
                         }}
                     >
                         <Pressable
-                            style={styles.largeBottomSheet}
+                            style={styles.addChildModal}
                             onPress={(e) => e.stopPropagation()}
                         >
                             <ScrollView
@@ -2206,6 +2206,13 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.3)',
     },
+    centeredOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: theme.spacing.md,
+    },
     dropdownModalContainer: {
         position: 'absolute',
         alignSelf: 'flex-start',
@@ -2329,13 +2336,7 @@ const styles = StyleSheet.create({
         marginTop: 0,
         flexWrap: 'wrap', // Allow wrapping on very small screens
     },
-    leaderRoleText: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-    },
-    leaderRoleTextSelected: {
-        color: theme.colors.secondary,
-    },
+
     // Bottom Sheet Styles
     bottomSheetOverlay: {
         flex: 1,
@@ -2717,8 +2718,6 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
-        alignSelf: 'center',
-        marginTop: isSmallScreen ? '2%' : '5%',
     },
     addChildModalScroll: {
         maxHeight: '90%',

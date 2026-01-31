@@ -1104,7 +1104,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={() => setShowAddEventModal(false)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowAddEventModal(false)}>
+                <Pressable style={styles.centeredModalOverlay} onPress={() => setShowAddEventModal(false)}>
                     <Pressable style={styles.addEventModal} onPress={(e) => e.stopPropagation()}>
                         <ScrollView style={styles.addEventScroll}>
                             <View style={styles.modalHeader}>
@@ -1881,7 +1881,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 onRequestClose={() => setShowEditEventModal(false)}
             >
                 <Pressable
-                    style={styles.modalOverlay}
+                    style={styles.centeredModalOverlay}
                     onPress={() => setShowEditEventModal(false)}
                 >
                     <Pressable
@@ -2680,12 +2680,20 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
     },
+    centeredModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     addEventModal: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.xl,
-        borderTopRightRadius: theme.borderRadius.xl,
+        borderRadius: theme.borderRadius.xl,
+        width: '90%',
+        maxWidth: 500,
         maxHeight: '90%',
         paddingBottom: theme.spacing.xl,
+        ...theme.shadows.card,
     },
     addEventScroll: {
         paddingHorizontal: theme.spacing.md,

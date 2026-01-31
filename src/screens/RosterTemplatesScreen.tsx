@@ -281,13 +281,13 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                     onRequestClose={() => setShowDivisionDropdown(false)}
                                 >
                                     <TouchableOpacity
-                                        style={styles.modalOverlay}
+                                        style={styles.bottomSheetOverlay}
                                         activeOpacity={1}
                                         onPress={() => setShowDivisionDropdown(false)}
                                     >
                                         <TouchableOpacity
                                             activeOpacity={1}
-                                            style={[styles.modalContainer, { maxHeight: '80%' }]}
+                                            style={[styles.bottomSheetContainer, { maxHeight: '80%' }]}
                                             onPress={(e) => e.stopPropagation()}
                                         >
                                             <View style={[styles.modalScrollContent, { flexShrink: 1 }]}>
@@ -504,14 +504,13 @@ const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'flex-end',
+        justifyContent: 'center',
         alignItems: 'center',
     },
     modalContainer: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.xl,
-        borderTopRightRadius: theme.borderRadius.xl,
-        width: '100%',
+        borderRadius: theme.borderRadius.xl,
+        width: '90%',
         maxWidth: 600,
         maxHeight: '90%',
         ...theme.shadows.card,
@@ -734,7 +733,7 @@ const styles = StyleSheet.create({
     },
     modalFooter: {
         flexDirection: 'row',
-        justifyContent: 'flex-end',
+        justifyContent: 'center',
         gap: theme.spacing.md,
         padding: theme.spacing.lg,
         borderTopWidth: 1,
@@ -793,5 +792,19 @@ const styles = StyleSheet.create({
     bottomSheetItemTextSelected: {
         color: theme.colors.secondary,
         fontWeight: '600',
+    },
+    // Bottom Sheet Styles
+    bottomSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    bottomSheetContainer: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
+        paddingBottom: theme.spacing.xl,
+        ...theme.shadows.card,
     },
 });

@@ -353,8 +353,8 @@ export const StaffScreen = ({ navigation }: any) => {
                 visible={modalVisible.addStaff}
                 onRequestClose={() => toggleModal('addStaff', false)}
             >
-                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-                    <View style={styles.modalContentLarge}>
+                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.centeredModalOverlay}>
+                    <View style={styles.centeredModalContent}>
                         <ScrollView>
                             <View style={styles.modalHeader}>
                                 <Text style={styles.modalTitle}>Add Staff Member</Text>
@@ -652,8 +652,8 @@ export const StaffScreen = ({ navigation }: any) => {
                 visible={modalVisible.editStaff}
                 onRequestClose={() => toggleModal('editStaff', false)}
             >
-                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-                    <View style={styles.modalContentLarge}>
+                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.centeredModalOverlay}>
+                    <View style={styles.centeredModalContent}>
                         <ScrollView>
                             <View style={styles.modalHeader}>
                                 <Text style={styles.modalTitle}>Edit Staff Member</Text>
@@ -1419,6 +1419,28 @@ const styles = StyleSheet.create({
         maxWidth: 600,
         height: '90%',
         alignSelf: 'center',
+    },
+    centeredModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: '100%',
+    },
+    centeredModalContent: {
+        backgroundColor: 'white',
+        borderRadius: 24,
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 20,
+        width: '90%',
+        maxWidth: 600,
+        maxHeight: '90%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
     modalHeader: {
         flexDirection: 'row',
