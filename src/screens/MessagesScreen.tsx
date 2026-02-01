@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
@@ -71,7 +72,12 @@ export const MessagesScreen = ({ navigation }: any) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <KeyboardAwareScrollView
+                contentContainerStyle={styles.scrollContent}
+                enableOnAndroid={true}
+                extraScrollHeight={20}
+                keyboardShouldPersistTaps="handled"
+            >
                 {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.openDrawer()}>
@@ -156,7 +162,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                     </StyledCard>
                 )}
 
-            </ScrollView>
+            </KeyboardAwareScrollView>
 
             {/* Floating Action Button */}
             <TouchableOpacity style={styles.fab}>
@@ -171,7 +177,13 @@ export const MessagesScreen = ({ navigation }: any) => {
                 onRequestClose={handleCloseCompose}
             >
                 <SafeAreaView style={styles.modalContainer}>
-                    <ScrollView contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
+                    <KeyboardAwareScrollView
+                        contentContainerStyle={styles.modalScrollContent}
+                        showsVerticalScrollIndicator={false}
+                        enableOnAndroid={true}
+                        extraScrollHeight={20}
+                        keyboardShouldPersistTaps="handled"
+                    >
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
                             <TouchableOpacity onPress={handleCloseCompose}>
@@ -375,7 +387,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                                 </Text>
                             </View>
                         </View>
-                    </ScrollView>
+                    </KeyboardAwareScrollView>
                 </SafeAreaView>
             </Modal>
         </SafeAreaView>

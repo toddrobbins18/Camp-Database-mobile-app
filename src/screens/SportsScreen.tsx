@@ -1900,7 +1900,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
     },
     dropdownModalContent: {
-        flex: 1,
+        // removed flex: 1 to prevent collapse on mobile
         justifyContent: 'flex-end',
         alignItems: 'center',
         paddingTop: 0,
@@ -2033,16 +2033,18 @@ const styles = StyleSheet.create({
         marginTop: theme.spacing.lg,
     },
     modalOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
         alignItems: 'center',
+        zIndex: 1000,
     },
     centeredModalOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
+        zIndex: 1000,
     },
     addEnrollmentModalContainer: {
         backgroundColor: theme.colors.surface,
@@ -2067,7 +2069,7 @@ const styles = StyleSheet.create({
         padding: theme.spacing.xs,
     },
     modalContent: {
-        flex: 1,
+        // removed flex: 1 to prevent collapse on mobile
     },
     modalScrollContent: {
         padding: theme.spacing.lg,

@@ -1671,10 +1671,11 @@ const styles = StyleSheet.create({
     },
     // Modal Styles
     modalOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         padding: theme.spacing.lg,
+        zIndex: 1000,
     },
     modalContent: {
         backgroundColor: theme.colors.surface,
@@ -1959,9 +1960,10 @@ const styles = StyleSheet.create({
     },
     // Roster Modal Bottom Sheet Styles
     rosterModalOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end',
+        zIndex: 1000,
     },
     rosterModalContent: {
         backgroundColor: theme.colors.surface,
@@ -1994,10 +1996,11 @@ const styles = StyleSheet.create({
     },
     // Trip Form Modal Bottom Sheet Styles
     tripFormModalOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
+        zIndex: 1000,
     },
     tripFormModalContent: {
         backgroundColor: theme.colors.surface,
@@ -2024,7 +2027,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     tripFormModalBody: {
-        flex: 1,
+        // removed flex: 1 to prevent collapse on mobile
     },
     tripFormScrollContent: {
         padding: theme.spacing.md,
@@ -2095,7 +2098,7 @@ const styles = StyleSheet.create({
         zIndex: 2000, // Ensure it sits above everything
     },
     dropdownList: {
-        flex: 1,
+        // removed flex: 1 to prevent collapse on mobile
     },
     dropdownItem: {
         paddingVertical: 12,

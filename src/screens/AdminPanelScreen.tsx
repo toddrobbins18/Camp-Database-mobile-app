@@ -1542,11 +1542,12 @@ const styles = StyleSheet.create({
     },
     // Modal Styles
     modalOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)', // Darker overlay for better focus
         justifyContent: 'center',
         alignItems: 'center',
         padding: theme.spacing.md,
+        zIndex: 1000,
     },
     pickerContent: {
         backgroundColor: 'white',
@@ -1722,9 +1723,10 @@ const styles = StyleSheet.create({
     },
     // Bottom Sheet Styles
     bottomSheetOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
+        zIndex: 1000,
     },
     bottomSheet: {
         backgroundColor: theme.colors.surface,
@@ -1733,7 +1735,7 @@ const styles = StyleSheet.create({
         paddingTop: theme.spacing.lg,
         paddingBottom: theme.spacing.xl,
         paddingHorizontal: theme.spacing.md,
-        height: '50%',
+        height: '30%',
         width: '100%',
     },
 
@@ -2384,10 +2386,11 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     centerModalOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
+        zIndex: 1000,
     },
     centerModal: {
         backgroundColor: theme.colors.surface,
