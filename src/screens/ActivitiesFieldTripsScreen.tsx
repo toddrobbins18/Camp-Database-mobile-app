@@ -1153,6 +1153,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         <Text style={[styles.formInputText, !formData.event_date && styles.formInputPlaceholder]}>
                                             {formData.event_date || 'Select event date'}
                                         </Text>
+                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
                                     </TouchableOpacity>
                                 </View>
 
@@ -1163,8 +1164,11 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         <Switch
                                             value={formData.is_multi_day}
                                             onValueChange={(value) => setFormData({ ...formData, is_multi_day: value })}
-                                            trackColor={{ false: theme.colors.border, true: theme.colors.secondary }}
-                                            thumbColor={theme.colors.surface}
+                                            trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
+                                            thumbColor="#ffffff"
+                                            // @ts-ignore
+                                            activeThumbColor="#ffffff"
+                                            ios_backgroundColor="#e2e8f0"
                                         />
                                     </View>
                                 </View>
@@ -1332,6 +1336,11 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             end_date: checked ? formData.end_date : '',
                                         });
                                     }}
+                                    trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
+                                    thumbColor="#ffffff"
+                                    // @ts-ignore
+                                    activeThumbColor="#ffffff"
+                                    ios_backgroundColor="#e2e8f0"
                                 />
                             </View>
 
@@ -1728,14 +1737,23 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             <Modal
                 visible={isDatePickerOpen}
                 transparent={true}
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => {
                     setIsDatePickerOpen(false);
                     setDatePickerField(null);
                 }}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.datePickerModal}>
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => {
+                        setIsDatePickerOpen(false);
+                        setDatePickerField(null);
+                    }}
+                >
+                    <Pressable
+                        style={styles.datePickerModal}
+                        onPress={(e) => e.stopPropagation()}
+                    >
                         <View style={styles.datePickerHeader}>
                             <Text style={styles.datePickerTitle}>Select Date</Text>
                             <TouchableOpacity
@@ -1888,8 +1906,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 <Text style={styles.datePickerConfirmButtonText}>Confirm</Text>
                             </TouchableOpacity>
                         </View>
-                    </View>
-                </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* CSV Upload Format Guide Modal */}
@@ -2959,12 +2977,14 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
         flex: 1,
+        marginRight: theme.spacing.sm,
     },
     formInputPlaceholder: {
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.textSecondary,
         flex: 1,
+        marginRight: theme.spacing.sm,
     },
     dropdownContainer: {
         zIndex: 10,
@@ -3292,17 +3312,22 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
         flex: 1,
+        marginRight: theme.spacing.sm,
     },
     dateInputPlaceholder: {
         color: theme.colors.textSecondary,
+        flex: 1,
+        marginRight: theme.spacing.sm,
     },
     // Date Picker Modal Styles
     datePickerModal: {
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        width: '90%',
-        maxWidth: 500,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
+        maxWidth: 600,
         maxHeight: '80%',
+        alignSelf: 'center',
     },
     datePickerHeader: {
         flexDirection: 'row',
@@ -3641,6 +3666,7 @@ const styles = StyleSheet.create({
     },
     addActivityBottomSheetContent: {
         paddingHorizontal: theme.spacing.md,
+        paddingBottom: theme.spacing.xl,
     },
     addActivityBottomSheetHeader: {
         flexDirection: 'row',
@@ -3707,6 +3733,7 @@ const styles = StyleSheet.create({
     },
     editActivityBottomSheetContent: {
         padding: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
     },
     // Centered Modal Styles
     centeredOverlay: {
