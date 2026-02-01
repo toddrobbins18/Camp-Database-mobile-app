@@ -1227,8 +1227,11 @@ export const TransportScreen = ({ navigation }: any) => {
                             <Switch
                                 value={tripFormData.is_multi_day}
                                 onValueChange={(val) => setTripFormData({ ...tripFormData, is_multi_day: val })}
-                                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                                thumbColor={'#fff'}
+                                trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
+                                thumbColor="#ffffff"
+                                // @ts-ignore
+                                activeThumbColor="#ffffff"
+                                ios_backgroundColor="#e2e8f0"
                             />
                         </View>
 
@@ -2512,6 +2515,8 @@ const styles = StyleSheet.create({
     dateInputText: {
         fontSize: 14,
         color: theme.colors.text,
+        flex: 1,
+        marginRight: theme.spacing.sm,
     },
     modalFooter: {
         flexDirection: 'row',

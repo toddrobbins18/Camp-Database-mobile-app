@@ -726,8 +726,11 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                 <Switch
                                     value={formData.followUpRequired}
                                     onValueChange={(value) => setFormData({ ...formData, followUpRequired: value })}
-                                    trackColor={{ false: theme.colors.border, true: theme.colors.secondary }}
-                                    thumbColor={theme.colors.surface}
+                                    trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
+                                    thumbColor="#ffffff"
+                                    // @ts-ignore
+                                    activeThumbColor="#ffffff"
+                                    ios_backgroundColor="#e2e8f0"
                                 />
                                 <Text style={styles.checkboxLabel}>Follow-up Required</Text>
                             </View>
@@ -1783,6 +1786,7 @@ const styles = StyleSheet.create({
     },
     addAppointmentBottomSheetContent: {
         padding: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
     },
     // Generic Bottom Sheet Styles for Pickers
     bottomSheet: {
