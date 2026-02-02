@@ -118,34 +118,37 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.openDrawer()}>
-                        <Ionicons name="menu" size={28} color={theme.colors.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity>
-                        <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
-                    </TouchableOpacity>
-                </View>
+                    <View style={styles.headerTopRow}>
+                        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                            <Ionicons name="menu-outline" size={28} color={theme.colors.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity>
+                            <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
+                        </TouchableOpacity>
+                    </View>
 
-                {/* Title and Description Section */}
-                <View style={styles.titleSection}>
-                    <View style={styles.titleContainer}>
-                        <Text style={styles.title}>Incident Reports</Text>
+                    <View style={styles.headerTitleContainer}>
+                        <View style={styles.headerTitleRow}>
+                            <Text style={styles.title}>Incident Reports</Text>
+                        </View>
                         <Text style={styles.subtitle}>Track and manage incident reports</Text>
                     </View>
 
-                    {/* Action Buttons */}
-                    <View style={styles.actionButtonsContainer}>
+                    {/* Action Buttons Row */}
+                    <View style={styles.actionButtonsRow}>
                         <TouchableOpacity style={styles.helpIcon} onPress={() => setShowHelpModal(true)}>
                             <Ionicons name="help-circle-outline" size={24} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.uploadBtn} onPress={handleUploadCSV}>
-                            <Ionicons name="cloud-upload-outline" size={18} color="white" />
-                            <Text style={styles.uploadBtnText}>Upload CSV</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.addBtn} onPress={handleAddIncident}>
-                            <Ionicons name="add" size={18} color="white" />
-                            <Text style={styles.addBtnText}>Add Incident</Text>
-                        </TouchableOpacity>
+                        <View style={styles.actionButtonsRight}>
+                            <TouchableOpacity style={styles.uploadBtn} onPress={handleUploadCSV}>
+                                <Ionicons name="cloud-upload-outline" size={18} color="white" />
+                                <Text style={styles.uploadBtnText}>Upload CSV</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.addBtn} onPress={handleAddIncident}>
+                                <Ionicons name="add" size={18} color="white" />
+                                <Text style={styles.addBtnText}>Add Incident</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
 
@@ -761,44 +764,51 @@ const styles = StyleSheet.create({
         padding: theme.spacing.md,
     },
     header: {
+        backgroundColor: theme.colors.surface,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        marginBottom: theme.spacing.lg,
+    },
+    headerTopRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: theme.spacing.lg,
-    },
-    headerCenter: {
-        flex: 1,
-        alignItems: 'center',
-    },
-    titleSection: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: theme.spacing.lg,
-        flexWrap: 'wrap',
-    },
-    titleContainer: {
-        flex: 1,
-        minWidth: '50%',
         marginBottom: theme.spacing.sm,
+    },
+    headerTitleContainer: {
+        marginBottom: theme.spacing.md,
+    },
+    headerTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
     },
     title: {
         ...theme.typography.h1,
-        fontSize: 32,
+        fontSize: 28,
         fontWeight: '700',
         color: theme.colors.text,
-        marginBottom: theme.spacing.xs,
     },
     subtitle: {
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.textSecondary,
+        marginTop: 4,
     },
-    actionButtonsContainer: {
+    actionButtonsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: theme.spacing.sm,
+    },
+    actionButtonsRight: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: theme.spacing.sm,
-        flexWrap: 'wrap',
+        flex: 1,
+        justifyContent: 'flex-end',
     },
     helpIcon: {
         padding: theme.spacing.xs,
@@ -806,30 +816,30 @@ const styles = StyleSheet.create({
     uploadBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#fa8c16', // Orange color
-        paddingVertical: theme.spacing.sm,
-        paddingHorizontal: theme.spacing.md,
+        backgroundColor: '#fa8c16',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
         borderRadius: theme.borderRadius.md,
-        gap: theme.spacing.xs,
+        gap: 6,
     },
     uploadBtnText: {
         color: 'white',
         fontWeight: '600',
-        fontSize: 14,
+        fontSize: 13,
     },
     addBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.secondary, // Blue color
-        paddingVertical: theme.spacing.sm,
-        paddingHorizontal: theme.spacing.md,
+        backgroundColor: theme.colors.secondary,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
         borderRadius: theme.borderRadius.md,
-        gap: theme.spacing.xs,
+        gap: 6,
     },
     addBtnText: {
         color: 'white',
         fontWeight: '600',
-        fontSize: 14,
+        fontSize: 13,
     },
     contentCard: {
         backgroundColor: theme.colors.surface,
@@ -838,6 +848,7 @@ const styles = StyleSheet.create({
         minHeight: 400,
         alignItems: 'center',
         justifyContent: 'center',
+        marginHorizontal: theme.spacing.md,
     },
     emptyState: {
         alignItems: 'center',
@@ -959,9 +970,10 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.md,
     },
     codeText: {
-        fontFamily: 'monospace',
+        fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
         fontSize: 12,
         color: theme.colors.text,
+        letterSpacing: 0.5,
     },
     importantNote: {
         ...theme.typography.bodySmall,
