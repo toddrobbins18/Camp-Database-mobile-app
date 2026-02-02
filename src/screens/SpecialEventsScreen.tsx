@@ -1254,16 +1254,18 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     modalOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
+        zIndex: 1000,
     },
     bottomSheetOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
         alignItems: 'center',
+        zIndex: 1000,
     },
     datePickerContainer: {
         backgroundColor: theme.colors.surface,
@@ -1366,7 +1368,7 @@ const styles = StyleSheet.create({
         padding: theme.spacing.xs,
     },
     modalContent: {
-        flex: 1,
+        // removed flex: 1 to prevent collapse on mobile
     },
     modalScrollContent: {
         padding: theme.spacing.lg,

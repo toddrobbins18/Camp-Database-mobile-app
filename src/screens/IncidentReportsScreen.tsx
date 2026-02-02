@@ -24,10 +24,13 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     const [showSeverityPicker, setShowSeverityPicker] = useState(false);
     const [description, setDescription] = useState<string>('');
     const [reportedBy, setReportedBy] = useState<string>('');
+    const [status, setStatus] = useState<string>('Open');
+    const [showStatusPicker, setShowStatusPicker] = useState(false);
 
     // Options
     const incidentTypes = ['Accident', 'Behavior', 'Medical', 'Injury', 'Other'];
     const severityLevels = ['Low', 'Medium', 'High', 'Critical'];
+    const statusOptions = ['Open', 'Investigating', 'Resolved', 'Closed'];
 
     const handleUploadCSV = () => {
         setShowBottomSheet(true);
@@ -89,6 +92,12 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
         setShowSeverityPicker(false);
     };
 
+    // Handle status selection
+    const handleStatusSelect = (stat: string) => {
+        setStatus(stat);
+        setShowStatusPicker(false);
+    };
+
     // Reset form when modal closes
     const handleCloseAddIncident = () => {
         setShowAddIncidentModal(false);
@@ -97,6 +106,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
         setDate(new Date());
         setIncidentType('');
         setSeverity('');
+        setStatus('Open');
         setDescription('');
         setReportedBy('');
         setTags([]);
@@ -494,14 +504,18 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             {/* Status Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Status</Text>
-                                <View style={styles.inputContainer}>
+                                <TouchableOpacity
+                                    style={styles.inputContainer}
+                                    onPress={() => setShowStatusPicker(true)}
+                                >
                                     <TextInput
                                         style={styles.inputField}
-                                        value="Open"
+                                        value={status}
                                         editable={false}
+                                        pointerEvents="none"
                                     />
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                                </View>
+                                </TouchableOpacity>
                             </View>
 
                             {/* Action Buttons */}
@@ -695,6 +709,45 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
+
+            {/* Status Picker Modal */}
+            <Modal
+                visible={showStatusPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowStatusPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowStatusPicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Status</Text>
+                            <TouchableOpacity onPress={() => setShowStatusPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.pickerScroll}>
+                            {statusOptions.map((option) => (
+                                <TouchableOpacity
+                                    key={option}
+                                    style={[
+                                        styles.pickerOption,
+                                        status === option && styles.pickerOptionActive
+                                    ]}
+                                    onPress={() => handleStatusSelect(option)}
+                                >
+                                    <Text style={[
+                                        styles.pickerOptionText,
+                                        status === option && styles.pickerOptionTextActive
+                                    ]}>{option}</Text>
+                                    {status === option && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -797,9 +850,10 @@ const styles = StyleSheet.create({
     },
     // Bottom Sheet Styles
     modalOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
+        zIndex: 1000,
     },
     guideModal: {
         backgroundColor: theme.colors.surface,
@@ -935,10 +989,11 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.xs,
     },
     centerModalOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
+        zIndex: 1000,
     },
     bottomSheet: {
         backgroundColor: theme.colors.surface,
@@ -1272,6 +1327,17 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: 'white',
+    },
+    pickerScroll: {
+        paddingHorizontal: theme.spacing.md,
+        maxHeight: 300,
+    },
+    pickerOptionActive: {
+        backgroundColor: theme.colors.secondary + '10',
+    },
+    pickerOptionTextActive: {
+        color: theme.colors.secondary,
+        fontWeight: '600',
     },
 });
 

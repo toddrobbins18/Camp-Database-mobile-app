@@ -961,9 +961,10 @@ const styles = StyleSheet.create({
     },
     // Help Modal Styles (50% height bottom sheet)
     helpModalOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
+        zIndex: 1000,
     },
     helpModalContainer: {
         backgroundColor: theme.colors.surface,
@@ -975,11 +976,12 @@ const styles = StyleSheet.create({
     },
     // Centered Modal Styles
     centeredOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
         padding: theme.spacing.md,
+        zIndex: 1000,
     },
     centeredModal: {
         backgroundColor: theme.colors.surface,
@@ -1459,9 +1461,10 @@ const styles = StyleSheet.create({
     },
     // Bottom Sheet Styles
     bottomSheetOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
+        zIndex: 1000,
     },
     bottomSheet: {
         backgroundColor: theme.colors.surface,
@@ -1504,7 +1507,7 @@ const styles = StyleSheet.create({
         paddingBottom: theme.spacing.xl,
     },
     addAwardBottomSheetScroll: {
-        flex: 1,
+        // removed flex: 1 to prevent collapse on mobile
     },
 });
 

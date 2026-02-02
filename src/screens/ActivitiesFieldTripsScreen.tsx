@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Switch, Pressable } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -211,16 +212,16 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         return days;
     };
 
-    // Format week range (e.g., "January 18 – 24")
+    // Format week range (e.g., "January 18 â€“ 24")
     const formatWeekRange = (date: Date) => {
         const weekDays = getWeekDays(date);
         const start = weekDays[0];
         const end = weekDays[6];
 
         if (start.getMonth() === end.getMonth()) {
-            return `${start.toLocaleDateString('en-US', { month: 'long' })} ${start.getDate()} – ${end.getDate()}`;
+            return `${start.toLocaleDateString('en-US', { month: 'long' })} ${start.getDate()} â€“ ${end.getDate()}`;
         } else {
-            return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+            return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} â€“ ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
         }
     };
 
@@ -229,7 +230,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
     };
 
-    // Format agenda range (e.g., "01/22/2026 – 02/21/2026")
+    // Format agenda range (e.g., "01/22/2026 â€“ 02/21/2026")
     const formatAgendaRange = (date: Date) => {
         const start = new Date(date);
         const end = new Date(date);
@@ -238,7 +239,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         const startStr = start.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
         const endStr = end.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 
-        return `${startStr} – ${endStr}`;
+        return `${startStr} â€“ ${endStr}`;
     };
 
     // Generate time slots (24 hours)
@@ -465,7 +466,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         <View style={styles.bottomSheetHeader}>
                             <Text style={styles.bottomSheetTitle}>{title}</Text>
                         </View>
-                        <ScrollView style={{ maxHeight: 300 }}>
+                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={{ maxHeight: 300 }}>
                             {options.map((option) => (
                                 <TouchableOpacity
                                     key={option.label}
@@ -490,7 +491,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     )}
                                 </TouchableOpacity>
                             ))}
-                        </ScrollView>
+                        </KeyboardAwareScrollView>
                         <TouchableOpacity
                             style={{
                                 marginTop: 16,
@@ -533,7 +534,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
 
 
-            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+            <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
                 {/* Controls Bar */}
                 <View style={styles.controlsBar}>
                     {/* Division Filter and Sort */}
@@ -682,7 +683,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             </View>
 
                             {/* Bottom Row: View Options */}
-                            <ScrollView
+                            <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled"
                                 horizontal
                                 showsHorizontalScrollIndicator={false}
                                 style={styles.viewOptionsScroll}
@@ -705,7 +706,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
-                            </ScrollView>
+                            </KeyboardAwareScrollView>
                         </View>
 
                         {/* Calendar Grid */}
@@ -742,7 +743,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 </View>
 
                                 {/* Scrollable time grid */}
-                                <ScrollView style={styles.weekScrollView} nestedScrollEnabled>
+                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.weekScrollView} nestedScrollEnabled>
                                     <View style={styles.weekTimeGrid}>
                                         {/* Time column */}
                                         <View style={styles.timeColumn}>
@@ -783,7 +784,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             })}
                                         </View>
                                     </View>
-                                </ScrollView>
+                                </KeyboardAwareScrollView>
                             </View>
                         ) : calendarView === 'Day' ? (
                             <View style={styles.dayViewContainer}>
@@ -807,7 +808,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 </View>
 
                                 {/* Scrollable time grid */}
-                                <ScrollView style={styles.dayScrollView} nestedScrollEnabled>
+                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.dayScrollView} nestedScrollEnabled>
                                     <View style={styles.dayTimeGrid}>
                                         {/* Time column */}
                                         <View style={styles.timeColumn}>
@@ -836,7 +837,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             ))}
                                         </View>
                                     </View>
-                                </ScrollView>
+                                </KeyboardAwareScrollView>
                             </View>
                         ) : calendarView === 'Agenda' ? (
                             <View style={styles.agendaViewContainer}>
@@ -986,7 +987,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     </View>
                 )}
 
-            </ScrollView >
+            </KeyboardAwareScrollView>
 
             {/* Division Dropdown Modal - Bottom Sheet */}
             <Modal
@@ -1010,7 +1011,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
                         {/* Bottom Sheet Options */}
                         <View style={styles.bottomSheetContent}>
-                            <ScrollView
+                            <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled"
                                 style={styles.divisionBottomSheetScroll}
                                 showsVerticalScrollIndicator={false}
                             >
@@ -1039,7 +1040,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
-                            </ScrollView>
+                            </KeyboardAwareScrollView>
                         </View>
                     </Pressable>
                 </Pressable>
@@ -1110,7 +1111,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         style={styles.centeredModal}
                         onPress={(e) => e.stopPropagation()}
                     >
-                        <ScrollView
+                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled"
                             style={styles.addActivityBottomSheetScroll}
                             contentContainerStyle={styles.addActivityBottomSheetContent}
                             showsVerticalScrollIndicator={false}
@@ -1153,7 +1154,6 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         <Text style={[styles.formInputText, !formData.event_date && styles.formInputPlaceholder]}>
                                             {formData.event_date || 'Select event date'}
                                         </Text>
-                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
                                     </TouchableOpacity>
                                 </View>
 
@@ -1164,11 +1164,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         <Switch
                                             value={formData.is_multi_day}
                                             onValueChange={(value) => setFormData({ ...formData, is_multi_day: value })}
-                                            trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
-                                            thumbColor="#ffffff"
-                                            // @ts-ignore
-                                            activeThumbColor="#ffffff"
-                                            ios_backgroundColor="#e2e8f0"
+                                            trackColor={{ false: theme.colors.border, true: theme.colors.secondary }}
+                                            thumbColor={theme.colors.surface}
                                         />
                                     </View>
                                 </View>
@@ -1266,7 +1263,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     </TouchableOpacity>
                                 </View>
                             </View>
-                        </ScrollView>
+                        </KeyboardAwareScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -1296,7 +1293,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         style={styles.centeredModal}
                         onPress={(e) => e.stopPropagation()}
                     >
-                        <ScrollView
+                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled"
                             style={styles.editActivityBottomSheetScroll}
                             contentContainerStyle={styles.editActivityBottomSheetContent}
                             showsVerticalScrollIndicator={false}
@@ -1336,11 +1333,6 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             end_date: checked ? formData.end_date : '',
                                         });
                                     }}
-                                    trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
-                                    thumbColor="#ffffff"
-                                    // @ts-ignore
-                                    activeThumbColor="#ffffff"
-                                    ios_backgroundColor="#e2e8f0"
                                 />
                             </View>
 
@@ -1492,7 +1484,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         </TouchableOpacity>
                                     </View>
                                 </View>
-                                <ScrollView style={styles.divisionsList} nestedScrollEnabled>
+                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.divisionsList} nestedScrollEnabled>
                                     {MOCK_DIVISIONS.filter(d => d.id !== '1').map((division) => (
                                         <TouchableOpacity
                                             key={division.id}
@@ -1515,7 +1507,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             <Text style={styles.divisionCheckboxText}>{division.name}</Text>
                                         </TouchableOpacity>
                                     ))}
-                                </ScrollView>
+                                </KeyboardAwareScrollView>
                             </View>
 
                             {/* Optional Fields */}
@@ -1687,7 +1679,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     </Text>
                                 </TouchableOpacity>
                             </View>
-                        </ScrollView>
+                        </KeyboardAwareScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -1737,23 +1729,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             <Modal
                 visible={isDatePickerOpen}
                 transparent={true}
-                animationType="slide"
+                animationType="fade"
                 onRequestClose={() => {
                     setIsDatePickerOpen(false);
                     setDatePickerField(null);
                 }}
             >
-                <Pressable
-                    style={styles.bottomSheetOverlay}
-                    onPress={() => {
-                        setIsDatePickerOpen(false);
-                        setDatePickerField(null);
-                    }}
-                >
-                    <Pressable
-                        style={styles.datePickerModal}
-                        onPress={(e) => e.stopPropagation()}
-                    >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.datePickerModal}>
                         <View style={styles.datePickerHeader}>
                             <Text style={styles.datePickerTitle}>Select Date</Text>
                             <TouchableOpacity
@@ -1770,7 +1753,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             {/* Month Selection */}
                             <View style={styles.datePickerColumn}>
                                 <Text style={styles.datePickerLabel}>Month</Text>
-                                <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
+                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
                                     {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
                                         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
                                         const isSelected = selectedDate.getMonth() + 1 === month;
@@ -1796,13 +1779,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             </TouchableOpacity>
                                         );
                                     })}
-                                </ScrollView>
+                                </KeyboardAwareScrollView>
                             </View>
 
                             {/* Day Selection */}
                             <View style={styles.datePickerColumn}>
                                 <Text style={styles.datePickerLabel}>Day</Text>
-                                <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
+                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
                                     {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
                                         const daysInMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate();
                                         const isSelected = selectedDate.getDate() === day;
@@ -1834,13 +1817,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             </TouchableOpacity>
                                         );
                                     })}
-                                </ScrollView>
+                                </KeyboardAwareScrollView>
                             </View>
 
                             {/* Year Selection */}
                             <View style={styles.datePickerColumn}>
                                 <Text style={styles.datePickerLabel}>Year</Text>
-                                <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
+                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.datePickerScroll} showsVerticalScrollIndicator={false}>
                                     {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => {
                                         const isSelected = selectedDate.getFullYear() === year;
                                         return (
@@ -1870,7 +1853,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             </TouchableOpacity>
                                         );
                                     })}
-                                </ScrollView>
+                                </KeyboardAwareScrollView>
                             </View>
                         </View>
 
@@ -1906,8 +1889,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 <Text style={styles.datePickerConfirmButtonText}>Confirm</Text>
                             </TouchableOpacity>
                         </View>
-                    </Pressable>
-                </Pressable>
+                    </View>
+                </View>
             </Modal>
 
             {/* CSV Upload Format Guide Modal */}
@@ -1931,7 +1914,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         </View>
 
                         {/* Tabs */}
-                        <ScrollView
+                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled"
                             horizontal
                             showsHorizontalScrollIndicator={false}
                             style={styles.helpModalTabs}
@@ -1954,10 +1937,10 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     </Text>
                                 </TouchableOpacity>
                             ))}
-                        </ScrollView>
+                        </KeyboardAwareScrollView>
 
                         {/* Content */}
-                        <ScrollView style={styles.helpModalContent}>
+                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.helpModalContent}>
                             {helpModalTab === 'Trips' && (
                                 <View>
                                     <Text style={styles.helpModalHeading}>Activities & Field Trips</Text>
@@ -1973,19 +1956,19 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         Junior Hershey Trip, 2026-07-28, 2026-07-29, true, field-trip, away, ["1","2"], 08:00, 18:00, Hershey Park, 50, John Doe, Fun trip to Hershey Park, ["Lunch","Dinner"]
                                     </Text>
                                     <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                    <Text style={styles.helpModalBullet}>• division_ids must be an array of valid division IDs</Text>
-                                    <Text style={styles.helpModalBullet}>• event_date and end_date format: YYYY-MM-DD</Text>
-                                    <Text style={styles.helpModalBullet}>• is_multi_day: true or false</Text>
-                                    <Text style={styles.helpModalBullet}>• home_away: "home" or "away"</Text>
-                                    <Text style={styles.helpModalBullet}>• meal_options must be an array (e.g., ["Breakfast","Lunch"])</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ division_ids must be an array of valid division IDs</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ event_date and end_date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ is_multi_day: true or false</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ home_away: "home" or "away"</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ meal_options must be an array (e.g., ["Breakfast","Lunch"])</Text>
                                     <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                    <Text style={styles.helpModalBullet}>• Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
-                                    <Text style={styles.helpModalBullet}>• Leave fields empty for optional columns</Text>
-                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                    <Text style={styles.helpModalBullet}>• Dates must be in YYYY-MM-DD format</Text>
-                                    <Text style={styles.helpModalBullet}>• Time format: HH:MM (24-hour format)</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Leave fields empty for optional columns</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Dates must be in YYYY-MM-DD format</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Time format: HH:MM (24-hour format)</Text>
                                 </View>
                             )}
                             {helpModalTab === 'Staff' && (
@@ -2003,16 +1986,16 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         Jane Smith, jane@thenest.com, 555-9876, Counselor, Activities, 2024-01-15, {"<leader_id>"}, active, Summer 2024
                                     </Text>
                                     <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                    <Text style={styles.helpModalBullet}>• leader_id must be a valid UUID from staff table</Text>
-                                    <Text style={styles.helpModalBullet}>• hire_date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ leader_id must be a valid UUID from staff table</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ hire_date format: YYYY-MM-DD</Text>
                                     <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                    <Text style={styles.helpModalBullet}>• Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
-                                    <Text style={styles.helpModalBullet}>• Leave fields empty for optional columns</Text>
-                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                    <Text style={styles.helpModalBullet}>• Dates must be in YYYY-MM-DD format</Text>
-                                    <Text style={styles.helpModalBullet}>• UUIDs can be obtained from the backend for existing records</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Leave fields empty for optional columns</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Dates must be in YYYY-MM-DD format</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ UUIDs can be obtained from the backend for existing records</Text>
                                 </View>
                             )}
                             {helpModalTab === 'Children' && (
@@ -2030,13 +2013,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         John Doe, 2010-05-15, male, 1, Jane Doe, jane@example.com, 555-1234, None, Vegetarian
                                     </Text>
                                     <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                    <Text style={styles.helpModalBullet}>• division_id must be a valid division ID</Text>
-                                    <Text style={styles.helpModalBullet}>• date_of_birth format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ division_id must be a valid division ID</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ date_of_birth format: YYYY-MM-DD</Text>
                                     <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
-                                    <Text style={styles.helpModalBullet}>• Dates must be in YYYY-MM-DD format</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Dates must be in YYYY-MM-DD format</Text>
                                 </View>
                             )}
                             {helpModalTab === 'Medications' && (
@@ -2054,12 +2037,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         1, Advil, 200mg, Twice daily, 2024-07-01, 2024-08-31, Take with food
                                     </Text>
                                     <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                    <Text style={styles.helpModalBullet}>• camper_id must be a valid camper ID</Text>
-                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ camper_id must be a valid camper ID</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Date format: YYYY-MM-DD</Text>
                                     <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Maximum 1000 rows per upload</Text>
                                 </View>
                             )}
                             {helpModalTab === 'Menu' && (
@@ -2077,12 +2060,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         2024-07-15, Lunch, Grilled Chicken, Delicious grilled chicken with sides, ["Gluten-Free","Dairy-Free"]
                                     </Text>
                                     <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
-                                    <Text style={styles.helpModalBullet}>• meal_type: Breakfast, Lunch, Dinner, or Snack</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ meal_type: Breakfast, Lunch, Dinner, or Snack</Text>
                                     <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Maximum 1000 rows per upload</Text>
                                 </View>
                             )}
                             {helpModalTab === 'Awards' && (
@@ -2100,12 +2083,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         1, Camper of the Week, 2024-07-20, Recognition, Outstanding behavior
                                     </Text>
                                     <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                    <Text style={styles.helpModalBullet}>• camper_id must be a valid camper ID</Text>
-                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ camper_id must be a valid camper ID</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Date format: YYYY-MM-DD</Text>
                                     <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Maximum 1000 rows per upload</Text>
                                 </View>
                             )}
                             {helpModalTab === 'Daily Notes' && (
@@ -2123,12 +2106,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         1, 2024-07-15, General, Had a great day at the pool, 5
                                     </Text>
                                     <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                    <Text style={styles.helpModalBullet}>• camper_id and staff_id must be valid IDs</Text>
-                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ camper_id and staff_id must be valid IDs</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Date format: YYYY-MM-DD</Text>
                                     <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Maximum 1000 rows per upload</Text>
                                 </View>
                             )}
                             {helpModalTab === 'Incidents' && (
@@ -2146,13 +2129,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         2024-07-15, 14:30, 1, Minor Injury, Scraped knee during activity, Low, 5
                                     </Text>
                                     <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                    <Text style={styles.helpModalBullet}>• camper_id and staff_id must be valid IDs</Text>
-                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
-                                    <Text style={styles.helpModalBullet}>• Time format: HH:MM</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ camper_id and staff_id must be valid IDs</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Time format: HH:MM</Text>
                                     <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Maximum 1000 rows per upload</Text>
                                 </View>
                             )}
                             {helpModalTab === 'Calendar' && (
@@ -2170,11 +2153,11 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         Camp Fire, 2024-07-20, 2024-07-20, Event, Evening campfire with songs, Main Field
                                     </Text>
                                     <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Date format: YYYY-MM-DD</Text>
                                     <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Maximum 1000 rows per upload</Text>
                                 </View>
                             )}
                             {helpModalTab === 'Sports' && (
@@ -2192,17 +2175,17 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         Basketball, 2024-07-15, 10:00, Gym, ["1","2"], 5
                                     </Text>
                                     <Text style={styles.helpModalLabel}>Important Notes:</Text>
-                                    <Text style={styles.helpModalBullet}>• division_ids must be an array of valid division IDs</Text>
-                                    <Text style={styles.helpModalBullet}>• coach_id must be a valid staff ID</Text>
-                                    <Text style={styles.helpModalBullet}>• Date format: YYYY-MM-DD</Text>
-                                    <Text style={styles.helpModalBullet}>• Time format: HH:MM</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ division_ids must be an array of valid division IDs</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ coach_id must be a valid staff ID</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Date format: YYYY-MM-DD</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Time format: HH:MM</Text>
                                     <Text style={styles.helpModalLabel}>General Tips:</Text>
-                                    <Text style={styles.helpModalBullet}>• First row must contain column names exactly as shown</Text>
-                                    <Text style={styles.helpModalBullet}>• Use commas to separate values</Text>
-                                    <Text style={styles.helpModalBullet}>• Maximum 1000 rows per upload</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Use commas to separate values</Text>
+                                    <Text style={styles.helpModalBullet}>â€¢ Maximum 1000 rows per upload</Text>
                                 </View>
                             )}
-                        </ScrollView>
+                        </KeyboardAwareScrollView>
                     </View>
                 </View>
             </Modal>
@@ -2244,7 +2227,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             {/* Hour Selection */}
                             <View style={styles.timePickerColumn}>
                                 <Text style={styles.timePickerLabel}>Hour</Text>
-                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                                     {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
                                         <TouchableOpacity
                                             key={hour}
@@ -2262,13 +2245,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             </Text>
                                         </TouchableOpacity>
                                     ))}
-                                </ScrollView>
+                                </KeyboardAwareScrollView>
                             </View>
 
                             {/* Minute Selection */}
                             <View style={styles.timePickerColumn}>
                                 <Text style={styles.timePickerLabel}>Minute</Text>
-                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                                     {Array.from({ length: 60 }, (_, i) => i).map((minute) => (
                                         <TouchableOpacity
                                             key={minute}
@@ -2286,13 +2269,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             </Text>
                                         </TouchableOpacity>
                                     ))}
-                                </ScrollView>
+                                </KeyboardAwareScrollView>
                             </View>
 
                             {/* AM/PM Selection */}
                             <View style={styles.timePickerColumn}>
                                 <Text style={styles.timePickerLabel}>Period</Text>
-                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                                     {['AM', 'PM'].map((period) => (
                                         <TouchableOpacity
                                             key={period}
@@ -2310,7 +2293,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             </Text>
                                         </TouchableOpacity>
                                     ))}
-                                </ScrollView>
+                                </KeyboardAwareScrollView>
                             </View>
                         </View>
 
@@ -2977,14 +2960,12 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
         flex: 1,
-        marginRight: theme.spacing.sm,
     },
     formInputPlaceholder: {
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.textSecondary,
         flex: 1,
-        marginRight: theme.spacing.sm,
     },
     dropdownContainer: {
         zIndex: 10,
@@ -3312,22 +3293,17 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
         flex: 1,
-        marginRight: theme.spacing.sm,
     },
     dateInputPlaceholder: {
         color: theme.colors.textSecondary,
-        flex: 1,
-        marginRight: theme.spacing.sm,
     },
     // Date Picker Modal Styles
     datePickerModal: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.xl,
-        borderTopRightRadius: theme.borderRadius.xl,
-        width: '100%',
-        maxWidth: 600,
+        borderRadius: theme.borderRadius.lg,
+        width: '90%',
+        maxWidth: 500,
         maxHeight: '80%',
-        alignSelf: 'center',
     },
     datePickerHeader: {
         flexDirection: 'row',
@@ -3662,11 +3638,10 @@ const styles = StyleSheet.create({
         paddingBottom: theme.spacing.xl,
     },
     addActivityBottomSheetScroll: {
-        flex: 1,
+        // removed flex: 1 to prevent collapse on mobile
     },
     addActivityBottomSheetContent: {
         paddingHorizontal: theme.spacing.md,
-        paddingBottom: theme.spacing.xl,
     },
     addActivityBottomSheetHeader: {
         flexDirection: 'row',
@@ -3729,28 +3704,29 @@ const styles = StyleSheet.create({
         paddingBottom: theme.spacing.xl,
     },
     editActivityBottomSheetScroll: {
-        flex: 1,
+        // removed flex: 1 to prevent collapse on mobile
     },
     editActivityBottomSheetContent: {
         padding: theme.spacing.lg,
-        paddingBottom: theme.spacing.xl,
     },
     // Centered Modal Styles
     centeredOverlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
         padding: theme.spacing.md,
+        zIndex: 1000,
     },
     centeredModal: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
         width: '100%',
         maxWidth: 600,
-        maxHeight: '80%',
+        maxHeight: '90%',
         ...theme.shadows.card,
         elevation: 5,
         overflow: 'hidden',
     },
 });
+
