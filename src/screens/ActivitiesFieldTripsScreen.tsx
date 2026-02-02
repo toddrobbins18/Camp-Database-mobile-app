@@ -517,9 +517,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         <SafeAreaView style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.openDrawer()}>
-                    <Ionicons name="menu" size={28} color={theme.colors.primary} />
-                </TouchableOpacity>
+                <View style={styles.headerTopRow}>
+                    <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                        <Ionicons name="menu-outline" size={28} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity>
+                        <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                </View>
                 <View style={styles.headerTitleContainer}>
                     <View style={styles.headerTitleRow}>
                         <Ionicons name="leaf" size={24} color={theme.colors.primary} />
@@ -527,9 +532,6 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     </View>
                     <Text style={styles.headerSubtitle}>Schedule and manage activities and field trips for The Nest.</Text>
                 </View>
-                <TouchableOpacity>
-                    <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
-                </TouchableOpacity>
             </View>
 
 
@@ -2336,18 +2338,20 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.background,
     },
     header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.sm,
         backgroundColor: theme.colors.surface,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
+    headerTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: theme.spacing.sm,
+    },
     headerTitleContainer: {
         flex: 1,
-        marginLeft: theme.spacing.md,
     },
     headerTitleRow: {
         flexDirection: 'row',
@@ -2360,7 +2364,8 @@ const styles = StyleSheet.create({
     },
     headerSubtitle: {
         ...theme.typography.bodySmall,
-        marginTop: theme.spacing.xs,
+        marginTop: 4,
+        color: theme.colors.textSecondary,
     },
     scrollView: {
         flex: 1,

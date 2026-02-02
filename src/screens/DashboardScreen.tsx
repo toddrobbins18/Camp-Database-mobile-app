@@ -12,10 +12,15 @@ export const DashboardScreen = ({ navigation }: any) => {
                 {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.openDrawer()}>
-                        <Ionicons name="document-text-outline" size={24} color={theme.colors.text} />
+                        <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
                     </TouchableOpacity>
+
+                    <View style={styles.headerCenter}>
+                        <View style={styles.centerDot} />
+                    </View>
+
                     <TouchableOpacity>
-                        <Ionicons name="person-circle-outline" size={24} color={theme.colors.text} />
+                        <Ionicons name="person-circle-outline" size={28} color={theme.colors.text} />
                     </TouchableOpacity>
                 </View>
 
@@ -23,6 +28,35 @@ export const DashboardScreen = ({ navigation }: any) => {
                 <View style={styles.titleSection}>
                     <Text style={styles.title}>Dashboard</Text>
                     <Text style={styles.welcomeText}>Welcome back! Here's what's happening today.</Text>
+                </View>
+
+                {/* Quick Menu Grid */}
+                <View style={styles.quickMenuGrid}>
+                    {[
+                        { label: 'Camper', icon: 'people-outline', route: 'Camper' },
+                        { label: 'Staff', icon: 'person-outline', route: 'Staff' },
+                        { label: 'Calendar', icon: 'calendar-outline', route: 'Calendar' },
+                        { label: 'Health', icon: 'medical-outline', route: 'Health' },
+                        { label: 'Sports', icon: 'trophy-outline', route: 'Sports' },
+                        { label: 'Events', icon: 'star-outline', route: 'SpecialEvents' },
+                        { label: 'Menu', icon: 'restaurant-outline', route: 'Menu' },
+                        { label: 'Transport', icon: 'car-outline', route: 'Transport' },
+                        { label: 'Messages', icon: 'mail-outline', route: 'Messages' },
+                        { label: 'Reports', icon: 'bar-chart-outline', route: 'Reports' },
+                        { label: 'Admin', icon: 'shield-outline', route: 'AdminPanel' },
+                        { label: 'Approvals', icon: 'checkmark-circle-outline', route: 'UserApprovals' },
+                    ].map((item, index) => (
+                        <TouchableOpacity
+                            key={index}
+                            style={styles.gridTile}
+                            onPress={() => navigation.navigate(item.route)}
+                        >
+                            <View style={styles.tileIconContainer}>
+                                <Ionicons name={item.icon as any} size={24} color={theme.colors.secondary} />
+                            </View>
+                            <Text style={styles.tileLabel} numberOfLines={1}>{item.label}</Text>
+                        </TouchableOpacity>
+                    ))}
                 </View>
 
                 {/* Weather Widget */}
@@ -61,7 +95,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                             <Text style={styles.menuLabel}>DINNER</Text>
                         </TouchableOpacity>
                     </View>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.viewMenuBtn}
                         onPress={() => navigation.navigate('Menu')}
                     >
@@ -79,7 +113,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyText}>No sports events today</Text>
                     </View>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.outlineBtn}
                         onPress={() => navigation.navigate('SportsCalendar')}
                     >
@@ -97,7 +131,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyText}>No special events today</Text>
                     </View>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.outlineBtn}
                         onPress={() => navigation.navigate('SpecialEvents')}
                     >
@@ -162,6 +196,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: theme.spacing.lg,
     },
+    headerCenter: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    centerDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#2563eb',
+    },
     titleSection: {
         marginBottom: theme.spacing.lg,
     },
@@ -176,6 +221,34 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.textSecondary,
+    },
+    quickMenuGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.lg,
+    },
+    gridTile: {
+        width: '23%', // 4 columns
+        aspectRatio: 1,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.xs,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        ...theme.shadows.card,
+    },
+    tileIconContainer: {
+        marginBottom: 4,
+    },
+    tileLabel: {
+        fontSize: 10,
+        fontWeight: '600',
+        color: theme.colors.text,
+        textAlign: 'center',
     },
     widgetCard: {
         backgroundColor: theme.colors.surface,
@@ -327,4 +400,3 @@ const styles = StyleSheet.create({
         elevation: 5,
     },
 });
- 
