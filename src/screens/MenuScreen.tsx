@@ -869,7 +869,7 @@ const styles = StyleSheet.create({
         color: theme.colors.secondary,
     },
     guideContent: {
-        flex: 1,
+        // Removed flex: 1 to prevent collapse on mobile
     },
     guideContentContainer: {
         paddingHorizontal: theme.spacing.md,
