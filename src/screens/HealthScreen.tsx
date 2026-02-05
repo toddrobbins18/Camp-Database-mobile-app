@@ -1,111 +1,1001 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 
-const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
-    <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()}>
-            <Ionicons name="menu" size={28} color={theme.colors.primary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{title}</Text>
-        <TouchableOpacity>
-            <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
-        </TouchableOpacity>
-    </View>
-);
-
 export const HealthScreen = ({ navigation }: any) => {
+    const [activeView, setActiveView] = useState('list'); // 'list' or 'calendar'
+    const [activeTab, setActiveTab] = useState('Daily Log');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedDivision, setSelectedDivision] = useState('All Divisions');
+    const [showDivisionPicker, setShowDivisionPicker] = useState(false);
+    const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1)); // January 2026
+    const [selectedDate, setSelectedDate] = useState(new Date(2026, 0, 22)); // January 22, 2026
+    const [rfidInput, setRfidInput] = useState('');
+    const [healthCenterRfidInput, setHealthCenterRfidInput] = useState('');
+    const [searchChildrenQuery, setSearchChildrenQuery] = useState('');
+    const [selectedChild, setSelectedChild] = useState<string | null>(null);
+    const [showAdmitModal, setShowAdmitModal] = useState(false);
+    const [admitReason, setAdmitReason] = useState('');
+    const [childToAdmit, setChildToAdmit] = useState<{ id: string; name: string } | null>(null);
+    const [selectedMedicationChild, setSelectedMedicationChild] = useState<string>('');
+    const [medicationName, setMedicationName] = useState('');
+    const [dosage, setDosage] = useState('');
+    const [mealTime, setMealTime] = useState<string>('');
+    const [notes, setNotes] = useState('');
+    const [isRecurring, setIsRecurring] = useState(false);
+    const [showChildPicker, setShowChildPicker] = useState(false);
+    const [showUploadModal, setShowUploadModal] = useState(false);
+
+    const divisions = [
+        'All Divisions',
+        'Freshmen A Girls',
+        'Freshmen B Girls',
+        'Cadet Girls',
+        'Sophomore Girls',
+        'Junior Girls',
+        'Senior Girls',
+        'Super Girls',
+        'Teen Girls',
+        'CIT Girls',
+        'Freshmen A Boys',
+        'Freshmen B Boys',
+        'Cadet Boys',
+        'Sophomore Boys',
+        'Junior Boys',
+        'Senior Boys',
+        'Super Boys',
+        'Teen Boys',
+        'CIT Boys',
+    ];
+
+    // Sample children data for Health Center
+    const availableChildren = [
+        { id: '1', name: 'Abby Weiss', division: 'CIT Girls' },
+        { id: '2', name: 'Adam Elliott', division: 'Freshmen B Boys' },
+        { id: '3', name: 'Addison Brewer', division: 'Sophomore Girls' },
+        { id: '4', name: 'Adrianna Gelb', division: 'CIT Girls' },
+        { id: '5', name: 'Alden Feld', division: 'Freshmen B Boys' },
+        { id: '6', name: 'Alden Leon', division: 'Sophomore Boys' },
+        { id: '7', name: 'Alden Weisz', division: 'Freshmen B Boys' },
+        { id: '8', name: 'AJ Goldberg', division: 'Freshmen B Boys' },
+        { id: '9', name: 'Alaia Khalil', division: 'Freshmen B Girls' },
+        { id: '10', name: 'Alex Haboush', division: 'CIT Boys' },
+        { id: '11', name: 'Alex Stumacher', division: 'Cadet Boys' },
+        { id: '12', name: 'Alexa Alfred', division: 'Super Senior Girls' },
+        { id: '13', name: 'Alexa Friedland', division: 'Super Senior Girls' },
+        { id: '14', name: 'Alexa Horowitz', division: 'Sophomore Girls' },
+        { id: '15', name: 'Alexa Jacobs', division: 'Sophomore Girls' },
+        { id: '16', name: 'Alexa Mendelson', division: 'Sophomore Girls' },
+        { id: '17', name: 'Alexa Miller', division: 'Super Senior Girls' },
+        { id: '18', name: 'Alexa Soble', division: 'Freshmen A Girls' },
+        { id: '19', name: 'Alexa Zinner', division: 'Super Senior Girls' },
+        { id: '20', name: 'Alexander Ull', division: 'Freshmen B Boys' },
+        { id: '21', name: 'Alexis Kalikow', division: 'Cadet Girls' },
+        { id: '22', name: 'Ali Vieira', division: 'Junior Girls' },
+        { id: '23', name: 'Andrew Feigenbaum', division: 'Sophomore Boys' },
+        { id: '24', name: 'Annabelle Korff', division: 'Cadet Girls' },
+        { id: '25', name: 'Arden Suveyke', division: 'Sophomore Girls' },
+        { id: '26', name: 'Ari Gerber', division: 'Freshmen A Boys' },
+        { id: '27', name: 'Ari Lean', division: 'Super Senior Boys' },
+        { id: '28', name: 'Ari Milim', division: 'Sophomore Boys' },
+        { id: '29', name: 'Ari Talaszan', division: 'Freshmen B Boys' },
+        { id: '30', name: 'Ariana Mizrachi', division: 'Freshmen B Girls' },
+        { id: '31', name: 'Arielle Sullivan', division: 'Senior Girls' },
+        { id: '32', name: 'Ascher Sundick', division: 'Sophomore Boys' },
+        { id: '33', name: 'Asha Sampathkur', division: 'Freshmen A Girls' },
+        { id: '34', name: 'Asher Greenberg', division: 'Teen TN1 Boys' },
+        { id: '35', name: 'Asher Talaszan', division: 'Sophomore Boys' },
+        { id: '36', name: 'Ashley Weingarten', division: 'Teen TN1 Girls' },
+        { id: '37', name: 'Ashton Donzis', division: 'Junior Boys' },
+        { id: '38', name: 'Ashton Harvey', division: 'Freshmen A Boys' },
+        { id: '39', name: 'Ashton Weiss', division: 'Teen TN1 Boys' },
+        { id: '40', name: 'Audrey Slater', division: 'Freshmen A Girls' },
+        { id: '41', name: 'Austin Bloch', division: 'Senior Boys' },
+        { id: '42', name: 'Austyn Fishman', division: 'Freshmen B Girls' },
+        { id: '43', name: 'Ava Englander', division: 'Teen TN1 Girls' },
+        { id: '44', name: 'Ava Schnall', division: 'Teen TN1 Girls' },
+        { id: '45', name: 'Ava Wolf', division: 'Junior Girls' },
+        { id: '46', name: 'Ava Zinner', division: 'Super Senior Girls' },
+        { id: '47', name: 'Avery Atlas', division: 'Freshmen B Girls' },
+        { id: '48', name: 'Avery Berg', division: 'Freshmen A Girls' },
+        { id: '49', name: 'Avery Kaplan', division: 'Junior Girls' },
+        { id: '50', name: 'Avery Rothstein', division: 'CIT Girls' },
+        { id: '51', name: 'Avery Slater', division: 'Sophomore Girls' },
+        { id: '52', name: 'Avery Warsaw', division: 'Freshmen B Girls' },
+        { id: '53', name: 'Axel Altman', division: 'Freshmen B Boys' },
+        { id: '54', name: 'Axd Helfer', division: 'Sophomore Boys' },
+        { id: '55', name: 'Ben Geller', division: 'Junior Boys' },
+        { id: '56', name: 'Ben Kaplan', division: 'Teen TN1 Boys' },
+        { id: '57', name: 'Ben Schochet', division: 'Senior Boys' },
+        { id: '58', name: 'Benjamin Fina', division: 'Sophomore Boys' },
+        { id: '59', name: 'Benjamin Khadoury', division: 'Senior Boys' },
+        { id: '60', name: 'Benjamin Rozbruch', division: 'Junior Boys' },
+        { id: '61', name: 'Bibi Khoudiari', division: 'Freshmen B Boys' },
+        { id: '62', name: 'Blake Bailey', division: 'Junior Girls' },
+        { id: '63', name: 'Blake Bortnick', division: 'Junior Boys' },
+        { id: '64', name: 'Blake Brewer', division: 'Super Senior Boys' },
+        { id: '65', name: 'Blake Jaffe', division: 'Super Senior Boys' },
+        { id: '66', name: 'Blake Stern', division: 'Junior Girls' },
+        { id: '67', name: 'Bodin Geller', division: 'CIT Boys' },
+        { id: '68', name: 'Bradley Feierstein', division: 'Freshmen B Boys' },
+        { id: '69', name: 'Bradley Ottavino', division: 'Sophomore Girls' },
+        { id: '70', name: 'Brady Goldstein', division: 'Senior Boys' },
+    ];
+
+    // Filter children based on search query
+    const filteredChildren = availableChildren.filter(child =>
+        child.name.toLowerCase().includes(searchChildrenQuery.toLowerCase()) ||
+        child.division.toLowerCase().includes(searchChildrenQuery.toLowerCase())
+    );
+
+    // Calendar functions
+    const getDaysInMonth = (date: Date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const daysInMonth = lastDay.getDate();
+        const startingDayOfWeek = firstDay.getDay();
+
+        const days = [];
+
+        // Previous month days
+        const prevMonth = new Date(year, month - 1, 0);
+        const prevMonthDays = prevMonth.getDate();
+        for (let i = startingDayOfWeek - 1; i >= 0; i--) {
+            days.push({
+                date: prevMonthDays - i,
+                isCurrentMonth: false,
+                fullDate: new Date(year, month - 1, prevMonthDays - i)
+            });
+        }
+
+        // Current month days
+        for (let i = 1; i <= daysInMonth; i++) {
+            days.push({
+                date: i,
+                isCurrentMonth: true,
+                fullDate: new Date(year, month, i)
+            });
+        }
+
+        // Next month days to fill the grid
+        const remainingDays = 42 - days.length;
+        for (let i = 1; i <= remainingDays; i++) {
+            days.push({
+                date: i,
+                isCurrentMonth: false,
+                fullDate: new Date(year, month + 1, i)
+            });
+        }
+
+        return days;
+    };
+
+    const formatMonthYear = (date: Date) => {
+        const months = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
+        return `${months[date.getMonth()]} ${date.getFullYear()}`;
+    };
+
+    const navigateMonth = (direction: 'prev' | 'next') => {
+        const newDate = new Date(currentDate);
+        if (direction === 'prev') {
+            newDate.setMonth(newDate.getMonth() - 1);
+        } else {
+            newDate.setMonth(newDate.getMonth() + 1);
+        }
+        setCurrentDate(newDate);
+    };
+
+    const isSameDate = (date1: Date, date2: Date) => {
+        return date1.getDate() === date2.getDate() &&
+            date1.getMonth() === date2.getMonth() &&
+            date1.getFullYear() === date2.getFullYear();
+    };
+
+    const isToday = (date: Date) => {
+        const today = new Date();
+        return isSameDate(date, today);
+    };
+
+    const isPastDate = (date: Date) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const checkDate = new Date(date);
+        checkDate.setHours(0, 0, 0, 0);
+        return checkDate < today;
+    };
+
+    const formatSelectedDate = (date: Date) => {
+        const months = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
+        return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+    };
+
+    const calendarDays = getDaysInMonth(currentDate);
+    const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+    const handleUploadCSV = () => {
+        setShowUploadModal(true);
+    };
+
+    const tabs = ['Daily Log', "Today's Medications", 'Health Center', 'Health Center Log', 'Add Medication'];
+
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <ScreenHeader title="Nurse Dashboard" navigation={navigation} />
-
-                {/* Quick Stats Grid */}
-                <View style={styles.statsRow}>
-                    <StyledCard style={styles.statCard}>
-                        <Ionicons name="medkit" size={24} color={theme.colors.danger} />
-                        <Text style={styles.statNumber}>12</Text>
-                        <Text style={styles.statLabel}>Pending Meds</Text>
-                    </StyledCard>
-                    <StyledCard style={styles.statCard}>
-                        <Ionicons name="thermometer" size={24} color={theme.colors.warning} />
-                        <Text style={styles.statNumber}>4</Text>
-                        <Text style={styles.statLabel}>Sick Bay</Text>
-                    </StyledCard>
-                    <StyledCard style={styles.statCard}>
-                        <Ionicons name="bandage" size={24} color={theme.colors.secondary} />
-                        <Text style={styles.statNumber}>8</Text>
-                        <Text style={styles.statLabel}>Incidents</Text>
-                    </StyledCard>
-                </View>
-
-                {/* Action Buttons */}
-                <View style={styles.actionRow}>
-                    <TouchableOpacity style={styles.primaryBtn}>
-                        <Ionicons name="add-circle-outline" size={20} color="white" />
-                        <Text style={styles.primaryBtnText}>Log Incident</Text>
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                {/* Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                        <Ionicons name="menu" size={28} color={theme.colors.text} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.secondaryBtn}>
-                        <Text style={styles.secondaryBtnText}>View Medical Profiles</Text>
+                    <TouchableOpacity>
+                        <Ionicons name="person-circle-outline" size={28} color={theme.colors.text} />
                     </TouchableOpacity>
                 </View>
 
-                <Text style={styles.sectionHeader}>Medication Schedule</Text>
-
-                {/* Medication List */}
-                <View style={styles.medList}>
-                    <StyledCard style={styles.medCard}>
-                        <View style={styles.medHeader}>
-                            <Text style={styles.medTime}>08:00 AM</Text>
-                            <View style={[styles.statusBadge, { backgroundColor: '#fef3c7' }]}>
-                                <Text style={{ color: '#d97706', fontSize: 10, fontWeight: 'bold' }}>PENDING</Text>
-                            </View>
-                        </View>
-                        <View style={styles.medBody}>
-                            <View style={styles.camperInfo}>
-                                <View style={styles.avatar}><Text style={styles.avatarText}>JS</Text></View>
-                                <View>
-                                    <Text style={styles.camperName}>Jacob Smith</Text>
-                                    <Text style={styles.camperCottage}>Bunk 4</Text>
-                                </View>
-                            </View>
-                            <View style={styles.medDetails}>
-                                <Text style={styles.medName}>Amoxicillin</Text>
-                                <Text style={styles.medDose}>500mg • 1 Tablet</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity style={styles.logBtn}>
-                            <Text style={styles.logBtnText}>Log Administration</Text>
-                        </TouchableOpacity>
-                    </StyledCard>
-
-                    <StyledCard style={styles.medCard}>
-                        <View style={styles.medHeader}>
-                            <Text style={styles.medTime}>08:00 AM</Text>
-                            <View style={[styles.statusBadge, { backgroundColor: '#dcfce7' }]}>
-                                <Text style={{ color: theme.colors.success, fontSize: 10, fontWeight: 'bold' }}>COMPLETED</Text>
-                            </View>
-                        </View>
-                        <View style={styles.medBody}>
-                            <View style={styles.camperInfo}>
-                                <View style={styles.avatar}><Text style={styles.avatarText}>ED</Text></View>
-                                <View>
-                                    <Text style={styles.camperName}>Emily Davis</Text>
-                                    <Text style={styles.camperCottage}>Bunk 7</Text>
-                                </View>
-                            </View>
-                            <View style={styles.medDetails}>
-                                <Text style={styles.medName}>Claritin</Text>
-                                <Text style={styles.medDose}>10mg • 1 Tablet</Text>
-                            </View>
-                        </View>
-                    </StyledCard>
+                {/* Title and Description Section */}
+                <View style={styles.titleSection}>
+                    <View style={styles.titleContainer}>
+                        <Text style={styles.title}>Nurse Dashboard</Text>
+                        <Text style={styles.subtitle}>Manage children's daily medications</Text>
+                    </View>
                 </View>
+
+                {/* View Controls */}
+                <View style={styles.viewControls}>
+                    <TouchableOpacity
+                        style={[styles.viewControlBtn, activeView === 'list' && styles.viewControlBtnActive]}
+                        onPress={() => setActiveView('list')}
+                    >
+                        <Ionicons
+                            name="list-outline"
+                            size={18}
+                            color={activeView === 'list' ? 'white' : theme.colors.text}
+                        />
+                        <Text style={[styles.viewControlText, activeView === 'list' && styles.viewControlTextActive]}>
+                            List
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.viewControlBtn, activeView === 'calendar' && styles.viewControlBtnActive]}
+                        onPress={() => setActiveView('calendar')}
+                    >
+                        <Ionicons
+                            name="calendar-outline"
+                            size={18}
+                            color={activeView === 'calendar' ? 'white' : theme.colors.text}
+                        />
+                        <Text style={[styles.viewControlText, activeView === 'calendar' && styles.viewControlTextActive]}>
+                            Calendar
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.viewControlIcon}>
+                        <Ionicons name="time-outline" size={18} color={theme.colors.text} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.uploadBtn} onPress={handleUploadCSV}>
+                        <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} />
+                        <Text style={styles.uploadBtnText}>Upload CSV</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Search and Filter Section */}
+                <View style={styles.searchFilterSection}>
+                    <View style={styles.searchContainer}>
+                        <Ionicons name="search" size={18} color={theme.colors.textSecondary} style={styles.searchIcon} />
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search by child name..."
+                            placeholderTextColor={theme.colors.textSecondary}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                        />
+                    </View>
+                    <TouchableOpacity
+                        style={styles.dropdownContainer}
+                        onPress={() => setShowDivisionPicker(true)}
+                    >
+                        <Text style={styles.dropdownText}>{selectedDivision}</Text>
+                        <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.sortBtn}>
+                    <Ionicons name="swap-vertical-outline" size={16} color={theme.colors.text} />
+                    <Text style={styles.sortBtnText}>Sort by Division</Text>
+                </TouchableOpacity>
+
+                {/* Conditional Content: Calendar or List View */}
+                {activeView === 'calendar' ? (
+                    <>
+                        {/* Calendar Component */}
+                        <StyledCard style={styles.calendarCard}>
+                            {/* Calendar Header */}
+                            <View style={styles.calendarHeader}>
+                                <TouchableOpacity onPress={() => navigateMonth('prev')}>
+                                    <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
+                                </TouchableOpacity>
+                                <Text style={styles.calendarMonthYear}>{formatMonthYear(currentDate)}</Text>
+                                <TouchableOpacity onPress={() => navigateMonth('next')}>
+                                    <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Week Days Header */}
+                            <View style={styles.weekDaysContainer}>
+                                {weekDays.map((day) => (
+                                    <View key={day} style={styles.weekDay}>
+                                        <Text style={styles.weekDayText}>{day}</Text>
+                                    </View>
+                                ))}
+                            </View>
+
+                            {/* Calendar Grid */}
+                            <View style={styles.calendarGrid}>
+                                {calendarDays.map((day, index) => {
+                                    const isSelected = isSameDate(day.fullDate, selectedDate);
+                                    const isTodayDate = isToday(day.fullDate);
+                                    const isPast = isPastDate(day.fullDate);
+
+                                    return (
+                                        <TouchableOpacity
+                                            key={index}
+                                            style={[
+                                                styles.calendarDay,
+                                                !day.isCurrentMonth && styles.calendarDayOtherMonth,
+                                                isSelected && styles.calendarDaySelected,
+                                                isTodayDate && !isSelected && styles.calendarDayToday,
+                                            ]}
+                                            onPress={() => setSelectedDate(day.fullDate)}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.calendarDayText,
+                                                    !day.isCurrentMonth && styles.calendarDayTextOtherMonth,
+                                                    isSelected && styles.calendarDayTextSelected,
+                                                    isTodayDate && !isSelected && styles.calendarDayTextToday,
+                                                ]}
+                                            >
+                                                {day.date}
+                                            </Text>
+                                            {index === 27 && day.isCurrentMonth && (
+                                                <View style={styles.calendarDayDot} />
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </StyledCard>
+
+                        {/* Medications for Selected Date */}
+                        <StyledCard style={styles.medicationDateCard}>
+                            <Text style={styles.medicationDateTitle}>
+                                Medications for {formatSelectedDate(selectedDate)}
+                            </Text>
+                            {isPastDate(selectedDate) && (
+                                <Text style={styles.pastDateText}>Past date - View only with notes option</Text>
+                            )}
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyText}>No medications scheduled for this date</Text>
+                            </View>
+                        </StyledCard>
+                    </>
+                ) : (
+                    <>
+                        {/* Tabs */}
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.tabsContainer}
+                            contentContainerStyle={styles.tabsContent}
+                        >
+                            {tabs.map((tab) => (
+                                <TouchableOpacity
+                                    key={tab}
+                                    style={[styles.tab, activeTab === tab && styles.tabActive]}
+                                    onPress={() => setActiveTab(tab)}
+                                >
+                                    <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                                        {tab}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
+                        {/* Conditional Content Based on Active Tab */}
+                        {activeTab === "Today's Medications" ? (
+                            <StyledCard style={styles.todaysMedicationsCard}>
+                                <Text style={styles.todaysMedicationsTitle}>Today's Medications</Text>
+                                <Text style={styles.todaysMedicationsSubtitle}>Track medication administration</Text>
+
+                                {/* RFID Quick Check-In Card */}
+                                <StyledCard style={styles.rfidCard}>
+                                    <View style={styles.rfidHeader}>
+                                        <Ionicons name="radio-outline" size={24} color={theme.colors.text} />
+                                        <Text style={styles.rfidTitle}>RFID Quick Check-In</Text>
+                                    </View>
+                                    <Text style={styles.rfidDescription}>
+                                        Scan camper's RFID bracelet to automatically administer their medications.
+                                    </Text>
+
+                                    <View style={styles.rfidInputContainer}>
+                                        <TextInput
+                                            style={styles.rfidInput}
+                                            placeholder="Scan or type RFID..."
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={rfidInput}
+                                            onChangeText={setRfidInput}
+                                        />
+                                        <TouchableOpacity style={styles.scanButton}>
+                                            <Ionicons name="scan-outline" size={18} color="white" />
+                                            <Text style={styles.scanButtonText}>Scan</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.clearButton}
+                                            onPress={() => setRfidInput('')}
+                                        >
+                                            <Text style={styles.clearButtonText}>Clear</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </StyledCard>
+
+                                {/* Empty State */}
+                                <View style={styles.emptyStateRow}>
+                                    <Text style={styles.emptyText}>No medications scheduled for today</Text>
+                                    <View style={styles.emptyDot} />
+                                </View>
+                            </StyledCard>
+                        ) : activeTab === 'Health Center' ? (
+                            <View style={styles.healthCenterContainer}>
+                                {/* Health Center Admissions Header */}
+                                <View style={styles.healthCenterHeader}>
+                                    <View style={styles.healthCenterTitleRow}>
+                                        <Ionicons name="lock-closed-outline" size={20} color={theme.colors.secondary} />
+                                        <Text style={styles.healthCenterTitle}>Health Center Admissions</Text>
+                                    </View>
+                                    <Text style={styles.healthCenterSubtitle}>
+                                        Track overnight admissions to the health center
+                                    </Text>
+                                </View>
+
+                                {/* RFID Quick Check-in / Check-Out Card */}
+                                <StyledCard style={styles.rfidCard}>
+                                    <View style={styles.rfidHeader}>
+                                        <Ionicons name="radio-outline" size={24} color={theme.colors.secondary} />
+                                        <Text style={styles.rfidTitle}>RFID Quick Check-in / Check-Out</Text>
+                                    </View>
+                                    <Text style={styles.rfidDescription}>
+                                        Scan RFID to admit or check out - system auto-detects the action
+                                    </Text>
+
+                                    <View style={styles.rfidInputContainer}>
+                                        <TextInput
+                                            style={styles.rfidInput}
+                                            placeholder="Scan or type RFID..."
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={healthCenterRfidInput}
+                                            onChangeText={setHealthCenterRfidInput}
+                                        />
+                                        <TouchableOpacity style={styles.scanButton}>
+                                            <Ionicons name="scan-outline" size={18} color="white" />
+                                            <Text style={styles.scanButtonText}>Scan</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.clearButton}
+                                            onPress={() => setHealthCenterRfidInput('')}
+                                        >
+                                            <Text style={styles.clearButtonText}>Clear</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </StyledCard>
+
+                                {/* Search Children Section */}
+                                <View style={styles.searchChildrenSection}>
+                                    <Text style={styles.searchChildrenTitle}>Search Children</Text>
+                                    <View style={styles.searchChildrenInputContainer}>
+                                        <Ionicons name="search" size={18} color={theme.colors.textSecondary} style={styles.searchIcon} />
+                                        <TextInput
+                                            style={styles.searchChildrenInput}
+                                            placeholder="Search by name..."
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={searchChildrenQuery}
+                                            onChangeText={setSearchChildrenQuery}
+                                        />
+                                    </View>
+                                </View>
+
+                                {/* Available Children Section */}
+                                <View style={styles.availableChildrenSection}>
+                                    <View style={styles.availableChildrenHeader}>
+                                        <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                                        <Text style={styles.availableChildrenTitle}>Available Children</Text>
+                                    </View>
+
+                                    <ScrollView
+                                        style={styles.childrenList}
+                                        showsVerticalScrollIndicator={true}
+                                    >
+                                        {filteredChildren.map((child) => {
+                                            const isSelected = selectedChild === child.id;
+                                            return (
+                                                <TouchableOpacity
+                                                    key={child.id}
+                                                    style={[
+                                                        styles.childCard,
+                                                        isSelected && styles.childCardSelected
+                                                    ]}
+                                                    onPress={() => setSelectedChild(isSelected ? null : child.id)}
+                                                >
+                                                    <View style={styles.childCardContent}>
+                                                        <Text style={[
+                                                            styles.childName,
+                                                            isSelected && styles.childNameSelected
+                                                        ]}>
+                                                            {child.name}
+                                                        </Text>
+                                                        <View style={styles.childDivisionTag}>
+                                                            <Text style={[
+                                                                styles.childDivisionText,
+                                                                isSelected && styles.childDivisionTextSelected
+                                                            ]}>
+                                                                {child.division}
+                                                            </Text>
+                                                        </View>
+                                                    </View>
+                                                    <TouchableOpacity
+                                                        style={[
+                                                            styles.admitButton,
+                                                            isSelected && styles.admitButtonSelected
+                                                        ]}
+                                                        onPress={(e) => {
+                                                            e.stopPropagation();
+                                                            setChildToAdmit({ id: child.id, name: child.name });
+                                                            setShowAdmitModal(true);
+                                                        }}
+                                                    >
+                                                        <Ionicons
+                                                            name="person-add-outline"
+                                                            size={16}
+                                                            color={isSelected ? 'white' : theme.colors.text}
+                                                        />
+                                                        <Text style={[
+                                                            styles.admitButtonText,
+                                                            isSelected && styles.admitButtonTextSelected
+                                                        ]}>
+                                                            Admit
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </ScrollView>
+                                </View>
+                            </View>
+                        ) : activeTab === 'Health Center Log' ? (
+                            <StyledCard style={styles.healthCenterLogCard}>
+                                <View style={styles.healthCenterLogHeader}>
+                                    <Ionicons name="bar-chart-outline" size={24} color={theme.colors.text} />
+                                    <Text style={styles.healthCenterLogTitle}>Health Center Admission History</Text>
+                                </View>
+                                <Text style={styles.healthCenterLogSubtitle}>
+                                    Past health center admissions this season
+                                </Text>
+                                <View style={styles.emptyState}>
+                                    <Text style={styles.emptyText}>No admission history found for this season</Text>
+                                </View>
+                            </StyledCard>
+                        ) : activeTab === 'Add Medication' ? (
+                            <StyledCard style={styles.addMedicationCard}>
+                                <View style={styles.addMedicationHeader}>
+                                    <Ionicons name="link-outline" size={24} color={theme.colors.text} />
+                                    <Text style={styles.addMedicationTitle}>Add Medication</Text>
+                                </View>
+                                <Text style={styles.addMedicationSubtitle}>
+                                    Schedule medication for a child
+                                </Text>
+
+                                {/* Form Fields */}
+                                <View style={styles.formContainer}>
+                                    {/* Child Selection */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Child</Text>
+                                        <TouchableOpacity
+                                            style={styles.childPickerButton}
+                                            onPress={() => setShowChildPicker(true)}
+                                        >
+                                            <Text style={[
+                                                styles.childPickerText,
+                                                !selectedMedicationChild && styles.childPickerPlaceholder
+                                            ]}>
+                                                {selectedMedicationChild || 'Select a child'}
+                                            </Text>
+                                            <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {/* Medication Name */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Medication Name</Text>
+                                        <TextInput
+                                            style={styles.formInput}
+                                            placeholder="Enter medication name"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={medicationName}
+                                            onChangeText={setMedicationName}
+                                        />
+                                    </View>
+
+                                    {/* Dosage */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Dosage</Text>
+                                        <TextInput
+                                            style={styles.formInput}
+                                            placeholder="e.g., 5ml, 1 tablet"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={dosage}
+                                            onChangeText={setDosage}
+                                        />
+                                    </View>
+
+                                    {/* Meal Time */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Meal Time</Text>
+                                        <View style={styles.mealTimeContainer}>
+                                            <View style={styles.mealTimeColumn}>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('Before Breakfast')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'Before Breakfast' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'Before Breakfast' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>Before Breakfast</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('Before Lunch')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'Before Lunch' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'Before Lunch' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>Before Lunch</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('Before Dinner')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'Before Dinner' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'Before Dinner' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>Before Dinner</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('Bedtime')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'Bedtime' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'Bedtime' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>Bedtime</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                            <View style={styles.mealTimeColumn}>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('After Breakfast')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'After Breakfast' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'After Breakfast' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>After Breakfast</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('After Lunch')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'After Lunch' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'After Lunch' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>After Lunch</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.radioButton}
+                                                    onPress={() => setMealTime('After Dinner')}
+                                                >
+                                                    <View style={[
+                                                        styles.radioCircle,
+                                                        mealTime === 'After Dinner' && styles.radioCircleSelected
+                                                    ]}>
+                                                        {mealTime === 'After Dinner' && <View style={styles.radioInner} />}
+                                                    </View>
+                                                    <Text style={styles.radioLabel}>After Dinner</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    </View>
+
+                                    {/* Notes */}
+                                    <View style={styles.formField}>
+                                        <Text style={styles.formLabel}>Notes</Text>
+                                        <TextInput
+                                            style={styles.formTextArea}
+                                            placeholder="Additional notes..."
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={notes}
+                                            onChangeText={setNotes}
+                                            multiline={true}
+                                            numberOfLines={4}
+                                        />
+                                    </View>
+
+                                    {/* Recurring Medication Checkbox */}
+                                    <TouchableOpacity
+                                        style={styles.checkboxContainer}
+                                        onPress={() => setIsRecurring(!isRecurring)}
+                                    >
+                                        <View style={[
+                                            styles.checkbox,
+                                            isRecurring && styles.checkboxSelected
+                                        ]}>
+                                            {isRecurring && <Ionicons name="checkmark" size={16} color="white" />}
+                                        </View>
+                                        <Text style={styles.checkboxLabel}>Recurring medication</Text>
+                                    </TouchableOpacity>
+
+                                    {/* Add Medication Button */}
+                                    <TouchableOpacity
+                                        style={styles.addMedicationButton}
+                                        onPress={() => {
+                                            // Handle add medication
+                                            console.log('Add Medication:', {
+                                                child: selectedMedicationChild,
+                                                medicationName,
+                                                dosage,
+                                                mealTime,
+                                                notes,
+                                                isRecurring
+                                            });
+                                            // Reset form
+                                            setSelectedMedicationChild('');
+                                            setMedicationName('');
+                                            setDosage('');
+                                            setMealTime('');
+                                            setNotes('');
+                                            setIsRecurring(false);
+                                        }}
+                                    >
+                                        <Text style={styles.addMedicationButtonText}>Add Medication</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </StyledCard>
+                        ) : (
+                            <StyledCard style={styles.medicationLogCard}>
+                                <Text style={styles.logTitle}>Daily Medication Log</Text>
+                                <Text style={styles.logDescription}>Mark off medications administered today.</Text>
+                                <View style={styles.emptyState}>
+                                    <Text style={styles.emptyText}>No medications scheduled for today.</Text>
+                                </View>
+                            </StyledCard>
+                        )}
+                    </>
+                )}
 
             </ScrollView>
+
+            {/* Division Picker Modal */}
+            <Modal
+                visible={showDivisionPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowDivisionPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowDivisionPicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Division</Text>
+                            <TouchableOpacity onPress={() => setShowDivisionPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView
+                            style={styles.pickerContent}
+                            showsVerticalScrollIndicator={true}
+                        >
+                            {divisions.map((division) => (
+                                <TouchableOpacity
+                                    key={division}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setSelectedDivision(division);
+                                        setShowDivisionPicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{division}</Text>
+                                    {selectedDivision === division && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Admit Modal */}
+            <Modal
+                visible={showAdmitModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => {
+                    setShowAdmitModal(false);
+                    setAdmitReason('');
+                    setChildToAdmit(null);
+                }}
+            >
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={() => {
+                        setShowAdmitModal(false);
+                        setAdmitReason('');
+                        setChildToAdmit(null);
+                    }}
+                >
+                    <Pressable
+                        style={styles.admitModal}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <Text style={styles.admitModalTitle}>Notice from site thenest.camp</Text>
+                        <Text style={styles.admitModalSubtitle}>Reason for admission (optional)</Text>
+
+                        <TextInput
+                            style={styles.admitReasonInput}
+                            placeholder="Enter reason..."
+                            placeholderTextColor={theme.colors.textSecondary}
+                            value={admitReason}
+                            onChangeText={setAdmitReason}
+                            multiline={true}
+                            numberOfLines={4}
+                        />
+
+                        <TouchableOpacity
+                            style={styles.confirmButton}
+                            onPress={() => {
+                                // Handle confirm action
+                                console.log('Admit:', childToAdmit?.name, 'Reason:', admitReason);
+                                setShowAdmitModal(false);
+                                setAdmitReason('');
+                                setChildToAdmit(null);
+                            }}
+                        >
+                            <Text style={styles.confirmButtonText}>Confirm</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.cancelButton}
+                            onPress={() => {
+                                setShowAdmitModal(false);
+                                setAdmitReason('');
+                                setChildToAdmit(null);
+                            }}
+                        >
+                            <Text style={styles.cancelButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Child Picker Modal for Add Medication */}
+            <Modal
+                visible={showChildPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowChildPicker(false)}
+            >
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={() => setShowChildPicker(false)}
+                >
+                    <Pressable
+                        style={styles.pickerModal}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Child</Text>
+                            <TouchableOpacity onPress={() => setShowChildPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.pickerContent}>
+                            {availableChildren.map((child) => (
+                                <TouchableOpacity
+                                    key={child.id}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setSelectedMedicationChild(child.name);
+                                        setShowChildPicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{child.name}</Text>
+                                    {selectedMedicationChild === child.name && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Upload CSV Modal */}
+            <Modal
+                visible={showUploadModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowUploadModal(false)}
+            >
+                <Pressable
+                    style={styles.uploadModalOverlay}
+                    onPress={() => setShowUploadModal(false)}
+                >
+                    <Pressable
+                        style={styles.uploadModal}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <Text style={styles.uploadModalTitle}>Select file</Text>
+
+                        <TouchableOpacity
+                            style={styles.uploadOption}
+                            onPress={() => {
+                                // Handle Aloha downloads selection
+                                console.log('Selected: Aloha downloads');
+                                setShowUploadModal(false);
+                            }}
+                        >
+                            <Ionicons name="folder-outline" size={24} color={theme.colors.text} />
+                            <Text style={styles.uploadOptionText}>Aloha downloads</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.uploadOption}
+                            onPress={() => {
+                                // Handle Other files selection
+                                console.log('Selected: Other files');
+                                setShowUploadModal(false);
+                            }}
+                        >
+                            <Ionicons name="document-outline" size={24} color={theme.colors.text} />
+                            <Text style={styles.uploadOptionText}>Other files</Text>
+                        </TouchableOpacity>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Floating Action Button */}
+            <TouchableOpacity style={styles.fab}>
+                <Ionicons name="notifications-outline" size={24} color="white" />
+            </TouchableOpacity>
         </SafeAreaView>
     );
 };
@@ -117,152 +1007,932 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         padding: theme.spacing.md,
+        paddingBottom: 100,
+        width: '100%',
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: theme.spacing.lg,
-    },
-    headerTitle: {
-        ...theme.typography.h2,
-    },
-    statsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: theme.spacing.lg,
-    },
-    statCard: {
-        width: '31%',
-        alignItems: 'center',
-        padding: theme.spacing.sm,
-    },
-    statNumber: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        marginTop: 4,
-    },
-    statLabel: {
-        fontSize: 10,
-        color: theme.colors.textSecondary,
-    },
-    actionRow: {
-        flexDirection: 'row',
-        gap: theme.spacing.md,
-        marginBottom: theme.spacing.lg,
-    },
-    primaryBtn: {
-        flex: 1,
-        backgroundColor: theme.colors.secondary,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        borderRadius: theme.borderRadius.md,
-        gap: 8,
-    },
-    primaryBtnText: {
-        color: 'white',
-        fontWeight: '600',
-    },
-    secondaryBtn: {
-        flex: 1,
-        backgroundColor: 'white',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        borderRadius: theme.borderRadius.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    secondaryBtnText: {
-        color: theme.colors.text,
-        fontWeight: '600',
-    },
-    sectionHeader: {
-        ...theme.typography.h3,
         marginBottom: theme.spacing.md,
     },
-    medList: {
-        gap: theme.spacing.md,
+    titleSection: {
+        marginBottom: theme.spacing.lg,
     },
-    medCard: {
-        padding: 0, // Reset padding for custom inner layout
-        overflow: 'hidden',
+    titleContainer: {
+        width: '100%',
     },
-    medHeader: {
+    title: {
+        ...theme.typography.h1,
+        fontSize: 32,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
+        flexShrink: 1,
+    },
+    subtitle: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    viewControls: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.md,
+        flexWrap: 'wrap',
+    },
+    viewControlBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        gap: theme.spacing.xs,
+        flexShrink: 1,
+        minWidth: 80,
+    },
+    viewControlBtnActive: {
+        backgroundColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+    },
+    viewControlText: {
+        color: theme.colors.text,
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    viewControlTextActive: {
+        color: 'white',
+    },
+    viewControlIcon: {
+        padding: theme.spacing.sm,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    uploadBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        gap: theme.spacing.xs,
+        flexShrink: 1,
+        minWidth: 100,
+    },
+    uploadBtnText: {
+        color: theme.colors.text,
+        fontWeight: '600',
+        fontSize: 12,
+        flexShrink: 1,
+    },
+    searchFilterSection: {
+        flexDirection: 'row',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.sm,
+        flexWrap: 'wrap',
+    },
+    searchContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        height: 44,
+        minWidth: 150,
+        flexShrink: 1,
+    },
+    searchIcon: {
+        marginRight: theme.spacing.xs,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 14,
+        color: theme.colors.text,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
+    },
+    dropdownContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        backgroundColor: '#f8fafc',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        height: 44,
+        minWidth: 120,
+        flexShrink: 1,
+        flex: 1,
+        maxWidth: 200,
+    },
+    dropdownText: {
+        fontSize: 14,
+        color: theme.colors.text,
+        flexShrink: 1,
+        flex: 1,
+    },
+    sortBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        paddingVertical: theme.spacing.sm,
         paddingHorizontal: theme.spacing.md,
-        paddingVertical: 8,
+        borderRadius: theme.borderRadius.md,
+        gap: theme.spacing.xs,
+        marginBottom: theme.spacing.md,
+    },
+    sortBtnText: {
+        color: theme.colors.text,
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    tabsContainer: {
+        marginBottom: theme.spacing.md,
+    },
+    tabsContent: {
+        gap: theme.spacing.sm,
+        paddingRight: theme.spacing.md,
+    },
+    tab: {
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        flexShrink: 0,
+    },
+    tabActive: {
+        backgroundColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+    },
+    tabText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+        flexShrink: 0,
+    },
+    tabTextActive: {
+        color: 'white',
+    },
+    medicationLogCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.xl,
+        minHeight: 300,
+        width: '100%',
+    },
+    logTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.sm,
+    },
+    logDescription: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.xl,
+    },
+    emptyState: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: theme.spacing.xl,
+    },
+    emptyText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        justifyContent: 'flex-end',
+    },
+    pickerModal: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        height: '50%',
+        paddingBottom: theme.spacing.xl,
+        width: '100%',
+    },
+    pickerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.md,
+        paddingHorizontal: theme.spacing.md,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
-    medTime: {
-        fontWeight: 'bold',
+    pickerTitle: {
+        ...theme.typography.h2,
+        fontSize: 18,
+        fontWeight: '700',
         color: theme.colors.text,
     },
-    statusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 4,
+    pickerContent: {
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.md,
     },
-    medBody: {
-        padding: theme.spacing.md,
+    pickerOption: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
     },
-    camperInfo: {
+    pickerOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    // Upload CSV Modal Styles
+    uploadModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    calendarCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.lg,
+        marginBottom: theme.spacing.md,
+        width: '100%',
+    },
+    calendarHeader: {
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        gap: 12,
+        marginBottom: theme.spacing.lg,
     },
-    avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#e0e7ff',
+    calendarMonthYear: {
+        ...theme.typography.h2,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    weekDaysContainer: {
+        flexDirection: 'row',
+        marginBottom: theme.spacing.sm,
+    },
+    weekDay: {
+        flex: 1,
         alignItems: 'center',
-        justifyContent: 'center',
+        paddingVertical: theme.spacing.xs,
     },
-    avatarText: {
-        color: '#3730a3',
-        fontWeight: 'bold',
-    },
-    camperName: {
-        fontWeight: 'bold',
-        fontSize: 14,
-    },
-    camperCottage: {
+    weekDayText: {
+        ...theme.typography.bodySmall,
         fontSize: 12,
+        fontWeight: '600',
         color: theme.colors.textSecondary,
     },
-    medDetails: {
-        alignItems: 'flex-end',
+    calendarGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        width: '100%',
     },
-    medName: {
-        fontWeight: '600',
+    calendarDay: {
+        width: '14.28%',
+        minWidth: 40,
+        aspectRatio: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+    },
+    calendarDayOtherMonth: {
+        opacity: 0.3,
+    },
+    calendarDaySelected: {
+        backgroundColor: theme.colors.secondary,
+        borderRadius: theme.borderRadius.md,
+    },
+    calendarDayToday: {
+        backgroundColor: '#FFA500',
+        borderRadius: theme.borderRadius.md,
+    },
+    calendarDayText: {
+        ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.text,
     },
-    medDose: {
+    calendarDayTextOtherMonth: {
+        color: theme.colors.textSecondary,
+    },
+    calendarDayTextSelected: {
+        color: 'white',
+        fontWeight: '700',
+    },
+    calendarDayTextToday: {
+        color: 'white',
+        fontWeight: '700',
+    },
+    calendarDayDot: {
+        position: 'absolute',
+        bottom: 4,
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: theme.colors.secondary,
+    },
+    medicationDateCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.xl,
+        minHeight: 200,
+    },
+    medicationDateTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.sm,
+    },
+    pastDateText: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.lg,
+    },
+    // Today's Medications Styles
+    todaysMedicationsCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.xl,
+        minHeight: 400,
+        width: '100%',
+    },
+    todaysMedicationsTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
+    },
+    todaysMedicationsSubtitle: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.lg,
+    },
+    rfidCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.lg,
+        marginBottom: theme.spacing.lg,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        width: '100%',
+    },
+    rfidHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: theme.spacing.sm,
+        gap: theme.spacing.sm,
+    },
+    rfidTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+        flexShrink: 1,
+        flex: 1,
+    },
+    rfidDescription: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.md,
+    },
+    rfidInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        flexWrap: 'wrap',
+    },
+    rfidInput: {
+        flex: 1,
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        fontSize: 14,
+        color: theme.colors.text,
+        height: 44,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
+        minWidth: 150,
+    },
+    scanButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.secondary,
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        gap: theme.spacing.xs,
+        height: 44,
+        flexShrink: 0,
+        minWidth: 70,
+    },
+    scanButtonText: {
+        color: 'white',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    clearButton: {
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        height: 44,
+        justifyContent: 'center',
+        flexShrink: 0,
+        minWidth: 60,
+    },
+    clearButtonText: {
+        color: theme.colors.text,
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    emptyStateRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: theme.spacing.xs,
+        marginTop: theme.spacing.xl,
+    },
+    emptyDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: theme.colors.secondary,
+    },
+    // Floating Action Button
+    fab: {
+        position: 'absolute',
+        bottom: theme.spacing.xl,
+        right: theme.spacing.xl,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: theme.colors.secondary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+        zIndex: 1000,
+    },
+    // Health Center Styles
+    healthCenterContainer: {
+        width: '100%',
+    },
+    healthCenterHeader: {
+        marginBottom: theme.spacing.lg,
+    },
+    healthCenterTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.xs,
+    },
+    healthCenterTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    healthCenterSubtitle: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    searchChildrenSection: {
+        marginBottom: theme.spacing.lg,
+    },
+    searchChildrenTitle: {
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.sm,
+    },
+    searchChildrenInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        height: 44,
+    },
+    searchChildrenInput: {
+        flex: 1,
+        fontSize: 14,
+        color: theme.colors.text,
+        marginLeft: theme.spacing.xs,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
+    },
+    availableChildrenSection: {
+        width: '100%',
+    },
+    availableChildrenHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.md,
+    },
+    availableChildrenTitle: {
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    childrenList: {
+        maxHeight: 500,
+        width: '100%',
+    },
+    childCard: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.sm,
+        width: '100%',
+    },
+    childCardSelected: {
+        backgroundColor: '#FFA500',
+        borderColor: '#FFA500',
+    },
+    childCardContent: {
+        flex: 1,
+    },
+    childName: {
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
+    },
+    childNameSelected: {
+        color: 'white',
+    },
+    childDivisionTag: {
+        alignSelf: 'flex-start',
+    },
+    childDivisionText: {
+        ...theme.typography.bodySmall,
         fontSize: 12,
         color: theme.colors.textSecondary,
     },
-    logBtn: {
-        marginHorizontal: theme.spacing.md,
-        marginBottom: theme.spacing.md,
-        backgroundColor: theme.colors.primary,
-        paddingVertical: 8,
-        borderRadius: theme.borderRadius.sm,
+    childDivisionTextSelected: {
+        color: 'white',
+    },
+    admitButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        gap: theme.spacing.xs,
+    },
+    admitButtonSelected: {
+        backgroundColor: '#FFA500',
+        borderColor: '#FFA500',
+    },
+    admitButtonText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    admitButtonTextSelected: {
+        color: 'white',
+    },
+    // Admit Modal Styles
+    admitModal: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.xl,
+        marginHorizontal: theme.spacing.lg,
+        width: '90%',
+        maxWidth: 500,
+        alignSelf: 'center',
+        marginTop: '20%',
+    },
+    admitModalTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.sm,
+        textAlign: 'center',
+    },
+    admitModalSubtitle: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.lg,
+        textAlign: 'center',
+    },
+    admitReasonInput: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 2,
+        borderColor: theme.colors.secondary,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        fontSize: 16,
+        color: theme.colors.text,
+        minHeight: 120,
+        textAlignVertical: 'top',
+        marginBottom: theme.spacing.lg,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
+    },
+    confirmButton: {
+        backgroundColor: theme.colors.secondary,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.lg,
+        alignItems: 'center',
+        marginBottom: theme.spacing.sm,
+    },
+    confirmButtonText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        fontWeight: '600',
+        color: 'white',
+    },
+    cancelButton: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.lg,
         alignItems: 'center',
     },
-    logBtnText: {
-        color: 'white',
+    cancelButtonText: {
+        ...theme.typography.body,
+        fontSize: 16,
         fontWeight: '600',
-        fontSize: 12,
-    }
+        color: theme.colors.secondary,
+    },
+    // Health Center Log Styles
+    healthCenterLogCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.xl,
+        minHeight: 400,
+        width: '100%',
+    },
+    healthCenterLogHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.xs,
+    },
+    healthCenterLogTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    healthCenterLogSubtitle: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.xl,
+    },
+    // Add Medication Styles
+    addMedicationCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.xl,
+        width: '100%',
+    },
+    addMedicationHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.xs,
+    },
+    addMedicationTitle: {
+        ...theme.typography.h2,
+        fontSize: 20,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    addMedicationSubtitle: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.lg,
+    },
+    formContainer: {
+        width: '100%',
+    },
+    formField: {
+        marginBottom: theme.spacing.lg,
+    },
+    formLabel: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.sm,
+    },
+    childPickerButton: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        height: 44,
+    },
+    childPickerText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    childPickerPlaceholder: {
+        color: theme.colors.textSecondary,
+    },
+    formInput: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        fontSize: 14,
+        color: theme.colors.text,
+        height: 44,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
+    },
+    mealTimeContainer: {
+        flexDirection: 'row',
+        gap: theme.spacing.md,
+    },
+    mealTimeColumn: {
+        flex: 1,
+    },
+    radioButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: theme.spacing.md,
+        gap: theme.spacing.sm,
+    },
+    radioCircle: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        borderWidth: 2,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    radioCircleSelected: {
+        borderColor: theme.colors.secondary,
+        backgroundColor: theme.colors.secondary,
+    },
+    radioInner: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: 'white',
+    },
+    radioLabel: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    formTextArea: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        fontSize: 14,
+        color: theme.colors.text,
+        minHeight: 100,
+        textAlignVertical: 'top',
+        outlineWidth: 0,
+        outlineColor: 'transparent',
+    },
+    checkboxContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: theme.spacing.lg,
+        gap: theme.spacing.sm,
+    },
+    checkbox: {
+        width: 20,
+        height: 20,
+        borderRadius: 4,
+        borderWidth: 2,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    checkboxSelected: {
+        backgroundColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+    },
+    checkboxLabel: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    addMedicationButton: {
+        backgroundColor: theme.colors.secondary,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.lg,
+        alignItems: 'center',
+        marginTop: theme.spacing.md,
+    },
+    addMedicationButtonText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        fontWeight: '600',
+        color: 'white',
+    },
+
+    // Upload CSV Modal Styles
+    uploadModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    uploadModal: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        height: '50%',
+    },
+    uploadModalTitle: {
+        ...theme.typography.h2,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.lg,
+        textAlign: 'center',
+    },
+    uploadOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        gap: theme.spacing.md,
+    },
+    uploadOptionText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
 });
