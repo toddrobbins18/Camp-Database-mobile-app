@@ -19,6 +19,8 @@ interface LoginScreenProps {
 export const LoginScreen = ({ navigation }: LoginScreenProps) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
+    const [resetStatus, setResetStatus] = useState<'none' | 'error' | 'success'>('none');
 
     const handleSignIn = () => {
         // TODO: Implement authentication logic
@@ -43,63 +45,127 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
 
                         {/* Form */}
                         <View style={styles.form}>
-                            {/* Email Input */}
-                            <View style={styles.inputContainer}>
-                                <Text style={styles.label}>Email address</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Your email address"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    value={email}
-                                    onChangeText={setEmail}
-                                    keyboardType="email-address"
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                />
-                            </View>
+                            {!isForgotPassword ? (
+                                <>
+                                    {/* Email Input */}
+                                    <View style={styles.inputContainer}>
+                                        <Text style={styles.label}>Email address</Text>
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Your email address"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={email}
+                                            onChangeText={setEmail}
+                                            keyboardType="email-address"
+                                            autoCapitalize="none"
+                                            autoCorrect={false}
+                                        />
+                                    </View>
 
-                            {/* Password Input */}
-                            <View style={styles.inputContainer}>
-                                <Text style={styles.label}>Your Password</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Your password"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    value={password}
-                                    onChangeText={setPassword}
-                                    secureTextEntry
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                />
-                            </View>
+                                    {/* Password Input */}
+                                    <View style={styles.inputContainer}>
+                                        <Text style={styles.label}>Your Password</Text>
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Your password"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={password}
+                                            onChangeText={setPassword}
+                                            secureTextEntry
+                                            autoCapitalize="none"
+                                            autoCorrect={false}
+                                        />
+                                    </View>
 
-                            {/* Sign In Button */}
-                            <TouchableOpacity
-                                style={styles.signInButton}
-                                onPress={handleSignIn}
-                                activeOpacity={0.8}
-                            >
-                                <Text style={styles.signInButtonText}>Sign in</Text>
-                            </TouchableOpacity>
+                                    {/* Sign In Button */}
+                                    <TouchableOpacity
+                                        style={styles.signInButton}
+                                        onPress={handleSignIn}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Text style={styles.signInButtonText}>Sign in</Text>
+                                    </TouchableOpacity>
 
-                            {/* Links */}
-                            <TouchableOpacity
-                                style={styles.linkContainer}
-                                onPress={() => {
-                                    // TODO: Implement forgot password
-                                }}
-                            >
-                                <Text style={styles.linkText}>Forgot your password?</Text>
-                            </TouchableOpacity>
+                                    {/* Links */}
+                                    <TouchableOpacity
+                                        style={styles.linkContainer}
+                                        onPress={() => {
+                                            setIsForgotPassword(true);
+                                            setResetStatus('none');
+                                        }}
+                                    >
+                                        <Text style={styles.linkText}>Forgot your password?</Text>
+                                    </TouchableOpacity>
 
-                            <TouchableOpacity
-                                style={styles.linkContainer}
-                                onPress={() => navigation.navigate('SignUp')}
-                            >
-                                <Text style={styles.linkText}>
-                                    Don't have an account? Sign up
-                                </Text>
-                            </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.linkContainer}
+                                        onPress={() => navigation.navigate('SignUp')}
+                                    >
+                                        <Text style={styles.linkText}>
+                                            Don't have an account? Sign up
+                                        </Text>
+                                    </TouchableOpacity>
+                                </>
+                            ) : (
+                                <>
+                                    {/* Forgot Password Flow */}
+                                    <View style={styles.inputContainer}>
+                                        <Text style={styles.label}>Email address</Text>
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Your email address"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={email}
+                                            onChangeText={setEmail}
+                                            keyboardType="email-address"
+                                            autoCapitalize="none"
+                                            autoCorrect={false}
+                                        />
+                                    </View>
+
+                                    <TouchableOpacity
+                                        style={styles.signInButton}
+                                        onPress={() => {
+                                            if (!email.trim()) {
+                                                setResetStatus('error');
+                                            } else {
+                                                setResetStatus('success');
+                                            }
+                                        }}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Text style={styles.signInButtonText}>
+                                            Send reset password instructions
+                                        </Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.linkContainer}
+                                        onPress={() => {
+                                            setIsForgotPassword(false);
+                                            setResetStatus('none');
+                                        }}
+                                    >
+                                        <Text style={styles.linkText}>Already have an account? Sign in</Text>
+                                    </TouchableOpacity>
+
+                                    {resetStatus === 'error' && (
+                                        <View style={styles.errorBox}>
+                                            <Text style={styles.errorText}>
+                                                Password recovery requires an email
+                                            </Text>
+                                        </View>
+                                    )}
+
+                                    {resetStatus === 'success' && (
+                                        <View style={styles.successBox}>
+                                            <Text style={styles.successText}>
+                                                Check your email for the password reset link
+                                            </Text>
+                                        </View>
+                                    )}
+                                </>
+                            )}
                         </View>
                     </View>
                 </ScrollView>
@@ -187,5 +253,33 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.secondary,
         textAlign: 'center',
+    },
+    errorBox: {
+        backgroundColor: '#fef2f2',
+        borderWidth: 1,
+        borderColor: '#fecaca',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginTop: theme.spacing.xl,
+    },
+    errorText: {
+        color: '#991b1b',
+        fontSize: 14,
+        textAlign: 'center',
+        fontWeight: '500',
+    },
+    successBox: {
+        backgroundColor: '#f0fdf4',
+        borderWidth: 1,
+        borderColor: '#bbf7d0',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginTop: theme.spacing.xl,
+    },
+    successText: {
+        color: '#166534',
+        fontSize: 14,
+        textAlign: 'center',
+        fontWeight: '500',
     },
 });
