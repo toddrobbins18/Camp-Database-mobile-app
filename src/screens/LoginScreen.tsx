@@ -10,7 +10,10 @@ import {
     ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
+import { useLogin } from '../hooks/useAuth';
+import { loginSchema } from '../lib/authSchemas';
 
 interface LoginScreenProps {
     navigation: any;
@@ -21,18 +24,30 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
     const [password, setPassword] = useState('');
     const [isForgotPassword, setIsForgotPassword] = useState(false);
     const [resetStatus, setResetStatus] = useState<'none' | 'error' | 'success'>('none');
+    const [error, setError] = useState('');
+
+    const { mutate: login, isPending } = useLogin((data: any) => {
+        navigation.replace('MainApp');
+    });
 
     const handleSignIn = () => {
-        // TODO: Implement authentication logic
-        // For now, navigate to main app
-        navigation.replace('MainApp');
+        setError('');
+
+        const result = loginSchema.safeParse({ email, password });
+        if (!result.success) {
+            setError(result.error.issues[0].message);
+            return;
+        }
+
+        login({ email, password });
     };
+
 
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.keyboardView}
+                style={{ flex: 1 }}
             >
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
@@ -40,8 +55,16 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
                 >
                     <View style={styles.content}>
                         {/* Header */}
-                        <Text style={styles.title}>Welcome Back</Text>
-                        <Text style={styles.subtitle}>Sign in to manage The Nest</Text>
+                        <Text style={styles.title}>{isForgotPassword ? 'Reset Password' : 'Welcome Back'}</Text>
+                        <Text style={styles.subtitle}>
+                            {isForgotPassword ? 'Follow instructions to reset password' : 'Sign in to manage The Nest'}
+                        </Text>
+
+                        {error ? (
+                            <View style={styles.errorBox}>
+                                <Text style={styles.errorText}>{error}</Text>
+                            </View>
+                        ) : null}
 
                         {/* Form */}
                         <View style={styles.form}>
@@ -79,11 +102,14 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
 
                                     {/* Sign In Button */}
                                     <TouchableOpacity
-                                        style={styles.signInButton}
+                                        style={[styles.signInButton, isPending && { opacity: 0.7 }]}
                                         onPress={handleSignIn}
                                         activeOpacity={0.8}
+                                        disabled={isPending}
                                     >
-                                        <Text style={styles.signInButtonText}>Sign in</Text>
+                                        <Text style={styles.signInButtonText}>
+                                            {isPending ? 'Signing in...' : 'Sign in'}
+                                        </Text>
                                     </TouchableOpacity>
 
                                     {/* Links */}
@@ -92,6 +118,7 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
                                         onPress={() => {
                                             setIsForgotPassword(true);
                                             setResetStatus('none');
+                                            setError('');
                                         }}
                                     >
                                         <Text style={styles.linkText}>Forgot your password?</Text>
@@ -128,8 +155,11 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
                                         onPress={() => {
                                             if (!email.trim()) {
                                                 setResetStatus('error');
+                                                setError('Email is required for password recovery');
                                             } else {
                                                 setResetStatus('success');
+                                                setError('');
+                                                // TODO: Implement forgot password logic
                                             }
                                         }}
                                         activeOpacity={0.8}
@@ -144,18 +174,11 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
                                         onPress={() => {
                                             setIsForgotPassword(false);
                                             setResetStatus('none');
+                                            setError('');
                                         }}
                                     >
-                                        <Text style={styles.linkText}>Already have an account? Sign in</Text>
+                                        <Text style={styles.linkText}>Back to Sign In</Text>
                                     </TouchableOpacity>
-
-                                    {resetStatus === 'error' && (
-                                        <View style={styles.errorBox}>
-                                            <Text style={styles.errorText}>
-                                                Password recovery requires an email
-                                            </Text>
-                                        </View>
-                                    )}
 
                                     {resetStatus === 'success' && (
                                         <View style={styles.successBox}>
@@ -173,6 +196,7 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
         </SafeAreaView>
     );
 };
+
 
 const styles = StyleSheet.create({
     container: {

@@ -8,9 +8,13 @@ import {
     KeyboardAvoidingView,
     Platform,
     ScrollView,
+    Alert,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../theme/theme';
+import { useRegister } from '../hooks/useAuth';
+import { registerSchema } from '../lib/authSchemas';
 
 interface SignUpScreenProps {
     navigation: any;
@@ -19,11 +23,42 @@ interface SignUpScreenProps {
 export const SignUpScreen = ({ navigation }: SignUpScreenProps) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+
+
+    const { mutate: register, isPending } = useRegister(
+        () => {
+            navigation.navigate('Login');
+        },
+        (err) => {
+            if (err.message?.toLowerCase().includes('already registered')) {
+                setError('User already registered');
+            } else {
+                setError(err.message || 'Registration failed');
+            }
+        }
+    );
 
     const handleSignUp = () => {
-        // TODO: Implement signup logic
-        // For now, navigate to main app
-        navigation.replace('MainApp');
+        setError('');
+
+        if (password.length < 6) {
+            Alert.alert("Invalid Password", "The password must contain 6 characters or more");
+            return;
+        }
+
+        const result = registerSchema.safeParse({
+            email,
+            password,
+            full_name: email.split('@')[0] // Use email prefix as default name since field is removed
+        });
+
+        if (!result.success) {
+            Alert.alert("Validation Error", result.error.issues[0].message);
+            return;
+        }
+
+        register({ email, password, full_name: email.split('@')[0] });
     };
 
     return (
@@ -37,9 +72,9 @@ export const SignUpScreen = ({ navigation }: SignUpScreenProps) => {
                     keyboardShouldPersistTaps="handled"
                 >
                     <View style={styles.content}>
-                        {/* Header */}
-                        <Text style={styles.title}>Create Account</Text>
-                        <Text style={styles.subtitle}>Sign up to manage The Nest</Text>
+                        {/* Header matching image exactly */}
+                        <Text style={styles.title}>Welcome Back</Text>
+                        <Text style={styles.subtitle}>Sign in to manage The Nest</Text>
 
                         {/* Form */}
                         <View style={styles.form}>
@@ -60,10 +95,10 @@ export const SignUpScreen = ({ navigation }: SignUpScreenProps) => {
 
                             {/* Password Input */}
                             <View style={styles.inputContainer}>
-                                <Text style={styles.label}>Your Password</Text>
+                                <Text style={styles.label}>Create a Password</Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Your password"
+                                    placeholder="Create a password"
                                     placeholderTextColor={theme.colors.textSecondary}
                                     value={password}
                                     onChangeText={setPassword}
@@ -75,11 +110,14 @@ export const SignUpScreen = ({ navigation }: SignUpScreenProps) => {
 
                             {/* Sign Up Button */}
                             <TouchableOpacity
-                                style={styles.signUpButton}
+                                style={[styles.signUpButton, isPending && { opacity: 0.7 }]}
                                 onPress={handleSignUp}
                                 activeOpacity={0.8}
+                                disabled={isPending}
                             >
-                                <Text style={styles.signUpButtonText}>Sign up</Text>
+                                <Text style={styles.signUpButtonText}>
+                                    {isPending ? 'Signing up...' : 'Sign up'}
+                                </Text>
                             </TouchableOpacity>
 
                             {/* Link */}
@@ -91,6 +129,13 @@ export const SignUpScreen = ({ navigation }: SignUpScreenProps) => {
                                     Already have an account? Sign in
                                 </Text>
                             </TouchableOpacity>
+
+                            {/* Error display at the bottom as per screenshot */}
+                            {error ? (
+                                <View style={styles.errorBox}>
+                                    <Text style={styles.errorText}>{error}</Text>
+                                </View>
+                            ) : null}
                         </View>
                     </View>
                 </ScrollView>
@@ -98,6 +143,7 @@ export const SignUpScreen = ({ navigation }: SignUpScreenProps) => {
         </SafeAreaView>
     );
 };
+
 
 const styles = StyleSheet.create({
     container: {
@@ -179,4 +225,21 @@ const styles = StyleSheet.create({
         color: theme.colors.secondary,
         textAlign: 'center',
     },
+    errorBox: {
+        backgroundColor: '#fef2f2',
+        borderWidth: 1,
+        borderColor: '#fecaca',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginTop: theme.spacing.sm,
+        marginBottom: theme.spacing.lg,
+        width: '100%',
+    },
+    errorText: {
+        color: '#991b1b',
+        fontSize: 14,
+        textAlign: 'center',
+        fontWeight: '500',
+    },
 });
+
