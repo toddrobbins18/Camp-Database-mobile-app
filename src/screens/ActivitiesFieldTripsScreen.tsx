@@ -5,97 +5,215 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { supabase } from '../lib/supabase';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert } from 'react-native';
 
-// Mock divisions data
-const MOCK_DIVISIONS = [
-    { id: '1', name: 'All Divisions', gender: '', sort_order: 0 },
-    { id: '2', name: 'Freshmen A Girls', gender: 'female', sort_order: 1 },
-    { id: '3', name: 'Freshmen B Girls', gender: 'female', sort_order: 2 },
-    { id: '4', name: 'Cadet Girls', gender: 'female', sort_order: 3 },
-    { id: '5', name: 'Sophomore Girls', gender: 'female', sort_order: 4 },
-    { id: '6', name: 'Junior Girls', gender: 'female', sort_order: 5 },
-    { id: '7', name: 'Senior Girls', gender: 'female', sort_order: 6 },
-    { id: '8', name: 'Super Girls', gender: 'female', sort_order: 7 },
-    { id: '9', name: 'Teen Girls', gender: 'female', sort_order: 8 },
-    { id: '10', name: 'CIT Girls', gender: 'female', sort_order: 9 },
-    { id: '11', name: 'Freshmen A Boys', gender: 'male', sort_order: 10 },
-    { id: '12', name: 'Freshmen B Boys', gender: 'male', sort_order: 11 },
-    { id: '13', name: 'Cadet Boys', gender: 'male', sort_order: 12 },
-    { id: '14', name: 'Sophomore Boys', gender: 'male', sort_order: 13 },
-    { id: '15', name: 'Junior Boys', gender: 'male', sort_order: 14 },
-    { id: '16', name: 'Senior Boys', gender: 'male', sort_order: 15 },
-    { id: '17', name: 'Super Boys', gender: 'male', sort_order: 16 },
-    { id: '18', name: 'Teen Boys', gender: 'male', sort_order: 17 },
-    { id: '19', name: 'CIT Boys', gender: 'male', sort_order: 18 },
-];
-
-// Mock activities data matching the screenshot
-const MOCK_ACTIVITIES: any[] = [
-    {
-        id: '1',
-        title: 'Junior Hershey/Dorney Trip',
-        event_date: '2026-07-28',
-        end_date: '2026-07-29',
-        is_multi_day: true,
-        activity_type: 'field-trip',
-        home_away: 'away',
-        divisions: [
-            { id: '1', name: 'Junior Girls' },
-            { id: '2', name: 'Junior Boys' }
-        ],
-        depart_from_camp: '',
-        depart_from_activity: '',
-        location: '',
-        capacity: null,
-        chaperone: '',
-        description: '',
-        meal_options: [],
-        meal_notes: '',
-    },
-    {
-        id: '2',
-        title: 'Teen/CIT Cali Trip',
-        event_date: '2026-07-29',
-        end_date: '2026-08-03',
-        is_multi_day: true,
-        activity_type: 'field-trip',
-        home_away: 'away',
-        divisions: [],
-        depart_from_camp: '',
-        depart_from_activity: '',
-        location: '',
-        capacity: null,
-        chaperone: '',
-        description: '',
-        meal_options: [],
-        meal_notes: '',
-    },
-    {
-        id: '3',
-        title: 'Super Montreal Trip',
-        event_date: '2026-07-30',
-        end_date: '2026-08-01',
-        is_multi_day: true,
-        activity_type: 'field-trip',
-        home_away: 'away',
-        divisions: [
-            { id: '1', name: 'Super Boys' },
-            { id: '2', name: 'Super Girls' }
-        ],
-        depart_from_camp: '',
-        depart_from_activity: '',
-        location: '',
-        capacity: null,
-        chaperone: '',
-        description: '',
-        meal_options: [],
-        meal_notes: '',
-    },
-];
-
+// Calendar view types
 type CalendarView = 'Month' | 'Week' | 'Day' | 'Agenda';
 
 export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
+    const queryClient = useQueryClient();
+
+    const addActivityMutation = useMutation({
+        mutationFn: async (newActivity: any) => {
+            const { division_ids, ...activityData } = newActivity;
+
+            // 1. Insert activity
+            const { data: activity, error: activityError } = await supabase
+                .from('activities_field_trips')
+                .insert([{ ...activityData, company_id: companyId, season: selectedYear }])
+                .select()
+                .single();
+
+            if (activityError) throw activityError;
+
+            // 2. Insert division links
+            if (division_ids && division_ids.length > 0) {
+                const links = division_ids.map((divId: string) => ({
+                    activity_id: activity.id,
+                    division_id: divId,
+                    company_id: companyId
+                }));
+                const { error: linksError } = await supabase
+                    .from('activities_field_trips_divisions')
+                    .insert(links);
+                if (linksError) throw linksError;
+            }
+            return activity;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['activities'] });
+            Alert.alert('Success', 'Activity added successfully');
+            setIsAddActivityModalOpen(false);
+            resetFormData();
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to add activity');
+        }
+    });
+
+    const updateActivityMutation = useMutation({
+        mutationFn: async (updatedActivity: any) => {
+            const { id, division_ids, divisions: _, ...activityData } = updatedActivity;
+
+            // 1. Update activity
+            const { error: activityError } = await supabase
+                .from('activities_field_trips')
+                .update(activityData)
+                .eq('id', id);
+
+            if (activityError) throw activityError;
+
+            // 2. Update division links (Delete and Re-insert)
+            const { error: deleteError } = await supabase
+                .from('activities_field_trips_divisions')
+                .delete()
+                .eq('activity_id', id);
+
+            if (deleteError) throw deleteError;
+
+            if (division_ids && division_ids.length > 0) {
+                const links = division_ids.map((divId: string) => ({
+                    activity_id: id,
+                    division_id: divId,
+                    company_id: companyId
+                }));
+                const { error: linksError } = await supabase
+                    .from('activities_field_trips_divisions')
+                    .insert(links);
+                if (linksError) throw linksError;
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['activities'] });
+            Alert.alert('Success', 'Activity updated successfully');
+            setIsEditModalOpen(false);
+            setEditingActivity(null);
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to update activity');
+        }
+    });
+
+    const deleteActivityMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase
+                .from('activities_field_trips')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['activities'] });
+            Alert.alert('Success', 'Activity deleted successfully');
+            setIsDeleteModalOpen(false);
+            setActivityToDelete(null);
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to delete activity');
+        }
+    });
+
+    const resetFormData = () => {
+        const todayStr = formatDateForStorage(new Date());
+        setFormData({
+            title: '',
+            event_date: todayStr,
+            end_date: todayStr,
+            is_multi_day: false,
+            activity_type: '',
+            home_away: '',
+            division_ids: [],
+            depart_from_camp: '',
+            depart_from_activity: '',
+            location: '',
+            capacity: '',
+            chaperone: '',
+            description: '',
+            meal_options: [],
+            meal_notes: ''
+        });
+    };
+
+    // Fetch profile to get company_id
+    const { data: profile } = useQuery({
+        queryKey: ['profile'],
+        queryFn: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('No user found');
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+            if (error) throw error;
+            return data;
+        }
+    });
+
+    const companyId = profile?.company_id;
+    const [selectedYear, setSelectedYear] = useState('2026');
+
+    // Fetch divisions
+    const { data: divisions = [] } = useQuery({
+        queryKey: ['divisions', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('divisions')
+                .select('*')
+                .eq('company_id', companyId)
+                .eq('is_active', true);
+            if (error) throw error;
+            // Simplified sorting for now, can add sort_order logic later
+            return data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        },
+        enabled: !!companyId
+    });
+
+    // Fetch activities and division associations
+    const { data: activities = [], isLoading: isLoadingActivities } = useQuery({
+        queryKey: ['activities', companyId, selectedYear],
+        queryFn: async () => {
+            if (!companyId) return [];
+
+            // Parallel fetch for activities and their division links
+            const [activitiesResult, divisionsResult] = await Promise.all([
+                supabase
+                    .from("activities_field_trips")
+                    .select("*")
+                    .eq('company_id', companyId)
+                    .eq('season', selectedYear)
+                    .order("event_date", { ascending: true }),
+                supabase
+                    .from("activities_field_trips_divisions")
+                    .select("activity_id, division_id, divisions(id, name, gender)")
+                    .eq('company_id', companyId)
+            ]);
+
+            if (activitiesResult.error) throw activitiesResult.error;
+            if (divisionsResult.error) throw divisionsResult.error;
+
+            // Map divisions to activities
+            const divisionMap: Record<string, any[]> = {};
+            (divisionsResult.data || []).forEach(link => {
+                if (!divisionMap[link.activity_id]) {
+                    divisionMap[link.activity_id] = [];
+                }
+                if (link.divisions) {
+                    divisionMap[link.activity_id].push(link.divisions);
+                }
+            });
+
+            return (activitiesResult.data || []).map(activity => ({
+                ...activity,
+                divisions: divisionMap[activity.id] || []
+            }));
+        },
+        enabled: !!companyId
+    });
+
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [isDivisionDropdownOpen, setIsDivisionDropdownOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');
@@ -398,8 +516,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
     // Group activities by month
     const groupActivitiesByMonth = () => {
-        const grouped: Record<string, typeof MOCK_ACTIVITIES> = {};
-        MOCK_ACTIVITIES.forEach(activity => {
+        const grouped: Record<string, any[]> = {};
+
+        const filteredActivities = activities.filter(activity => {
+            if (selectedDivision === 'All Divisions') return true;
+            return activity.divisions?.some((div: any) => div.name === selectedDivision);
+        });
+
+        filteredActivities.forEach(activity => {
             const date = new Date(activity.event_date + 'T00:00:00');
             const monthKey = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
             if (!grouped[monthKey]) {
@@ -617,23 +741,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             style={styles.addButton}
                             onPress={() => {
                                 setEditingActivity(null);
-                                setFormData({
-                                    event_date: '',
-                                    end_date: '',
-                                    is_multi_day: false,
-                                    title: '',
-                                    activity_type: '',
-                                    home_away: '',
-                                    division_ids: [],
-                                    depart_from_camp: '',
-                                    depart_from_activity: '',
-                                    location: '',
-                                    capacity: '',
-                                    chaperone: '',
-                                    description: '',
-                                    meal_options: [],
-                                    meal_notes: '',
-                                });
+                                resetFormData();
                                 setIsAddActivityModalOpen(true);
                                 setIsActivityTypeDropdownOpen(false);
                                 setIsLocationTypeDropdownOpen(false);
@@ -885,6 +993,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                                 ]}>
                                                     {day.date.getDate()}
                                                 </Text>
+                                                <View style={styles.calendarDayEvents}>
+                                                    {activities.filter(a => a.event_date === formatDateForStorage(day.date)).slice(0, 2).map((a, idx) => (
+                                                        <View key={idx} style={[styles.dayEventIndicator, { backgroundColor: a.home_away === 'away' ? theme.colors.primary : theme.colors.secondary }]} />
+                                                    ))}
+                                                    {activities.filter(a => a.event_date === formatDateForStorage(day.date)).length > 2 && (
+                                                        <View style={styles.dayEventMore} />
+                                                    )}
+                                                </View>
                                             </TouchableOpacity>
                                         );
                                     })}
@@ -959,7 +1075,9 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             </View>
                                             <View style={styles.activityCardBadges}>
                                                 <View style={[styles.badge, styles.badgePrimary]}>
-                                                    <Text style={styles.badgeText}>{activity.activity_type}</Text>
+                                                    <Text style={styles.badgeText}>
+                                                        {activity.activity_type ? activity.activity_type.split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Activity'}
+                                                    </Text>
                                                 </View>
                                                 {activity.is_multi_day && activity.end_date && (
                                                     <View style={[styles.badge, styles.badgePrimary]}>
@@ -1017,7 +1135,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 style={styles.divisionBottomSheetScroll}
                                 showsVerticalScrollIndicator={false}
                             >
-                                {MOCK_DIVISIONS.map((division) => (
+                                {[{ id: 'all', name: 'All Divisions' }, ...divisions].map((division) => (
                                     <TouchableOpacity
                                         key={division.id}
                                         style={[
@@ -1256,9 +1374,11 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     <TouchableOpacity
                                         style={styles.addActivitySaveButton}
                                         onPress={() => {
-                                            // TODO: Handle save
-                                            console.log('Save activity:', formData);
-                                            setIsAddActivityModalOpen(false);
+                                            if (!formData.title || !formData.event_date) {
+                                                Alert.alert('Error', 'Please fill in required fields (Title and Event Date)');
+                                                return;
+                                            }
+                                            addActivityMutation.mutate(formData);
                                         }}
                                     >
                                         <Text style={styles.addActivitySaveButtonText}>Save</Text>
@@ -1487,7 +1607,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     </View>
                                 </View>
                                 <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.divisionsList} nestedScrollEnabled>
-                                    {MOCK_DIVISIONS.filter(d => d.id !== '1').map((division) => (
+                                    {divisions.map((division) => (
                                         <TouchableOpacity
                                             key={division.id}
                                             style={styles.divisionCheckbox}
@@ -1669,11 +1789,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 <TouchableOpacity
                                     style={styles.updateButton}
                                     onPress={() => {
-                                        // Handle update
-                                        setIsEditModalOpen(false);
-                                        setEditingActivity(null);
-                                        setIsActivityTypeDropdownOpen(false);
-                                        setIsLocationTypeDropdownOpen(false);
+                                        if (!formData.title || !formData.event_date) {
+                                            Alert.alert('Error', 'Please fill in required fields (Title and Event Date)');
+                                            return;
+                                        }
+                                        if (editingActivity) {
+                                            updateActivityMutation.mutate({ ...formData, id: editingActivity.id });
+                                        }
                                     }}
                                 >
                                     <Text style={styles.updateButtonText}>
@@ -1715,9 +1837,9 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             <TouchableOpacity
                                 style={styles.deleteConfirmButton}
                                 onPress={() => {
-                                    // Handle delete
-                                    setIsDeleteModalOpen(false);
-                                    setActivityToDelete(null);
+                                    if (activityToDelete) {
+                                        deleteActivityMutation.mutate(activityToDelete.id);
+                                    }
                                 }}
                             >
                                 <Text style={styles.deleteConfirmButtonText}>Delete</Text>
@@ -3732,6 +3854,25 @@ const styles = StyleSheet.create({
         ...theme.shadows.card,
         elevation: 5,
         overflow: 'hidden',
+    },
+    calendarDayEvents: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 2,
+        marginTop: 2,
+        justifyContent: 'center',
+        paddingHorizontal: 2,
+    },
+    dayEventIndicator: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    dayEventMore: {
+        width: 3,
+        height: 3,
+        borderRadius: 1.5,
+        backgroundColor: theme.colors.textSecondary,
     },
 });
 
