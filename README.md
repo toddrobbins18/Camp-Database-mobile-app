@@ -86,18 +86,23 @@ The application is organized into a main Drawer navigation with the following mo
 *   **Navigation**: React Navigation (Drawer & Stack)
 *   **UI Components**: React Native Elements + Custom Components
 *   **Styling**: StyleSheet API (Centralized Theme in `src/theme/theme.ts`)
-*   **Backend**: Supabase (Client configured in `src/supabase`)
+*   **Backend & APIs**: Supabase
+    *   **Edge Functions**: Located in `supabase/functions/` (20+ functions for AI, notifications, etc.)
+    *   **Database**: PostgreSQL via Supabase, migrations in `supabase/migrations/`
 *   **Icons**: Ionicons (@expo/vector-icons)
 
 ## 📁 Project Structure
 
 ```
+supabase/           # Backend (Edge Functions, Migrations, Config)
+├── functions/      # API Logic (Edge Functions)
+└── migrations/     # Database Schema & Migrations
 src/
-├── components/     # Reusable UI components (buttons, cards, inputs)
-├── navigation/     # Navigation setup (AppNavigator.tsx, Drawer config)
-├── screens/        # Individual app screens (one file per screen)
-├── theme/          # Centralized styling constants (Colors, Spacing)
-└── supabase/       # Supabase client configuration and types
+├── components/     # Reusable UI components
+├── navigation/     # Navigation setup
+├── screens/        # App screens (with Supabase integration logic)
+├── theme/          # Centralized styling
+└── lib/            # Utility libraries and schemas
 ```
 
 ## ⚠️ Troubleshooting
