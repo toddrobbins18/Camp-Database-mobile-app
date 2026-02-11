@@ -7,53 +7,205 @@ import {
     TouchableOpacity,
     Modal,
     Pressable,
+    ActivityIndicator,
+    Alert,
+    Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import * as DocumentPicker from 'expo-document-picker';
+import { supabase } from '../lib/supabase';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+interface RainyDayDocument {
+    id: string;
+    date: string;
+    file_url: string;
+    file_name: string;
+    uploaded_by: string;
+    created_at: string;
+}
 
 interface RainyDayScheduleScreenProps {
     navigation: any;
 }
 
 export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenProps) => {
-    const [date, setDate] = useState('01/24/2026');
-    const [fileName, setFileName] = useState('');
+    const queryClient = useQueryClient();
+    const [selectedDateStr, setSelectedDateStr] = useState(new Date().toISOString().split('T')[0]);
+    const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+    const [uploading, setUploading] = useState(false);
 
     // Date Picker State
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [datePickerMonth, setDatePickerMonth] = useState(new Date().getMonth());
     const [datePickerYear, setDatePickerYear] = useState(new Date().getFullYear());
 
+    // Fetch profile to get company_id
+    const { data: profile } = useQuery({
+        queryKey: ['profile'],
+        queryFn: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('No user found');
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+            if (error) throw error;
+            return data;
+        }
+    });
+
+    const companyId = profile?.company_id;
+    const selectedSeason = new Date().getFullYear().toString();
+
+    // Fetch documents
+    const { data: documents = [], isLoading: isLoadingDocs } = useQuery({
+        queryKey: ['rainy_day_documents', companyId, selectedSeason],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from("rainy_day_documents")
+                .select("*")
+                .eq("company_id", companyId)
+                .eq("season", selectedSeason)
+                .order("date", { ascending: false });
+
+            if (error) throw error;
+            return data as RainyDayDocument[];
+        },
+        enabled: !!companyId
+    });
+
     const monthNames = [
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'
     ];
 
-    const formatDate = (d: Date) => {
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const year = d.getFullYear();
+    const formatDateForUI = (dateString: string) => {
+        if (!dateString) return '';
+        const [year, month, day] = dateString.split('-');
         return `${month}/${day}/${year}`;
     };
 
-    const handleFileUpload = async () => {
+    const handleFileSelect = async () => {
         try {
             const result = await DocumentPicker.getDocumentAsync({
                 type: 'application/pdf',
                 copyToCacheDirectory: true,
             });
 
-            if (result.assets && result.assets[0]) {
-                setFileName(result.assets[0].name);
-                // Here you would typically handle the file upload to your backend
-                // const fileUri = result.assets[0].uri;
+            if (!result.canceled && result.assets && result.assets[0]) {
+                setSelectedFile(result.assets[0]);
             }
         } catch (err) {
             console.error('Error picking document:', err);
         }
+    };
+
+    const handleUpload = async () => {
+        if (!selectedFile || !companyId) return;
+
+        setUploading(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("Not authenticated");
+
+            // Prepare file for upload
+            // In React Native, we need to fetch the file content from the URI
+            const response = await fetch(selectedFile.uri);
+            const blob = await response.blob();
+
+            const timestamp = Date.now();
+            const fileName = selectedFile.name;
+            const filePath = `${companyId}/${selectedSeason}/${selectedDateStr}-${timestamp}-${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from("rainy-day-documents")
+                .upload(filePath, blob, {
+                    contentType: "application/pdf",
+                    upsert: false
+                });
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from("rainy-day-documents")
+                .getPublicUrl(filePath);
+
+            const { error } = await supabase
+                .from("rainy_day_documents")
+                .insert({
+                    company_id: companyId,
+                    season: selectedSeason,
+                    date: selectedDateStr,
+                    file_name: fileName,
+                    file_url: publicUrl,
+                    uploaded_by: user.id,
+                });
+
+            if (error) throw error;
+
+            Alert.alert("Success", "Rainy Day Schedule uploaded successfully");
+            setSelectedFile(null);
+            queryClient.invalidateQueries({ queryKey: ['rainy_day_documents'] });
+        } catch (error) {
+            console.error("Upload error:", error);
+            Alert.alert("Error", "Failed to upload document");
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleViewPDF = async (fileUrl: string) => {
+        const canOpen = await Linking.canOpenURL(fileUrl);
+        if (canOpen) {
+            await Linking.openURL(fileUrl);
+        } else {
+            Alert.alert("Error", "Cannot open this URL");
+        }
+    };
+
+    const handleDelete = async (id: string, fileUrl: string) => {
+        Alert.alert(
+            "Confirm Delete",
+            "Are you sure you want to delete this document?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            const urlParts = fileUrl.split('/rainy-day-documents/');
+                            if (urlParts.length > 1) {
+                                const filePath = urlParts[1].split('?')[0];
+                                const { error: storageError } = await supabase.storage
+                                    .from("rainy-day-documents")
+                                    .remove([filePath]);
+                                if (storageError) console.error("Storage delete error:", storageError);
+                            }
+
+                            const { error } = await supabase
+                                .from("rainy_day_documents")
+                                .delete()
+                                .eq("id", id);
+
+                            if (error) throw error;
+
+                            Alert.alert("Success", "Document deleted");
+                            queryClient.invalidateQueries({ queryKey: ['rainy_day_documents'] });
+                        } catch (error) {
+                            console.error("Delete error:", error);
+                            Alert.alert("Error", "Failed to delete document");
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const renderDatePicker = () => {
@@ -129,9 +281,8 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                                     if (!d) {
                                         return <View key={index} style={styles.dateCell} />;
                                     }
-                                    const dateStr = formatDate(d);
-                                    const isToday = formatDate(d) === formatDate(today);
-                                    const isSelected = date && formatDate(d) === date;
+                                    const dateISO = d.toISOString().split('T')[0];
+                                    const isSelected = selectedDateStr === dateISO;
                                     return (
                                         <TouchableOpacity
                                             key={index}
@@ -140,7 +291,7 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                                                 isSelected && styles.selectedDateCell,
                                             ]}
                                             onPress={() => {
-                                                setDate(dateStr);
+                                                setSelectedDateStr(dateISO);
                                                 setShowDatePicker(false);
                                             }}
                                         >
@@ -159,15 +310,14 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                             <View style={styles.datePickerActions}>
                                 <TouchableOpacity
                                     onPress={() => {
-                                        setDate('');
                                         setShowDatePicker(false);
                                     }}
                                 >
-                                    <Text style={styles.datePickerActionText}>Clear</Text>
+                                    <Text style={styles.datePickerActionText}>Cancel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     onPress={() => {
-                                        setDate(formatDate(today));
+                                        setSelectedDateStr(new Date().toISOString().split('T')[0]);
                                         setShowDatePicker(false);
                                     }}
                                 >
@@ -216,7 +366,7 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                     <View style={styles.formGroup}>
                         <Text style={styles.label}>Date</Text>
                         <View style={styles.dateInputContainer}>
-                            <Text style={styles.dateText}>{date || 'Select Date'}</Text>
+                            <Text style={styles.dateText}>{formatDateForUI(selectedDateStr) || 'Select Date'}</Text>
                             <TouchableOpacity onPress={() => setShowDatePicker(true)}>
                                 <Ionicons name="calendar-outline" size={20} color={theme.colors.text} />
                             </TouchableOpacity>
@@ -226,17 +376,25 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                     <View style={styles.formGroup}>
                         <Text style={styles.label}>PDF File</Text>
                         <View style={styles.fileInputContainer}>
-                            <TouchableOpacity style={styles.chooseFileButton} onPress={handleFileUpload}>
+                            <TouchableOpacity style={styles.chooseFileButton} onPress={handleFileSelect}>
                                 <Text style={styles.chooseFileText}>Choose File</Text>
                             </TouchableOpacity>
-                            <Text style={styles.fileNameText}>
-                                {fileName || 'No file chosen'}
+                            <Text style={styles.fileNameText} numberOfLines={1}>
+                                {selectedFile?.name || 'No file chosen'}
                             </Text>
                         </View>
                     </View>
 
-                    <TouchableOpacity style={styles.uploadButton}>
-                        <Text style={styles.uploadButtonText}>Upload Schedule</Text>
+                    <TouchableOpacity
+                        style={[styles.uploadButton, (!selectedFile || uploading) && { opacity: 0.6 }]}
+                        onPress={handleUpload}
+                        disabled={!selectedFile || uploading}
+                    >
+                        {uploading ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                            <Text style={styles.uploadButtonText}>Upload Schedule</Text>
+                        )}
                     </TouchableOpacity>
                 </StyledCard>
 
@@ -247,9 +405,44 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                         <Text style={styles.uploadedTitle}>Uploaded Schedules</Text>
                     </View>
 
-                    <StyledCard style={styles.emptyStateCard}>
-                        <Text style={styles.emptyStateText}>No schedules uploaded yet</Text>
-                    </StyledCard>
+                    {isLoadingDocs ? (
+                        <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 20 }} />
+                    ) : documents.length === 0 ? (
+                        <StyledCard style={styles.emptyStateCard}>
+                            <Text style={styles.emptyStateText}>No schedules uploaded yet</Text>
+                        </StyledCard>
+                    ) : (
+                        documents.map((doc) => (
+                            <StyledCard key={doc.id} style={styles.docCard}>
+                                <View style={styles.docInfo}>
+                                    <View style={styles.docIconContainer}>
+                                        <Ionicons name="rainy" size={24} color={theme.colors.primary} />
+                                    </View>
+                                    <View style={styles.docTextContainer}>
+                                        <Text style={styles.docFileName} numberOfLines={1}>{doc.file_name}</Text>
+                                        <Text style={styles.docSubText}>
+                                            {formatDateForUI(doc.date)} • Uploaded {new Date(doc.created_at).toLocaleDateString()}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={styles.docActions}>
+                                    <TouchableOpacity
+                                        style={styles.docButton}
+                                        onPress={() => handleViewPDF(doc.file_url)}
+                                    >
+                                        <Ionicons name="eye-outline" size={18} color={theme.colors.text} />
+                                        <Text style={styles.docButtonText}>View PDF</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.deleteButton}
+                                        onPress={() => handleDelete(doc.id, doc.file_url)}
+                                    >
+                                        <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                                    </TouchableOpacity>
+                                </View>
+                            </StyledCard>
+                        ))
+                    )}
                 </View>
 
                 {/* Chat Bubble (Floating Action Button style placeholder) */}
@@ -271,6 +464,7 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         padding: theme.spacing.md,
+        paddingBottom: 80,
     },
     header: {
         flexDirection: 'row',
@@ -376,6 +570,8 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.md,
         alignItems: 'center',
         marginTop: theme.spacing.sm,
+        height: 48,
+        justifyContent: 'center',
     },
     uploadButtonText: {
         color: '#fff',
@@ -405,6 +601,66 @@ const styles = StyleSheet.create({
     emptyStateText: {
         color: theme.colors.textSecondary,
         fontSize: 14,
+    },
+    docCard: {
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.sm,
+    },
+    docInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: theme.spacing.md,
+    },
+    docIconContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: theme.colors.background,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: theme.spacing.md,
+    },
+    docTextContainer: {
+        flex: 1,
+    },
+    docFileName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: 2,
+    },
+    docSubText: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+    },
+    docActions: {
+        flexDirection: 'row',
+        gap: theme.spacing.sm,
+    },
+    docButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: theme.spacing.sm,
+        gap: 8,
+    },
+    docButtonText: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: theme.colors.text,
+    },
+    deleteButton: {
+        width: 44,
+        height: 44,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
     },
     chatButton: {
         position: 'absolute',

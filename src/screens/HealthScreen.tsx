@@ -4,15 +4,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { supabase } from '../lib/supabase';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert } from 'react-native';
+
 
 export const HealthScreen = ({ navigation }: any) => {
+    const queryClient = useQueryClient();
     const [activeView, setActiveView] = useState('list'); // 'list' or 'calendar'
+
     const [activeTab, setActiveTab] = useState('Daily Log');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [showDivisionPicker, setShowDivisionPicker] = useState(false);
-    const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1)); // January 2026
-    const [selectedDate, setSelectedDate] = useState(new Date(2026, 0, 22)); // January 22, 2026
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+    const [selectedDate, setSelectedDate] = useState(new Date());
+
     const [rfidInput, setRfidInput] = useState('');
     const [healthCenterRfidInput, setHealthCenterRfidInput] = useState('');
     const [searchChildrenQuery, setSearchChildrenQuery] = useState('');
@@ -29,107 +37,334 @@ export const HealthScreen = ({ navigation }: any) => {
     const [showChildPicker, setShowChildPicker] = useState(false);
     const [showUploadModal, setShowUploadModal] = useState(false);
 
-    const divisions = [
-        'All Divisions',
-        'Freshmen A Girls',
-        'Freshmen B Girls',
-        'Cadet Girls',
-        'Sophomore Girls',
-        'Junior Girls',
-        'Senior Girls',
-        'Super Girls',
-        'Teen Girls',
-        'CIT Girls',
-        'Freshmen A Boys',
-        'Freshmen B Boys',
-        'Cadet Boys',
-        'Sophomore Boys',
-        'Junior Boys',
-        'Senior Boys',
-        'Super Boys',
-        'Teen Boys',
-        'CIT Boys',
-    ];
+    // Fetch profile to get company_id
+    const { data: profile } = useQuery({
+        queryKey: ['profile'],
+        queryFn: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('No user found');
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+            if (error) throw error;
+            return data;
+        }
+    });
 
-    // Sample children data for Health Center
-    const availableChildren = [
-        { id: '1', name: 'Abby Weiss', division: 'CIT Girls' },
-        { id: '2', name: 'Adam Elliott', division: 'Freshmen B Boys' },
-        { id: '3', name: 'Addison Brewer', division: 'Sophomore Girls' },
-        { id: '4', name: 'Adrianna Gelb', division: 'CIT Girls' },
-        { id: '5', name: 'Alden Feld', division: 'Freshmen B Boys' },
-        { id: '6', name: 'Alden Leon', division: 'Sophomore Boys' },
-        { id: '7', name: 'Alden Weisz', division: 'Freshmen B Boys' },
-        { id: '8', name: 'AJ Goldberg', division: 'Freshmen B Boys' },
-        { id: '9', name: 'Alaia Khalil', division: 'Freshmen B Girls' },
-        { id: '10', name: 'Alex Haboush', division: 'CIT Boys' },
-        { id: '11', name: 'Alex Stumacher', division: 'Cadet Boys' },
-        { id: '12', name: 'Alexa Alfred', division: 'Super Senior Girls' },
-        { id: '13', name: 'Alexa Friedland', division: 'Super Senior Girls' },
-        { id: '14', name: 'Alexa Horowitz', division: 'Sophomore Girls' },
-        { id: '15', name: 'Alexa Jacobs', division: 'Sophomore Girls' },
-        { id: '16', name: 'Alexa Mendelson', division: 'Sophomore Girls' },
-        { id: '17', name: 'Alexa Miller', division: 'Super Senior Girls' },
-        { id: '18', name: 'Alexa Soble', division: 'Freshmen A Girls' },
-        { id: '19', name: 'Alexa Zinner', division: 'Super Senior Girls' },
-        { id: '20', name: 'Alexander Ull', division: 'Freshmen B Boys' },
-        { id: '21', name: 'Alexis Kalikow', division: 'Cadet Girls' },
-        { id: '22', name: 'Ali Vieira', division: 'Junior Girls' },
-        { id: '23', name: 'Andrew Feigenbaum', division: 'Sophomore Boys' },
-        { id: '24', name: 'Annabelle Korff', division: 'Cadet Girls' },
-        { id: '25', name: 'Arden Suveyke', division: 'Sophomore Girls' },
-        { id: '26', name: 'Ari Gerber', division: 'Freshmen A Boys' },
-        { id: '27', name: 'Ari Lean', division: 'Super Senior Boys' },
-        { id: '28', name: 'Ari Milim', division: 'Sophomore Boys' },
-        { id: '29', name: 'Ari Talaszan', division: 'Freshmen B Boys' },
-        { id: '30', name: 'Ariana Mizrachi', division: 'Freshmen B Girls' },
-        { id: '31', name: 'Arielle Sullivan', division: 'Senior Girls' },
-        { id: '32', name: 'Ascher Sundick', division: 'Sophomore Boys' },
-        { id: '33', name: 'Asha Sampathkur', division: 'Freshmen A Girls' },
-        { id: '34', name: 'Asher Greenberg', division: 'Teen TN1 Boys' },
-        { id: '35', name: 'Asher Talaszan', division: 'Sophomore Boys' },
-        { id: '36', name: 'Ashley Weingarten', division: 'Teen TN1 Girls' },
-        { id: '37', name: 'Ashton Donzis', division: 'Junior Boys' },
-        { id: '38', name: 'Ashton Harvey', division: 'Freshmen A Boys' },
-        { id: '39', name: 'Ashton Weiss', division: 'Teen TN1 Boys' },
-        { id: '40', name: 'Audrey Slater', division: 'Freshmen A Girls' },
-        { id: '41', name: 'Austin Bloch', division: 'Senior Boys' },
-        { id: '42', name: 'Austyn Fishman', division: 'Freshmen B Girls' },
-        { id: '43', name: 'Ava Englander', division: 'Teen TN1 Girls' },
-        { id: '44', name: 'Ava Schnall', division: 'Teen TN1 Girls' },
-        { id: '45', name: 'Ava Wolf', division: 'Junior Girls' },
-        { id: '46', name: 'Ava Zinner', division: 'Super Senior Girls' },
-        { id: '47', name: 'Avery Atlas', division: 'Freshmen B Girls' },
-        { id: '48', name: 'Avery Berg', division: 'Freshmen A Girls' },
-        { id: '49', name: 'Avery Kaplan', division: 'Junior Girls' },
-        { id: '50', name: 'Avery Rothstein', division: 'CIT Girls' },
-        { id: '51', name: 'Avery Slater', division: 'Sophomore Girls' },
-        { id: '52', name: 'Avery Warsaw', division: 'Freshmen B Girls' },
-        { id: '53', name: 'Axel Altman', division: 'Freshmen B Boys' },
-        { id: '54', name: 'Axd Helfer', division: 'Sophomore Boys' },
-        { id: '55', name: 'Ben Geller', division: 'Junior Boys' },
-        { id: '56', name: 'Ben Kaplan', division: 'Teen TN1 Boys' },
-        { id: '57', name: 'Ben Schochet', division: 'Senior Boys' },
-        { id: '58', name: 'Benjamin Fina', division: 'Sophomore Boys' },
-        { id: '59', name: 'Benjamin Khadoury', division: 'Senior Boys' },
-        { id: '60', name: 'Benjamin Rozbruch', division: 'Junior Boys' },
-        { id: '61', name: 'Bibi Khoudiari', division: 'Freshmen B Boys' },
-        { id: '62', name: 'Blake Bailey', division: 'Junior Girls' },
-        { id: '63', name: 'Blake Bortnick', division: 'Junior Boys' },
-        { id: '64', name: 'Blake Brewer', division: 'Super Senior Boys' },
-        { id: '65', name: 'Blake Jaffe', division: 'Super Senior Boys' },
-        { id: '66', name: 'Blake Stern', division: 'Junior Girls' },
-        { id: '67', name: 'Bodin Geller', division: 'CIT Boys' },
-        { id: '68', name: 'Bradley Feierstein', division: 'Freshmen B Boys' },
-        { id: '69', name: 'Bradley Ottavino', division: 'Sophomore Girls' },
-        { id: '70', name: 'Brady Goldstein', division: 'Senior Boys' },
-    ];
+    const companyId = profile?.company_id;
+
+    // Fetch children
+    const { data: remoteChildren = [] } = useQuery({
+        queryKey: ['children', companyId, selectedYear],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('children')
+                .select(`
+                    *,
+                    division:divisions(id, name, gender)
+                `)
+                .eq('company_id', companyId)
+                .eq('season', selectedYear)
+                .order('name');
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!companyId
+    });
+
+    // Fetch staff
+    const { data: remoteStaff = [] } = useQuery({
+        queryKey: ['staff', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('staff')
+                .select('*')
+                .eq('company_id', companyId)
+                .eq('status', 'active');
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!companyId
+    });
+
+    // Fetch divisions
+    const { data: remoteDivisions = [] } = useQuery({
+        queryKey: ['divisions', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('divisions')
+                .select('*')
+                .eq('company_id', companyId)
+                .eq('is_active', true);
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!companyId
+    });
+
+    // Fetch medications
+    const { data: medications = [], isLoading: isLoadingMedications } = useQuery({
+        queryKey: ['medications', companyId, selectedYear, selectedDate],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const dateStr = selectedDate.toISOString().split('T')[0];
+            const { data, error } = await supabase
+                .from('medication_logs')
+                .select('*, children(name), staff(name)')
+                .eq('company_id', companyId)
+                .eq('season', selectedYear)
+                .eq('date', dateStr)
+                .order('meal_time');
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!companyId
+    });
+
+    // Fetch admissions
+    const { data: admissions = [], isLoading: isLoadingAdmissions } = useQuery({
+        queryKey: ['admissions', companyId, selectedYear],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('health_center_admissions')
+                .select(`
+                    *,
+                    children!fk_health_center_admissions_child_id (
+                        id,
+                        name,
+                        division_id,
+                        division:division_id (name)
+                    ),
+                    staff (
+                        id,
+                        name,
+                        role
+                    )
+                `)
+                .eq('company_id', companyId)
+                .eq('season', selectedYear)
+                .is('checked_out_at', null)
+                .order('admitted_at', { ascending: false });
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!companyId
+    });
+
+    // Fetch admission history
+    const { data: admissionHistory = [] } = useQuery({
+        queryKey: ['admissionHistory', companyId, selectedYear],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('health_center_admissions')
+                .select(`
+                    *,
+                    children!fk_health_center_admissions_child_id (
+                        id,
+                        name,
+                        division_id,
+                        division:division_id (name)
+                    )
+                `)
+                .eq('company_id', companyId)
+                .eq('season', selectedYear)
+                .not('checked_out_at', 'is', null)
+                .order('admitted_at', { ascending: false });
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!companyId
+    });
+
+    // Replace static divisions and availableChildren with remote data
+    const availableChildren = remoteChildren.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        division: c.division?.name || 'N/A'
+    }));
+
+    const activeDivisionsList = ['All Divisions', ...remoteDivisions.map((d: any) => d.name)];
+
+
+    // Real-time synchronization
+    React.useEffect(() => {
+        const channel = supabase
+            .channel('medication-and-admissions-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'medication_logs' },
+                () => {
+                    queryClient.invalidateQueries({ queryKey: ['medications'] });
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'health_center_admissions' },
+                () => {
+                    queryClient.invalidateQueries({ queryKey: ['admissions'] });
+                    queryClient.invalidateQueries({ queryKey: ['admissionHistory'] });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [selectedDate, selectedYear, companyId, queryClient]);
+    const divisions = activeDivisionsList;
 
     // Filter children based on search query
-    const filteredChildren = availableChildren.filter(child =>
+    const filteredChildren = availableChildren.filter((child: any) =>
         child.name.toLowerCase().includes(searchChildrenQuery.toLowerCase()) ||
         child.division.toLowerCase().includes(searchChildrenQuery.toLowerCase())
     );
+
+    // Filter medications based on division and search query
+    const filteredMedications = medications.filter((med: any) => {
+        const matchesSearch = med.children?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesDivision = selectedDivision === 'All Divisions' || med.children?.division?.name === selectedDivision;
+        return matchesSearch && matchesDivision;
+    });
+
+    // Filter admissions based on division and search query
+    const filteredAdmissions = admissions.filter((admission: any) => {
+        // Staff admissions (no child_id) are always shown in this context
+        if (!admission.child_id) return true;
+        const matchesSearch = admission.children?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesDivision = selectedDivision === 'All Divisions' || admission.children?.division?.name === selectedDivision;
+        return matchesSearch && matchesDivision;
+    });
+
+    // Filter admission history based on division and search query
+    const filteredHistory = admissionHistory.filter((admission: any) => {
+        if (!admission.child_id) return true;
+        const matchesSearch = admission.children?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesDivision = selectedDivision === 'All Divisions' || admission.children?.division?.name === selectedDivision;
+        return matchesSearch && matchesDivision;
+    });
+
+    // Mutations
+    const administerMutation = useMutation({
+        mutationFn: async (medId: string) => {
+            const { data: { user } } = await supabase.auth.getUser();
+            const { data: staffData } = await supabase
+                .from("staff")
+                .select("id")
+                .eq("email", user?.email)
+                .single();
+
+            const { error } = await supabase
+                .from("medication_logs")
+                .update({
+                    administered: true,
+                    administered_by: staffData?.id,
+                    administered_at: new Date().toISOString(),
+                })
+                .eq("id", medId);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['medications'] });
+            Alert.alert('Success', 'Medication marked as administered');
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to administer medication');
+        }
+    });
+
+    const admitMutation = useMutation({
+        mutationFn: async ({ childId, reason, notes }: { childId: string, reason: string, notes: string }) => {
+            const { data: { user } } = await supabase.auth.getUser();
+
+            // Check for existing admission
+            const { data: existing } = await supabase
+                .from("health_center_admissions")
+                .select("id")
+                .eq("child_id", childId)
+                .is("checked_out_at", null)
+                .maybeSingle();
+
+            if (existing) throw new Error('Child is already admitted');
+
+            const { error } = await supabase
+                .from("health_center_admissions")
+                .insert({
+                    child_id: childId,
+                    admitted_by: user?.id,
+                    reason,
+                    notes,
+                    season: selectedYear,
+                    company_id: companyId,
+                });
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admissions'] });
+            Alert.alert('Success', 'Child admitted to Health Center');
+            setShowAdmitModal(false);
+            setAdmitReason('');
+            setChildToAdmit(null);
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to admit child');
+        }
+    });
+
+    const checkoutMutation = useMutation({
+        mutationFn: async (admissionId: string) => {
+            const { data: { user } } = await supabase.auth.getUser();
+            const { error } = await supabase
+                .from("health_center_admissions")
+                .update({
+                    checked_out_at: new Date().toISOString(),
+                    checked_out_by: user?.id,
+                })
+                .eq("id", admissionId);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admissions'] });
+            Alert.alert('Success', 'Checked out successfully');
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to checkout');
+        }
+    });
+
+    const addMedicationMutation = useMutation({
+        mutationFn: async (newMed: any) => {
+            const { error } = await supabase
+                .from("medication_logs")
+                .insert([{
+                    ...newMed,
+                    company_id: companyId,
+                    season: selectedYear,
+                    date: new Date().toISOString().split('T')[0]
+                }]);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['medications'] });
+            Alert.alert('Success', 'Medication added successfully');
+            // Reset form
+            setSelectedMedicationChild('');
+            setMedicationName('');
+            setDosage('');
+            setMealTime('');
+            setNotes('');
+            setIsRecurring(false);
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to add medication');
+        }
+    });
 
     // Calendar functions
     const getDaysInMonth = (date: Date) => {
@@ -430,7 +665,32 @@ export const HealthScreen = ({ navigation }: any) => {
                                             value={rfidInput}
                                             onChangeText={setRfidInput}
                                         />
-                                        <TouchableOpacity style={styles.scanButton}>
+                                        <TouchableOpacity
+                                            style={styles.scanButton}
+                                            onPress={async () => {
+                                                if (!rfidInput.trim()) return;
+                                                // Find child by RFID
+                                                const { data: child } = await supabase
+                                                    .from('children')
+                                                    .select('id, name')
+                                                    .eq('rfid', rfidInput.trim())
+                                                    .eq('company_id', companyId)
+                                                    .eq('season', selectedYear)
+                                                    .single();
+
+                                                if (child) {
+                                                    const med = medications.find((m: any) => m.child_id === child.id && !m.administered);
+                                                    if (med) {
+                                                        administerMutation.mutate(med.id);
+                                                        setRfidInput('');
+                                                    } else {
+                                                        Alert.alert('No Medications', `No pending medications for ${child.name} today.`);
+                                                    }
+                                                } else {
+                                                    Alert.alert('Not Found', 'RFID bracelet not recognized.');
+                                                }
+                                            }}
+                                        >
                                             <Ionicons name="scan-outline" size={18} color="white" />
                                             <Text style={styles.scanButtonText}>Scan</Text>
                                         </TouchableOpacity>
@@ -440,26 +700,95 @@ export const HealthScreen = ({ navigation }: any) => {
                                         >
                                             <Text style={styles.clearButtonText}>Clear</Text>
                                         </TouchableOpacity>
+
                                     </View>
                                 </StyledCard>
 
-                                {/* Empty State */}
-                                <View style={styles.emptyStateRow}>
-                                    <Text style={styles.emptyText}>No medications scheduled for today</Text>
-                                    <View style={styles.emptyDot} />
-                                </View>
+                                {filteredMedications.length === 0 ? (
+                                    <View style={styles.emptyStateRow}>
+                                        <Text style={styles.emptyText}>No medications scheduled for today</Text>
+                                        <View style={styles.emptyDot} />
+                                    </View>
+                                ) : (
+                                    <ScrollView style={{ width: '100%' }}>
+                                        {filteredMedications.map((med: any) => (
+                                            <View key={med.id} style={styles.childCard}>
+                                                <View style={styles.childCardContent}>
+                                                    <View style={styles.medicationNameRow}>
+                                                        <Text style={styles.childName}>{med.children?.name}</Text>
+                                                        {med.administered && (
+                                                            <View style={[styles.statusBadge, { backgroundColor: '#dcfce7' }]}>
+                                                                <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
+                                                                <Text style={[styles.statusText, { color: '#16a34a' }]}>Given</Text>
+                                                            </View>
+                                                        )}
+                                                    </View>
+                                                    <Text style={styles.medicationDetailsText}>
+                                                        {med.medication_name} - {med.dosage} ({med.meal_time})
+                                                    </Text>
+                                                    {med.administered && med.staff?.name && (
+                                                        <Text style={styles.administeredByText}>By {med.staff.name}</Text>
+                                                    )}
+                                                </View>
+                                                {!med.administered && (
+                                                    <TouchableOpacity
+                                                        style={styles.administerButton}
+                                                        onPress={() => administerMutation.mutate(med.id)}
+                                                    >
+                                                        <Text style={styles.administerButtonText}>Administer</Text>
+                                                    </TouchableOpacity>
+                                                )}
+                                            </View>
+                                        ))}
+                                    </ScrollView>
+                                )}
                             </StyledCard>
                         ) : activeTab === 'Health Center' ? (
                             <View style={styles.healthCenterContainer}>
                                 {/* Health Center Admissions Header */}
                                 <View style={styles.healthCenterHeader}>
                                     <View style={styles.healthCenterTitleRow}>
-                                        <Ionicons name="lock-closed-outline" size={20} color={theme.colors.secondary} />
+                                        <Ionicons name="medical-outline" size={20} color={theme.colors.secondary} />
                                         <Text style={styles.healthCenterTitle}>Health Center Admissions</Text>
                                     </View>
                                     <Text style={styles.healthCenterSubtitle}>
                                         Track overnight admissions to the health center
                                     </Text>
+                                </View>
+
+                                {/* Active Admissions Section */}
+                                <View style={styles.activeAdmissionsSection}>
+                                    <View style={styles.activeAdmissionsHeader}>
+                                        <Ionicons name="bed-outline" size={18} color={theme.colors.secondary} />
+                                        <Text style={styles.activeAdmissionsTitle}>Active Admissions ({filteredAdmissions.length})</Text>
+                                    </View>
+                                    {filteredAdmissions.length === 0 ? (
+                                        <View style={styles.emptyState}>
+                                            <Text style={styles.emptyText}>No active admissions</Text>
+                                        </View>
+                                    ) : (
+                                        <ScrollView style={styles.admissionsList}>
+                                            {filteredAdmissions.map((admission: any) => (
+                                                <View key={admission.id} style={styles.childCard}>
+                                                    <View style={styles.childCardContent}>
+                                                        <Text style={styles.childName}>{admission.children?.name || admission.staff?.name}</Text>
+                                                        <Text style={styles.childDivisionText}>
+                                                            Reason: {admission.reason}
+                                                        </Text>
+                                                        <Text style={styles.admissionTimeText}>
+                                                            Admitted: {new Date(admission.admitted_at).toLocaleString()}
+                                                        </Text>
+                                                    </View>
+                                                    <TouchableOpacity
+                                                        style={[styles.admitButton, { backgroundColor: '#ef4444' }]}
+                                                        onPress={() => checkoutMutation.mutate(admission.id)}
+                                                    >
+                                                        <Text style={[styles.admitButtonText, { color: 'white' }]}>Checkout</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            ))}
+                                        </ScrollView>
+                                    )}
                                 </View>
 
                                 {/* RFID Quick Check-in / Check-Out Card */}
@@ -480,7 +809,33 @@ export const HealthScreen = ({ navigation }: any) => {
                                             value={healthCenterRfidInput}
                                             onChangeText={setHealthCenterRfidInput}
                                         />
-                                        <TouchableOpacity style={styles.scanButton}>
+                                        <TouchableOpacity
+                                            style={styles.scanButton}
+                                            onPress={async () => {
+                                                if (!healthCenterRfidInput.trim()) return;
+                                                // Find child by RFID
+                                                const { data: child } = await supabase
+                                                    .from('children')
+                                                    .select('id, name')
+                                                    .eq('rfid', healthCenterRfidInput.trim())
+                                                    .eq('company_id', companyId)
+                                                    .eq('season', selectedYear)
+                                                    .single();
+
+                                                if (child) {
+                                                    const existing = admissions.find((a: any) => a.child_id === child.id);
+                                                    if (existing) {
+                                                        checkoutMutation.mutate(existing.id);
+                                                    } else {
+                                                        setChildToAdmit({ id: child.id, name: child.name });
+                                                        setShowAdmitModal(true);
+                                                    }
+                                                    setHealthCenterRfidInput('');
+                                                } else {
+                                                    Alert.alert('Not Found', 'RFID bracelet not recognized.');
+                                                }
+                                            }}
+                                        >
                                             <Ionicons name="scan-outline" size={18} color="white" />
                                             <Text style={styles.scanButtonText}>Scan</Text>
                                         </TouchableOpacity>
@@ -584,10 +939,29 @@ export const HealthScreen = ({ navigation }: any) => {
                                 <Text style={styles.healthCenterLogSubtitle}>
                                     Past health center admissions this season
                                 </Text>
-                                <View style={styles.emptyState}>
-                                    <Text style={styles.emptyText}>No admission history found for this season</Text>
-                                </View>
+                                {filteredHistory.length === 0 ? (
+                                    <View style={styles.emptyState}>
+                                        <Text style={styles.emptyText}>No admission history found for this season</Text>
+                                    </View>
+                                ) : (
+                                    <ScrollView style={{ width: '100%' }}>
+                                        {filteredHistory.map((admission: any) => (
+                                            <View key={admission.id} style={styles.childCard}>
+                                                <View style={styles.childCardContent}>
+                                                    <Text style={styles.childName}>{admission.children?.name || admission.staff?.name}</Text>
+                                                    <Text style={styles.childDivisionText}>
+                                                        {admission.reason} ({new Date(admission.admitted_at).toLocaleDateString()})
+                                                    </Text>
+                                                    <Text style={styles.checkoutTimeText}>
+                                                        Checked out: {new Date(admission.checked_out_at).toLocaleString()}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </ScrollView>
+                                )}
                             </StyledCard>
+
                         ) : activeTab === 'Add Medication' ? (
                             <StyledCard style={styles.addMedicationCard}>
                                 <View style={styles.addMedicationHeader}>
@@ -768,36 +1142,69 @@ export const HealthScreen = ({ navigation }: any) => {
                                     <TouchableOpacity
                                         style={styles.addMedicationButton}
                                         onPress={() => {
-                                            // Handle add medication
-                                            console.log('Add Medication:', {
-                                                child: selectedMedicationChild,
-                                                medicationName,
+                                            if (!selectedMedicationChild || !medicationName || !dosage || !mealTime) {
+                                                Alert.alert('Error', 'Please fill in all required fields');
+                                                return;
+                                            }
+                                            addMedicationMutation.mutate({
+                                                child_id: remoteChildren.find((c: any) => c.name === selectedMedicationChild)?.id,
+                                                medication_name: medicationName,
                                                 dosage,
-                                                mealTime,
+                                                meal_time: [mealTime],
                                                 notes,
-                                                isRecurring
+                                                is_recurring: isRecurring
                                             });
-                                            // Reset form
-                                            setSelectedMedicationChild('');
-                                            setMedicationName('');
-                                            setDosage('');
-                                            setMealTime('');
-                                            setNotes('');
-                                            setIsRecurring(false);
                                         }}
                                     >
-                                        <Text style={styles.addMedicationButtonText}>Add Medication</Text>
+                                        <Text style={styles.addMedicationButtonText}>
+                                            {addMedicationMutation.isPending ? 'Adding...' : 'Add Medication'}
+                                        </Text>
                                     </TouchableOpacity>
+
                                 </View>
                             </StyledCard>
                         ) : (
                             <StyledCard style={styles.medicationLogCard}>
                                 <Text style={styles.logTitle}>Daily Medication Log</Text>
                                 <Text style={styles.logDescription}>Mark off medications administered today.</Text>
-                                <View style={styles.emptyState}>
-                                    <Text style={styles.emptyText}>No medications scheduled for today.</Text>
-                                </View>
+                                {isLoadingMedications ? (
+                                    <View style={styles.emptyState}>
+                                        <Text style={styles.emptyText}>Loading medications...</Text>
+                                    </View>
+                                ) : medications.length === 0 ? (
+                                    <View style={styles.emptyState}>
+                                        <Text style={styles.emptyText}>No medications scheduled for today.</Text>
+                                    </View>
+                                ) : (
+                                    <ScrollView style={{ width: '100%' }}>
+                                        {medications.map((med: any) => (
+                                            <TouchableOpacity
+                                                key={med.id}
+                                                style={styles.childCard}
+                                                onPress={() => administerMutation.mutate(med.id)}
+                                            >
+                                                <View style={styles.childCardContent}>
+                                                    <Text style={styles.childName}>{med.children?.name}</Text>
+                                                    <Text style={styles.childDivisionText}>
+                                                        {med.medication_name} - {med.dosage} ({med.meal_time?.[0]})
+                                                    </Text>
+                                                </View>
+                                                {med.administered ? (
+                                                    <Ionicons name="checkmark-circle" size={24} color="#10b981" />
+                                                ) : (
+                                                    <TouchableOpacity
+                                                        style={styles.admitButton}
+                                                        onPress={() => administerMutation.mutate(med.id)}
+                                                    >
+                                                        <Text style={styles.admitButtonText}>Give</Text>
+                                                    </TouchableOpacity>
+                                                )}
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                )}
                             </StyledCard>
+
                         )}
                     </>
                 )}
@@ -1375,13 +1782,6 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.lg,
     },
     // Today's Medications Styles
-    todaysMedicationsCard: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.xl,
-        minHeight: 400,
-        width: '100%',
-    },
     todaysMedicationsTitle: {
         ...theme.typography.h2,
         fontSize: 20,
@@ -1395,6 +1795,8 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
         marginBottom: theme.spacing.lg,
     },
+
+
     rfidCard: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.md,
