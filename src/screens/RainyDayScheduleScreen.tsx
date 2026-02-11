@@ -43,6 +43,10 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
     const [datePickerMonth, setDatePickerMonth] = useState(new Date().getMonth());
     const [datePickerYear, setDatePickerYear] = useState(new Date().getFullYear());
 
+    // Delete Confirmation State
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [docToDelete, setDocToDelete] = useState<{ id: string; url: string } | null>(null);
+
     // Fetch profile to get company_id
     const { data: profile } = useQuery({
         queryKey: ['profile'],
@@ -161,51 +165,55 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
     };
 
     const handleViewPDF = async (fileUrl: string) => {
-        const canOpen = await Linking.canOpenURL(fileUrl);
-        if (canOpen) {
-            await Linking.openURL(fileUrl);
-        } else {
-            Alert.alert("Error", "Cannot open this URL");
+        try {
+            const canOpen = await Linking.canOpenURL(fileUrl);
+            if (canOpen) {
+                await Linking.openURL(fileUrl);
+            } else {
+                // Fallback for web if canOpenURL fails
+                window.open(fileUrl, '_blank');
+            }
+        } catch (error) {
+            console.error("Error opening PDF:", error);
+            window.open(fileUrl, '_blank');
         }
     };
 
-    const handleDelete = async (id: string, fileUrl: string) => {
-        Alert.alert(
-            "Confirm Delete",
-            "Are you sure you want to delete this document?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            const urlParts = fileUrl.split('/rainy-day-documents/');
-                            if (urlParts.length > 1) {
-                                const filePath = urlParts[1].split('?')[0];
-                                const { error: storageError } = await supabase.storage
-                                    .from("rainy-day-documents")
-                                    .remove([filePath]);
-                                if (storageError) console.error("Storage delete error:", storageError);
-                            }
+    const handleDelete = (id: string, fileUrl: string) => {
+        setDocToDelete({ id, url: fileUrl });
+        setShowDeleteModal(true);
+    };
 
-                            const { error } = await supabase
-                                .from("rainy_day_documents")
-                                .delete()
-                                .eq("id", id);
+    const confirmDelete = async () => {
+        if (!docToDelete) return;
+        const { id, url: fileUrl } = docToDelete;
 
-                            if (error) throw error;
+        try {
+            const urlParts = fileUrl.split('/rainy-day-documents/');
+            if (urlParts.length > 1) {
+                const filePath = urlParts[1].split('?')[0];
+                const { error: storageError } = await supabase.storage
+                    .from("rainy-day-documents")
+                    .remove([filePath]);
+                if (storageError) console.error("Storage delete error:", storageError);
+            }
 
-                            Alert.alert("Success", "Document deleted");
-                            queryClient.invalidateQueries({ queryKey: ['rainy_day_documents'] });
-                        } catch (error) {
-                            console.error("Delete error:", error);
-                            Alert.alert("Error", "Failed to delete document");
-                        }
-                    }
-                }
-            ]
-        );
+            const { error } = await supabase
+                .from("rainy_day_documents")
+                .delete()
+                .eq("id", id);
+
+            if (error) throw error;
+
+            Alert.alert("Success", "Document deleted");
+            queryClient.invalidateQueries({ queryKey: ['rainy_day_documents'] });
+        } catch (error) {
+            console.error("Delete error:", error);
+            Alert.alert("Error", "Failed to delete document");
+        } finally {
+            setShowDeleteModal(false);
+            setDocToDelete(null);
+        }
     };
 
     const renderDatePicker = () => {
@@ -453,6 +461,34 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
             </ScrollView>
 
             {renderDatePicker()}
+
+            {/* Custom Delete Confirmation Modal */}
+            <Modal visible={showDeleteModal} transparent animationType="fade">
+                <View style={[styles.modalOverlay, { justifyContent: 'center' }]}>
+                    <View style={styles.confirmModalContent}>
+                        <View style={styles.confirmIconContainer}>
+                            <Ionicons name="trash-outline" size={32} color={theme.colors.danger} />
+                        </View>
+                        <Text style={styles.confirmTitle}>Confirm Delete</Text>
+                        <Text style={styles.confirmText}>Are you sure you want to delete this document? This action cannot be undone.</Text>
+
+                        <View style={styles.confirmActions}>
+                            <TouchableOpacity
+                                style={[styles.confirmBtn, styles.cancelBtn]}
+                                onPress={() => setShowDeleteModal(false)}
+                            >
+                                <Text style={styles.cancelBtnText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.confirmBtn, styles.deleteBtn]}
+                                onPress={confirmDelete}
+                            >
+                                <Text style={styles.deleteBtnText}>Delete</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -771,5 +807,65 @@ const styles = StyleSheet.create({
         color: theme.colors.secondary,
         fontWeight: '600',
         fontSize: 14,
+    },
+    // Confirm Modal Styles
+    confirmModalContent: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.xl,
+        width: '85%',
+        maxWidth: 400,
+        alignItems: 'center',
+        ...theme.shadows.card,
+    },
+    confirmIconContainer: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#fee2e2',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: theme.spacing.md,
+    },
+    confirmTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.sm,
+    },
+    confirmText: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        marginBottom: theme.spacing.xl,
+        lineHeight: 20,
+    },
+    confirmActions: {
+        flexDirection: 'row',
+        gap: theme.spacing.md,
+        width: '100%',
+    },
+    confirmBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: theme.borderRadius.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cancelBtn: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+    },
+    cancelBtnText: {
+        color: theme.colors.text,
+        fontWeight: '600',
+    },
+    deleteBtn: {
+        backgroundColor: theme.colors.danger,
+    },
+    deleteBtnText: {
+        color: '#fff',
+        fontWeight: '600',
     },
 });
