@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Switch, Pressable } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Switch, Pressable, Platform } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -153,7 +153,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     });
 
     const companyId = profile?.company_id;
-    const [selectedYear, setSelectedYear] = useState('2026');
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
 
     // Fetch divisions
     const { data: divisions = [] } = useQuery({
@@ -218,8 +218,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const [isDivisionDropdownOpen, setIsDivisionDropdownOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');
     const [calendarView, setCalendarView] = useState<CalendarView>('Month');
-    const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 22)); // January 22, 2026
-    const [currentMonth, setCurrentMonth] = useState(new Date(2026, 0, 1)); // January 2026
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [currentMonth, setCurrentMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
     const [sortBy, setSortBy] = useState<'date' | 'division'>('date');
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingActivity, setEditingActivity] = useState<any>(null);
@@ -991,7 +991,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                                     isSelected && styles.calendarDayTextSelected,
                                                     isCurrentDay && !isSelected && styles.calendarDayTextToday
                                                 ]}>
-                                                    {day.date.getDate()}
+                                                    {day.date.getDate().toString().padStart(2, '0')}
                                                 </Text>
                                                 <View style={styles.calendarDayEvents}>
                                                     {activities.filter(a => a.event_date === formatDateForStorage(day.date)).slice(0, 2).map((a, idx) => (
@@ -2685,11 +2685,12 @@ const styles = StyleSheet.create({
     },
     calendarDay: {
         width: '14.28%',
-        aspectRatio: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
+        ...(Platform.OS === 'web' ? { height: 120 } : { aspectRatio: 1 }),
+        alignItems: 'flex-end',
+        justifyContent: 'flex-start',
         borderWidth: 1,
         borderColor: theme.colors.border,
+        padding: 4,
     },
     calendarDayOtherMonth: {
         backgroundColor: theme.colors.background,
@@ -3859,9 +3860,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 2,
-        marginTop: 2,
+        marginTop: 'auto',
+        alignSelf: 'center',
         justifyContent: 'center',
         paddingHorizontal: 2,
+        marginBottom: 2,
     },
     dayEventIndicator: {
         width: 6,

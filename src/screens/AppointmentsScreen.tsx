@@ -4,31 +4,44 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { supabase } from '../lib/supabase';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert } from 'react-native';
 
-// Mock appointments data
-const MOCK_APPOINTMENTS: any[] = [];
+// Interfaces
+interface Child {
+    id: string;
+    name: string;
+    division_id: string | null;
+}
 
-// Mock campers data
-const MOCK_CAMPERS = [
-    { id: '1', name: 'Abby Weiss' },
-    { id: '2', name: 'Adam Elliott' },
-    { id: '3', name: 'Addison Brewer' },
-    { id: '4', name: 'Adrianna Gelb' },
-    { id: '5', name: 'Aiden Feld' },
-    { id: '6', name: 'Aiden Leon' },
-    { id: '7', name: 'Aiden Weisz' },
-    { id: '8', name: 'Alex Haboush' },
-    { id: '9', name: 'Alaia Khalili' },
-    { id: '10', name: 'Alexa Alfred' },
-];
+interface Staff {
+    id: string;
+    name: string;
+    department: string | null;
+}
 
-// Mock staff data
-const MOCK_STAFF = [
-    { id: '1', name: 'John Smith' },
-    { id: '2', name: 'Jane Doe' },
-    { id: '3', name: 'Mike Johnson' },
-    { id: '4', name: 'Sarah Williams' },
-];
+interface Appointment {
+    id: string;
+    child_id: string | null;
+    staff_id: string | null;
+    appointment_type: string;
+    appointment_date: string;
+    appointment_time: string | null;
+    provider_name: string | null;
+    location: string | null;
+    notes: string | null;
+    status: string;
+    outcome: string | null;
+    follow_up_required: boolean;
+    follow_up_date: string | null;
+    child?: Child;
+    staff?: Staff;
+    season: string;
+    company_id: string;
+}
+
+// Mock data removed in favor of Supabase data
 
 // Appointment types (for filter)
 const APPOINTMENT_TYPES = [
@@ -75,6 +88,150 @@ const APPOINTMENT_STATUS_OPTIONS = [
 type AppointmentTab = 'Upcoming' | 'Past' | 'All';
 
 export const AppointmentsScreen = ({ navigation }: any) => {
+    const queryClient = useQueryClient();
+
+    // Fetch profile to get company_id
+    const { data: profile } = useQuery({
+        queryKey: ['profile'],
+        queryFn: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('No user found');
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+            if (error) throw error;
+            return data;
+        }
+    });
+
+    const companyId = profile?.company_id;
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+
+    // Data Queries
+    const { data: appointments = [], isLoading: isLoadingAppointments } = useQuery({
+        queryKey: ['appointments', companyId, selectedYear],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('appointments')
+                .select(`
+                    *,
+                    child:child_id(id, name, division_id),
+                    staff:staff_id(id, name, department)
+                `)
+                .eq('company_id', companyId)
+                .eq('season', selectedYear)
+                .order('appointment_date', { ascending: true });
+
+            if (error) throw error;
+            return (data || []) as Appointment[];
+        },
+        enabled: !!companyId
+    });
+
+    const { data: children = [] } = useQuery({
+        queryKey: ['children', companyId, selectedYear],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('children')
+                .select('id, name, division_id')
+                .eq('company_id', companyId)
+                .eq('season', selectedYear)
+                .order('name');
+            if (error) throw error;
+            return (data || []) as Child[];
+        },
+        enabled: !!companyId
+    });
+
+    const { data: staff = [] } = useQuery({
+        queryKey: ['staff', companyId, selectedYear],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('staff')
+                .select('id, name, department')
+                .eq('company_id', companyId)
+                .eq('season', selectedYear)
+                .order('name');
+            if (error) throw error;
+            return (data || []) as Staff[];
+        },
+        enabled: !!companyId
+    });
+
+    // Mutations
+    const addAppointmentMutation = useMutation({
+        mutationFn: async (newAppointment: any) => {
+            const { data, error } = await supabase
+                .from('appointments')
+                .insert([{ ...newAppointment, company_id: companyId, season: selectedYear }])
+                .select()
+                .single();
+            if (error) throw error;
+
+            // Send notification
+            await supabase.functions.invoke('send-appointment-notification', {
+                body: { appointment_id: data.id, action: 'create' }
+            });
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['appointments'] });
+            Alert.alert('Success', 'Appointment scheduled successfully');
+            setIsAddModalOpen(false);
+            // resetFormData(); // Will be handled in UI logic
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to schedule appointment');
+        }
+    });
+
+    const updateAppointmentMutation = useMutation({
+        mutationFn: async (updatedAppointment: any) => {
+            const { id, ...updateData } = updatedAppointment;
+            const { error } = await supabase
+                .from('appointments')
+                .update(updateData)
+                .eq('id', id);
+
+            if (error) throw error;
+
+            // Send notification
+            await supabase.functions.invoke('send-appointment-notification', {
+                body: { appointment_id: id, action: 'update' }
+            });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['appointments'] });
+            Alert.alert('Success', 'Appointment updated successfully');
+            setIsEditModalOpen(false);
+            setEditingAppointment(null);
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to update appointment');
+        }
+    });
+
+    const deleteAppointmentMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase
+                .from('appointments')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['appointments'] });
+            Alert.alert('Success', 'Appointment deleted successfully');
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to delete appointment');
+        }
+    });
     const [activeTab, setActiveTab] = useState<AppointmentTab>('Upcoming');
     const [searchQuery, setSearchQuery] = useState('');
     const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
@@ -95,11 +252,13 @@ export const AppointmentsScreen = ({ navigation }: any) => {
         person: '',
         personId: '',
         type: '',
-        provider: 'Dr. Smith',
-        location: '123 Medical Center',
+        provider: '',
+        location: '',
         status: 'Scheduled',
         notes: '',
+        outcome: '',
         followUpRequired: false,
+        followUpDate: '',
     });
 
     // Date/Time Picker State
@@ -107,6 +266,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
     const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [selectedTime, setSelectedTime] = useState({ hour: 12, minute: 0, ampm: 'PM' });
+    const [currentDateField, setCurrentDateField] = useState<'date' | 'followUpDate'>('date');
 
     // Helper to format date for display in the picker header
     const formatDateForPickerDisplay = (date: Date) => {
@@ -123,7 +283,11 @@ export const AppointmentsScreen = ({ navigation }: any) => {
 
     const confirmDateSelection = () => {
         const dateString = formatDateForStorage(selectedDate);
-        setFormData({ ...formData, date: dateString });
+        if (currentDateField === 'followUpDate') {
+            setFormData({ ...formData, followUpDate: dateString });
+        } else {
+            setFormData({ ...formData, date: dateString });
+        }
         setIsDatePickerOpen(false);
     };
 
@@ -134,27 +298,35 @@ export const AppointmentsScreen = ({ navigation }: any) => {
     };
 
     // Filter appointments based on active tab, search, type, and status
-    const filteredAppointments = MOCK_APPOINTMENTS.filter((appointment) => {
+    const filteredAppointments = (appointments || []).filter((appointment: Appointment) => {
+        if (!appointment.appointment_date) return false;
+
         // Tab filter
         const now = new Date();
-        const appointmentDate = new Date(appointment.date);
+        now.setHours(0, 0, 0, 0);
+
+        // Parse YYYY-MM-DD
+        const [year, month, day] = appointment.appointment_date.split('-').map(Number);
+        const appointmentDate = new Date(year, month - 1, day);
+
         if (activeTab === 'Upcoming' && appointmentDate < now) return false;
         if (activeTab === 'Past' && appointmentDate >= now) return false;
 
         // Search filter
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
+            const personName = appointment.child?.name || appointment.staff?.name || '';
             if (
-                !appointment.person?.toLowerCase().includes(query) &&
-                !appointment.provider?.toLowerCase().includes(query) &&
-                !appointment.type?.toLowerCase().includes(query)
+                !personName.toLowerCase().includes(query) &&
+                !appointment.provider_name?.toLowerCase().includes(query) &&
+                !appointment.appointment_type?.toLowerCase().includes(query)
             ) {
                 return false;
             }
         }
 
         // Type filter
-        if (selectedType !== 'All Types' && appointment.type !== selectedType) {
+        if (selectedType !== 'All Types' && appointment.appointment_type !== selectedType) {
             return false;
         }
 
@@ -172,9 +344,10 @@ export const AppointmentsScreen = ({ navigation }: any) => {
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     };
 
-    const formatDateTime = (dateString: string, timeString: string) => {
+    const formatDateTime = (dateString: string | null, timeString: string | null) => {
         if (!dateString) return '';
-        const date = new Date(dateString);
+        const [year, month, day] = dateString.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
         const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         if (timeString) {
             return `${dateStr} at ${timeString}`;
@@ -199,37 +372,76 @@ export const AppointmentsScreen = ({ navigation }: any) => {
 
     const handleAddAppointment = () => {
         setFormData({
-            date: '',
+            date: formatDateForStorage(new Date()),
             time: '',
             person: '',
             personId: '',
             type: '',
-            provider: 'Dr. Smith',
-            location: '123 Medical Center',
+            provider: '',
+            location: '',
             status: 'Scheduled',
             notes: '',
+            outcome: '',
             followUpRequired: false,
+            followUpDate: '',
         });
         setAppointmentFor('Camper');
         setEditingAppointment(null);
         setIsAddModalOpen(true);
     };
 
-    const handleEditAppointment = (appointment: any) => {
+    const handleEditAppointment = (appointment: Appointment) => {
+        const personName = appointment.child?.name || appointment.staff?.name || '';
+        const personId = appointment.child_id || appointment.staff_id || '';
+        const isCamper = !!appointment.child_id;
+
+        setAppointmentFor(isCamper ? 'Camper' : 'Staff');
+
         setFormData({
-            date: appointment.date || '',
-            time: appointment.time || '',
-            person: appointment.person || '',
-            personId: appointment.personId || '',
-            type: appointment.type || '',
-            provider: appointment.provider || '',
+            date: appointment.appointment_date,
+            time: appointment.appointment_time || '',
+            person: personName,
+            personId: personId,
+            type: appointment.appointment_type,
+            provider: appointment.provider_name || '',
             location: appointment.location || '',
-            status: appointment.status || 'Scheduled',
+            status: appointment.status,
             notes: appointment.notes || '',
-            followUpRequired: appointment.followUpRequired || false,
+            outcome: appointment.outcome || '',
+            followUpRequired: appointment.follow_up_required,
+            followUpDate: appointment.follow_up_date || '',
         });
         setEditingAppointment(appointment);
         setIsEditModalOpen(true);
+    };
+
+    const handleSave = () => {
+        // Validation
+        if (!formData.date || !formData.type || !formData.personId) {
+            Alert.alert('Error', 'Please fill in all required fields');
+            return;
+        }
+
+        const payload = {
+            appointment_date: formData.date,
+            appointment_time: formData.time || null,
+            appointment_type: formData.type,
+            child_id: appointmentFor === 'Camper' ? formData.personId : null,
+            staff_id: appointmentFor === 'Staff' ? formData.personId : null,
+            provider_name: formData.provider || null,
+            location: formData.location || null,
+            status: formData.status,
+            notes: formData.notes || null,
+            outcome: formData.outcome || null,
+            follow_up_required: formData.followUpRequired,
+            follow_up_date: formData.followUpRequired ? formData.followUpDate : null,
+        };
+
+        if (editingAppointment) {
+            updateAppointmentMutation.mutate({ id: editingAppointment.id, ...payload });
+        } else {
+            addAppointmentMutation.mutate(payload);
+        }
     };
 
     return (
@@ -446,7 +658,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                         </StyledCard>
                     ) : (
                         <View style={styles.appointmentsList}>
-                            {filteredAppointments.map((appointment, index) => (
+                            {filteredAppointments.map((appointment: any, index: number) => (
                                 <StyledCard key={appointment.id || index} style={styles.appointmentCard}>
                                     <TouchableOpacity
                                         onPress={() => handleEditAppointment(appointment)}
@@ -456,10 +668,10 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                         <View style={styles.appointmentCardHeader}>
                                             <View style={styles.appointmentCardTitleContainer}>
                                                 <Text style={styles.appointmentCardTitle}>
-                                                    {appointment.person || 'Unnamed Person'}
+                                                    {appointment.child?.name || appointment.staff?.name || 'Unnamed Person'}
                                                 </Text>
                                                 <Text style={styles.appointmentCardDate}>
-                                                    {formatDateTime(appointment.date, appointment.time)}
+                                                    {formatDateTime(appointment.appointment_date, appointment.appointment_time)}
                                                 </Text>
                                             </View>
                                             <View style={styles.appointmentCardActions}>
@@ -472,6 +684,29 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                                 >
                                                     <Ionicons name="pencil" size={20} color={theme.colors.textSecondary} />
                                                 </Pressable>
+                                                <Pressable
+                                                    style={({ pressed }) => [
+                                                        styles.actionIconButton,
+                                                        pressed && styles.actionIconButtonPressed,
+                                                        { marginLeft: 8 }
+                                                    ]}
+                                                    onPress={() => {
+                                                        Alert.alert(
+                                                            'Delete Appointment',
+                                                            'Are you sure you want to delete this appointment?',
+                                                            [
+                                                                { text: 'Cancel', style: 'cancel' },
+                                                                {
+                                                                    text: 'Delete',
+                                                                    style: 'destructive',
+                                                                    onPress: () => deleteAppointmentMutation.mutate(appointment.id)
+                                                                }
+                                                            ]
+                                                        );
+                                                    }}
+                                                >
+                                                    <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
+                                                </Pressable>
                                             </View>
                                         </View>
 
@@ -481,7 +716,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                                 <Ionicons name="medical-outline" size={18} color={theme.colors.textSecondary} style={styles.infoIcon} />
                                                 <View style={styles.appointmentInfo}>
                                                     <Text style={styles.appointmentInfoLabel}>Type</Text>
-                                                    <Text style={styles.appointmentInfoValue}>{appointment.type || '-'}</Text>
+                                                    <Text style={styles.appointmentInfoValue}>{appointment.appointment_type || '-'}</Text>
                                                 </View>
                                             </View>
 
@@ -489,7 +724,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                                 <Ionicons name="person-outline" size={18} color={theme.colors.textSecondary} style={styles.infoIcon} />
                                                 <View style={styles.appointmentInfo}>
                                                     <Text style={styles.appointmentInfoLabel}>Provider</Text>
-                                                    <Text style={styles.appointmentInfoValue}>{appointment.provider || '-'}</Text>
+                                                    <Text style={styles.appointmentInfoValue}>{appointment.provider_name || '-'}</Text>
                                                 </View>
                                             </View>
 
@@ -641,10 +876,12 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                     style={styles.formInputWithIcon}
                                     onPress={() => {
                                         if (formData.date) {
-                                            setSelectedDate(new Date(formData.date));
+                                            const [y, m, d] = formData.date.split('-').map(Number);
+                                            setSelectedDate(new Date(y, m - 1, d));
                                         } else {
                                             setSelectedDate(new Date());
                                         }
+                                        setCurrentDateField('date');
                                         setIsDatePickerOpen(true);
                                     }}
                                 >
@@ -707,19 +944,21 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                 />
                             </View>
 
-                            {/* Notes */}
-                            <View style={styles.formField}>
-                                <Text style={styles.formLabel}>Notes</Text>
-                                <TextInput
-                                    style={[styles.formTextInput, styles.formTextArea]}
-                                    placeholder="Additional notes..."
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    value={formData.notes}
-                                    onChangeText={(text) => setFormData({ ...formData, notes: text })}
-                                    multiline
-                                    numberOfLines={4}
-                                />
-                            </View>
+                            {/* Outcome (for editing) */}
+                            {editingAppointment && (
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Outcome</Text>
+                                    <TextInput
+                                        style={[styles.formTextInput, styles.formTextArea]}
+                                        placeholder="Appointment outcome..."
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        value={formData.outcome}
+                                        onChangeText={(text) => setFormData({ ...formData, outcome: text })}
+                                        multiline
+                                        numberOfLines={2}
+                                    />
+                                </View>
+                            )}
 
                             {/* Follow-up Required */}
                             <View style={styles.checkboxContainer}>
@@ -734,6 +973,33 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                 />
                                 <Text style={styles.checkboxLabel}>Follow-up Required</Text>
                             </View>
+
+                            {/* Follow-up Date */}
+                            {formData.followUpRequired && (
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>
+                                        Follow-up Date <Text style={styles.requiredStar}>*</Text>
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={styles.formInputWithIcon}
+                                        onPress={() => {
+                                            if (formData.followUpDate) {
+                                                const [y, m, d] = formData.followUpDate.split('-').map(Number);
+                                                setSelectedDate(new Date(y, m - 1, d));
+                                            } else {
+                                                setSelectedDate(new Date());
+                                            }
+                                            setCurrentDateField('followUpDate');
+                                            setIsDatePickerOpen(true);
+                                        }}
+                                    >
+                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                        <Text style={formData.followUpDate ? styles.formInputText : styles.formInputPlaceholder}>
+                                            {formData.followUpDate ? formatDate(formData.followUpDate) : 'Pick a date'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
 
                             {/* Action Buttons */}
                             <View style={styles.modalActions}>
@@ -752,12 +1018,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                 </Pressable>
                                 <TouchableOpacity
                                     style={styles.updateButton}
-                                    onPress={() => {
-                                        // Handle save (UI only - no database)
-                                        setIsAddModalOpen(false);
-                                        setIsEditModalOpen(false);
-                                        setEditingAppointment(null);
-                                    }}
+                                    onPress={handleSave}
                                 >
                                     <Text style={styles.updateButtonText}>
                                         {editingAppointment ? 'Update Appointment' : 'Create Appointment'}
@@ -904,8 +1165,8 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                             </View>
                         </View>
                         <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true} showsVerticalScrollIndicator={false}>
-                            {(appointmentFor === 'Camper' ? MOCK_CAMPERS : MOCK_STAFF)
-                                .filter((person) =>
+                            {(appointmentFor === 'Camper' ? children : staff)
+                                .filter((person: any) =>
                                     person.name.toLowerCase().includes(personSearchText.toLowerCase())
                                 )
                                 .map((person) => {
@@ -1178,7 +1439,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
-        </SafeAreaView>
+        </SafeAreaView >
     );
 };
 
