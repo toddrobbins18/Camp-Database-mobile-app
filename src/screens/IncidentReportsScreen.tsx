@@ -1,13 +1,40 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { supabase } from '../lib/supabase';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSeason } from '../context/SeasonContext';
+import { incidentService } from '../api/incidentService';
 
 export const IncidentReportsScreen = ({ navigation }: any) => {
+    const queryClient = useQueryClient();
+
+    // Fetch profile to get company_id
+    const { data: profile } = useQuery({
+        queryKey: ['profile'],
+        queryFn: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('No user found');
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+            if (error) throw error;
+            return data;
+        }
+    });
+
+    const { selectedSeason } = useSeason();
+    const companyId = profile?.company_id;
+
     const [showBottomSheet, setShowBottomSheet] = useState(false);
     const [showAddIncidentModal, setShowAddIncidentModal] = useState(false);
+    const [editingIncident, setEditingIncident] = useState<any>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState('');
@@ -20,17 +47,228 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [incidentType, setIncidentType] = useState<string>('');
     const [showTypePicker, setShowTypePicker] = useState(false);
-    const [severity, setSeverity] = useState<string>('');
+    const [severity, setSeverity] = useState<string>('medium');
     const [showSeverityPicker, setShowSeverityPicker] = useState(false);
     const [description, setDescription] = useState<string>('');
     const [reportedBy, setReportedBy] = useState<string>('');
-    const [status, setStatus] = useState<string>('Open');
+    const [status, setStatus] = useState<string>('open');
     const [showStatusPicker, setShowStatusPicker] = useState(false);
+    const [childSearch, setChildSearch] = useState('');
 
     // Options
-    const incidentTypes = ['Accident', 'Behavior', 'Medical', 'Injury', 'Other'];
-    const severityLevels = ['Low', 'Medium', 'High', 'Critical'];
-    const statusOptions = ['Open', 'Investigating', 'Resolved', 'Closed'];
+    const incidentTypes = ['injury', 'behavioral', 'medical', 'safety', 'other'];
+    const severityLevels = ['low', 'medium', 'high', 'critical'];
+    const statusOptions = ['open', 'investigating', 'resolved', 'closed'];
+
+    // Fetch children
+    const { data: children = [] } = useQuery({
+        queryKey: ['children', companyId, selectedSeason],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('children')
+                .select('*')
+                .eq('status', 'active')
+                .eq('company_id', companyId)
+                .eq('season', selectedSeason)
+                .order('name');
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId
+    });
+
+    // Fetch incidents
+    const { data: incidents = [], isLoading } = useQuery({
+        queryKey: ['incidents', companyId, selectedSeason],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('incident_reports')
+                .select(`
+                    *,
+                    incident_children(
+                        child_id,
+                        children(name, division_id)
+                    ),
+                    staff(name)
+                `)
+                .or(`season.eq.${selectedSeason},season.is.null`)
+                .eq('company_id', companyId)
+                .order('date', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId
+    });
+
+    // Effect to pre-fill form when editing
+    useEffect(() => {
+        if (editingIncident && showAddIncidentModal) {
+            setDate(new Date(editingIncident.date));
+            setIncidentType(editingIncident.type);
+            setSeverity(editingIncident.severity || 'medium');
+            setDescription(editingIncident.description);
+            setReportedBy(editingIncident.reported_by || '');
+            setStatus(editingIncident.status.charAt(0).toUpperCase() + editingIncident.status.slice(1)); // Capitalize for picker
+            setTags(editingIncident.tags || []);
+            setSelectedChildren(editingIncident.incident_children?.map((ic: any) => ic.child_id) || []);
+        }
+    }, [editingIncident, showAddIncidentModal]);
+
+    // Real-time subscription
+    useEffect(() => {
+        if (!companyId) return;
+
+        const channel = supabase
+            .channel('incident-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'incident_reports' },
+                () => {
+                    queryClient.invalidateQueries({ queryKey: ['incidents'] });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [companyId, queryClient]);
+
+    // Add incident mutation
+    const addIncidentMutation = useMutation({
+        mutationFn: async (formData: any) => {
+            if (selectedChildren.length === 0) {
+                throw new Error('Please select at least one child');
+            }
+            if (!incidentType) {
+                throw new Error('Please select an incident type');
+            }
+
+            // Insert incident
+            const { data: incident, error: incidentError } = await supabase
+                .from('incident_reports')
+                .insert({
+                    date: date.toISOString().split('T')[0],
+                    type: incidentType,
+                    description: description,
+                    severity: severity || 'medium',
+                    reported_by: reportedBy,
+                    status: status.toLowerCase(),
+                    tags: tags,
+                    company_id: companyId,
+                    season: selectedSeason
+                })
+                .select()
+                .single();
+
+            if (incidentError || !incident) {
+                throw incidentError || new Error('Failed to create incident');
+            }
+
+            // Insert children relationships
+            const childrenInserts = selectedChildren.map(childId => ({
+                incident_id: incident.id,
+                child_id: childId
+            }));
+
+            const { error: childrenError } = await supabase
+                .from('incident_children')
+                .insert(childrenInserts);
+
+            if (childrenError) {
+                throw new Error('Error linking children to incident');
+            }
+
+            return incident;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['incidents'] });
+            Alert.alert('Success', 'Incident report added successfully');
+            handleCloseAddIncident();
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to add incident');
+        }
+    });
+
+    // Update incident mutation
+    const updateIncidentMutation = useMutation({
+        mutationFn: async (formData: any) => {
+            if (!editingIncident) return;
+            if (selectedChildren.length === 0) {
+                throw new Error('Please select at least one child');
+            }
+            if (!incidentType) {
+                throw new Error('Please select an incident type');
+            }
+
+            // Update incident
+            const { error: updateError } = await supabase
+                .from('incident_reports')
+                .update({
+                    date: date.toISOString().split('T')[0],
+                    type: incidentType,
+                    description: description,
+                    severity: severity || 'medium',
+                    reported_by: reportedBy,
+                    status: status.toLowerCase(),
+                    tags: tags,
+                    company_id: companyId,
+                    season: selectedSeason
+                })
+                .eq('id', editingIncident.id);
+
+            if (updateError) {
+                throw updateError;
+            }
+
+            // Delete existing children relationships
+            const { error: deleteError } = await supabase
+                .from('incident_children')
+                .delete()
+                .eq('incident_id', editingIncident.id);
+
+            if (deleteError) {
+                throw new Error('Error updating children links (delete)');
+            }
+
+            // Insert new children relationships
+            const childrenInserts = selectedChildren.map(childId => ({
+                incident_id: editingIncident.id,
+                child_id: childId
+            }));
+
+            const { error: insertError } = await supabase
+                .from('incident_children')
+                .insert(childrenInserts);
+
+            if (insertError) {
+                throw new Error('Error updating children links (insert)');
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['incidents'] });
+            Alert.alert('Success', 'Incident report updated successfully');
+            handleCloseAddIncident();
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to update incident');
+        }
+    });
+
+    // Delete incident mutation
+    const deleteIncidentMutation = useMutation({
+        mutationFn: (id: string) => incidentService.deleteIncident(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['incidents'] });
+            Alert.alert('Success', 'Incident report deleted successfully');
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to delete incident');
+        }
+    });
 
     const handleUploadCSV = () => {
         setShowBottomSheet(true);
@@ -51,11 +289,11 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     };
 
 
-    const toggleChildSelection = (childName: string) => {
+    const toggleChildSelection = (childId: string) => {
         setSelectedChildren(prev =>
-            prev.includes(childName)
-                ? prev.filter(name => name !== childName)
-                : [...prev, childName]
+            prev.includes(childId)
+                ? prev.filter(id => id !== childId)
+                : [...prev, childId]
         );
     };
 
@@ -98,9 +336,19 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
         setShowStatusPicker(false);
     };
 
+    const handleEditIncident = (incident: any) => {
+        setEditingIncident(incident);
+        setShowAddIncidentModal(true);
+    };
+
+    const handleDeleteIncident = (id: string) => {
+        setDeletingId(id);
+    };
+
     // Reset form when modal closes
     const handleCloseAddIncident = () => {
         setShowAddIncidentModal(false);
+        setEditingIncident(null);
         // Reset form fields
         setSelectedChildren([]);
         setDate(new Date());
@@ -154,12 +402,120 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
 
                 {/* Main Content Card */}
                 <StyledCard style={styles.contentCard}>
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>No incident reports found</Text>
-                    </View>
-                </StyledCard>
+                    {isLoading ? (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>Loading...</Text>
+                        </View>
+                    ) : incidents.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>No incident reports found</Text>
+                        </View>
+                    ) : (
+                        <View style={styles.incidentsList}>
+                            {incidents.map((incident: any) => (
+                                <View key={incident.id} style={styles.incidentCard}>
+                                    {/* Incident Header */}
+                                    <View style={styles.incidentHeader}>
+                                        <View style={styles.incidentHeaderLeft}>
+                                            <Text style={styles.incidentChildren}>
+                                                {incident.incident_children?.map((ic: any) => ic.children?.name).filter(Boolean).join(', ') || 'No children assigned'}
+                                            </Text>
+                                            <Text style={styles.incidentDate}>
+                                                {new Date(incident.date).toLocaleDateString()}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.incidentActions}>
+                                            <TouchableOpacity
+                                                style={styles.iconBtn}
+                                                onPress={() => handleEditIncident(incident)}
+                                            >
+                                                <Ionicons name="create-outline" size={20} color={theme.colors.primary} />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.iconBtn}
+                                                onPress={() => handleDeleteIncident(incident.id)}
+                                            >
+                                                <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
 
+                                    {/* Incident Details */}
+                                    <View style={styles.incidentDetails}>
+                                        <View style={styles.badgeRow}>
+                                            <View style={[styles.badge, styles[`severity${incident.severity?.charAt(0).toUpperCase() + incident.severity?.slice(1)}`]]}>
+                                                <Text style={styles.badgeText}>{incident.severity || 'Not Set'}</Text>
+                                            </View>
+                                            <View style={styles.badgeOutline}>
+                                                <Text style={styles.badgeOutlineText}>{incident.type}</Text>
+                                            </View>
+                                            {incident.tags?.map((tag: string) => (
+                                                <View key={tag} style={styles.badgeSecondary}>
+                                                    <Text style={styles.badgeSecondaryText}>{tag}</Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                        <Text style={styles.incidentDescription} numberOfLines={3}>
+                                            {incident.description}
+                                        </Text>
+                                        {(incident.staff?.name || incident.reported_by) && (
+                                            <Text style={styles.reportedBy}>
+                                                Reported by: {incident.staff?.name || incident.reported_by}
+                                            </Text>
+                                        )}
+                                        <View style={[styles.statusBadge, incident.status === 'open' ? styles.statusOpen : styles.statusClosed]}>
+                                            <Text style={styles.statusText}>{incident.status}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+                </StyledCard>
             </ScrollView>
+
+            {/* Delete Confirmation Modal */}
+            <Modal
+                visible={!!deletingId}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setDeletingId(null)}
+            >
+                <Pressable
+                    style={styles.centerModalOverlay}
+                    onPress={() => setDeletingId(null)}>
+                    <Pressable
+                        style={styles.confirmModalContent}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <Text style={styles.confirmTitle}>Delete Incident Report</Text>
+                        <Text style={styles.confirmDescription}>
+                            Are you sure you want to delete this incident report? This action cannot be undone.
+                        </Text>
+                        <View style={styles.confirmActions}>
+                            <TouchableOpacity
+                                style={[styles.confirmBtn, styles.cancelBtn]}
+                                onPress={() => setDeletingId(null)}
+                            >
+                                <Text style={styles.cancelBtnText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.confirmBtn, styles.deleteConfirmBtn]}
+                                onPress={() => {
+                                    if (deletingId) {
+                                        deleteIncidentMutation.mutate(deletingId);
+                                        setDeletingId(null);
+                                    }
+                                }}
+                            >
+                                <Text style={styles.deleteConfirmBtnText}>
+                                    {deleteIncidentMutation.isPending ? 'Deleting...' : 'Delete'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
 
             {/* CSV Upload Format Guide Modal */}
             <Modal
@@ -344,7 +700,9 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                         <ScrollView style={styles.addIncidentScroll} showsVerticalScrollIndicator={false}>
                             {/* Modal Header */}
                             <View style={styles.addIncidentHeader}>
-                                <Text style={styles.addIncidentTitle}>Add Incident Report</Text>
+                                <Text style={styles.addIncidentTitle}>
+                                    {editingIncident ? 'Edit Incident Report' : 'Add Incident Report'}
+                                </Text>
                                 <TouchableOpacity onPress={handleCloseAddIncident}>
                                     <Ionicons name="close" size={24} color={theme.colors.text} />
                                 </TouchableOpacity>
@@ -359,6 +717,8 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                         style={styles.searchInput}
                                         placeholder="Search children..."
                                         placeholderTextColor={theme.colors.textSecondary}
+                                        value={childSearch}
+                                        onChangeText={setChildSearch}
                                     />
                                 </View>
                                 <ScrollView
@@ -366,32 +726,37 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     nestedScrollEnabled={true}
                                     showsVerticalScrollIndicator={true}
                                 >
-                                    {[
-                                        'Abby Weiss',
-                                        'Adam Elliott',
-                                        'Addison Brewer',
-                                        'Adrianna Gelb',
-                                        'Aiden Feld',
-                                        'Aiden Leon',
-                                        'Alexandra Stone',
-                                        'Amelia Chen',
-                                        'Andrew Martinez',
-                                        'Anna Johnson'
-                                    ].map((child) => (
-                                        <TouchableOpacity
-                                            key={child}
-                                            style={styles.childItem}
-                                            onPress={() => toggleChildSelection(child)}
-                                        >
-                                            <View style={[styles.checkbox, selectedChildren.includes(child) && styles.checkboxChecked]}>
-                                                {selectedChildren.includes(child) && (
-                                                    <Ionicons name="checkmark" size={16} color="white" />
-                                                )}
-                                            </View>
-                                            <Text style={styles.childName}>{child}</Text>
-                                        </TouchableOpacity>
-                                    ))}
+                                    {children
+                                        .filter((child: any) =>
+                                            child.name.toLowerCase().includes(childSearch.toLowerCase())
+                                        )
+                                        .map((child: any) => (
+                                            <TouchableOpacity
+                                                key={child.id}
+                                                style={styles.childItem}
+                                                onPress={() => toggleChildSelection(child.id)}
+                                            >
+                                                <View style={[styles.checkbox, selectedChildren.includes(child.id) && styles.checkboxChecked]}>
+                                                    {selectedChildren.includes(child.id) && (
+                                                        <Ionicons name="checkmark" size={16} color="white" />
+                                                    )}
+                                                </View>
+                                                <Text style={styles.childName}>{child.name}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    {children.filter((child: any) =>
+                                        child.name.toLowerCase().includes(childSearch.toLowerCase())
+                                    ).length === 0 && (
+                                            <Text style={styles.emptyText}>
+                                                {childSearch ? 'No children found' : 'No children available'}
+                                            </Text>
+                                        )}
                                 </ScrollView>
+                                {selectedChildren.length > 0 && (
+                                    <Text style={styles.selectedCountText}>
+                                        {selectedChildren.length} child{selectedChildren.length > 1 ? 'ren' : ''} selected
+                                    </Text>
+                                )}
                             </View>
 
                             {/* Date Section */}
@@ -526,8 +891,17 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                 <TouchableOpacity style={styles.cancelBtn} onPress={handleCloseAddIncident}>
                                     <Text style={styles.cancelBtnText}>Cancel</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={styles.submitBtn}>
-                                    <Text style={styles.submitBtnText}>Add Incident</Text>
+                                <TouchableOpacity
+                                    style={styles.submitBtn}
+                                    onPress={() => editingIncident ? updateIncidentMutation.mutate({}) : addIncidentMutation.mutate({})}
+                                    disabled={addIncidentMutation.isPending || updateIncidentMutation.isPending}
+                                >
+                                    <Text style={styles.submitBtnText}>
+                                        {editingIncident
+                                            ? (updateIncidentMutation.isPending ? 'Updating...' : 'Update Incident')
+                                            : (addIncidentMutation.isPending ? 'Adding...' : 'Add Incident')
+                                        }
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
@@ -1350,6 +1724,183 @@ const styles = StyleSheet.create({
     pickerOptionTextActive: {
         color: theme.colors.secondary,
         fontWeight: '600',
+    },
+    // Incident List Styles
+    incidentsList: {
+        gap: theme.spacing.md,
+    },
+    incidentCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    incidentHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: theme.spacing.sm,
+    },
+    incidentHeaderLeft: {
+        flex: 1,
+    },
+    incidentChildren: {
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: 4,
+    },
+    incidentDate: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    incidentActions: {
+        flexDirection: 'row',
+        gap: theme.spacing.xs,
+    },
+    iconBtn: {
+        padding: theme.spacing.sm,
+        margin: -4, // Counteract padding to keep visual alignment but increase hit area
+    },
+    incidentDetails: {
+        gap: theme.spacing.sm,
+    },
+    badgeRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.xs,
+    },
+    badge: {
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 4,
+        borderRadius: theme.borderRadius.sm,
+    },
+    severityCritical: {
+        backgroundColor: '#ef4444',
+    },
+    severityHigh: {
+        backgroundColor: '#f97316',
+    },
+    severityMedium: {
+        backgroundColor: '#eab308',
+    },
+    severityLow: {
+        backgroundColor: '#22c55e',
+    },
+    badgeText: {
+        ...theme.typography.body,
+        fontSize: 12,
+        fontWeight: '600',
+        color: 'white',
+        textTransform: 'capitalize',
+    },
+    badgeOutline: {
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 4,
+        borderRadius: theme.borderRadius.sm,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    badgeOutlineText: {
+        ...theme.typography.body,
+        fontSize: 12,
+        color: theme.colors.text,
+        textTransform: 'capitalize',
+    },
+    badgeSecondary: {
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 4,
+        borderRadius: theme.borderRadius.sm,
+        backgroundColor: theme.colors.secondary + '20',
+    },
+    badgeSecondaryText: {
+        ...theme.typography.body,
+        fontSize: 12,
+        color: theme.colors.secondary,
+    },
+    incidentDescription: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        lineHeight: 20,
+    },
+    reportedBy: {
+        ...theme.typography.body,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        fontStyle: 'italic',
+    },
+    statusBadge: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 4,
+        borderRadius: theme.borderRadius.sm,
+    },
+    statusOpen: {
+        backgroundColor: theme.colors.primary + '20',
+    },
+    statusClosed: {
+        backgroundColor: theme.colors.textSecondary + '20',
+    },
+    statusText: {
+        ...theme.typography.body,
+        fontSize: 12,
+        fontWeight: '600',
+        textTransform: 'capitalize',
+    },
+    selectedCountText: {
+        ...theme.typography.body,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: theme.spacing.xs,
+    },
+    confirmModalContent: {
+        width: '85%',
+        backgroundColor: 'white',
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.lg,
+        alignItems: 'center',
+    },
+    confirmTitle: {
+        ...theme.typography.h3,
+        marginBottom: theme.spacing.sm,
+        textAlign: 'center',
+    },
+    confirmDescription: {
+        ...theme.typography.body,
+        textAlign: 'center',
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.lg,
+    },
+    confirmActions: {
+        flexDirection: 'row',
+        gap: theme.spacing.md,
+        width: '100%',
+    },
+    confirmBtn: {
+        flex: 1,
+        paddingVertical: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        alignItems: 'center',
+    },
+    cancelBtn: {
+        backgroundColor: theme.colors.background,
+    },
+    deleteConfirmBtn: {
+        backgroundColor: theme.colors.danger,
+    },
+    cancelBtnText: {
+        ...theme.typography.body,
+        fontWeight: '600',
+    },
+    deleteConfirmBtnText: {
+        ...theme.typography.body,
+        fontWeight: '600',
+        color: 'white',
     },
 });
 
