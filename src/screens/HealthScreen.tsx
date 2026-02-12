@@ -109,10 +109,10 @@ export const HealthScreen = ({ navigation }: any) => {
 
     // Fetch medications
     const { data: medications = [], isLoading: isLoadingMedications } = useQuery({
-        queryKey: ['medications', companyId, selectedYear, selectedDate],
+        queryKey: ['medications', companyId, selectedYear],
         queryFn: async () => {
             if (!companyId) return [];
-            const dateStr = selectedDate.toISOString().split('T')[0];
+            const dateStr = new Date().toISOString().split('T')[0];
             const { data, error } = await supabase
                 .from('medication_logs')
                 .select('*, children(name), staff(name)')
