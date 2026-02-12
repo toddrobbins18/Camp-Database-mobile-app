@@ -1,21 +1,39 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { supabase } from '../lib/supabase';
+import { useQuery } from '@tanstack/react-query';
+import { useSeason } from '../context/SeasonContext';
+import { calendarService, UnifiedEvent } from '../api/calendarService';
 
-interface Event {
-    id: string;
-    title: string;
-    date: Date;
-    location: string;
-    tags: string[];
-    type: 'sports' | 'field-trip' | 'special-event';
-    time?: string;
+interface Event extends UnifiedEvent {
+    date: Date; // For internal calendar logic compatibility
 }
 
 export const CalendarScreen = ({ navigation }: any) => {
+    const { selectedSeason } = useSeason();
+
+    // Fetch profile to get company_id
+    const { data: profile } = useQuery({
+        queryKey: ['profile'],
+        queryFn: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('No user found');
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*, company:companies(id, name)')
+                .eq('id', user.id)
+                .single();
+            if (error) throw error;
+            return data;
+        }
+    });
+
+    const companyId = profile?.company_id;
+
     const [activeView, setActiveView] = useState('Month');
     const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1)); // July 2026
     const [selectedDate, setSelectedDate] = useState(new Date(2026, 6, 1));
@@ -35,33 +53,39 @@ export const CalendarScreen = ({ navigation }: any) => {
     const [showLocationTypePicker, setShowLocationTypePicker] = useState(false);
     const [showSortPicker, setShowSortPicker] = useState(false);
 
-    // Sample event data matching the screenshots
-    const events: Event[] = [
-        { id: '1', title: 'Kamen Cup', date: new Date(2026, 6, 5), location: 'Equinunk', tags: ['Sports', 'Soccer', 'Teen Boys'], type: 'sports' },
-        { id: '2', title: 'Soccer Cup', date: new Date(2026, 6, 6), location: 'Blue Ridge', tags: ['Sports', 'Soccer'], type: 'sports' },
-        { id: '3', title: 'Equinunk Cup', date: new Date(2026, 6, 8), location: 'Equinunk', tags: ['Sports', 'Hockey', 'Junior Boys'], type: 'sports' },
-        { id: '4', title: 'Falki Open', date: new Date(2026, 6, 8), location: 'Equinunk', tags: ['Sports', 'Tennis', 'Freshmen A Girls'], type: 'sports' },
-        { id: '5', title: 'Boys Basketball Invitational', date: new Date(2026, 6, 13), location: 'Home', tags: ['Sports', 'Basketball', 'CIT Boys'], type: 'sports' },
-        { id: '6', title: '3 v 3 Basketball Tourney', date: new Date(2026, 6, 15), location: 'Equinunk', tags: ['Sports', 'Basketball', 'Senior Boys'], type: 'sports' },
-        { id: '7', title: 'Basketball Tourney', date: new Date(2026, 6, 16), location: 'Blue Ridge', tags: ['Sports', 'Basketball', 'Senior Girls'], type: 'sports' },
-        { id: '8', title: 'Silent DJ Disco', date: new Date(2026, 6, 17), location: '', tags: ['Special Event', 'evening-activity'], type: 'special-event', time: '7:00 - 23 PM' },
-        { id: '9', title: 'Girls Basketball Invitational', date: new Date(2026, 6, 20), location: 'Home', tags: ['Sports', 'Basketball', 'CIT Girls'], type: 'sports' },
-        { id: '10', title: 'THC Dance Competition', date: new Date(2026, 6, 22), location: 'THC', tags: ['Sports', 'Dance', 'Freshmen A Girls'], type: 'sports' },
-        { id: '11', title: 'Jacobs Cup', date: new Date(2026, 6, 22), location: 'Timber Lake Camp', tags: ['Sports', 'Basketball', 'Super Boys'], type: 'sports' },
-        { id: '12', title: 'Soccer Cup', date: new Date(2026, 6, 23), location: 'Blue Ridge', tags: ['Sports', 'Soccer', 'Junior Girls'], type: 'sports' },
-        { id: '13', title: 'Sixes Lax Tourney', date: new Date(2026, 6, 24), location: 'THC', tags: ['Sports', 'Lacrosse', 'Cadet Boys'], type: 'sports' },
-        { id: '14', title: 'Laz Bowl', date: new Date(2026, 6, 27), location: 'Home', tags: ['Sports', 'Football', 'CIT Boys'], type: 'sports' },
-        { id: '15', title: 'Junior Hershey/Dorney Trip', date: new Date(2026, 6, 28), location: '', tags: ['Field Trip', 'field-trip'], type: 'field-trip' },
-        { id: '16', title: 'Franko Cup', date: new Date(2026, 6, 29), location: 'THC', tags: ['Sports', 'Football', 'Senior Girls'], type: 'sports' },
-        { id: '17', title: 'Gordon Cup', date: new Date(2026, 6, 29), location: 'Timber Lake Camp', tags: ['Sports', 'Hockey'], type: 'sports' },
-        { id: '18', title: 'Teen/CIT Cali Trip', date: new Date(2026, 6, 29), location: '', tags: ['Field Trip', 'field-trip'], type: 'field-trip' },
-        { id: '19', title: 'Super Montreal Trip', date: new Date(2026, 6, 30), location: '', tags: ['Field Trip', 'field-trip'], type: 'field-trip' },
-        { id: '20', title: 'Cubs Cup', date: new Date(2026, 7, 3), location: '', tags: ['Sports', 'Hockey', 'Freshmen B Boys'], type: 'sports' },
-        { id: '21', title: 'Party Hardy- DJ - End of Year Bash', date: new Date(2026, 7, 12), location: '', tags: ['Special Event', 'evening-activity'], type: 'special-event', time: '7:00 - 22 PM' },
-    ];
+    // Fetch unified events
+    const { data: rawEvents = [], isLoading } = useQuery({
+        queryKey: ['calendar-events', companyId, selectedSeason],
+        queryFn: () => calendarService.fetchAllEvents(companyId, selectedSeason),
+        enabled: !!companyId
+    });
+
+    // Fetch divisions for filter
+    const { data: backendDivisions = [] } = useQuery({
+        queryKey: ['divisions', companyId],
+        queryFn: () => calendarService.fetchDivisions(companyId),
+        enabled: !!companyId
+    });
+
+    // Map rawEvents to local Event interface
+    const events = useMemo(() => {
+        return rawEvents.map(e => ({
+            ...e,
+            date: new Date(e.event_date + 'T12:00:00'), // Use midday to avoid timezone shifts
+            location: e.location || '',
+            tags: [
+                e.source === 'sports_calendar' ? 'Sports' :
+                    e.source === 'activities_field_trips' ? 'Field Trip' : 'Special Event',
+                e.type,
+                e.division?.name
+            ].filter(Boolean) as string[],
+            type: (e.source === 'sports_calendar' ? 'sports' :
+                e.source === 'activities_field_trips' ? 'field-trip' : 'special-event') as any
+        }));
+    }, [rawEvents]);
 
     // Options
-    const divisions = ['All Divisions', 'Sports Academy', 'Field Trips', 'Special Events', 'Activities'];
+    const divisions = useMemo(() => ['All Divisions', ...backendDivisions.map((d: any) => d.name)], [backendDivisions]);
     const timeOptions = ['All Times', 'Morning', 'Afternoon', 'Evening'];
     const locationTypes = ['Home & Away', 'Home', 'Away'];
     const sortOptions = ['Sort by Date', 'Sort by Name', 'Sort by Time', 'Sort by Location'];
@@ -178,20 +202,40 @@ export const CalendarScreen = ({ navigation }: any) => {
     };
 
     // Filter events
-    const filteredEvents = events.filter(event => {
-        const matchesName = event.title.toLowerCase().includes(eventNameSearch.toLowerCase());
-        const matchesLocation = event.location.toLowerCase().includes(locationSearch.toLowerCase());
-        return matchesName && matchesLocation;
-    }).sort((a, b) => {
-        if (sortBy === 'Sort by Date') {
-            return a.date.getTime() - b.date.getTime();
-        } else if (sortBy === 'Sort by Name') {
-            return a.title.localeCompare(b.title);
-        } else if (sortBy === 'Sort by Location') {
-            return a.location.localeCompare(b.location);
-        }
-        return 0;
-    });
+    const filteredEvents = useMemo(() => {
+        return events.filter(event => {
+            const matchesName = event.title.toLowerCase().includes(eventNameSearch.toLowerCase());
+            const matchesLocation = event.location.toLowerCase().includes(locationSearch.toLowerCase());
+
+            // Division Filter
+            let matchesDivision = true;
+            if (selectedDivision !== 'All Divisions') {
+                // Check if event belongs to selected division
+                // Note: Sports events can have multiple divisions in backend, but unifiedEvent maps to first one for now
+                matchesDivision = event.division?.name === selectedDivision ||
+                    (event.originalData?.divisions?.some((d: any) => d.name === selectedDivision));
+            }
+
+            // Location Type Filter
+            let matchesLocationType = true;
+            if (selectedLocationType === 'Home') {
+                matchesLocationType = event.location?.toLowerCase().includes('home') || !event.location;
+            } else if (selectedLocationType === 'Away') {
+                matchesLocationType = !event.location?.toLowerCase().includes('home') && event.location !== '';
+            }
+
+            return matchesName && matchesLocation && matchesDivision && matchesLocationType;
+        }).sort((a, b) => {
+            if (sortBy === 'Sort by Date') {
+                return a.date.getTime() - b.date.getTime();
+            } else if (sortBy === 'Sort by Name') {
+                return a.title.localeCompare(b.title);
+            } else if (sortBy === 'Sort by Location') {
+                return a.location.localeCompare(b.location);
+            }
+            return 0;
+        });
+    }, [events, eventNameSearch, locationSearch, selectedDivision, selectedLocationType, sortBy]);
 
     // Group events by month
     const groupedEvents = filteredEvents.reduce((acc, event) => {
@@ -272,20 +316,29 @@ export const CalendarScreen = ({ navigation }: any) => {
                 <View style={styles.titleSection}>
                     <View style={styles.titleContainer}>
                         <Text style={styles.title}>Master Calendar</Text>
-                        <Text style={styles.subtitle}>Consolidated view of all events and activities for The Nest</Text>
+                        <Text style={styles.subtitle}>Consolidated view of all events and activities for {profile?.company?.name || 'The Nest'}</Text>
                     </View>
                     <View style={styles.titleRight}>
                         <TouchableOpacity
-                            style={styles.calendarIcon}
+                            style={[styles.viewIcon, !showEventList && styles.viewIconActive]}
                             onPress={() => setShowEventList(false)}
                         >
-                            <Ionicons name="calendar" size={20} color="white" />
+                            <Ionicons name="calendar" size={20} color={!showEventList ? "white" : theme.colors.text} />
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => setShowEventList(!showEventList)}>
-                            <Ionicons name="menu" size={28} color={theme.colors.text} />
+                        <TouchableOpacity
+                            style={[styles.viewIcon, showEventList && styles.viewIconActive]}
+                            onPress={() => setShowEventList(true)}
+                        >
+                            <Ionicons name="menu" size={28} color={showEventList ? "white" : theme.colors.text} />
                         </TouchableOpacity>
                     </View>
                 </View>
+
+                {isLoading && (
+                    <View style={{ padding: 20 }}>
+                        <ActivityIndicator size="large" color={theme.colors.primary} />
+                    </View>
+                )}
 
                 {/* Search and Filter Section */}
                 <StyledCard style={styles.filterCard}>
@@ -855,13 +908,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: theme.spacing.sm,
     },
-    calendarIcon: {
+    viewIcon: {
         width: 40,
         height: 40,
-        backgroundColor: theme.colors.accent,
         borderRadius: theme.borderRadius.md,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    viewIconActive: {
+        backgroundColor: theme.colors.accent,
     },
     filterCard: {
         backgroundColor: theme.colors.surface,
