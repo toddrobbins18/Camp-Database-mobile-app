@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../lib/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 600; // Mobile: full width cards
@@ -142,8 +144,86 @@ export const CamperScreen = ({ navigation }: any) => {
         allergies: '',
         medicalNotes: '',
     });
+
+    const queryClient = useQueryClient();
+
+    // Fetch campers from Supabase
+    const { data: children = [], error: childrenError, isLoading: childrenLoading } = useQuery({
+        queryKey: ['children'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('camper_profiles')
+                .select('*')
+                .order('name');
+            if (error) throw error;
+            return data;
+        },
+    });
+
+    // Helper functions for error handling (to fix user's reported errors)
+    const checkError = (error: any) => {
+        if (error) {
+            console.error('Operation failed:', error);
+            throw error;
+        }
+    };
+
+    const checkData = (data: any) => {
+        if (!data) throw new Error("No data returned");
+        return data;
+    };
+
+    // Mutations
+    const deleteCamperMutation = useMutation({
+        mutationFn: async (id: number) => {
+            const { error } = await supabase
+                .from('camper_profiles')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['children'] });
+            setShowDeleteModal(false);
+        },
+    });
+
+    const addCamperMutation = useMutation({
+        mutationFn: async (newCamper: any) => {
+            const { data, error } = await supabase
+                .from('camper_profiles')
+                .insert([newCamper])
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['children'] });
+            setShowAddChildModal(false);
+        },
+    });
+
+    const updateCamperMutation = useMutation({
+        mutationFn: async ({ id, updates }: { id: number, updates: any }) => {
+            const { data, error } = await supabase
+                .from('camper_profiles')
+                .update(updates)
+                .eq('id', id)
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['children'] });
+            setShowEditChildModal(false);
+        },
+    });
+
     const campersPerPage = 50;
-    const totalCampers = mockCampers.length;
+    const campersData = (children || []) as any[]; // Use fetched data
+    const totalCampers = campersData.length;
     const totalPages = Math.ceil(totalCampers / campersPerPage);
 
     // Keep scanner input focused when in scanner mode
@@ -177,7 +257,7 @@ export const CamperScreen = ({ navigation }: any) => {
     // Calculate pagination
     const startIndex = (currentPage - 1) * campersPerPage;
     const endIndex = startIndex + campersPerPage;
-    const currentCampers = mockCampers.slice(startIndex, endIndex);
+    const currentCampers = campersData.slice(startIndex, endIndex);
     const showingStart = totalCampers > 0 ? startIndex + 1 : 0;
     const showingEnd = Math.min(endIndex, totalCampers);
 
@@ -475,7 +555,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     onChangeText={setSearchCamperName}
                                                     onSubmitEditing={() => {
                                                         // TODO: Implement search
-                                                        const results = mockCampers.filter(c =>
+                                                        const results = campersData.filter(c =>
                                                             c.name.toLowerCase().includes(searchCamperName.toLowerCase())
                                                         ).slice(0, 10);
                                                         setSearchResults(results);
@@ -484,7 +564,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 <TouchableOpacity
                                                     style={styles.searchButton}
                                                     onPress={() => {
-                                                        const results = mockCampers.filter(c =>
+                                                        const results = campersData.filter(c =>
                                                             c.name.toLowerCase().includes(searchCamperName.toLowerCase())
                                                         ).slice(0, 10);
                                                         setSearchResults(results);
@@ -929,9 +1009,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                         <TouchableOpacity
                                             style={styles.submitButton}
                                             onPress={() => {
-                                                // TODO: Implement submit logic
-                                                console.log('Add child:', formData);
-                                                setShowAddChildModal(false);
+                                                addCamperMutation.mutate(formData);
                                             }}
                                         >
                                             <Text style={styles.submitButtonText}>Add Child</Text>
@@ -1146,10 +1224,9 @@ export const CamperScreen = ({ navigation }: any) => {
                                 <TouchableOpacity
                                     style={styles.deleteConfirmButton}
                                     onPress={() => {
-                                        // TODO: Implement delete functionality
-                                        console.log('Delete camper:', camperToDelete?.name);
-                                        setShowDeleteModal(false);
-                                        setCamperToDelete(null);
+                                        if (camperToDelete?.id) {
+                                            deleteCamperMutation.mutate(camperToDelete.id);
+                                        }
                                     }}
                                 >
                                     <Text style={styles.deleteConfirmButtonText}>Delete</Text>
@@ -1549,10 +1626,9 @@ export const CamperScreen = ({ navigation }: any) => {
                                         <TouchableOpacity
                                             style={styles.submitButton}
                                             onPress={() => {
-                                                // TODO: Implement Edit Child submission logic
-                                                console.log('Edit Child Form Data:', editFormData);
-                                                setShowEditChildModal(false);
-                                                setCamperToEdit(null);
+                                                if (camperToEdit?.id) {
+                                                    updateCamperMutation.mutate({ id: camperToEdit.id, updates: editFormData });
+                                                }
                                             }}
                                         >
                                             <Text style={styles.submitButtonText}>Save Changes</Text>

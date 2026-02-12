@@ -1,32 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput, Pressable } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../lib/supabase';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
 const isMediumScreen = width < 414;
 const isLargeScreen = width >= 414;
-
-// Mock awards data - empty for now to show empty state
-const MOCK_AWARDS: any[] = [];
-
-// Mock children data
-const MOCK_CHILDREN = [
-    { id: '1', name: 'Abby Weiss' },
-    { id: '2', name: 'Adam Elliott' },
-    { id: '3', name: 'Addison Brewer' },
-    { id: '4', name: 'Adrianna Gelb' },
-    { id: '5', name: 'Aiden Feld' },
-    { id: '6', name: 'Aiden Leon' },
-    { id: '7', name: 'Aidan Waisz' },
-    { id: '8', name: 'John Doe' },
-    { id: '9', name: 'Jane Smith' },
-    { id: '10', name: 'Mike Johnson' },
-    { id: '11', name: 'Sarah Williams' },
-];
 
 const YEAR_END_AWARDS = [
     "Camper of the Year",
@@ -61,7 +45,7 @@ const ScreenHeader = ({ title, navigation }: { title: string, navigation: any })
 );
 
 export const AwardsScreen = ({ navigation }: any) => {
-    const [awards] = useState(MOCK_AWARDS);
+    const queryClient = useQueryClient();
     const [isCSVGuideOpen, setIsCSVGuideOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('awards');
     const [isAddAwardModalOpen, setIsAddAwardModalOpen] = useState(false);
@@ -79,21 +63,213 @@ export const AwardsScreen = ({ navigation }: any) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [notes, setNotes] = useState('');
 
-    // Calculate statistics - all will be 0 with empty data
+    // Fetch Profile and Company Context
+    const { data: profileContext } = useQuery({
+        queryKey: ['profile_context_awards'],
+        queryFn: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('No user found');
+
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('*, companies(id, name, slug)')
+                .eq('id', user.id)
+                .single();
+
+            const { data: roles } = await supabase.from('user_roles').select('role').eq('user_id', user.id);
+            const userRoles = (roles || []).map((r: any) => r.role);
+            const isSuperAdmin = userRoles.includes('super_admin');
+
+            let companyId = profile.company_id;
+            let companySlug = profile.companies?.slug;
+
+            if (isSuperAdmin && companySlug !== 'tyler-hill-camp') {
+                const { data: tylerHill } = await supabase.from('companies').select('id, slug').eq('slug', 'tyler-hill-camp').single();
+                if (tylerHill) companyId = tylerHill.id;
+            }
+            return { companyId, isSuperAdmin, season: '2026' }; // Defaulting season to 2026 as per other screens
+        }
+    });
+
+    const companyId = profileContext?.companyId;
+    const currentSeason = profileContext?.season;
+
+    // Fetch Awards
+    const { data: awards = [], isLoading: isLoadingAwards } = useQuery({
+        queryKey: ['awards', companyId, currentSeason],
+        queryFn: async () => {
+            if (!companyId) return [];
+            let query = supabase
+                .from('awards')
+                .select(`
+                    *,
+                    children:child_id (
+                        id,
+                        name,
+                        division_id
+                    )
+                `)
+                .eq('company_id', companyId)
+                .order('date', { ascending: false });
+
+            // Handle season filter (or null season)
+            // .or(`season.eq.${currentSeason},season.is.null`) - syntax slightly different in JS client usually, but let's try standard
+            // The web app uses: .or(`season.eq.${currentSeason},season.is.null`)
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            // Client side filter for season to match web app logic if .or is tricky, but let's trust the fetch for now.
+            // Actually, let's just filter by company for safely and then refine if needed.
+            // Web app logic: .or(`season.eq.${currentSeason},season.is.null`)
+
+            return data || [];
+        },
+        enabled: !!companyId
+    });
+
+    // Fetch Children (for dropdown)
+    const { data: children = [] } = useQuery({
+        queryKey: ['children_awards', companyId, currentSeason],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('children')
+                .select('id, name')
+                .eq('company_id', companyId)
+                .eq('season', currentSeason)
+                .eq('status', 'active')
+                .order('name');
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId,
+    });
+
+
+    // Calculate statistics
     const totalAchievements = awards.length;
-    const childrenWithAwards = new Set(awards.map(award => award.childId)).size;
-    const thisMonth = awards.filter(award => {
+    const childrenWithAwards = new Set(awards.map((award: any) => award.child_id)).size;
+    const thisMonth = awards.filter((award: any) => {
         const awardDate = new Date(award.date);
         const now = new Date();
         return awardDate.getMonth() === now.getMonth() && awardDate.getFullYear() === now.getFullYear();
     }).length;
 
+    // Group Awards by Child
+    const groupedAwards = useMemo(() => {
+        const grouped = awards.reduce((acc: any, award: any) => {
+            const childId = award.children?.id;
+            const childName = award.children?.name || "Unknown Child";
+
+            if (!childId) return acc;
+
+            if (!acc[childId]) {
+                acc[childId] = {
+                    childId,
+                    childName,
+                    achievements: [],
+                };
+            }
+
+            acc[childId].achievements.push(award);
+            return acc;
+        }, {});
+
+        return Object.values(grouped);
+    }, [awards]);
+
     const handleAddAward = () => {
         setIsAddAwardModalOpen(true);
     };
 
+    const [editingAwardId, setEditingAwardId] = useState<string | null>(null);
+
+    // Update Award Mutation
+    const updateAwardMutation = useMutation({
+        mutationFn: async (updatedAward: any) => {
+            const { id, ...data } = updatedAward;
+            const { error } = await supabase.from('awards').update(data).eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['awards'] });
+            handleCloseAddAward();
+        },
+        onError: (error) => {
+            console.error('Error updating award:', error);
+        }
+    });
+
+    // Delete Award Mutation
+    const deleteAwardMutation = useMutation({
+        mutationFn: async (awardId: string) => {
+            const { error } = await supabase.from('awards').delete().eq('id', awardId);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['awards'] });
+        },
+        onError: (error) => {
+            console.error('Error deleting award:', error);
+        }
+    });
+
+    const handleOpenEditAward = (award: any) => {
+        setEditingAwardId(award.id);
+        setSelectedChild(award.child_id);
+        setNotes(award.description || '');
+
+        if (award.date) {
+            const d = new Date(award.date);
+            setDate(d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }));
+            setSelectedDate(d);
+        }
+
+        // Parse category
+        try {
+            const cat = typeof award.category === 'string' ? JSON.parse(award.category) : award.category;
+            if (cat) {
+                setWeeklyStarfishValues(cat.weekly_starfish_values || []);
+                // If we tracked year end starfish values, we'd set them here
+            } else {
+                setWeeklyStarfishValues([]);
+            }
+        } catch (e) {
+            setWeeklyStarfishValues([]);
+        }
+
+        // Determine Year End Award from title
+        const title = award.title || "";
+        let yearend = "";
+        for (const a of YEAR_END_AWARDS) {
+            if (title.includes(a)) {
+                yearend = a;
+                break;
+            }
+        }
+        setYearEndAward(yearend);
+
+        setIsAddAwardModalOpen(true);
+    };
+
+    const handleDeleteAward = (awardId: string) => {
+        // In a real app, show a confirmation alert here
+        // Alert.alert(
+        //    "Delete Award",
+        //    "Are you sure you want to delete this award?",
+        //    [
+        //        { text: "Cancel", style: "cancel" },
+        //        { text: "Delete", style: "destructive", onPress: () => deleteAwardMutation.mutate(awardId) }
+        //    ]
+        // );
+        // For now, just delete
+        deleteAwardMutation.mutate(awardId);
+    };
+
     const handleCloseAddAward = () => {
         setIsAddAwardModalOpen(false);
+        setEditingAwardId(null); // Reset editing state
         // Reset form
         setSelectedChild('');
         setChildSearchText('');
@@ -136,16 +312,81 @@ export const AwardsScreen = ({ navigation }: any) => {
         );
     };
 
+    // Add Award Mutation
+    const addAwardMutation = useMutation({
+        mutationFn: async (newAward: any) => {
+            const { error } = await supabase.from('awards').insert([newAward]);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['awards'] });
+            handleCloseAddAward();
+        },
+        onError: (error) => {
+            console.error('Error adding award:', error);
+            // Alert.alert('Error', 'Failed to add award'); // Configure alert if needed
+        }
+    });
+
+
     const handleSubmitAward = () => {
-        // TODO: Submit award to backend
-        handleCloseAddAward();
+        if (!selectedChild) {
+            // Alert.alert("Error", "Please select a child");
+            return;
+        }
+
+        const hasWeeklyStarfish = weeklyStarfishValues.length > 0;
+        const hasYearEnd = yearEndAward !== "";
+
+        if (!hasWeeklyStarfish && !hasYearEnd) {
+            // Alert.alert("Error", "Please select at least one award type");
+            return;
+        }
+
+        // Build title based on selections
+        let title = "";
+        if (hasWeeklyStarfish && hasYearEnd) {
+            title = `Weekly Starfish, ${yearEndAward}`;
+        } else if (hasWeeklyStarfish) {
+            title = "Weekly Starfish";
+        } else {
+            title = yearEndAward;
+        }
+
+        // Store values in category field as JSON
+        const categoryData: any = {};
+        if (hasWeeklyStarfish) {
+            categoryData.weekly_starfish_values = weeklyStarfishValues;
+        }
+        // Note: Mobile app currently doesn't have year end starfish values selection in UI, 
+        // but if we added it, it would go here. For now, following existing UI state.
+
+        const category = Object.keys(categoryData).length > 0
+            ? JSON.stringify(categoryData)
+            : null;
+
+        const awardData = {
+            title,
+            category,
+            description: notes,
+            date: selectedDate.toISOString().split('T')[0], // YYYY-MM-DD
+            child_id: selectedChild,
+            company_id: companyId,
+            season: currentSeason
+        };
+
+        if (editingAwardId) {
+            updateAwardMutation.mutate({ ...awardData, id: editingAwardId });
+        } else {
+            addAwardMutation.mutate(awardData);
+        }
     };
 
     const filteredChildren = childSearchText.length > 0
-        ? MOCK_CHILDREN.filter(child =>
+        ? children.filter((child: any) =>
             child.name.toLowerCase().includes(childSearchText.toLowerCase())
         )
-        : MOCK_CHILDREN;
+        : children;
 
     const handleUploadCSV = () => {
         setIsUploadCSVModalOpen(true);
@@ -216,10 +457,94 @@ export const AwardsScreen = ({ navigation }: any) => {
                     </StyledCard>
                 </View>
 
-                {/* Empty State */}
-                <View style={styles.emptyStateContainer}>
-                    <Text style={styles.emptyStateText}>No awards found. Add your first achievement!</Text>
-                </View>
+                {/* Content - Grouped by Child */}
+                {isLoadingAwards ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color={theme.colors.primary} />
+                    </View>
+                ) : groupedAwards.length > 0 ? (
+                    <View style={styles.cardsContainer}>
+                        {groupedAwards.map((child: any) => (
+                            <StyledCard key={child.childId} style={styles.childCard}>
+                                <View style={styles.childHeader}>
+                                    <View style={styles.childIconContainer}>
+                                        <Ionicons name="person" size={20} color={theme.colors.primary} />
+                                    </View>
+                                    <View>
+                                        <Text style={styles.childName}>{child.childName}</Text>
+                                        <Text style={styles.achievementCount}>{child.achievements.length} achievements</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.viewProfileButton}
+                                        onPress={() => {
+                                            // TODO: Navigate to child profile
+                                            console.log('Navigate to child', child.childId);
+                                        }}
+                                    >
+                                        <Text style={styles.viewProfileText}>View Profile</Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View style={styles.achievementsList}>
+                                    {child.achievements.map((achievement: any) => (
+                                        <View key={achievement.id} style={styles.achievementItem}>
+                                            <View style={styles.achievementIconContainer}>
+                                                <Ionicons name="trophy" size={20} color={theme.colors.primary} />
+                                            </View>
+                                            <View style={styles.achievementContent}>
+                                                <Text style={styles.achievementTitle}>{achievement.title}</Text>
+                                                <Text style={styles.achievementDescription}>{achievement.description}</Text>
+                                                <View style={styles.achievementMeta}>
+                                                    <Ionicons name="calendar-outline" size={12} color={theme.colors.textSecondary} />
+                                                    <Text style={styles.achievementDate}>
+                                                        {new Date(achievement.date).toLocaleDateString()}
+                                                    </Text>
+                                                    {achievement.category && (
+                                                        <>
+                                                            <Text style={styles.metaDot}>•</Text>
+                                                            {/* Parse category if string, or use directly if object - handle both safely */}
+                                                            <Text style={styles.achievementCategory}>
+                                                                {(() => {
+                                                                    try {
+                                                                        const cat = typeof achievement.category === 'string'
+                                                                            ? JSON.parse(achievement.category)
+                                                                            : achievement.category;
+
+                                                                        if (cat?.weekly_starfish_values) return "Weekly Starfish";
+                                                                        if (cat?.year_end_starfish_values) return "Starfish";
+                                                                        return "";
+                                                                    } catch (e) { return ""; }
+                                                                })()}
+                                                            </Text>
+                                                        </>
+                                                    )}
+                                                </View>
+                                            </View>
+                                            <View style={styles.achievementActions}>
+                                                <TouchableOpacity
+                                                    style={styles.actionIcon}
+                                                    onPress={() => handleOpenEditAward(achievement)}
+                                                >
+                                                    <Ionicons name="pencil-outline" size={16} color={theme.colors.textSecondary} />
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.actionIcon}
+                                                    onPress={() => handleDeleteAward(achievement.id)}
+                                                >
+                                                    <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    ))}
+                                </View>
+                            </StyledCard>
+                        ))}
+                    </View>
+                ) : (
+                    <View style={styles.emptyStateContainer}>
+                        <Text style={styles.emptyStateText}>No awards found. Add your first achievement!</Text>
+                    </View>
+                )}
             </ScrollView>
 
             {/* Upload CSV Bottom Sheet Modal */}
@@ -289,7 +614,9 @@ export const AwardsScreen = ({ navigation }: any) => {
                     >
                         {/* Modal Header */}
                         <View style={styles.addAwardModalHeader}>
-                            <Text style={styles.addAwardModalTitle}>Add New Award</Text>
+                            <Text style={styles.addAwardModalTitle}>
+                                {editingAwardId ? 'Edit Award' : 'Add New Award'}
+                            </Text>
                             <TouchableOpacity
                                 style={styles.addAwardModalCloseButton}
                                 onPress={handleCloseAddAward}
@@ -315,7 +642,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                                         styles.selectInputText,
                                         !selectedChild && styles.selectInputPlaceholder
                                     ]}>
-                                        {selectedChild ? MOCK_CHILDREN.find(c => c.id === selectedChild)?.name : 'Select a child...'}
+                                        {selectedChild ? children?.find((c: any) => c.id === selectedChild)?.name : 'Select a child...'}
                                     </Text>
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
@@ -413,7 +740,9 @@ export const AwardsScreen = ({ navigation }: any) => {
                                     style={styles.addAwardButton}
                                     onPress={handleSubmitAward}
                                 >
-                                    <Text style={styles.addAwardButtonText}>Add Award</Text>
+                                    <Text style={styles.addAwardButtonText}>
+                                        {editingAwardId ? 'Save Changes' : 'Add Award'}
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
@@ -1508,6 +1837,116 @@ const styles = StyleSheet.create({
     },
     addAwardBottomSheetScroll: {
         // removed flex: 1 to prevent collapse on mobile
+    },
+    // New Styles for Awards List
+    loadingContainer: {
+        padding: theme.spacing.xl,
+        alignItems: 'center',
+    },
+    cardsContainer: {
+        gap: theme.spacing.md,
+        paddingBottom: theme.spacing.xl,
+    },
+    childCard: {
+        padding: 0,
+        overflow: 'hidden',
+    },
+    childHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        backgroundColor: theme.colors.menuCardBg, // Use a light background for header
+    },
+    childIconContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: theme.spacing.md,
+    },
+    childName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    achievementCount: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    viewProfileButton: {
+        marginLeft: 'auto',
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: theme.spacing.xs,
+        borderWidth: 1,
+        borderColor: theme.colors.primary,
+        borderRadius: theme.borderRadius.sm,
+    },
+    viewProfileText: {
+        fontSize: 12,
+        color: theme.colors.primary,
+        fontWeight: '500',
+    },
+    achievementsList: {
+        padding: theme.spacing.md,
+        gap: theme.spacing.md,
+    },
+    achievementItem: {
+        flexDirection: 'row',
+        padding: theme.spacing.md,
+        backgroundColor: theme.colors.background,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    achievementIconContainer: {
+        padding: theme.spacing.xs,
+        marginRight: theme.spacing.md,
+    },
+    achievementContent: {
+        flex: 1,
+    },
+    achievementTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: 2,
+    },
+    achievementDescription: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        marginBottom: 4,
+    },
+    achievementMeta: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    achievementDate: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    metaDot: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginHorizontal: 4,
+    },
+    achievementCategory: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        fontStyle: 'italic',
+    },
+    achievementActions: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: theme.spacing.sm,
+        marginLeft: theme.spacing.sm,
+    },
+    actionIcon: {
+        padding: 4,
     },
 });
 
