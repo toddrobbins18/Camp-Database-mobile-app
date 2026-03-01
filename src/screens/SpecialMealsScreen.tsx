@@ -8,11 +8,16 @@ import {
     TextInput,
     Modal,
     FlatList,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { supabase } from '../lib/supabase';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCompany } from '../contexts/CompanyContext';
 
 interface SpecialMealsScreenProps {
     navigation: any;
@@ -27,6 +32,9 @@ const MEAL_TYPES = [
 ];
 
 export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
+    const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
+
     const [showAddMealModal, setShowAddMealModal] = useState(false);
     const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
 
@@ -41,6 +49,53 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
     // Date picker state
     const [mealDatePickerMonth, setMealDatePickerMonth] = useState(new Date().getMonth());
     const [mealDatePickerYear, setMealDatePickerYear] = useState(new Date().getFullYear());
+
+    // Fetch special meals from Supabase
+    const { data: specialMeals = [], isLoading: isLoadingMeals } = useQuery({
+        queryKey: ['special_meals', companyId, season],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('special_meals')
+                .select('*')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .order('date', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId,
+    });
+
+    // Add special meal mutation
+    const addMealMutation = useMutation({
+        mutationFn: async (mealData: any) => {
+            // Convert mm/dd/yyyy to yyyy-mm-dd
+            const parts = mealData.date.split('/');
+            const isoDate = `${parts[2]}-${parts[0]}-${parts[1]}`;
+            const { data, error } = await supabase
+                .from('special_meals')
+                .insert([{
+                    company_id: companyId,
+                    season: season,
+                    date: isoDate,
+                    meal_type: mealData.mealType,
+                    menu_items: mealData.menuItems,
+                    allergens: mealData.allergens || null,
+                }])
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['special_meals'] });
+            Alert.alert('Success', 'Special meal added successfully');
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to add special meal');
+        },
+    });
 
     // Reuse date formatting function
     const formatDate = (date: Date) => {
@@ -189,9 +244,12 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
     };
 
     const handleAddMeal = () => {
-        // TODO: Implement meal creation
-        console.log('Adding special meal:', {
-            mealDate,
+        if (!mealDate || !mealType) {
+            Alert.alert('Validation', 'Please fill in Date and Meal Type');
+            return;
+        }
+        addMealMutation.mutate({
+            date: mealDate,
             mealType,
             menuItems,
             allergens,
@@ -273,24 +331,58 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                     </TouchableOpacity>
                 </View>
 
-                {/* Empty State */}
-                <View style={styles.emptyStateContainer}>
-                    <StyledCard style={styles.emptyStateCard}>
-                        <View style={styles.emptyStateContent}>
-                            <View style={styles.emptyStateIconContainer}>
-                                <Ionicons
-                                    name="restaurant-outline"
-                                    size={64}
-                                    color={theme.colors.textSecondary}
-                                />
-                                <View style={styles.greenDot} />
+                {/* Meals List / Empty State */}
+                {isLoadingMeals ? (
+                    <View style={styles.emptyStateContainer}>
+                        <ActivityIndicator size="large" color={theme.colors.primary} />
+                    </View>
+                ) : specialMeals.length === 0 ? (
+                    <View style={styles.emptyStateContainer}>
+                        <StyledCard style={styles.emptyStateCard}>
+                            <View style={styles.emptyStateContent}>
+                                <View style={styles.emptyStateIconContainer}>
+                                    <Ionicons
+                                        name="restaurant-outline"
+                                        size={64}
+                                        color={theme.colors.textSecondary}
+                                    />
+                                    <View style={styles.greenDot} />
+                                </View>
+                                <Text style={styles.emptyStateText}>
+                                    No special meals scheduled yet
+                                </Text>
                             </View>
-                            <Text style={styles.emptyStateText}>
-                                No special meals scheduled yet
-                            </Text>
-                        </View>
-                    </StyledCard>
-                </View>
+                        </StyledCard>
+                    </View>
+                ) : (
+                    <View style={styles.emptyStateContainer}>
+                        {specialMeals.map((meal: any) => (
+                            <StyledCard key={meal.id} style={{ marginBottom: theme.spacing.sm, padding: theme.spacing.md }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ ...theme.typography.body, fontWeight: '600', color: theme.colors.text }}>
+                                            {meal.meal_type}
+                                        </Text>
+                                        <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary, marginTop: 4 }}>
+                                            {meal.date}
+                                        </Text>
+                                        {meal.menu_items ? (
+                                            <Text style={{ ...theme.typography.bodySmall, color: theme.colors.text, marginTop: 4 }}>
+                                                {meal.menu_items}
+                                            </Text>
+                                        ) : null}
+                                        {meal.allergens ? (
+                                            <Text style={{ ...theme.typography.bodySmall, color: theme.colors.warning, marginTop: 4 }}>
+                                                Allergens: {meal.allergens}
+                                            </Text>
+                                        ) : null}
+                                    </View>
+                                    <Ionicons name="restaurant-outline" size={24} color={theme.colors.textSecondary} />
+                                </View>
+                            </StyledCard>
+                        ))}
+                    </View>
+                )}
             </ScrollView>
 
             {/* Add Special Meal Modal */}

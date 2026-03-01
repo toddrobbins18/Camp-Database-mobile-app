@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../lib/supabase';
 import {
     View,
     Text,
@@ -13,6 +15,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCampers } from '../api/campers';
+import { useStaff } from '../api/staff';
+import { useCompany } from '../contexts/CompanyContext';
 
 interface SportsEvent {
     id: string;
@@ -39,6 +44,12 @@ interface SportsEvent {
 }
 
 export const SportsCalendarScreen = ({ navigation }: any) => {
+    const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
+    const { data: camperData = [] } = useCampers(companyId, season);
+    const { data: staffData = [] } = useStaff(companyId, season);
+    const MOCK_CAMPERS = camperData.map((c: any) => ({ id: c.id, name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim(), grade: c.grade || '' }));
+    const MOCK_STAFF = staffData.map((s: any) => ({ id: s.id, name: s.name, role: s.role || s.staff_type || 'Staff' }));
     const [activeView, setActiveView] = useState('Month');
     const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1)); // January 2026
     const [selectedDate, setSelectedDate] = useState(new Date(2026, 0, 25));
@@ -121,32 +132,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     const [showStaffSelectionModal, setShowStaffSelectionModal] = useState(false);
     const [staffSelectionType, setStaffSelectionType] = useState<'ref' | null>(null);
 
-    const MOCK_CAMPERS = [
-        { id: '1', name: 'Abby Weiss', grade: '11th' },
-        { id: '2', name: 'Adam Elliott', grade: '4th' },
-        { id: '3', name: 'Addison Brewer', grade: '6th' },
-        { id: '4', name: 'Adrianna Gelb', grade: '11th' },
-        { id: '5', name: 'Aiden Feld', grade: '4th' },
-        { id: '6', name: 'Aiden Leon', grade: '6th' },
-        { id: '7', name: 'Aiden Weisz', grade: '4th' },
-        { id: '8', name: 'AJ Goldberg', grade: '4th' },
-        { id: '9', name: 'Alex Cohen', grade: '8th' },
-        { id: '10', name: 'Alex Miller', grade: '9th' },
-    ];
 
-    const MOCK_STAFF = [
-        { id: 's1', name: 'Abel Hernandez Gallardo', role: 'Soccer / General Counselor' },
-        { id: 's2', name: 'Abigail Sheridan', role: 'General Counselor - Freshmen Boys' },
-        { id: 's3', name: 'Adrian Chamu Ochoa', role: 'Lead Counselor' },
-        { id: 's4', name: 'Aidan Casey', role: 'Waterfront / General Counselor' },
-        { id: 's5', name: 'Alanah Mutch', role: 'Tennis / General Counselor' },
-        { id: 's6', name: 'ALEJO RODRIGUEZ ALONSO', role: 'Climbing Wall / General Counselor' },
-        { id: 's7', name: 'Aleksandra Makuch', role: 'Support Staff' },
-        { id: 's8', name: 'Alex Devitt', role: 'General Counselor' },
-        { id: 's9', name: 'Alex Weisenthal', role: 'General Counselor' },
-        { id: 's10', name: 'Alexandra Forman', role: 'General Counselor' },
-        { id: 's11', name: 'Alexandra Sproul', role: 'General Counselor' },
-    ];
 
     const toggleCamperSelection = (id: string) => {
         const newSelection = new Set(selectedCampers);
@@ -170,12 +156,40 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     const homeAwayOptions = ['Home', 'Away', 'Neutral'];
     const mealOptions = ['Breakfast', 'Snack', 'Lunch', 'Dinner', 'Other'];
 
-    // Sample sports events
-    const [events, setEvents] = useState<SportsEvent[]>([
-        { id: '1', title: 'Basketball Tournament', date: new Date(2026, 0, 15), location: 'Home', sport: 'Basketball', division: 'Senior Boys', gender: 'Boys', eventType: 'Tournament' },
-        { id: '2', title: 'Soccer Match', date: new Date(2026, 0, 20), location: 'Away', sport: 'Soccer', division: 'Junior Girls', gender: 'Girls', eventType: 'Match' },
-        { id: '3', title: 'Tennis Championship', date: new Date(2026, 0, 25), location: 'Home', sport: 'Tennis', division: 'CIT Boys', gender: 'Boys', eventType: 'Championship' },
-    ]);
+    // Fetch sports events from Supabase
+    const { data: sportsCalendarData = [] } = useQuery({
+        queryKey: ['sports_calendar', companyId, season],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('sports_calendar')
+                .select('*')
+                .eq('company_id', companyId)
+                .order('event_date', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId,
+    });
+
+    const events: SportsEvent[] = sportsCalendarData.map((e: any) => ({
+        id: e.id,
+        title: e.title || e.event_name || '',
+        date: new Date(e.event_date + 'T00:00:00'),
+        location: e.location || '',
+        sport: e.sport_type || e.custom_sport_type || '',
+        division: e.division_name || '',
+        gender: '',
+        eventType: e.event_type || '',
+        homeAway: e.home_away || '',
+        departTime: e.depart_time || '',
+        startTimeField: e.start_time || '',
+        description: e.description || '',
+        mealOptions: e.meal_options || [],
+        mealNotes: e.meal_notes || '',
+        divisionProvidesCoach: e.division_provides_coach || false,
+        divisionProvidesRef: e.division_provides_ref || false,
+    }));
 
     const divisions = ['All Divisions', 'Freshmen A', 'Freshmen B', 'Cadet', 'Sophomore', 'Junior', 'Senior', 'Super', 'Teen', 'CIT'];
     const genders = ['All Genders', 'Boys', 'Girls'];
@@ -260,30 +274,30 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         return true;
     });
 
-    const handleAddEvent = () => {
+    const handleAddEvent = async () => {
         if (!newEventTitle.trim() || !newEventSport) return;
-
-        const newEvent: SportsEvent = {
-            id: Date.now().toString(),
+        const dateStr = `${newEventDate.getFullYear()}-${String(newEventDate.getMonth() + 1).padStart(2, '0')}-${String(newEventDate.getDate()).padStart(2, '0')}`;
+        const { error } = await supabase.from('sports_calendar').insert([{
             title: newEventTitle.trim(),
-            date: new Date(newEventDate),
+            event_date: dateStr,
             location: newEventLocation || 'Home',
-            sport: newEventSport,
-            division: newEventDivision || 'All Divisions',
-            gender: newEventGender || 'All Genders',
-            eventType: newEventType || 'Match',
-        };
-
-        setEvents([...events, newEvent]);
-        setShowAddEventModal(false);
-        // Reset form
-        setNewEventTitle('');
-        setNewEventDate(new Date(2026, 0, 25));
-        setNewEventLocation('');
-        setNewEventSport('');
-        setNewEventDivision('');
-        setNewEventGender('');
-        setNewEventType('');
+            sport_type: newEventSport,
+            event_type: newEventType || 'match',
+            company_id: companyId,
+            season,
+        }]);
+        if (!error) {
+            queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
+            queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
+            setShowAddEventModal(false);
+            setNewEventTitle('');
+            setNewEventDate(new Date(2026, 0, 25));
+            setNewEventLocation('');
+            setNewEventSport('');
+            setNewEventDivision('');
+            setNewEventGender('');
+            setNewEventType('');
+        }
     };
 
     const handleDeleteClick = (eventId: string) => {
@@ -291,9 +305,11 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         setShowDeleteConfirmModal(true);
     };
 
-    const handleConfirmDelete = () => {
+    const handleConfirmDelete = async () => {
         if (eventToDelete) {
-            setEvents(events.filter(event => event.id !== eventToDelete));
+            await supabase.from('sports_calendar').delete().eq('id', eventToDelete);
+            queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
+            queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
         }
         setShowDeleteConfirmModal(false);
         setEventToDelete(null);
@@ -329,33 +345,37 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         setShowEditEventModal(true);
     };
 
-    const handleUpdateEvent = () => {
-        const updatedEvents = events.map(e => e.id === editFormData.id ? {
-            ...e,
+    const handleUpdateEvent = async () => {
+        const dateStr = editFormData.event_date instanceof Date
+            ? `${editFormData.event_date.getFullYear()}-${String(editFormData.event_date.getMonth() + 1).padStart(2, '0')}-${String(editFormData.event_date.getDate()).padStart(2, '0')}`
+            : editFormData.event_date;
+        const { error } = await supabase.from('sports_calendar').update({
             title: editFormData.title,
-            date: editFormData.event_date,
-            sport: editFormData.sport_type,
-            eventType: editFormData.event_type,
+            event_date: dateStr,
+            sport_type: editFormData.sport_type,
+            custom_sport_type: editFormData.custom_sport_type,
+            event_type: editFormData.event_type,
+            home_away: editFormData.home_away,
+            depart_time: editFormData.depart_time,
+            start_time: editFormData.start_time_field,
             location: editFormData.location,
-            customSport: editFormData.custom_sport_type,
-            divisionIds: editFormData.division_ids,
-            homeAway: editFormData.home_away,
-            departTime: editFormData.depart_time,
-            startTimeField: editFormData.start_time_field,
-            team: editFormData.team,
-            opponent: editFormData.opponent,
             description: editFormData.description,
-            mealOptions: editFormData.meal_options,
-            mealNotes: editFormData.meal_notes,
-            divisionProvidesCoach: editFormData.division_provides_coach,
-            divisionProvidesRef: editFormData.division_provides_ref,
-        } : e);
-        setEvents(updatedEvents);
-        setShowEditEventModal(false);
+            meal_options: editFormData.meal_options,
+            meal_notes: editFormData.meal_notes,
+            division_provides_coach: editFormData.division_provides_coach,
+            division_provides_ref: editFormData.division_provides_ref,
+        }).eq('id', editFormData.id);
+        if (!error) {
+            queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
+            queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
+            setShowEditEventModal(false);
+        }
     };
 
-    const handleDeleteEvent = (id: string) => {
-        setEvents(events.filter(event => event.id !== id));
+    const handleDeleteEvent = async (id: string) => {
+        await supabase.from('sports_calendar').delete().eq('id', id);
+        queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
+        queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
     };
 
     const navigateMonth = (direction: 'prev' | 'next') => {

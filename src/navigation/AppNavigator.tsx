@@ -38,15 +38,34 @@ import { UserApprovalsScreen } from '../screens/UserApprovalsScreen';
 import { AccessDeniedScreen } from '../screens/AccessDeniedScreen';
 
 import { ODManagementScreen } from '../screens/ODManagementScreen';
+import { useRole } from '../hooks/useRole';
+import { supabase } from '../lib/supabase';
 import { theme } from '../theme/theme';
 
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
 
-// Custom Drawer Content
+// Custom Drawer Content with Role-Based Visibility
 const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const [selectedYear, setSelectedYear] = useState('2026');
+    const { data: roleData } = useRole();
+
+    // Role flags (default to showing Main Menu items while loading)
+    const isSuperAdmin = roleData?.isSuperAdmin ?? false;
+    const isAdmin = roleData?.isAdmin ?? false;  // includes super_admin
+    const isStaff = roleData?.isStaff ?? false;
+    const isRoleLoaded = !!roleData;
+
+    // Access helpers
+    const canSeeStaffScreens = isAdmin || isStaff || !isRoleLoaded; // staff+ or loading
+    const canSeeAdminScreens = isAdmin || !isRoleLoaded;             // admin+ or loading
+    const canSeeSuperAdminOnly = isSuperAdmin;                       // super_admin only
+
+    const drawerItemProps = {
+        labelStyle: styles.drawerLabel,
+        inactiveTintColor: '#94a3b8',
+    };
 
     return (
         <View style={{ flex: 1, backgroundColor: theme.colors.primary }}>
@@ -84,212 +103,208 @@ const CustomDrawerContent = (props: any) => {
 
                 <Text style={styles.sectionHeader}>Main Menu</Text>
 
+                {/* ── Everyone (all roles) ── */}
                 <DrawerItem
-                    label="Activities & Field Trips"
-                    icon={({ color }) => <Ionicons name="leaf-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('ActivitiesFieldTrips')}
-                    labelStyle={styles.drawerLabel}
-                    activeTintColor={theme.colors.surface}
-                    inactiveTintColor="#94a3b8"
-                    activeBackgroundColor={theme.colors.sidebarActiveBg}
-                />
-                <DrawerItem
-                    label="Appointments"
-                    icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Appointments')}
-                    labelStyle={styles.drawerLabel}
-                    activeTintColor={theme.colors.surface}
-                    inactiveTintColor="#94a3b8"
-                    activeBackgroundColor={theme.colors.sidebarActiveBg}
-                />
-                <DrawerItem
-                    label="Awards"
-                    icon={({ color }) => <Ionicons name="ribbon-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Awards')}
-                    labelStyle={styles.drawerLabel}
-                    activeTintColor={theme.colors.surface}
-                    inactiveTintColor="#94a3b8"
-                    activeBackgroundColor={theme.colors.sidebarActiveBg}
+                    label="Dashboard"
+                    icon={({ color }) => <Ionicons name="home-outline" size={22} color={color} />}
+                    onPress={() => props.navigation.navigate('Dashboard')}
+                    {...drawerItemProps}
                 />
                 <DrawerItem
                     label="Camper"
                     icon={({ color }) => <Ionicons name="people-outline" size={22} color={color} />}
                     onPress={() => props.navigation.navigate('Camper')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Daily News"
-                    icon={({ color }) => <Ionicons name="document-text-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('DailyNews')}
-                    labelStyle={styles.drawerLabel}
-                    activeTintColor={theme.colors.surface}
-                    inactiveTintColor="#94a3b8"
-                    activeBackgroundColor={theme.colors.sidebarActiveBg}
-                />
-                <DrawerItem
-                    label="Dashboard"
-                    icon={({ color }) => <Ionicons name="home-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Dashboard')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Incident Reports"
-                    icon={({ color }) => <Ionicons name="warning-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('IncidentReports')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
+                    {...drawerItemProps}
                 />
                 <DrawerItem
                     label="Master Calendar"
                     icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
                     onPress={() => props.navigation.navigate('Calendar')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
+                    {...drawerItemProps}
                 />
                 <DrawerItem
                     label="Menu"
                     icon={({ color }) => <Ionicons name="restaurant-outline" size={22} color={color} />}
                     onPress={() => props.navigation.navigate('Menu')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
+                    {...drawerItemProps}
                 />
                 <DrawerItem
                     label="Messages"
                     icon={({ color }) => <Ionicons name="mail-outline" size={22} color={color} />}
                     onPress={() => props.navigation.navigate('Messages')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Nurse"
-                    icon={({ color }) => <Ionicons name="medical-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Health')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="OD Management"
-                    icon={({ color }) => <Ionicons name="clipboard-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('ODManagement')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Rainy Day Schedule"
-                    icon={({ color }) => <Ionicons name="rainy-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('RainyDaySchedule')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Reports"
-                    icon={({ color }) => <Ionicons name="bar-chart-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Reports')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Roster Templates"
-                    icon={({ color }) => <Ionicons name="list-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('RosterTemplates')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Special Events & Evening Activities"
-                    icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('SpecialEvents')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Special Meals"
-                    icon={({ color }) => <Ionicons name="restaurant-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('SpecialMeals')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Sports Academy"
-                    icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Sports')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Sports Calendar"
-                    icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('SportsCalendar')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Staff"
-                    icon={({ color }) => <Ionicons name="person-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Staff')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Transportation"
-                    icon={({ color }) => <Ionicons name="car-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Transport')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Tutoring & Therapy"
-                    icon={({ color }) => <Ionicons name="book-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('TutoringTherapy')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
+                    {...drawerItemProps}
                 />
 
-                <Text style={styles.sectionHeader}>Administration</Text>
-                <DrawerItem
-                    label="Admin Panel"
-                    icon={({ color }) => <Ionicons name="shield-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('AdminPanel')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Evaluation Questions"
-                    icon={({ color }) => <Ionicons name="clipboard-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('EvaluationQuestions')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Role Permissions"
-                    icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('RolePermissions')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Division Permissions"
-                    icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('DivisionPermissions')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="Specialist Sport Assignments"
-                    icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('AccessDenied')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
-                <DrawerItem
-                    label="User Approvals"
-                    icon={({ color }) => <Ionicons name="checkmark-circle-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('UserApprovals')}
-                    labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
-                />
+                {/* ── Staff + Admin + Super Admin ── */}
+                {canSeeStaffScreens && (
+                    <>
+                        <DrawerItem
+                            label="Activities & Field Trips"
+                            icon={({ color }) => <Ionicons name="leaf-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('ActivitiesFieldTrips')}
+                            {...drawerItemProps}
+                            activeTintColor={theme.colors.surface}
+                            activeBackgroundColor={theme.colors.sidebarActiveBg}
+                        />
+                        <DrawerItem
+                            label="Appointments"
+                            icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('Appointments')}
+                            {...drawerItemProps}
+                            activeTintColor={theme.colors.surface}
+                            activeBackgroundColor={theme.colors.sidebarActiveBg}
+                        />
+                        <DrawerItem
+                            label="Nurse"
+                            icon={({ color }) => <Ionicons name="medical-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('Health')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="OD Management"
+                            icon={({ color }) => <Ionicons name="clipboard-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('ODManagement')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Special Events & Evening Activities"
+                            icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('SpecialEvents')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Special Meals"
+                            icon={({ color }) => <Ionicons name="restaurant-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('SpecialMeals')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Sports Academy"
+                            icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('Sports')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Sports Calendar"
+                            icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('SportsCalendar')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Staff"
+                            icon={({ color }) => <Ionicons name="person-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('Staff')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Transportation"
+                            icon={({ color }) => <Ionicons name="car-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('Transport')}
+                            {...drawerItemProps}
+                        />
+                    </>
+                )}
+
+                {/* ── Admin + Super Admin only ── */}
+                {canSeeAdminScreens && (
+                    <>
+                        <DrawerItem
+                            label="Awards"
+                            icon={({ color }) => <Ionicons name="ribbon-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('Awards')}
+                            {...drawerItemProps}
+                            activeTintColor={theme.colors.surface}
+                            activeBackgroundColor={theme.colors.sidebarActiveBg}
+                        />
+                        <DrawerItem
+                            label="Daily News"
+                            icon={({ color }) => <Ionicons name="document-text-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('DailyNews')}
+                            {...drawerItemProps}
+                            activeTintColor={theme.colors.surface}
+                            activeBackgroundColor={theme.colors.sidebarActiveBg}
+                        />
+                        <DrawerItem
+                            label="Incident Reports"
+                            icon={({ color }) => <Ionicons name="warning-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('IncidentReports')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Rainy Day Schedule"
+                            icon={({ color }) => <Ionicons name="rainy-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('RainyDaySchedule')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Reports"
+                            icon={({ color }) => <Ionicons name="bar-chart-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('Reports')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Roster Templates"
+                            icon={({ color }) => <Ionicons name="list-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('RosterTemplates')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Tutoring & Therapy"
+                            icon={({ color }) => <Ionicons name="book-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('TutoringTherapy')}
+                            {...drawerItemProps}
+                        />
+                    </>
+                )}
+
+                {/* ── Administration Section (Admin+) ── */}
+                {canSeeAdminScreens && (
+                    <>
+                        <Text style={styles.sectionHeader}>Administration</Text>
+                        <DrawerItem
+                            label="Admin Panel"
+                            icon={({ color }) => <Ionicons name="shield-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('AdminPanel')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Evaluation Questions"
+                            icon={({ color }) => <Ionicons name="clipboard-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('EvaluationQuestions')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Specialist Sport Assignments"
+                            icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('AccessDenied')}
+                            {...drawerItemProps}
+                        />
+                    </>
+                )}
+
+                {/* ── Super Admin only ── */}
+                {canSeeSuperAdminOnly && (
+                    <>
+                        <DrawerItem
+                            label="Role Permissions"
+                            icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('RolePermissions')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Division Permissions"
+                            icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('DivisionPermissions')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="User Approvals"
+                            icon={({ color }) => <Ionicons name="checkmark-circle-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('UserApprovals')}
+                            {...drawerItemProps}
+                        />
+                    </>
+                )}
 
             </DrawerContentScrollView>
 
@@ -298,8 +313,8 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Log out"
                     icon={({ color }) => <Ionicons name="exit-outline" size={22} color={color} />}
-                    onPress={() => { 
-                        // TODO: Implement logout logic
+                    onPress={async () => {
+                        await supabase.auth.signOut();
                         props.navigation.getParent()?.navigate('Login');
                     }}
                     labelStyle={styles.drawerLabel}

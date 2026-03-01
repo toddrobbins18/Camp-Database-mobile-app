@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useAddEvaluationQuestion } from '../api/evaluations';
 
 export const QuestionTextScreen = ({ navigation, route }: any) => {
     const [questionText, setQuestionText] = useState('');
@@ -15,10 +16,28 @@ export const QuestionTextScreen = ({ navigation, route }: any) => {
     const [showStaffTypePicker, setShowStaffTypePicker] = useState(false);
 
     const staffTypes = ['Both', 'General Counselor', 'Specialist'];
+    const addQuestionMutation = useAddEvaluationQuestion();
 
     const handleSave = () => {
-        // Navigate back to Evaluation Questions screen
-        navigation.goBack();
+        if (!questionText.trim()) {
+            Alert.alert('Error', 'Question text is required.');
+            return;
+        }
+        const typeMap: Record<string, string> = { 'Both': 'text', 'General Counselor': 'rating', 'Specialist': 'rating' };
+        addQuestionMutation.mutate({
+            question_text: questionText.trim(),
+            question_type: 'rating' as 'multiple_choice' | 'text' | 'rating',
+            options: options.trim() ? options.split(',').map(o => o.trim()) : undefined,
+            category: undefined,
+        }, {
+            onSuccess: () => {
+                Alert.alert('Success', 'Question added successfully.');
+                navigation.goBack();
+            },
+            onError: () => {
+                Alert.alert('Error', 'Failed to add question.');
+            },
+        });
     };
 
     return (

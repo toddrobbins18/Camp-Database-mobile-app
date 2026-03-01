@@ -14,6 +14,9 @@ import {
     Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useCompany } from '../contexts/CompanyContext';
+import { useTrips, useAddTrip, useUpdateTrip, useDeleteTrip, useManageTripRoster, useTripAttendees } from '../api/transport';
+import { useCampers, useDivisions } from '../api/campers';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 
@@ -41,85 +44,7 @@ interface Trip {
 }
 
 // Mock Data - Expanded for testing filters
-const MOCK_TRIPS: Trip[] = [
-    {
-        id: '1',
-        name: 'Seniors Boston Trip',
-        destination: 'Boston, MA',
-        date: '2026-07-30',
-        end_date: '2026-08-01',
-        is_multi_day: true,
-        departure_time: '08:00:00',
-        return_time: '18:00:00',
-        attendingCount: 45,
-        chaperone: 'Sarah Jenkins',
-        status: 'pending',
-        type: 'field_trip',
-        event_type: 'field-trip',
-        transportation_type: 'Bus',
-    },
-    {
-        id: '2',
-        name: 'Super Montreal Trip',
-        destination: 'Montreal, QC',
-        date: '2026-07-30',
-        end_date: '2026-08-01',
-        is_multi_day: true,
-        departure_time: '07:30:00',
-        return_time: '20:00:00',
-        attendingCount: 32,
-        chaperone: 'Mike Thompson',
-        status: 'approved',
-        type: 'field_trip',
-        event_type: 'field-trip',
-        transportation_type: 'Bus',
-    },
-    {
-        id: '3',
-        name: 'Junior Beach Day',
-        destination: 'Sandy Point Beach',
-        date: '2026-08-05',
-        is_multi_day: false,
-        departure_time: '10:00:00',
-        return_time: '16:00:00',
-        attendingCount: 80,
-        chaperone: 'Jessica Alva',
-        status: 'confirmed',
-        type: 'field_trip',
-        event_type: 'field-trip',
-        transportation_type: 'Bus',
-    },
-    {
-        id: '4',
-        name: 'Varsity Basketball vs. Camp Lohikan',
-        destination: 'Camp Lohikan',
-        date: '2026-07-28',
-        is_multi_day: false,
-        departure_time: '13:00:00',
-        return_time: '17:00:00',
-        attendingCount: 15,
-        chaperone: 'Coach Miller',
-        status: 'approved',
-        type: 'sporting_event',
-        event_type: 'Basketball',
-        transportation_type: 'Van',
-    },
-    {
-        id: '5',
-        name: 'U13 Soccer Tournament',
-        destination: 'Regional Fields',
-        date: '2026-08-02',
-        is_multi_day: false,
-        departure_time: '09:00:00',
-        return_time: '14:00:00',
-        attendingCount: 22,
-        chaperone: 'Coach Sarah',
-        status: 'pending',
-        type: 'sporting_event',
-        event_type: 'Soccer',
-        transportation_type: 'Bus',
-    },
-];
+
 
 const StatusBadge = ({ status }: { status: string }) => {
     let backgroundColor = theme.colors.warning + '20'; // transparent orange
@@ -147,7 +72,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 interface Camper {
     id: string;
     name: string;
-    divisionId: string;
+    division: string;
     avatar?: string;
     age?: number;
     grade?: string;
@@ -163,163 +88,9 @@ interface Division {
     totalCount: number;
 }
 
-const MOCK_DIVISIONS: Division[] = [
-    // Girls (Ordered by age/grade as per screenshot)
-    { id: 'freshmen_a_girls', name: 'Freshmen A Girls', totalCount: 22 },
-    { id: 'freshmen_b_girls', name: 'Freshmen B Girls', totalCount: 25 },
-    { id: 'cadet_girls', name: 'Cadet Girls', totalCount: 20 },
-    { id: 'sophomore_girls', name: 'Sophomore Girls', totalCount: 15 },
-    { id: 'junior_girls', name: 'Junior Girls', totalCount: 16 },
-    { id: 'senior_girls', name: 'Senior Girls', totalCount: 17 },
-    { id: 'super_girls', name: 'Super Girls', totalCount: 18 },
-    { id: 'teen_girls', name: 'Teen Girls', totalCount: 15 },
-    { id: 'cit_girls', name: 'CIT Girls', totalCount: 20 },
 
-    // Boys (Assuming similar structure)
-    { id: 'freshmen_a_boys', name: 'Freshmen A Boys', totalCount: 20 },
-    { id: 'freshmen_b_boys', name: 'Freshmen B Boys', totalCount: 18 },
-    { id: 'cadet_boys', name: 'Cadet Boys', totalCount: 35 },
-    { id: 'sophomore_boys', name: 'Sophomore Boys', totalCount: 22 },
-    { id: 'junior_boys', name: 'Junior Boys', totalCount: 21 },
-    { id: 'senior_boys', name: 'Senior Boys', totalCount: 18 },
-    { id: 'super_boys', name: 'Super Boys', totalCount: 19 },
-    { id: 'teen_boys', name: 'Teen Boys', totalCount: 14 },
-    { id: 'cit_boys', name: 'CIT Boys', totalCount: 13 },
-];
 
-const MOCK_CAMPERS: Camper[] = [
-    // A - Matching Screenshot
-    { id: '101', name: 'Abby Weiss', divisionId: 'cit_girls', age: 16, grade: '11th', group_name: 'Bunk 1' },
-    { id: '201', name: 'Adam Elliott', divisionId: 'freshmen_b_boys', age: 9, grade: '4th', group_name: 'Cabin A' },
-    { id: '11001', name: 'Addison Brewer', divisionId: 'sophomore_girls', age: 12, grade: '7th', group_name: 'Lodge 1' },
-    { id: '102', name: 'Adrianna Gelb', divisionId: 'cit_girls', age: 16, grade: '11th', allergies: 'Peanuts', group_name: 'Bunk 1' },
-    { id: '202', name: 'Aiden Feld', divisionId: 'freshmen_b_boys', age: 9, grade: '4th', group_name: 'Cabin B' },
-    { id: '4001', name: 'Aiden Leon', divisionId: 'sophomore_boys', age: 13, grade: '8th', group_name: 'Bunk 5' },
-    { id: '203', name: 'Aiden Weisz', divisionId: 'freshmen_b_boys', age: 9, grade: '4th', allergies: 'Gluten', group_name: 'Cabin A' },
-    { id: '204', name: 'AJ Goldberg', divisionId: 'freshmen_b_boys', age: 8, grade: '3rd', group_name: 'Cabin B' },
-    { id: '5001', name: 'Alaia Khalili', divisionId: 'freshmen_b_girls', age: 9, grade: '4th', group_name: 'Lodge A' },
-    { id: '6001', name: 'Alex Haboush', divisionId: 'cit_boys', age: 16, grade: '11th', group_name: 'Bunk 9' },
-    { id: '1501', name: 'Alex Scher', divisionId: 'teen_boys', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '7001', name: 'Alex Stumacher', divisionId: 'cadet_boys', age: 7, grade: '2nd', group_name: 'Cabin C' },
-    { id: '8001', name: 'Alexa Alfred', divisionId: 'super_girls', age: 14, grade: '9th', group_name: 'Lodge X' },
-    { id: '8002', name: 'Alexa Friedland', divisionId: 'super_girls', age: 14, grade: '9th', group_name: 'Lodge Y' },
-    { id: '8003', name: 'Alexa Horowitz', divisionId: 'super_girls', age: 14, grade: '9th', group_name: 'Lodge X' },
-    { id: '2515121', name: 'Alexa Resnick', divisionId: 'senior_girls', age: 15, grade: '10th', group_name: 'Lodge 8' },
-    { id: '2463811', name: 'Alexis Rayman', divisionId: 'cit_girls', age: 16, grade: '11th', group_name: 'Bunk 2' },
-    { id: '8077303', name: 'Amanda Goldstein', divisionId: 'freshmen_a_girls', age: 8, grade: '3rd', group_name: 'Lodge 3' },
-    { id: '2042272', name: 'Amanda Bruck', divisionId: 'freshmen_a_girls', age: 8, grade: '3rd', group_name: 'Lodge 3' },
-    { id: '2042893', name: 'Amanda Miller', divisionId: 'freshmen_b_girls', age: 9, grade: '4th', group_name: 'Lodge B' },
-    { id: '2685748', name: 'Amanda Stark', divisionId: 'freshmen_b_girls', age: 9, grade: '4th', group_name: 'Lodge B' },
-    { id: '2389195', name: 'Aaron Perchekly', divisionId: 'sophomore_boys', age: 13, grade: '8th', group_name: 'Bunk 6' },
-    { id: '10101', name: 'Abby Katz', divisionId: 'cadet_girls', age: 7, grade: '2nd', group_name: 'Lodge Z' },
-    { id: '1801', name: 'Adam Mayer- Schiaffo', divisionId: 'senior_boys', age: 15, grade: '10th', group_name: 'Bunk 12' },
-    { id: '3173977', name: 'Adam Dickstein', divisionId: 'cit_boys', age: 16, grade: '11th', group_name: 'Bunk 8' },
-    { id: '3000270', name: 'Aidan Weiss', divisionId: 'junior_boys', age: 10, grade: '5th', group_name: 'Cabin E' },
-    { id: '1302', name: 'Asher Feldman', divisionId: 'super_boys', age: 14, grade: '9th', group_name: 'Bunk 10' },
-    { id: '1802', name: 'Asher Rhine', divisionId: 'senior_boys', age: 15, grade: '10th', group_name: 'Bunk 12' },
-    { id: '8532840', name: 'Austin Dorfman', divisionId: 'cit_boys', age: 16, grade: '11th', group_name: 'Bunk 8' },
-    { id: '103', name: 'Avery Rothstein', divisionId: 'cit_girls', age: 16, grade: '11th', group_name: 'Bunk 2' },
 
-    // Mixed B-Z
-    { id: '5408355', name: 'Ben Schwed', divisionId: 'super_boys', age: 14, grade: '9th', group_name: 'Bunk 10' },
-    { id: '5399267', name: 'Ben Kaynes', divisionId: 'super_boys', age: 14, grade: '9th', group_name: 'Bunk 10' },
-    { id: '4066885', name: 'Blake Rubach', divisionId: 'junior_boys', age: 10, grade: '5th', group_name: 'Cabin E' },
-    { id: '2042911', name: 'Brianna Mittleman', divisionId: 'junior_girls', age: 10, grade: '5th', group_name: 'Lodge 5' },
-    { id: '4407994', name: 'Brooke Glazer', divisionId: 'junior_girls', age: 10, grade: '5th', group_name: 'Lodge 5' },
-    { id: '2042247', name: 'Carly Borzooyeh', divisionId: 'senior_girls', age: 15, grade: '10th', group_name: 'Lodge 8' },
-    { id: '4123826', name: 'Charley Smouha', divisionId: 'freshmen_a_girls', age: 8, grade: '3rd', group_name: 'Lodge 3' },
-    { id: '2476105', name: 'Cooper Ellenberg', divisionId: 'freshmen_a_boys', age: 8, grade: '3rd', group_name: 'Cabin D' },
-    { id: '2042558', name: 'Cooper Greene', divisionId: 'freshmen_a_boys', age: 8, grade: '3rd', group_name: 'Cabin D' },
-    { id: '4731610', name: 'Cooper Kirschner', divisionId: 'freshmen_b_boys', age: 9, grade: '4th', group_name: 'Cabin A' },
-    { id: '4091633', name: 'Daniella Silverman', divisionId: 'cadet_girls', age: 7, grade: '2nd', group_name: 'Lodge Z' },
-    { id: '4098992', name: 'Danielle Keyes', divisionId: 'cit_girls', age: 16, grade: '11th', group_name: 'Bunk 1' },
-    { id: '6284414', name: 'David Kirshner', divisionId: 'teen_boys', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '701', name: 'Dean Goldstein', divisionId: 'cadet_boys', age: 7, grade: '2nd', group_name: 'Cabin C' },
-    { id: '4112628', name: 'Demi Irgang', divisionId: 'sophomore_girls', age: 12, grade: '7th', group_name: 'Lodge 1' },
-    { id: '4044842', name: 'Dylan Fishman', divisionId: 'teen_boys', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '2043240', name: 'Dylan Siegel', divisionId: 'teen_boys', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '3393430', name: 'Dylan Spector', divisionId: 'cadet_boys', age: 7, grade: '2nd', group_name: 'Cabin C' },
-    { id: '1701', name: 'Eddie Kirshner', divisionId: 'junior_boys', age: 10, grade: '5th', group_name: 'Cabin E' },
-    { id: '2509568', name: 'Elayna Bassuk', divisionId: 'sophomore_girls', age: 12, grade: '7th', group_name: 'Lodge 2' },
-    { id: '2312389', name: 'Emma Blatteis', divisionId: 'senior_girls', age: 15, grade: '10th', group_name: 'Lodge 8' },
-    { id: '3727103', name: 'Emma Derector', divisionId: 'senior_girls', age: 15, grade: '10th', group_name: 'Lodge 8' },
-    { id: '1102', name: 'Emma Plotkin', divisionId: 'junior_girls', age: 10, grade: '5th', group_name: 'Lodge 5' },
-    { id: '2273843', name: 'Eric Treihaft', divisionId: 'sophomore_boys', age: 13, grade: '8th', group_name: 'Bunk 5' },
-    { id: '8080002', name: 'Ethan Goldman', divisionId: 'sophomore_boys', age: 12, grade: '7th', group_name: 'Bunk 5' },
-    { id: '4100669', name: 'Ethan Kaplan', divisionId: 'sophomore_boys', age: 12, grade: '7th', group_name: 'Bunk 6' },
-    { id: '8778123', name: 'Farah Blond', divisionId: 'junior_girls', age: 10, grade: '5th', group_name: 'Lodge 5' },
-    { id: '105', name: 'Gabriele Cohen', divisionId: 'cit_girls', age: 16, grade: '11th', group_name: 'Bunk 2' },
-    { id: '2537468', name: 'Gavin Scher', divisionId: 'senior_boys', age: 15, grade: '10th', group_name: 'Bunk 11' },
-    { id: '3634057', name: 'Hannah Kluft', divisionId: 'freshmen_b_girls', age: 9, grade: '4th', allergies: 'Dairy', group_name: 'Lodge A' },
-    { id: '106', name: 'Hannah Kravic', divisionId: 'cit_girls', age: 16, grade: '11th', allergies: 'Dairy', group_name: 'Bunk 1' },
-    { id: '4021233', name: 'Holly Borg', divisionId: 'cit_girls', age: 16, grade: '11th', group_name: 'Bunk 2' },
-    { id: '107', name: 'Isabella Starr', divisionId: 'cit_girls', age: 16, grade: '11th', group_name: 'Bunk 2' },
-    { id: '3977117', name: 'Jack Schwartz', divisionId: 'sophomore_boys', age: 13, grade: '8th', group_name: 'Bunk 5' },
-    { id: '3995789', name: 'Jack Gidseg', divisionId: 'freshmen_b_boys', age: 9, grade: '4th', group_name: 'Cabin B' },
-    { id: '3221517', name: 'Jacob Brooks', divisionId: 'sophomore_boys', age: 13, grade: '8th', group_name: 'Bunk 5' },
-    { id: '9677923', name: 'Jake Goldberg', divisionId: 'freshmen_a_boys', age: 8, grade: '3rd', group_name: 'Cabin D' },
-    { id: '3584095', name: 'Jake Krauss', divisionId: 'junior_boys', age: 10, grade: '5th', group_name: 'Cabin E' },
-    { id: '2043008', name: 'Jake Plotkin', divisionId: 'teen_boys', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '2042363', name: 'Jami Disman', divisionId: 'teen_girls', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '702', name: 'Jared Moreida', divisionId: 'cadet_boys', age: 7, grade: '2nd', allergies: 'Eggs', group_name: 'Cabin C' },
-    { id: '3221490', name: 'Jared Shulman', divisionId: 'senior_boys', age: 15, grade: '10th', group_name: 'Bunk 11' },
-    { id: '2657755', name: 'Jason Bruck', divisionId: 'sophomore_boys', age: 12, grade: '7th', group_name: 'Lodge 1' },
-    { id: '3178632', name: 'Jayden Kass', divisionId: 'freshmen_a_boys', age: 8, grade: '3rd', group_name: 'Cabin D' },
-    { id: '2280361', name: 'Jenna Kolberg', divisionId: 'cadet_girls', age: 7, grade: '2nd', group_name: 'Lodge Z' },
-    { id: '1702', name: 'Jesse Wayne', divisionId: 'junior_boys', age: 10, grade: '5th', group_name: 'Cabin E' },
-    { id: '2383396', name: 'Jessica Kratz', divisionId: 'senior_girls', age: 15, grade: '10th', group_name: 'Lodge 8' },
-    { id: '4101823', name: 'Jessica Mitchnick', divisionId: 'teen_girls', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '2453681', name: 'Jonathan Locker', divisionId: 'cit_boys', age: 16, grade: '11th', group_name: 'Bunk 9' },
-    { id: '4123697', name: 'Jordan Schenck', divisionId: 'freshmen_a_boys', age: 8, grade: '3rd', group_name: 'Cabin D' },
-    { id: '4116129', name: 'Jordan Weiss', divisionId: 'freshmen_b_boys', age: 9, grade: '4th', group_name: 'Cabin B' },
-    { id: '3198815', name: 'Julia Haboush', divisionId: 'freshmen_a_girls', age: 8, grade: '3rd', group_name: 'Lodge 3' },
-    { id: '501', name: 'Kate Schneider', divisionId: 'freshmen_b_girls', age: 9, grade: '4th', group_name: 'Lodge A' },
-    { id: '1101', name: 'Kayla Kusel', divisionId: 'junior_girls', age: 10, grade: '5th', group_name: 'Lodge 5' },
-    { id: '3226168', name: 'Kyle Zicherman', divisionId: 'senior_boys', age: 15, grade: '10th', group_name: 'Bunk 12' },
-    { id: '2500015', name: 'Laken Pomerantz', divisionId: 'freshmen_b_girls', age: 9, grade: '4th', group_name: 'Lodge B' },
-    { id: '2935656', name: 'Landon Krasner', divisionId: 'sophomore_boys', age: 12, grade: '7th', group_name: 'Bunk 6' },
-    { id: '2476104', name: 'Leo Ellenberg', divisionId: 'cadet_boys', age: 7, grade: '2nd', group_name: 'Cabin C' },
-    { id: '108', name: 'Lily Amsterdam', divisionId: 'cit_girls', age: 15, grade: '10th', group_name: 'Bunk 1' },
-    { id: '4098989', name: 'Lindsey Keyes', divisionId: 'teen_girls', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '1601', name: 'Lindsey Pinsky', divisionId: 'teen_girls', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '3965727', name: 'Luke Silverman', divisionId: 'cadet_boys', age: 7, grade: '2nd', group_name: 'Cabin C' },
-    { id: '6813708', name: 'Lyla Grosso', divisionId: 'freshmen_a_girls', age: 8, grade: '3rd', group_name: 'Lodge 3' },
-    { id: '2043416', name: 'Mack Zelnick', divisionId: 'senior_girls', age: 15, grade: '10th', group_name: 'Lodge 8' },
-    { id: '3491825', name: 'Mackenzie Zaffino', divisionId: 'sophomore_girls', age: 12, grade: '7th', allergies: 'Bees', group_name: 'Lodge 2' },
-    { id: '4630418', name: 'Max Feinstein', divisionId: 'freshmen_b_boys', age: 9, grade: '4th', group_name: 'Cabin B' },
-    { id: '4061578', name: 'Maya Bassan', divisionId: 'cadet_girls', age: 7, grade: '2nd', group_name: 'Lodge Z' },
-    { id: '3608259', name: 'Mia Camerata', divisionId: 'freshmen_b_girls', age: 9, grade: '4th', group_name: 'Lodge B' },
-    { id: '2042788', name: 'Mia Silverman', divisionId: 'freshmen_b_girls', age: 9, grade: '4th', group_name: 'Lodge B' },
-    { id: '133', name: 'Morgen Wilcox', divisionId: 'freshmen_a_girls', age: 8, grade: '3rd', group_name: 'Lodge 3' },
-    { id: '2042346', name: 'Nikki Davis', divisionId: 'super_girls', age: 14, grade: '9th', group_name: 'Lodge X' },
-    { id: '801', name: 'Nikki Stark', divisionId: 'super_girls', age: 14, grade: '9th', group_name: 'Lodge X' },
-    { id: '4097676', name: 'Noah Friedland', divisionId: 'sophomore_boys', age: 12, grade: '7th', group_name: 'Bunk 6' },
-    { id: '2042671', name: 'Olivia Kaplan', divisionId: 'junior_girls', age: 10, grade: '5th', group_name: 'Lodge 5' },
-    { id: '2533208', name: 'Oscar Meltzer', divisionId: 'cadet_boys', age: 7, grade: '2nd', group_name: 'Cabin C' },
-    { id: '311', name: 'Peyton Fishman', divisionId: 'cadet_girls', age: 7, grade: '2nd', group_name: 'Lodge Z' },
-    { id: '2042844', name: 'Rebecca Levy', divisionId: 'cit_girls', age: 16, grade: '11th', group_name: 'Bunk 1' },
-    { id: '1301', name: 'Reece Geller', divisionId: 'super_boys', age: 14, grade: '9th', group_name: 'Bunk 10' },
-    { id: '7792482', name: 'Remi Silverman', divisionId: 'freshmen_a_girls', age: 8, grade: '3rd', group_name: 'Lodge 3' },
-    { id: '3553752', name: 'Ryan Tepper', divisionId: 'cadet_boys', age: 7, grade: '2nd', group_name: 'Cabin C' },
-    { id: '2535083', name: 'Sam Platin', divisionId: 'teen_boys', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '128', name: 'Samantha Leicht', divisionId: 'super_girls', age: 14, grade: '9th', group_name: 'Lodge Y' },
-    { id: '2469813', name: 'Samantha Mercer', divisionId: 'cit_girls', age: 16, grade: '11th', group_name: 'Bunk 2' },
-    { id: '1402', name: 'Sami Ross', divisionId: 'senior_girls', age: 15, grade: '10th', group_name: 'Lodge 8' },
-    { id: '1501', name: 'Alex Scher', divisionId: 'teen_boys', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '1502', name: 'David Kirshner', divisionId: 'teen_boys', age: 15, grade: '10th', group_name: 'Teen House' },
-
-    // Teen Girls
-    { id: '1601', name: 'Lindsey Pinsky', divisionId: 'teen_girls', age: 15, grade: '10th', group_name: 'Teen House' },
-    { id: '1602', name: 'Jami Disman', divisionId: 'teen_girls', age: 15, grade: '10th', group_name: 'Teen House' },
-
-    // Junior Boys
-    { id: '1701', name: 'Eddie Kirshner', divisionId: 'junior_boys', age: 10, grade: '5th', group_name: 'Cabin E' },
-    { id: '1702', name: 'Jesse Wayne', divisionId: 'junior_boys', age: 10, grade: '5th', group_name: 'Cabin E' },
-
-    // Senior Boys
-    { id: '1801', name: 'Adam Mayer- Schiaffo', divisionId: 'senior_boys', age: 15, grade: '10th', group_name: 'Bunk 12' },
-    { id: '1802', name: 'Asher Rhine', divisionId: 'senior_boys', age: 15, grade: '10th', group_name: 'Bunk 12' },
-];
 
 const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDelete: () => void, onEdit: () => void, onManageRoster: () => void }) => {
     const formatDate = (dateString: string, endDateString?: string) => {
@@ -529,6 +300,42 @@ export const TransportScreen = ({ navigation }: any) => {
     const { width } = useWindowDimensions();
     const isLargeScreen = width >= 768; // Tablet/Desktop breakpoint
 
+
+    const { companyId } = useCompany();
+    const season = '2026';
+
+    const { data: rawTrips = [], isLoading } = useTrips(companyId, season);
+    const { data: rawCampers = [] } = useCampers(companyId, season);
+    const { data: rawDivisions = [] } = useDivisions();
+
+    const addTripMutation = useAddTrip();
+    const updateTripMutation = useUpdateTrip();
+    const deleteTripMutation = useDeleteTrip();
+    const manageRosterMutation = useManageTripRoster();
+
+    // Map fetched trips to UI expected Trips
+    const trips: Trip[] = React.useMemo(() => rawTrips.map(t => ({
+        id: t.id || '',
+        name: t.name,
+        destination: t.destination || '',
+        date: t.date,
+        is_multi_day: false,
+        departure_time: t.departure_time || '08:00',
+        return_time: t.return_time || '15:00',
+        attendingCount: t.trip_attendees?.[0]?.count || 0,
+        chaperone: t.chaperone || '',
+        status: t.status || 'pending',
+        type: t.type,
+        event_type: t.type,
+        transportation_type: 'Bus'
+    })), [rawTrips]);
+
+    // Derived unique values for filters
+    const uniqueTypes = Array.from(new Set(trips.map(t => t.type))).sort() as string[];
+    const uniqueEventTypes = Array.from(new Set(trips.map(t => t.event_type))).sort() as string[];
+    const uniqueTransportTypes = Array.from(new Set(trips.map(t => t.transportation_type))).sort() as string[];
+    const uniqueStatuses = Array.from(new Set(trips.map(t => t.status))).sort() as string[];
+
     const [searchQuery, setSearchQuery] = useState('');
 
     // View State
@@ -568,14 +375,7 @@ export const TransportScreen = ({ navigation }: any) => {
         setSelectedCamperIds(newSelected);
     };
 
-    // Trips State
-    const [trips, setTrips] = useState(MOCK_TRIPS);
 
-    // Derived unique values for filters (mocking the backend aggregation)
-    const uniqueTypes = Array.from(new Set(trips.map(t => t.type))).sort();
-    const uniqueEventTypes = Array.from(new Set(trips.map(t => t.event_type))).sort();
-    const uniqueTransportTypes = Array.from(new Set(trips.map(t => t.transportation_type))).sort();
-    const uniqueStatuses = Array.from(new Set(trips.map(t => t.status))).sort();
 
     const filteredTrips = useMemo(() => {
         return trips.filter(trip => {
@@ -611,8 +411,9 @@ export const TransportScreen = ({ navigation }: any) => {
 
     const handleDeleteTrip = () => {
         if (tripToDelete) {
-            setTrips(prev => prev.filter(t => t.id !== tripToDelete));
-            setTripToDelete(null);
+            deleteTripMutation.mutate(tripToDelete, {
+                onSuccess: () => setTripToDelete(null)
+            });
         }
     };
 
@@ -1031,12 +832,29 @@ export const TransportScreen = ({ navigation }: any) => {
     };
 
     const handleSaveTrip = () => {
+        const payload: any = {
+            company_id: companyId,
+            season,
+            name: tripFormData.name,
+            type: tripFormData.type,
+            destination: tripFormData.destination,
+            date: tripFormData.date,
+            departure_time: tripFormData.departure_time,
+            return_time: tripFormData.return_time,
+            chaperone: tripFormData.chaperone || null,
+            capacity: parseInt(tripFormData.capacity || "0") || null,
+            status: tripFormData.status || 'pending',
+        };
+
         if (modalState.mode === 'add') {
-            setTrips(prev => [tripFormData, ...prev]);
-        } else {
-            setTrips(prev => prev.map(t => t.id === modalState.tripId ? tripFormData : t));
+            addTripMutation.mutate(payload, {
+                onSuccess: () => setModalState({ ...modalState, visible: false })
+            });
+        } else if (modalState.mode === 'edit' && modalState.tripId) {
+            updateTripMutation.mutate({ ...payload, id: modalState.tripId }, {
+                onSuccess: () => setModalState({ ...modalState, visible: false })
+            });
         }
-        setModalState({ ...modalState, visible: false });
     };
 
     // Picker State
@@ -1332,7 +1150,7 @@ export const TransportScreen = ({ navigation }: any) => {
 
     const renderRosterModal = () => {
         // Calculate allergy counts
-        const selectedCampersList = MOCK_CAMPERS.filter(c => selectedCamperIds.has(c.id));
+        const selectedCampersList = rawCampers.filter(c => selectedCamperIds.has(c.id));
         const allergyCount = selectedCampersList.filter(c => c.allergies).length;
 
         return (
@@ -1368,8 +1186,8 @@ export const TransportScreen = ({ navigation }: any) => {
 
                         <ScrollView style={styles.helpModalBody} showsVerticalScrollIndicator={false}>
                             {activeRosterTab === 'division' ? (
-                                MOCK_DIVISIONS.map(division => {
-                                    const divisionCampers = MOCK_CAMPERS.filter(c => c.divisionId === division.id);
+                                rawDivisions.map(division => {
+                                    const divisionCampers = rawCampers.filter(c => c.division === division.id);
                                     const divisionSelectedCount = divisionCampers.filter(c => selectedCamperIds.has(c.id)).length;
 
                                     return (
@@ -1406,7 +1224,7 @@ export const TransportScreen = ({ navigation }: any) => {
                                         onPress={() => setIsDropdownOpen(true)}
                                     >
                                         <Text style={styles.filterDropdownText}>
-                                            {rosterFilterDivision === 'all' ? 'All Divisions' : MOCK_DIVISIONS.find(d => d.id === rosterFilterDivision)?.name}
+                                            {rosterFilterDivision === 'all' ? 'All Divisions' : rawDivisions.find(d => d.id === rosterFilterDivision)?.name}
                                         </Text>
                                         <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                     </TouchableOpacity>
@@ -1419,10 +1237,10 @@ export const TransportScreen = ({ navigation }: any) => {
                                     </View>
 
                                     <View style={styles.camperList}>
-                                        {MOCK_CAMPERS
-                                            .filter(c => rosterFilterDivision === 'all' || c.divisionId === rosterFilterDivision)
+                                        {rawCampers
+                                            .filter(c => rosterFilterDivision === 'all' || c.division === rosterFilterDivision)
                                             .map(camper => {
-                                                const divisionName = MOCK_DIVISIONS.find(d => d.id === camper.divisionId)?.name;
+                                                const divisionName = rawDivisions.find(d => d.id === camper.division)?.name;
                                                 return (
                                                     <TouchableOpacity
                                                         key={camper.id}
@@ -1495,7 +1313,7 @@ export const TransportScreen = ({ navigation }: any) => {
                                     <Text style={[styles.pickerOptionText, rosterFilterDivision === 'all' && styles.modalOptionTextActive]}>All Divisions</Text>
                                     {rosterFilterDivision === 'all' && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
                                 </TouchableOpacity>
-                                {MOCK_DIVISIONS.map(division => (
+                                {rawDivisions.map(division => (
                                     <TouchableOpacity
                                         key={division.id}
                                         style={[styles.pickerOption, rosterFilterDivision === division.id && styles.modalOptionActive]}

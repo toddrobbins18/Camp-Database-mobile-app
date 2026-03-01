@@ -13,6 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCompany } from '../contexts/CompanyContext';
+import { useSportsEnrollments, useAddSportsEnrollment, useDeleteSportsEnrollment } from '../api/sports';
+import { useCampers } from '../api/campers';
 
 interface SportsScreenProps {
     navigation: any;
@@ -81,8 +84,15 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const [selectedDate, setSelectedDate] = useState('01/22/2026');
     const [showAddEnrollmentModal, setShowAddEnrollmentModal] = useState(false);
 
+    const { companyId, season } = useCompany();
+    const { data: campersData = [] } = useCampers(companyId, season);
+    const { data: enrollmentsData = [] } = useSportsEnrollments(companyId, season);
+    const addEnrollmentMutation = useAddSportsEnrollment();
+    const deleteEnrollmentMutation = useDeleteSportsEnrollment();
+
     // Add Enrollment Modal States
-    const [camper, setCamper] = useState('');
+    const [selectedChildId, setSelectedChildId] = useState('');
+    const [showCamperDropdown, setShowCamperDropdown] = useState(false);
     const [sportName, setSportName] = useState('');
     const [instructor, setInstructor] = useState('');
     const [schedulePeriod, setSchedulePeriod] = useState('');
@@ -136,7 +146,10 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     };
 
     const handleEnrollmentDateSelect = (date: Date, type: 'start' | 'end') => {
-        const formatted = formatDate(date);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const formatted = `${year}-${month}-${day}`; // Format for DB: YYYY-MM-DD
         if (type === 'start') {
             setStartDate(formatted);
             setShowStartDatePicker(false);
@@ -151,7 +164,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         type: 'start' | 'end',
         visible: boolean,
         onClose: () => void
-    ): JSX.Element => {
+    ) => {
         const currentMonth = type === 'start' ? startDatePickerMonth : endDatePickerMonth;
         const currentYear = type === 'start' ? startDatePickerYear : endDatePickerYear;
         const today = new Date();
@@ -302,29 +315,33 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     };
 
     const handleAddEnrollment = () => {
-        // TODO: Implement enrollment creation
-        console.log('Adding enrollment:', {
-            camper,
-            sportName,
+        if (!selectedChildId || !sportName) return;
+
+        addEnrollmentMutation.mutate({
+            child_id: selectedChildId,
+            sport_name: sportName,
             instructor,
-            schedulePeriod,
-            startDate,
-            endDate,
+            schedule_days: schedulePeriod ? [schedulePeriod] : [],
+            start_date: startDate || null,
+            end_date: endDate || null,
             notes,
+        }, {
+            onSuccess: () => {
+                // Reset form
+                setSelectedChildId('');
+                setSportName('');
+                setInstructor('');
+                setSchedulePeriod('');
+                setStartDate('');
+                setEndDate('');
+                setNotes('');
+                setShowAddEnrollmentModal(false);
+            }
         });
-        // Reset form
-        setCamper('');
-        setSportName('');
-        setInstructor('');
-        setSchedulePeriod('');
-        setStartDate('');
-        setEndDate('');
-        setNotes('');
-        setShowAddEnrollmentModal(false);
     };
 
     const handleCloseAddEnrollmentModal = () => {
-        setCamper('');
+        setSelectedChildId('');
         setSportName('');
         setInstructor('');
         setSchedulePeriod('');
@@ -374,6 +391,21 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
             })()
             : null;
 
+        const selectedDateStr = selectedDateObj
+            ? `${selectedDateObj.getFullYear()}-${String(selectedDateObj.getMonth() + 1).padStart(2, '0')}-${String(selectedDateObj.getDate()).padStart(2, '0')}`
+            : null;
+
+        const todaysEnrollments = enrollmentsData.filter(e => {
+            if (!selectedDateStr) return false;
+            if (e.start_date && e.end_date) {
+                return selectedDateStr >= e.start_date && selectedDateStr <= e.end_date;
+            }
+            if (e.start_date) {
+                return e.start_date === selectedDateStr;
+            }
+            return false;
+        });
+
         return (
             <View style={styles.calendarViewContainer}>
                 {/* Daily Schedule View - Above Calendar */}
@@ -381,9 +413,20 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                     <Text style={styles.scheduleDate}>
                         {selectedDateObj ? formatDateLong(selectedDateObj) : 'Select a date'}
                     </Text>
-                    <Text style={styles.scheduleEmptyText}>
-                        No activities scheduled for this date
-                    </Text>
+                    {todaysEnrollments.length === 0 ? (
+                        <Text style={styles.scheduleEmptyText}>
+                            No activities scheduled for this date
+                        </Text>
+                    ) : (
+                        todaysEnrollments.map(enroll => (
+                            <View key={enroll.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+                                <Text style={{ ...theme.typography.body, fontWeight: '600' }}>{enroll.sport_name}</Text>
+                                <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>
+                                    {enroll.children?.name} • {enroll.instructor || 'No Instructor'}
+                                </Text>
+                            </View>
+                        ))
+                    )}
                 </StyledCard>
 
                 {/* Calendar Widget */}
@@ -653,12 +696,35 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
 
                 {/* List View / Empty State */}
                 {viewMode === 'list' && (
-                    <View style={styles.emptyStateContainer}>
-                        <StyledCard style={styles.emptyStateCard}>
-                            <Text style={styles.emptyStateText}>
-                                No sports academy enrollments found
-                            </Text>
-                        </StyledCard>
+                    <View style={styles.listContainer}>
+                        {enrollmentsData.length === 0 ? (
+                            <View style={styles.emptyStateContainer}>
+                                <StyledCard style={styles.emptyStateCard}>
+                                    <Text style={styles.emptyStateText}>
+                                        No sports academy enrollments found
+                                    </Text>
+                                </StyledCard>
+                            </View>
+                        ) : (
+                            enrollmentsData.map(enroll => (
+                                <StyledCard key={enroll.id} style={{ padding: theme.spacing.md, marginBottom: theme.spacing.md }}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm }}>
+                                        <Text style={{ ...theme.typography.h3 }}>{enroll.children?.name || 'Unknown Camper'}</Text>
+                                        <TouchableOpacity onPress={() => {
+                                            if (enroll.id) deleteEnrollmentMutation.mutate(enroll.id);
+                                        }}>
+                                            <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={{ gap: 4 }}>
+                                        <Text style={{ ...theme.typography.body }}>Sport: <Text style={{ fontWeight: '600' }}>{enroll.sport_name}</Text></Text>
+                                        <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>Instructor: {enroll.instructor || 'N/A'}</Text>
+                                        <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>Period: {enroll.schedule_days?.join(', ') || 'N/A'}</Text>
+                                        <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>Dates: {enroll.start_date || 'N/A'} to {enroll.end_date || 'N/A'}</Text>
+                                    </View>
+                                </StyledCard>
+                            ))
+                        )}
                     </View>
                 )}
             </ScrollView>
@@ -889,14 +955,83 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 <Text style={styles.label}>
                                     Camper <Text style={styles.required}>*</Text>
                                 </Text>
-                                <TextInput
-                                    style={styles.textInput}
-                                    placeholder="Type to search for a camper..."
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    value={camper}
-                                    onChangeText={setCamper}
-                                />
+                                <TouchableOpacity
+                                    style={styles.sportNameDropdown}
+                                    onPress={() => setShowCamperDropdown(true)}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.sportNameDropdownText,
+                                            !selectedChildId && styles.placeholder,
+                                        ]}
+                                        numberOfLines={1}
+                                    >
+                                        {campersData.find(c => c.id === selectedChildId)?.name || 'Select camper'}
+                                    </Text>
+                                    <Ionicons
+                                        name="chevron-down"
+                                        size={20}
+                                        color={theme.colors.textSecondary}
+                                    />
+                                </TouchableOpacity>
                             </View>
+
+                            {/* Camper Selection Modal */}
+                            <Modal
+                                visible={showCamperDropdown}
+                                transparent
+                                animationType="slide"
+                                onRequestClose={() => setShowCamperDropdown(false)}
+                            >
+                                <TouchableOpacity
+                                    style={styles.modalOverlay}
+                                    activeOpacity={1}
+                                    onPress={() => setShowCamperDropdown(false)}
+                                >
+                                    <View
+                                        style={styles.sportNameModalContainer}
+                                        onStartShouldSetResponder={() => true}
+                                    >
+                                        <View style={styles.sportNameModalHeader}>
+                                            <Text style={styles.sportNameModalTitle}>Select Camper</Text>
+                                            <TouchableOpacity
+                                                onPress={() => setShowCamperDropdown(false)}
+                                                style={styles.closeButton}
+                                            >
+                                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                                            </TouchableOpacity>
+                                        </View>
+                                        <FlatList
+                                            data={campersData}
+                                            keyExtractor={(item) => item.id || Math.random().toString()}
+                                            renderItem={({ item }) => (
+                                                <TouchableOpacity
+                                                    style={[
+                                                        styles.sportNameModalItem,
+                                                        selectedChildId === item.id && styles.sportNameModalItemSelected,
+                                                    ]}
+                                                    onPress={() => {
+                                                        if (item.id) setSelectedChildId(item.id);
+                                                        setShowCamperDropdown(false);
+                                                    }}
+                                                >
+                                                    <Text
+                                                        style={[
+                                                            styles.sportNameModalItemText,
+                                                            selectedChildId === item.id && styles.sportNameModalItemTextSelected,
+                                                        ]}
+                                                    >
+                                                        {item.name}
+                                                    </Text>
+                                                    {selectedChildId === item.id && (
+                                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                                    )}
+                                                </TouchableOpacity>
+                                            )}
+                                        />
+                                    </View>
+                                </TouchableOpacity>
+                            </Modal>
 
                             {/* Sport Name */}
                             <View style={styles.formSection}>
@@ -1114,10 +1249,10 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                             <TouchableOpacity
                                 style={[
                                     styles.submitButton,
-                                    (!camper || !sportName) && styles.submitButtonDisabled,
+                                    (!selectedChildId || !sportName) && styles.submitButtonDisabled,
                                 ]}
                                 onPress={handleAddEnrollment}
-                                disabled={!camper || !sportName}
+                                disabled={!selectedChildId || !sportName}
                             >
                                 <Text style={styles.submitButtonText}>Add Enrollment</Text>
                             </TouchableOpacity>
@@ -1154,7 +1289,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                             contentContainerStyle={styles.tabScrollContent}
                         >
                             <TouchableOpacity
-                                style={[styles.tabScrollable, activeHelpTab === 'Children' && styles.activeTab]}
+                                style={[styles.tabScrollable, activeHelpTab === 'Children' && styles.activeTabScrollable]}
                                 onPress={() => setActiveHelpTab('Children')}
                             >
                                 <Text style={[styles.tabText, activeHelpTab === 'Children' && styles.activeTabText]}>
@@ -1162,7 +1297,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.tabScrollable, activeHelpTab === 'Staff' && styles.activeTab]}
+                                style={[styles.tabScrollable, activeHelpTab === 'Staff' && styles.activeTabScrollable]}
                                 onPress={() => setActiveHelpTab('Staff')}
                             >
                                 <Text style={[styles.tabText, activeHelpTab === 'Staff' && styles.activeTabText]}>
@@ -1170,7 +1305,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.tabScrollable, activeHelpTab === 'Medications' && styles.activeTab]}
+                                style={[styles.tabScrollable, activeHelpTab === 'Medications' && styles.activeTabScrollable]}
                                 onPress={() => setActiveHelpTab('Medications')}
                             >
                                 <Text style={[styles.tabText, activeHelpTab === 'Medications' && styles.activeTabText]}>
@@ -1178,7 +1313,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.tabScrollable, activeHelpTab === 'Trips' && styles.activeTab]}
+                                style={[styles.tabScrollable, activeHelpTab === 'Trips' && styles.activeTabScrollable]}
                                 onPress={() => setActiveHelpTab('Trips')}
                             >
                                 <Text style={[styles.tabText, activeHelpTab === 'Trips' && styles.activeTabText]}>
@@ -1186,7 +1321,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.tabScrollable, activeHelpTab === 'Menus' && styles.activeTab]}
+                                style={[styles.tabScrollable, activeHelpTab === 'Menus' && styles.activeTabScrollable]}
                                 onPress={() => setActiveHelpTab('Menus')}
                             >
                                 <Text style={[styles.tabText, activeHelpTab === 'Menus' && styles.activeTabText]}>
@@ -1194,7 +1329,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.tabScrollable, activeHelpTab === 'Awards' && styles.activeTab]}
+                                style={[styles.tabScrollable, activeHelpTab === 'Awards' && styles.activeTabScrollable]}
                                 onPress={() => setActiveHelpTab('Awards')}
                             >
                                 <Text style={[styles.tabText, activeHelpTab === 'Awards' && styles.activeTabText]}>
@@ -1202,7 +1337,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.tabScrollable, activeHelpTab === 'Daily Notes' && styles.activeTab]}
+                                style={[styles.tabScrollable, activeHelpTab === 'Daily Notes' && styles.activeTabScrollable]}
                                 onPress={() => setActiveHelpTab('Daily Notes')}
                             >
                                 <Text style={[styles.tabText, activeHelpTab === 'Daily Notes' && styles.activeTabText]}>
@@ -1210,7 +1345,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.tabScrollable, activeHelpTab === 'Incidents' && styles.activeTab]}
+                                style={[styles.tabScrollable, activeHelpTab === 'Incidents' && styles.activeTabScrollable]}
                                 onPress={() => setActiveHelpTab('Incidents')}
                             >
                                 <Text style={[styles.tabText, activeHelpTab === 'Incidents' && styles.activeTabText]}>
@@ -1218,7 +1353,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.tabScrollable, activeHelpTab === 'Calendar' && styles.activeTab]}
+                                style={[styles.tabScrollable, activeHelpTab === 'Calendar' && styles.activeTabScrollable]}
                                 onPress={() => setActiveHelpTab('Calendar')}
                             >
                                 <Text style={[styles.tabText, activeHelpTab === 'Calendar' && styles.activeTabText]}>
@@ -1226,7 +1361,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.tabScrollable, activeHelpTab === 'Sports' && styles.activeTab]}
+                                style={[styles.tabScrollable, activeHelpTab === 'Sports' && styles.activeTabScrollable]}
                                 onPress={() => setActiveHelpTab('Sports')}
                             >
                                 <Text style={[styles.tabText, activeHelpTab === 'Sports' && styles.activeTabText]}>
@@ -1805,6 +1940,9 @@ const styles = StyleSheet.create({
     },
     viewModeButtonTextActive: {
         color: theme.colors.surface,
+    },
+    listContainer: {
+        marginTop: theme.spacing.lg,
     },
     rightActionButtons: {
         flexDirection: 'row',
@@ -2398,8 +2536,8 @@ const styles = StyleSheet.create({
         borderBottomColor: 'transparent',
         minWidth: 80,
     },
-    activeTab: {
-        backgroundColor: theme.colors.primaryLight,
+    activeTabScrollable: {
+        backgroundColor: '#e0e7ff',
         borderRadius: theme.borderRadius.sm,
         borderBottomWidth: 0,
     },

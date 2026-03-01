@@ -8,11 +8,16 @@ import {
     TextInput,
     Modal,
     FlatList,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useTutoringTherapy, useAddTutoringEntry, useDeleteTutoringEntry } from '../api/rainy_day_tutoring';
+import { supabase } from '../lib/supabase';
+import { useQuery } from '@tanstack/react-query';
 
 interface TutoringTherapyScreenProps {
     navigation: any;
@@ -56,32 +61,28 @@ const SERVICES = [
     'ESL Tutoring',
 ];
 
-const CAMPERS = [
-    'Abby Weiss',
-    'Adam Elliott',
-    'Addison Brewer',
-    'Adrianna Gelb',
-    'Aiden Feld',
-    'Aiden Leon',
-    'Aiden Weisz',
-    'AJ Goldberg',
-    'Alaia Khalili',
-    'Alex Haboush',
-    'Alex Stumacher',
-    'Alexa Cohen',
-    'Alexandra Gold',
-    'Alexis Rosen',
-    'Aliyah Katz',
-    'Allison Silver',
-    'Amanda Smith',
-    'Ariella Green',
-    'Ava Brown',
-    'Benjamin White',
-];
-
+// Fetch campers from Supabase instead of hardcoding
 const SCHEDULE_PERIODS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
 
 export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps) => {
+    // Fetch tutoring data from Supabase
+    const { data: enrollments = [], isLoading: enrollmentsLoading } = useTutoringTherapy('2026');
+    const addEntryMutation = useAddTutoringEntry();
+    const deleteEntryMutation = useDeleteTutoringEntry();
+
+    // Fetch campers from Supabase
+    const { data: CAMPERS = [] } = useQuery({
+        queryKey: ['campers_for_tutoring'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('children')
+                .select('id, first_name, last_name')
+                .order('last_name', { ascending: true });
+            if (error) throw error;
+            return (data || []).map((c: any) => `${c.first_name} ${c.last_name}`);
+        },
+    });
+
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [selectedGender, setSelectedGender] = useState('All Genders');
@@ -431,9 +432,30 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                     </View>
                 </StyledCard>
 
-                {/* Content Area - Placeholder for enrollments list */}
+                {/* Content Area - Show live enrollments or empty state */}
                 <View style={styles.contentArea}>
-                    <Text style={styles.emptyStateText}>No enrollments found</Text>
+                    {enrollmentsLoading ? (
+                        <ActivityIndicator size="large" color={theme.colors.secondary} />
+                    ) : enrollments.length === 0 ? (
+                        <Text style={styles.emptyStateText}>No enrollments found</Text>
+                    ) : (
+                        enrollments.map((entry: any) => (
+                            <StyledCard key={entry.id} style={{ marginBottom: 8, padding: 12 }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ fontWeight: '600', color: theme.colors.text }}>{entry.service_type}</Text>
+                                        <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 2 }}>
+                                            Instructor: {entry.instructor || 'N/A'} • Periods: {(entry.schedule_periods || []).join(', ') || 'N/A'}
+                                        </Text>
+                                        {entry.notes && <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }}>{entry.notes}</Text>}
+                                    </View>
+                                    <TouchableOpacity onPress={() => deleteEntryMutation.mutate(entry.id)}>
+                                        <Ionicons name="trash-outline" size={20} color={theme.colors.textSecondary} />
+                                    </TouchableOpacity>
+                                </View>
+                            </StyledCard>
+                        ))
+                    )}
                 </View>
             </ScrollView>
 
@@ -618,8 +640,32 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                 style={[styles.createButton, (!selectedCamper || !selectedServiceType) && styles.createButtonDisabled]}
                                 onPress={() => {
                                     if (selectedCamper && selectedServiceType) {
-                                        // Handle enrollment creation
-                                        setShowAddEnrollmentModal(false);
+                                        // Save to Supabase
+                                        addEntryMutation.mutate({
+                                            child_id: selectedCamper, // Note: in real use, this should be the camper's UUID
+                                            service_type: selectedServiceType,
+                                            instructor: instructorName || undefined,
+                                            schedule_periods: selectedPeriods,
+                                            start_date: startDate || undefined,
+                                            end_date: endDate || undefined,
+                                            notes: notes || undefined,
+                                            season: '2026',
+                                        }, {
+                                            onSuccess: () => {
+                                                Alert.alert('Success', 'Enrollment created!');
+                                                setShowAddEnrollmentModal(false);
+                                                setSelectedCamper('');
+                                                setSelectedServiceType('');
+                                                setInstructorName('');
+                                                setSelectedPeriods([]);
+                                                setStartDate('');
+                                                setEndDate('');
+                                                setNotes('');
+                                            },
+                                            onError: () => {
+                                                Alert.alert('Error', 'Failed to create enrollment.');
+                                            },
+                                        });
                                     }
                                 }}
                             >

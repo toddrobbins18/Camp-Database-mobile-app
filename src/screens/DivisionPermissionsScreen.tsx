@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useDivisionsLookup, useDivisionPermissions, useUpdateDivisionPermission } from '../api/permissions';
+import { supabase } from '../lib/supabase';
+import { useQuery } from '@tanstack/react-query';
 
 interface User {
     id: string;
@@ -19,230 +22,64 @@ interface UserDivisionPermissions {
 }
 
 export const DivisionPermissionsScreen = ({ navigation }: any) => {
-    const divisions = [
-        { id: 'freshmenAGirls', name: 'Freshmen A Girls' },
-        { id: 'freshmenBGirls', name: 'Freshmen B Girls' },
-        { id: 'cadetGirls', name: 'Cadet Girls' },
-        { id: 'sophomoreGirls', name: 'Sophomore Girls' },
-        { id: 'juniorGirls', name: 'Junior Girls' },
-        { id: 'seniorGirls', name: 'Senior Girls' },
-        { id: 'superGirls', name: 'Super Girls' },
-        { id: 'teenGirls', name: 'Teen Girls' },
-        { id: 'citGirls', name: 'CIT Girls' },
-        { id: 'freshmenABoys', name: 'Freshmen A Boys' },
-        { id: 'freshmenBBoys', name: 'Freshmen B Boys' },
-        { id: 'cadetBoys', name: 'Cadet Boys' },
-        { id: 'sophomoreBoys', name: 'Sophomore Boys' },
-        { id: 'juniorBoys', name: 'Junior Boys' },
-        { id: 'seniorBoys', name: 'Senior Boys' },
-        { id: 'superBoys', name: 'Super Boys' },
-        { id: 'teenBoys', name: 'Teen Boys' },
-        { id: 'citBoys', name: 'CIT Boys' },
-    ];
+    // Fetch divisions from Supabase
+    const { data: dbDivisions = [], isLoading: divLoading } = useDivisionsLookup();
+    const divisions = dbDivisions.map((d: any) => ({ id: d.id, name: d.name }));
 
-    const users: User[] = [
-        { id: '1', name: 'Todd Robbins', email: 'todd@camptic.com', role: 'super_admin' },
-        { id: '2', name: 'Haley Thomas', email: 'haley@camptic.com', role: 'viewer' },
-        { id: '3', name: 'todd', email: 'todd.robbins18@gmail.com', role: 'admin' },
-        { id: '4', name: 'Athletics', email: 'athletics@tylerhillcamp.com', role: 'admin' },
-        { id: '5', name: 'Nick Williams', email: 'nick@tylerhillcamp.com', role: 'admin' },
-        { id: '6', name: 'Mike Davidowitz', email: 'mike@camptic.com', role: 'admin' },
-        { id: '7', name: 'ansaralyh@gmail.com', email: 'ansaralyh@gmail.com', role: 'viewer' },
-        { id: '8', name: 'Courtney Sloan Parker', email: 'courtney@tylerhillcamp.com', role: 'staff' },
-        { id: '9', name: 'raeesajidal10', email: 'raeesajidal10@gmail.com', role: 'admin' },
-    ];
-
-    const [userDivisionPermissions, setUserDivisionPermissions] = useState<UserDivisionPermissions>({
-        '1': {
-            freshmenAGirls: true,
-            freshmenBGirls: true,
-            cadetGirls: true,
-            sophomoreGirls: true,
-            juniorGirls: true,
-            seniorGirls: true,
-            superGirls: true,
-            teenGirls: false,
-            citGirls: false,
-            freshmenABoys: false,
-            freshmenBBoys: false,
-            cadetBoys: false,
-            sophomoreBoys: false,
-            juniorBoys: false,
-            seniorBoys: false,
-            superBoys: false,
-            teenBoys: false,
-            citBoys: false,
-        },
-        '2': {
-            freshmenAGirls: false,
-            freshmenBGirls: false,
-            cadetGirls: false,
-            sophomoreGirls: false,
-            juniorGirls: false,
-            seniorGirls: false,
-            superGirls: false,
-            teenGirls: false,
-            citGirls: false,
-            freshmenABoys: false,
-            freshmenBBoys: false,
-            cadetBoys: false,
-            sophomoreBoys: false,
-            juniorBoys: false,
-            seniorBoys: false,
-            superBoys: false,
-            teenBoys: false,
-            citBoys: false,
-        },
-        '3': {
-            freshmenAGirls: false,
-            freshmenBGirls: false,
-            cadetGirls: false,
-            sophomoreGirls: false,
-            juniorGirls: false,
-            seniorGirls: false,
-            superGirls: false,
-            teenGirls: false,
-            citGirls: false,
-            freshmenABoys: false,
-            freshmenBBoys: false,
-            cadetBoys: false,
-            sophomoreBoys: false,
-            juniorBoys: false,
-            seniorBoys: false,
-            superBoys: false,
-            teenBoys: false,
-            citBoys: false,
-        },
-        '4': {
-            freshmenAGirls: false,
-            freshmenBGirls: false,
-            cadetGirls: false,
-            sophomoreGirls: false,
-            juniorGirls: false,
-            seniorGirls: false,
-            superGirls: false,
-            teenGirls: false,
-            citGirls: false,
-            freshmenABoys: false,
-            freshmenBBoys: false,
-            cadetBoys: false,
-            sophomoreBoys: false,
-            juniorBoys: false,
-            seniorBoys: false,
-            superBoys: false,
-            teenBoys: false,
-            citBoys: false,
-        },
-        '5': {
-            freshmenAGirls: false,
-            freshmenBGirls: false,
-            cadetGirls: false,
-            sophomoreGirls: false,
-            juniorGirls: false,
-            seniorGirls: false,
-            superGirls: false,
-            teenGirls: false,
-            citGirls: false,
-            freshmenABoys: false,
-            freshmenBBoys: false,
-            cadetBoys: false,
-            sophomoreBoys: false,
-            juniorBoys: false,
-            seniorBoys: false,
-            superBoys: false,
-            teenBoys: false,
-            citBoys: false,
-        },
-        '6': {
-            freshmenAGirls: false,
-            freshmenBGirls: false,
-            cadetGirls: false,
-            sophomoreGirls: false,
-            juniorGirls: false,
-            seniorGirls: false,
-            superGirls: false,
-            teenGirls: false,
-            citGirls: false,
-            freshmenABoys: false,
-            freshmenBBoys: false,
-            cadetBoys: false,
-            sophomoreBoys: false,
-            juniorBoys: false,
-            seniorBoys: false,
-            superBoys: false,
-            teenBoys: false,
-            citBoys: false,
-        },
-        '7': {
-            freshmenAGirls: false,
-            freshmenBGirls: false,
-            cadetGirls: false,
-            sophomoreGirls: false,
-            juniorGirls: false,
-            seniorGirls: false,
-            superGirls: false,
-            teenGirls: false,
-            citGirls: false,
-            freshmenABoys: false,
-            freshmenBBoys: false,
-            cadetBoys: false,
-            sophomoreBoys: false,
-            juniorBoys: false,
-            seniorBoys: false,
-            superBoys: false,
-            teenBoys: false,
-            citBoys: false,
-        },
-        '8': {
-            freshmenAGirls: false,
-            freshmenBGirls: false,
-            cadetGirls: false,
-            sophomoreGirls: false,
-            juniorGirls: false,
-            seniorGirls: false,
-            superGirls: false,
-            teenGirls: false,
-            citGirls: false,
-            freshmenABoys: false,
-            freshmenBBoys: false,
-            cadetBoys: false,
-            sophomoreBoys: false,
-            juniorBoys: false,
-            seniorBoys: false,
-            superBoys: false,
-            teenBoys: false,
-            citBoys: false,
-        },
-        '9': {
-            freshmenAGirls: false,
-            freshmenBGirls: false,
-            cadetGirls: false,
-            sophomoreGirls: false,
-            juniorGirls: false,
-            seniorGirls: false,
-            superGirls: false,
-            teenGirls: false,
-            citGirls: false,
-            freshmenABoys: false,
-            freshmenBBoys: false,
-            cadetBoys: false,
-            sophomoreBoys: false,
-            juniorBoys: false,
-            seniorBoys: false,
-            superBoys: false,
-            teenBoys: false,
-            citBoys: false,
+    // Fetch users from Supabase profiles
+    const { data: users = [], isLoading: usersLoading } = useQuery({
+        queryKey: ['profiles_division_perms'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('id, full_name, email')
+                .order('full_name', { ascending: true });
+            if (error) throw error;
+            return (data || []).map((p: any) => ({
+                id: p.id,
+                name: p.full_name || p.email || 'Unknown',
+                email: p.email || '',
+                role: 'staff' as const,
+            }));
         },
     });
 
+    // Fetch existing division permissions from Supabase
+    const { data: dbPerms = [] } = useDivisionPermissions();
+    const updateDivPermMutation = useUpdateDivisionPermission();
+
+    const [userDivisionPermissions, setUserDivisionPermissions] = useState<UserDivisionPermissions>({});
+
+    // Hydrate local state from Supabase division permissions
+    useEffect(() => {
+        if (dbPerms.length > 0 && users.length > 0) {
+            const perms: UserDivisionPermissions = {};
+            users.forEach((u: any) => {
+                perms[u.id] = {};
+                divisions.forEach((d: any) => {
+                    perms[u.id][d.id] = false;
+                });
+            });
+            dbPerms.forEach((p: any) => {
+                if (perms[p.user_id]) {
+                    perms[p.user_id][p.division_id] = p.can_access;
+                }
+            });
+            setUserDivisionPermissions(perms);
+        }
+    }, [dbPerms, users, divisions]);
+
     const handleToggleDivision = (userId: string, divisionId: string) => {
+        const newValue = !userDivisionPermissions[userId]?.[divisionId];
         setUserDivisionPermissions(prev => ({
             ...prev,
             [userId]: {
                 ...prev[userId],
-                [divisionId]: !prev[userId]?.[divisionId],
+                [divisionId]: newValue,
             }
         }));
+        // Persist to Supabase
+        updateDivPermMutation.mutate({ user_id: userId, division_id: divisionId, can_access: newValue });
     };
 
     const getRoleColor = (role: string) => {

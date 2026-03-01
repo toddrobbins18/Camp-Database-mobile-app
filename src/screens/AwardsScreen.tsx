@@ -1,32 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput, Pressable } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { supabase } from '../lib/supabase';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCompany } from '../contexts/CompanyContext';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
 const isMediumScreen = width < 414;
 const isLargeScreen = width >= 414;
 
-// Mock awards data - empty for now to show empty state
-const MOCK_AWARDS: any[] = [];
 
-// Mock children data
-const MOCK_CHILDREN = [
-    { id: '1', name: 'Abby Weiss' },
-    { id: '2', name: 'Adam Elliott' },
-    { id: '3', name: 'Addison Brewer' },
-    { id: '4', name: 'Adrianna Gelb' },
-    { id: '5', name: 'Aiden Feld' },
-    { id: '6', name: 'Aiden Leon' },
-    { id: '7', name: 'Aidan Waisz' },
-    { id: '8', name: 'John Doe' },
-    { id: '9', name: 'Jane Smith' },
-    { id: '10', name: 'Mike Johnson' },
-    { id: '11', name: 'Sarah Williams' },
-];
 
 const YEAR_END_AWARDS = [
     "Camper of the Year",
@@ -61,7 +48,79 @@ const ScreenHeader = ({ title, navigation }: { title: string, navigation: any })
 );
 
 export const AwardsScreen = ({ navigation }: any) => {
-    const [awards] = useState(MOCK_AWARDS);
+    const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
+
+    // Fetch awards from Supabase
+    const { data: awards = [], isLoading: isLoadingAwards } = useQuery({
+        queryKey: ['awards', companyId, season],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('awards')
+                .select('*, children(first_name, last_name)')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .order('date', { ascending: false });
+            if (error) throw error;
+            return (data || []).map((award: any) => ({
+                ...award,
+                childId: award.child_id,
+                childName: award.children
+                    ? `${award.children.first_name} ${award.children.last_name}`.trim()
+                    : 'Unknown',
+            }));
+        },
+        enabled: !!companyId,
+    });
+
+    // Fetch children from Supabase
+    const { data: children = [] } = useQuery({
+        queryKey: ['children', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('children')
+                .select('id, first_name, last_name')
+                .eq('company_id', companyId)
+                .order('last_name', { ascending: true });
+            if (error) throw error;
+            return (data || []).map((c: any) => ({
+                id: c.id,
+                name: `${c.first_name} ${c.last_name}`.trim(),
+            }));
+        },
+        enabled: !!companyId,
+    });
+
+    // Add award mutation
+    const addAwardMutation = useMutation({
+        mutationFn: async (newAward: any) => {
+            const { data, error } = await supabase
+                .from('awards')
+                .insert([{
+                    company_id: companyId,
+                    season: season,
+                    child_id: newAward.childId,
+                    title: newAward.yearEndAward || null,
+                    category: newAward.weeklyStarfishValues?.join(', ') || null,
+                    description: newAward.notes || null,
+                    date: newAward.date,
+                }])
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['awards'] });
+            Alert.alert('Success', 'Award added successfully');
+            handleCloseAddAward();
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to add award');
+        },
+    });
     const [isCSVGuideOpen, setIsCSVGuideOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('awards');
     const [isAddAwardModalOpen, setIsAddAwardModalOpen] = useState(false);
@@ -137,15 +196,24 @@ export const AwardsScreen = ({ navigation }: any) => {
     };
 
     const handleSubmitAward = () => {
-        // TODO: Submit award to backend
-        handleCloseAddAward();
+        if (!selectedChild) {
+            Alert.alert('Validation', 'Please select a child');
+            return;
+        }
+        addAwardMutation.mutate({
+            childId: selectedChild,
+            yearEndAward,
+            weeklyStarfishValues,
+            notes,
+            date,
+        });
     };
 
     const filteredChildren = childSearchText.length > 0
-        ? MOCK_CHILDREN.filter(child =>
+        ? children.filter((child: any) =>
             child.name.toLowerCase().includes(childSearchText.toLowerCase())
         )
-        : MOCK_CHILDREN;
+        : children;
 
     const handleUploadCSV = () => {
         setIsUploadCSVModalOpen(true);
@@ -315,7 +383,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                                         styles.selectInputText,
                                         !selectedChild && styles.selectInputPlaceholder
                                     ]}>
-                                        {selectedChild ? MOCK_CHILDREN.find(c => c.id === selectedChild)?.name : 'Select a child...'}
+                                        {selectedChild ? children.find((c: any) => c.id === selectedChild)?.name : 'Select a child...'}
                                     </Text>
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>

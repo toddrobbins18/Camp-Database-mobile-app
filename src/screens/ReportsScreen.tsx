@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,11 +9,15 @@ import {
     Modal,
     FlatList,
     Pressable,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCamperReports } from '../api/evaluations';
+import { useDivisionsLookup } from '../api/permissions';
+import { supabase } from '../lib/supabase';
 
 interface ReportsScreenProps {
     navigation: any;
@@ -32,25 +36,29 @@ const REPORT_TYPES = [
     'Activities & Field Trips',
 ];
 
-const DIVISIONS = [
-    'All Divisions',
-    'Freshmen A Girls',
-    'Freshmen B Girls',
-    'Cadet Girls',
-    'Sophomore Girls',
-    'Junior Girls',
-    'Senior Girls',
-    'Super Girls',
-    'Teen Girls',
-    'CIT Girls',
-    'Freshmen A Boys',
-    'Freshmen B Boys',
-    'Cadet Boys',
-    'Sophomore Boys',
-    'Junior Boys',
-];
-
 export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
+    // Fetch divisions from Supabase
+    const { data: dbDivisions = [] } = useDivisionsLookup();
+    const DIVISIONS = ['All Divisions', ...dbDivisions.map((d: any) => d.name)];
+
+    // Get company_id for reports query
+    const [companyId, setCompanyId] = useState<string | null>(null);
+    useEffect(() => {
+        supabase.auth.getUser().then(async ({ data }) => {
+            if (data.user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('company_id')
+                    .eq('id', data.user.id)
+                    .single();
+                setCompanyId(profile?.company_id || null);
+            }
+        });
+    }, []);
+
+    // Fetch camper reports from Supabase
+    const { data: reports = [], isLoading: reportsLoading } = useCamperReports(companyId, '2026');
+
     const [reportType, setReportType] = useState('Incident Reports');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -422,16 +430,16 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                     {/* Summary Cards */}
                     <View style={styles.summaryCards}>
                         <View style={styles.summaryCard}>
-                            <Text style={styles.summaryNumber}>0</Text>
-                            <Text style={styles.summaryLabel}>Total Incidents</Text>
+                            <Text style={styles.summaryNumber}>{reports.length}</Text>
+                            <Text style={styles.summaryLabel}>Total Reports</Text>
                         </View>
                         <View style={styles.summaryCard}>
-                            <Text style={styles.summaryNumber}>0</Text>
-                            <Text style={styles.summaryLabel}>Open</Text>
+                            <Text style={styles.summaryNumber}>{reports.filter((r: any) => r.report_type === '10_day').length}</Text>
+                            <Text style={styles.summaryLabel}>10-Day</Text>
                         </View>
                         <View style={styles.summaryCard}>
-                            <Text style={styles.summaryNumber}>0</Text>
-                            <Text style={styles.summaryLabel}>Resolved</Text>
+                            <Text style={styles.summaryNumber}>{reports.filter((r: any) => r.report_type === 'end_of_summer').length}</Text>
+                            <Text style={styles.summaryLabel}>End of Summer</Text>
                         </View>
                     </View>
 

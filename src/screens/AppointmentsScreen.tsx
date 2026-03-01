@@ -1,34 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Pressable, Switch } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Pressable, Switch, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { supabase } from '../lib/supabase';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCompany } from '../contexts/CompanyContext';
 
-// Mock appointments data
-const MOCK_APPOINTMENTS: any[] = [];
 
-// Mock campers data
-const MOCK_CAMPERS = [
-    { id: '1', name: 'Abby Weiss' },
-    { id: '2', name: 'Adam Elliott' },
-    { id: '3', name: 'Addison Brewer' },
-    { id: '4', name: 'Adrianna Gelb' },
-    { id: '5', name: 'Aiden Feld' },
-    { id: '6', name: 'Aiden Leon' },
-    { id: '7', name: 'Aiden Weisz' },
-    { id: '8', name: 'Alex Haboush' },
-    { id: '9', name: 'Alaia Khalili' },
-    { id: '10', name: 'Alexa Alfred' },
-];
-
-// Mock staff data
-const MOCK_STAFF = [
-    { id: '1', name: 'John Smith' },
-    { id: '2', name: 'Jane Doe' },
-    { id: '3', name: 'Mike Johnson' },
-    { id: '4', name: 'Sarah Williams' },
-];
 
 // Appointment types (for filter)
 const APPOINTMENT_TYPES = [
@@ -75,6 +55,164 @@ const APPOINTMENT_STATUS_OPTIONS = [
 type AppointmentTab = 'Upcoming' | 'Past' | 'All';
 
 export const AppointmentsScreen = ({ navigation }: any) => {
+    const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
+
+    // Fetch appointments from Supabase
+    const { data: appointments = [], isLoading: isLoadingAppointments } = useQuery({
+        queryKey: ['appointments', companyId, season],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('appointments')
+                .select('*')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .order('appointment_date', { ascending: true });
+            if (error) throw error;
+            // Map Supabase columns to UI fields
+            return (data || []).map((apt: any) => ({
+                id: apt.id,
+                date: apt.appointment_date,
+                time: apt.appointment_time,
+                person: apt.person_name || '',
+                personId: apt.child_id || apt.staff_id || '',
+                personType: apt.child_id ? 'Camper' : 'Staff',
+                type: apt.appointment_type,
+                provider: apt.provider_name,
+                location: apt.location,
+                status: apt.status || 'Scheduled',
+                notes: apt.notes,
+                followUpRequired: apt.follow_up_required || false,
+                child_id: apt.child_id,
+                staff_id: apt.staff_id,
+            }));
+        },
+        enabled: !!companyId,
+    });
+
+    // Fetch campers (children) from Supabase
+    const { data: campers = [] } = useQuery({
+        queryKey: ['children', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('children')
+                .select('id, first_name, last_name')
+                .eq('company_id', companyId)
+                .order('last_name', { ascending: true });
+            if (error) throw error;
+            return (data || []).map((c: any) => ({
+                id: c.id,
+                name: `${c.first_name} ${c.last_name}`.trim(),
+            }));
+        },
+        enabled: !!companyId,
+    });
+
+    // Fetch staff from Supabase
+    const { data: staffMembers = [] } = useQuery({
+        queryKey: ['staff', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .eq('company_id', companyId)
+                .order('full_name', { ascending: true });
+            if (error) throw error;
+            return (data || []).map((s: any) => ({
+                id: s.id,
+                name: s.full_name || 'Unknown',
+            }));
+        },
+        enabled: !!companyId,
+    });
+
+    // Add appointment mutation
+    const addAppointmentMutation = useMutation({
+        mutationFn: async (newAppointment: any) => {
+            const { data, error } = await supabase
+                .from('appointments')
+                .insert([{
+                    company_id: companyId,
+                    season: season,
+                    appointment_type: newAppointment.type,
+                    appointment_date: newAppointment.date,
+                    appointment_time: newAppointment.time || null,
+                    provider_name: newAppointment.provider,
+                    location: newAppointment.location,
+                    status: newAppointment.status,
+                    notes: newAppointment.notes,
+                    follow_up_required: newAppointment.followUpRequired,
+                    person_name: newAppointment.person,
+                    child_id: newAppointment.appointmentFor === 'Camper' ? newAppointment.personId : null,
+                    staff_id: newAppointment.appointmentFor === 'Staff' ? newAppointment.personId : null,
+                }])
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['appointments'] });
+            Alert.alert('Success', 'Appointment created successfully');
+            setIsAddModalOpen(false);
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to create appointment');
+        },
+    });
+
+    // Update appointment mutation
+    const updateAppointmentMutation = useMutation({
+        mutationFn: async (updatedAppointment: any) => {
+            const { error } = await supabase
+                .from('appointments')
+                .update({
+                    appointment_type: updatedAppointment.type,
+                    appointment_date: updatedAppointment.date,
+                    appointment_time: updatedAppointment.time || null,
+                    provider_name: updatedAppointment.provider,
+                    location: updatedAppointment.location,
+                    status: updatedAppointment.status,
+                    notes: updatedAppointment.notes,
+                    follow_up_required: updatedAppointment.followUpRequired,
+                    person_name: updatedAppointment.person,
+                    child_id: updatedAppointment.appointmentFor === 'Camper' ? updatedAppointment.personId : null,
+                    staff_id: updatedAppointment.appointmentFor === 'Staff' ? updatedAppointment.personId : null,
+                })
+                .eq('id', updatedAppointment.id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['appointments'] });
+            Alert.alert('Success', 'Appointment updated successfully');
+            setIsEditModalOpen(false);
+            setEditingAppointment(null);
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to update appointment');
+        },
+    });
+
+    // Delete appointment mutation
+    const deleteAppointmentMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase
+                .from('appointments')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['appointments'] });
+            Alert.alert('Success', 'Appointment deleted successfully');
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to delete appointment');
+        },
+    });
     const [activeTab, setActiveTab] = useState<AppointmentTab>('Upcoming');
     const [searchQuery, setSearchQuery] = useState('');
     const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
@@ -134,7 +272,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
     };
 
     // Filter appointments based on active tab, search, type, and status
-    const filteredAppointments = MOCK_APPOINTMENTS.filter((appointment) => {
+    const filteredAppointments = appointments.filter((appointment: any) => {
         // Tab filter
         const now = new Date();
         const appointmentDate = new Date(appointment.date);
@@ -753,10 +891,22 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                 <TouchableOpacity
                                     style={styles.updateButton}
                                     onPress={() => {
-                                        // Handle save (UI only - no database)
-                                        setIsAddModalOpen(false);
-                                        setIsEditModalOpen(false);
-                                        setEditingAppointment(null);
+                                        if (!formData.date || !formData.person || !formData.type) {
+                                            Alert.alert('Validation', 'Please fill in all required fields (Person, Type, Date)');
+                                            return;
+                                        }
+                                        if (editingAppointment) {
+                                            updateAppointmentMutation.mutate({
+                                                id: editingAppointment.id,
+                                                ...formData,
+                                                appointmentFor,
+                                            });
+                                        } else {
+                                            addAppointmentMutation.mutate({
+                                                ...formData,
+                                                appointmentFor,
+                                            });
+                                        }
                                     }}
                                 >
                                     <Text style={styles.updateButtonText}>
@@ -904,7 +1054,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                             </View>
                         </View>
                         <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true} showsVerticalScrollIndicator={false}>
-                            {(appointmentFor === 'Camper' ? MOCK_CAMPERS : MOCK_STAFF)
+                            {(appointmentFor === 'Camper' ? campers : staffMembers)
                                 .filter((person) =>
                                     person.name.toLowerCase().includes(personSearchText.toLowerCase())
                                 )

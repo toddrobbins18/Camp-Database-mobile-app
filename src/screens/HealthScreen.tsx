@@ -4,8 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCompany } from '../contexts/CompanyContext';
+import { useCampers } from '../api/campers';
+import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
 
 export const HealthScreen = ({ navigation }: any) => {
+    const { companyId } = useCompany();
+    const { data: campersData = [] } = useCampers(companyId, '2026');
+
     const [activeView, setActiveView] = useState('list'); // 'list' or 'calendar'
     const [activeTab, setActiveTab] = useState('Daily Log');
     const [searchQuery, setSearchQuery] = useState('');
@@ -51,85 +57,80 @@ export const HealthScreen = ({ navigation }: any) => {
         'CIT Boys',
     ];
 
-    // Sample children data for Health Center
-    const availableChildren = [
-        { id: '1', name: 'Abby Weiss', division: 'CIT Girls' },
-        { id: '2', name: 'Adam Elliott', division: 'Freshmen B Boys' },
-        { id: '3', name: 'Addison Brewer', division: 'Sophomore Girls' },
-        { id: '4', name: 'Adrianna Gelb', division: 'CIT Girls' },
-        { id: '5', name: 'Alden Feld', division: 'Freshmen B Boys' },
-        { id: '6', name: 'Alden Leon', division: 'Sophomore Boys' },
-        { id: '7', name: 'Alden Weisz', division: 'Freshmen B Boys' },
-        { id: '8', name: 'AJ Goldberg', division: 'Freshmen B Boys' },
-        { id: '9', name: 'Alaia Khalil', division: 'Freshmen B Girls' },
-        { id: '10', name: 'Alex Haboush', division: 'CIT Boys' },
-        { id: '11', name: 'Alex Stumacher', division: 'Cadet Boys' },
-        { id: '12', name: 'Alexa Alfred', division: 'Super Senior Girls' },
-        { id: '13', name: 'Alexa Friedland', division: 'Super Senior Girls' },
-        { id: '14', name: 'Alexa Horowitz', division: 'Sophomore Girls' },
-        { id: '15', name: 'Alexa Jacobs', division: 'Sophomore Girls' },
-        { id: '16', name: 'Alexa Mendelson', division: 'Sophomore Girls' },
-        { id: '17', name: 'Alexa Miller', division: 'Super Senior Girls' },
-        { id: '18', name: 'Alexa Soble', division: 'Freshmen A Girls' },
-        { id: '19', name: 'Alexa Zinner', division: 'Super Senior Girls' },
-        { id: '20', name: 'Alexander Ull', division: 'Freshmen B Boys' },
-        { id: '21', name: 'Alexis Kalikow', division: 'Cadet Girls' },
-        { id: '22', name: 'Ali Vieira', division: 'Junior Girls' },
-        { id: '23', name: 'Andrew Feigenbaum', division: 'Sophomore Boys' },
-        { id: '24', name: 'Annabelle Korff', division: 'Cadet Girls' },
-        { id: '25', name: 'Arden Suveyke', division: 'Sophomore Girls' },
-        { id: '26', name: 'Ari Gerber', division: 'Freshmen A Boys' },
-        { id: '27', name: 'Ari Lean', division: 'Super Senior Boys' },
-        { id: '28', name: 'Ari Milim', division: 'Sophomore Boys' },
-        { id: '29', name: 'Ari Talaszan', division: 'Freshmen B Boys' },
-        { id: '30', name: 'Ariana Mizrachi', division: 'Freshmen B Girls' },
-        { id: '31', name: 'Arielle Sullivan', division: 'Senior Girls' },
-        { id: '32', name: 'Ascher Sundick', division: 'Sophomore Boys' },
-        { id: '33', name: 'Asha Sampathkur', division: 'Freshmen A Girls' },
-        { id: '34', name: 'Asher Greenberg', division: 'Teen TN1 Boys' },
-        { id: '35', name: 'Asher Talaszan', division: 'Sophomore Boys' },
-        { id: '36', name: 'Ashley Weingarten', division: 'Teen TN1 Girls' },
-        { id: '37', name: 'Ashton Donzis', division: 'Junior Boys' },
-        { id: '38', name: 'Ashton Harvey', division: 'Freshmen A Boys' },
-        { id: '39', name: 'Ashton Weiss', division: 'Teen TN1 Boys' },
-        { id: '40', name: 'Audrey Slater', division: 'Freshmen A Girls' },
-        { id: '41', name: 'Austin Bloch', division: 'Senior Boys' },
-        { id: '42', name: 'Austyn Fishman', division: 'Freshmen B Girls' },
-        { id: '43', name: 'Ava Englander', division: 'Teen TN1 Girls' },
-        { id: '44', name: 'Ava Schnall', division: 'Teen TN1 Girls' },
-        { id: '45', name: 'Ava Wolf', division: 'Junior Girls' },
-        { id: '46', name: 'Ava Zinner', division: 'Super Senior Girls' },
-        { id: '47', name: 'Avery Atlas', division: 'Freshmen B Girls' },
-        { id: '48', name: 'Avery Berg', division: 'Freshmen A Girls' },
-        { id: '49', name: 'Avery Kaplan', division: 'Junior Girls' },
-        { id: '50', name: 'Avery Rothstein', division: 'CIT Girls' },
-        { id: '51', name: 'Avery Slater', division: 'Sophomore Girls' },
-        { id: '52', name: 'Avery Warsaw', division: 'Freshmen B Girls' },
-        { id: '53', name: 'Axel Altman', division: 'Freshmen B Boys' },
-        { id: '54', name: 'Axd Helfer', division: 'Sophomore Boys' },
-        { id: '55', name: 'Ben Geller', division: 'Junior Boys' },
-        { id: '56', name: 'Ben Kaplan', division: 'Teen TN1 Boys' },
-        { id: '57', name: 'Ben Schochet', division: 'Senior Boys' },
-        { id: '58', name: 'Benjamin Fina', division: 'Sophomore Boys' },
-        { id: '59', name: 'Benjamin Khadoury', division: 'Senior Boys' },
-        { id: '60', name: 'Benjamin Rozbruch', division: 'Junior Boys' },
-        { id: '61', name: 'Bibi Khoudiari', division: 'Freshmen B Boys' },
-        { id: '62', name: 'Blake Bailey', division: 'Junior Girls' },
-        { id: '63', name: 'Blake Bortnick', division: 'Junior Boys' },
-        { id: '64', name: 'Blake Brewer', division: 'Super Senior Boys' },
-        { id: '65', name: 'Blake Jaffe', division: 'Super Senior Boys' },
-        { id: '66', name: 'Blake Stern', division: 'Junior Girls' },
-        { id: '67', name: 'Bodin Geller', division: 'CIT Boys' },
-        { id: '68', name: 'Bradley Feierstein', division: 'Freshmen B Boys' },
-        { id: '69', name: 'Bradley Ottavino', division: 'Sophomore Girls' },
-        { id: '70', name: 'Brady Goldstein', division: 'Senior Boys' },
-    ];
+    const dateString = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+
+    // Medications
+    const { data: medicationsData = [] } = useMedicationLogs(companyId, dateString);
+    const addMedicationMutation = useAddMedicationLog();
+    const administerMutation = useAdministerMedication();
+
+    // Admissions
+    const { data: admissionsData = [] } = useHealthCenterAdmissions(companyId);
+    const addAdmissionMutation = useAddHealthCenterAdmission();
+    const checkoutMutation = useCheckoutHealthCenterAdmission();
 
     // Filter children based on search query
-    const filteredChildren = availableChildren.filter(child =>
-        child.name.toLowerCase().includes(searchChildrenQuery.toLowerCase()) ||
-        child.division.toLowerCase().includes(searchChildrenQuery.toLowerCase())
-    );
+    const filteredChildren = campersData.filter((child: any) =>
+        `${child.first_name} ${child.last_name}`.toLowerCase().includes(searchChildrenQuery.toLowerCase()) ||
+        (child.group_name || '').toLowerCase().includes(searchChildrenQuery.toLowerCase())
+    ).map((child: any) => ({
+        id: child.id,
+        name: `${child.first_name} ${child.last_name}`,
+        division: child.group_name || 'N/A'
+    }));
+
+    const handleAdmitChild = () => {
+        if (!childToAdmit || !admitReason || !companyId) return;
+
+        addAdmissionMutation.mutate({
+            company_id: companyId,
+            child_id: childToAdmit.id,
+            reason: admitReason,
+            season: '2026',
+        }, {
+            onSuccess: () => {
+                setShowAdmitModal(false);
+                setAdmitReason('');
+                setChildToAdmit(null);
+            }
+        });
+    };
+
+    const handleCheckoutChild = (admissionId: string) => {
+        checkoutMutation.mutate({ id: admissionId, checkedOutBy: undefined });
+    };
+
+    const handleAddMedication = () => {
+        if (!selectedMedicationChild || !medicationName || !companyId) return;
+
+        const child = campersData.find((c: any) => `${c.first_name} ${c.last_name}` === selectedMedicationChild);
+        if (!child) return;
+
+        let time = '08:00';
+        if (mealTime === 'Before Lunch') time = '12:00';
+        if (mealTime === 'Before Dinner') time = '18:00';
+        if (mealTime === 'Bedtime') time = '21:00';
+
+        const dStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+
+        addMedicationMutation.mutate({
+            company_id: companyId,
+            child_id: child.id as string,
+            medication_name: medicationName,
+            dosage: dosage,
+            scheduled_time: time,
+            date: dStr,
+            notes: notes,
+            alert_sent: false
+        }, {
+            onSuccess: () => {
+                setMedicationName('');
+                setDosage('');
+                setNotes('');
+                setMealTime('');
+            }
+        });
+    };
 
     // Calendar functions
     const getDaysInMonth = (date: Date) => {
@@ -443,11 +444,30 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </View>
                                 </StyledCard>
 
-                                {/* Empty State */}
-                                <View style={styles.emptyStateRow}>
-                                    <Text style={styles.emptyText}>No medications scheduled for today</Text>
-                                    <View style={styles.emptyDot} />
-                                </View>
+                                {/* Empty State or List */}
+                                {medicationsData.length === 0 ? (
+                                    <View style={styles.emptyStateRow}>
+                                        <Text style={styles.emptyText}>No medications scheduled for today</Text>
+                                        <View style={styles.emptyDot} />
+                                    </View>
+                                ) : (
+                                    medicationsData.map(med => (
+                                        <View key={med.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+                                            <View>
+                                                <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>{med.medication_name} {med.dosage ? `(${med.dosage})` : ''}</Text>
+                                                <Text style={{ color: theme.colors.textSecondary, marginTop: 4 }}>{med.children?.name} - {med.children?.group_name}</Text>
+                                                <Text style={{ color: theme.colors.textSecondary, marginTop: 2 }}>Time: {med.scheduled_time}</Text>
+                                            </View>
+                                            <TouchableOpacity
+                                                style={[styles.scanButton, { backgroundColor: med.administered ? '#10b981' : theme.colors.secondary, alignSelf: 'center' }]}
+                                                onPress={() => med.id && administerMutation.mutate({ id: med.id, administeredBy: undefined })}
+                                                disabled={med.administered}
+                                            >
+                                                <Text style={styles.scanButtonText}>{med.administered ? 'Done' : 'Administer'}</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    ))
+                                )}
                             </StyledCard>
                         ) : activeTab === 'Health Center' ? (
                             <View style={styles.healthCenterContainer}>
@@ -584,9 +604,32 @@ export const HealthScreen = ({ navigation }: any) => {
                                 <Text style={styles.healthCenterLogSubtitle}>
                                     Past health center admissions this season
                                 </Text>
-                                <View style={styles.emptyState}>
-                                    <Text style={styles.emptyText}>No admission history found for this season</Text>
-                                </View>
+                                {admissionsData.length === 0 ? (
+                                    <View style={styles.emptyState}>
+                                        <Text style={styles.emptyText}>No admission history found for this season</Text>
+                                    </View>
+                                ) : (
+                                    <ScrollView style={{ marginTop: 16 }}>
+                                        {admissionsData.map(admission => (
+                                            <View key={admission.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                                    <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>{admission.children?.name}</Text>
+                                                    <Text style={{ color: theme.colors.textSecondary }}>
+                                                        {admission.admitted_at ? new Date(admission.admitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                    </Text>
+                                                </View>
+                                                <Text style={{ color: theme.colors.textSecondary, marginTop: 4 }}>{admission.reason || 'No reason provided'}</Text>
+                                                {admission.checked_out_at ? (
+                                                    <Text style={{ color: '#10b981', marginTop: 8, fontSize: 12 }}>Checked out: {new Date(admission.checked_out_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                                ) : (
+                                                    <TouchableOpacity onPress={() => admission.id && handleCheckoutChild(admission.id)} style={{ marginTop: 8 }}>
+                                                        <Text style={{ color: theme.colors.secondary, fontWeight: 'bold' }}>Check Out Now</Text>
+                                                    </TouchableOpacity>
+                                                )}
+                                            </View>
+                                        ))}
+                                    </ScrollView>
+                                )}
                             </StyledCard>
                         ) : activeTab === 'Add Medication' ? (
                             <StyledCard style={styles.addMedicationCard}>
@@ -767,24 +810,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     {/* Add Medication Button */}
                                     <TouchableOpacity
                                         style={styles.addMedicationButton}
-                                        onPress={() => {
-                                            // Handle add medication
-                                            console.log('Add Medication:', {
-                                                child: selectedMedicationChild,
-                                                medicationName,
-                                                dosage,
-                                                mealTime,
-                                                notes,
-                                                isRecurring
-                                            });
-                                            // Reset form
-                                            setSelectedMedicationChild('');
-                                            setMedicationName('');
-                                            setDosage('');
-                                            setMealTime('');
-                                            setNotes('');
-                                            setIsRecurring(false);
-                                        }}
+                                        onPress={handleAddMedication}
                                     >
                                         <Text style={styles.addMedicationButtonText}>Add Medication</Text>
                                     </TouchableOpacity>
@@ -881,13 +907,7 @@ export const HealthScreen = ({ navigation }: any) => {
 
                         <TouchableOpacity
                             style={styles.confirmButton}
-                            onPress={() => {
-                                // Handle confirm action
-                                console.log('Admit:', childToAdmit?.name, 'Reason:', admitReason);
-                                setShowAdmitModal(false);
-                                setAdmitReason('');
-                                setChildToAdmit(null);
-                            }}
+                            onPress={handleAdmitChild}
                         >
                             <Text style={styles.confirmButtonText}>Confirm</Text>
                         </TouchableOpacity>
@@ -928,7 +948,7 @@ export const HealthScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.pickerContent}>
-                            {availableChildren.map((child) => (
+                            {filteredChildren.map((child: any) => (
                                 <TouchableOpacity
                                     key={child.id}
                                     style={styles.pickerOption}
@@ -1902,11 +1922,6 @@ const styles = StyleSheet.create({
     },
 
     // Upload CSV Modal Styles
-    uploadModalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'flex-end',
-    },
     uploadModal: {
         backgroundColor: theme.colors.surface,
         borderTopLeftRadius: theme.borderRadius.xl,

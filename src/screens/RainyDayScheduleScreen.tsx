@@ -7,12 +7,15 @@ import {
     TouchableOpacity,
     Modal,
     Pressable,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import * as DocumentPicker from 'expo-document-picker';
+import { useRainyDaySchedule, useAddRainyDayEvent } from '../api/rainy_day_tutoring';
 
 interface RainyDayScheduleScreenProps {
     navigation: any;
@@ -21,6 +24,9 @@ interface RainyDayScheduleScreenProps {
 export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenProps) => {
     const [date, setDate] = useState('01/24/2026');
     const [fileName, setFileName] = useState('');
+
+    // Fetch rainy day schedule from Supabase
+    const { data: scheduleEvents = [], isLoading: scheduleLoading } = useRainyDaySchedule();
 
     // Date Picker State
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -240,16 +246,29 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                     </TouchableOpacity>
                 </StyledCard>
 
-                {/* Uploaded Schedules Section */}
                 <View style={styles.uploadedSection}>
                     <View style={styles.uploadedHeader}>
                         <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.text} />
                         <Text style={styles.uploadedTitle}>Uploaded Schedules</Text>
                     </View>
 
-                    <StyledCard style={styles.emptyStateCard}>
-                        <Text style={styles.emptyStateText}>No schedules uploaded yet</Text>
-                    </StyledCard>
+                    {scheduleLoading ? (
+                        <ActivityIndicator size="large" color={theme.colors.secondary} style={{ marginTop: 20 }} />
+                    ) : scheduleEvents.length === 0 ? (
+                        <StyledCard style={styles.emptyStateCard}>
+                            <Text style={styles.emptyStateText}>No schedules uploaded yet</Text>
+                        </StyledCard>
+                    ) : (
+                        scheduleEvents.map((event: any) => (
+                            <StyledCard key={event.id} style={{ ...styles.emptyStateCard, alignItems: 'flex-start' as const }}>
+                                <Text style={{ fontWeight: '600', color: theme.colors.text, marginBottom: 4 }}>{event.name}</Text>
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
+                                    {event.date} • {event.activity_type} • {event.status}
+                                </Text>
+                                {event.location && <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }}>📍 {event.location}</Text>}
+                            </StyledCard>
+                        ))
+                    )}
                 </View>
 
                 {/* Chat Bubble (Floating Action Button style placeholder) */}

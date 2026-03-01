@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useEvaluationQuestions, useAddEvaluationQuestion, useDeleteEvaluationQuestion } from '../api/evaluations';
 
 interface EvaluationQuestion {
     id: string;
@@ -34,171 +35,49 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
     const questionTypes = ['Multiple Choice', 'Rating Scale', 'Text', 'Yes/No'];
     const staffTypes = ['Both', 'General Counselor', 'Specialist'];
 
-    const [questions, setQuestions] = useState<EvaluationQuestion[]>([
-        {
-            id: '1',
-            questionText: 'Shows enthusiasm and maintains a positive attitude',
-            questionType: 'Rating Scale',
-            category: 'ATTITUDE',
-            staffType: 'General Counselor',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 1,
-        },
-        {
-            id: '2',
-            questionText: 'Maintains clean and organized bunk environment',
-            questionType: 'Rating Scale',
-            category: 'BUNK MANAGEMENT',
-            staffType: 'General Counselor',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 2,
-        },
-        {
-            id: '3',
-            questionText: 'Demonstrates positive interactions with children',
-            questionType: 'Rating Scale',
-            category: 'CHILD INTERACTION',
-            staffType: 'General Counselor',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 3,
-        },
-        {
-            id: '4',
-            questionText: 'Displays effective behavior management techniques',
-            questionType: 'Rating Scale',
-            category: 'CHILD MANAGEMENT',
-            staffType: 'General Counselor',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 4,
-        },
-        {
-            id: '5',
-            questionText: 'Communicates effectively with parents and administration',
-            questionType: 'Rating Scale',
-            category: 'COMMUNICATION',
-            staffType: 'General Counselor',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 5,
-        },
-        {
-            id: '6',
-            questionText: 'Overall performance rating',
-            questionType: 'Rating Scale',
-            category: 'OVERALL',
-            staffType: 'General Counselor',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 6,
-        },
-        {
-            id: '7',
-            questionText: 'Participates actively in all camp activities and programs',
-            questionType: 'Rating Scale',
-            category: 'PARTICIPATION',
-            staffType: 'General Counselor',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 7,
-        },
-        {
-            id: '8',
-            questionText: 'Complies with camp rules and policies (rules/standards/routines/curfew/language/uniform/etc.)',
-            questionType: 'Rating Scale',
-            category: 'PROFESSIONALISM',
-            staffType: 'General Counselor',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 8,
-        },
-        {
-            id: '9',
-            questionText: 'Demonstrates consistent reliability and attendance',
-            questionType: 'Rating Scale',
-            category: 'PROFESSIONALISM',
-            staffType: 'General Counselor',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 9,
-        },
-        {
-            id: '10',
-            questionText: 'Cooperates with Division Leader and other staff members',
-            questionType: 'Rating Scale',
-            category: 'TEAMWORK',
-            staffType: 'General Counselor',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 10,
-        },
-        {
-            id: '11',
-            questionText: 'Shows enthusiasm and maintains a positive attitude',
-            questionType: 'Rating Scale',
-            category: 'ATTITUDE',
-            staffType: 'Specialist',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 1,
-        },
-        {
-            id: '12',
-            questionText: 'Demonstrates positive interactions with children',
-            questionType: 'Rating Scale',
-            category: 'CHILD INTERACTION',
-            staffType: 'Specialist',
-            evaluatedBy: 'Division Leader',
-            ratingOptions: 5,
-            displayOrder: 2,
-        },
-        {
-            id: '13',
-            questionText: 'Displays effective behavior management techniques',
-            questionType: 'Rating Scale',
-            category: 'CHILD MANAGEMENT',
-            staffType: 'Specialist',
-            evaluatedBy: 'Head Specialist',
-            ratingOptions: 5,
-            displayOrder: 3,
-        },
-        {
-            id: '14',
-            questionText: 'Communicates effectively with staff and administration',
-            questionType: 'Rating Scale',
-            category: 'COMMUNICATION',
-            staffType: 'Specialist',
-            evaluatedBy: 'Head Specialist',
-            ratingOptions: 5,
-            displayOrder: 4,
-        },
-        {
-            id: '15',
-            questionText: 'Shows initiative and problem-solving abilities',
-            questionType: 'Rating Scale',
-            category: 'LEADERSHIP',
-            staffType: 'Specialist',
-            evaluatedBy: 'Head Specialist',
-            ratingOptions: 5,
-            displayOrder: 5,
-        },
-        {
-            id: '16',
-            questionText: 'Overall performance rating',
-            questionType: 'Rating Scale',
-            category: 'OVERALL',
-            staffType: 'Specialist',
-            evaluatedBy: 'Both',
-            ratingOptions: 5,
-            displayOrder: 6,
-        },
-    ]);
+    // Fetch evaluation questions from Supabase
+    const { data: dbQuestions = [], isLoading: questionsLoading } = useEvaluationQuestions();
+    const addQuestionMutation = useAddEvaluationQuestion();
+    const deleteQuestionMutation = useDeleteEvaluationQuestion();
+
+    // Map DB questions to local format, fall back to hardcoded defaults
+    const defaultQuestions: EvaluationQuestion[] = [
+        { id: '1', questionText: 'Shows enthusiasm and maintains a positive attitude', questionType: 'Rating Scale', category: 'ATTITUDE', staffType: 'General Counselor', evaluatedBy: 'Division Leader', ratingOptions: 5, displayOrder: 1 },
+        { id: '2', questionText: 'Maintains clean and organized bunk environment', questionType: 'Rating Scale', category: 'BUNK MANAGEMENT', staffType: 'General Counselor', evaluatedBy: 'Division Leader', ratingOptions: 5, displayOrder: 2 },
+        { id: '3', questionText: 'Demonstrates positive interactions with children', questionType: 'Rating Scale', category: 'CHILD INTERACTION', staffType: 'General Counselor', evaluatedBy: 'Division Leader', ratingOptions: 5, displayOrder: 3 },
+        { id: '4', questionText: 'Displays effective behavior management techniques', questionType: 'Rating Scale', category: 'CHILD MANAGEMENT', staffType: 'General Counselor', evaluatedBy: 'Division Leader', ratingOptions: 5, displayOrder: 4 },
+        { id: '5', questionText: 'Overall performance rating', questionType: 'Rating Scale', category: 'OVERALL', staffType: 'General Counselor', evaluatedBy: 'Division Leader', ratingOptions: 5, displayOrder: 5 },
+    ];
+
+    const [questions, setQuestions] = useState<EvaluationQuestion[]>(defaultQuestions);
+
+    useEffect(() => {
+        if (dbQuestions.length > 0) {
+            setQuestions(dbQuestions.map((q: any) => ({
+                id: q.id,
+                questionText: q.question_text,
+                questionType: q.question_type === 'rating' ? 'Rating Scale' : q.question_type === 'text' ? 'Text' : 'Multiple Choice',
+                category: q.category || 'GENERAL',
+                staffType: 'Both',
+                evaluatedBy: '',
+                ratingOptions: 5,
+                displayOrder: 0,
+                options: q.options?.join(', '),
+            })));
+        }
+    }, [dbQuestions]);
 
     const handleAddQuestion = () => {
         if (questionText.trim()) {
+            // Save to Supabase
+            const typeMap: Record<string, string> = { 'Multiple Choice': 'multiple_choice', 'Rating Scale': 'rating', 'Text': 'text', 'Yes/No': 'multiple_choice' };
+            addQuestionMutation.mutate({
+                question_text: questionText.trim(),
+                question_type: (typeMap[questionType] || 'text') as 'multiple_choice' | 'text' | 'rating',
+                options: options.trim() ? options.split(',').map(o => o.trim()) : undefined,
+                category: category.trim() || undefined,
+            });
+            // Also add to local state for immediate feedback
             const newQuestion: EvaluationQuestion = {
                 id: Date.now().toString(),
                 questionText: questionText.trim(),
@@ -212,7 +91,6 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
                 ratingOptions: 5,
             };
             setQuestions([...questions, newQuestion]);
-            // Reset form
             setQuestionText('');
             setCategory('');
             setEvaluatedBy('');
@@ -223,6 +101,7 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
     };
 
     const handleDeleteQuestion = (id: string) => {
+        deleteQuestionMutation.mutate(id);
         setQuestions(questions.filter(q => q.id !== id));
     };
 

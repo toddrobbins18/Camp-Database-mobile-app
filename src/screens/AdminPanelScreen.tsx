@@ -4,28 +4,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useAdminUsers, useUpdateUserRole, useDeleteUser, useEmailConfigs, useUpdateEmailConfig, useEditHistory } from '../api/admin';
 
-interface User {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    roleColor: string; // 'danger' | 'info' | 'primary' | 'success' etc.
-    tags?: string[];
-}
 
 export const AdminPanelScreen = ({ navigation }: any) => {
-    // Mock Users Data
-    const [users, setUsers] = useState<User[]>([
-        { id: '1', name: 'Todd Robbins', email: 'todd@camptlc.com', role: 'Super Admin', roleColor: '#ef4444', tags: [] },
-        { id: '2', name: 'Haley Thomas', email: 'haley@camptlc.com', role: 'Admin', roleColor: '#ef4444', tags: [] },
-        { id: '3', name: 'Athletics', email: 'athletics@tylerhillcamp.com', role: 'Admin', roleColor: '#ef4444', tags: [] },
-        { id: '4', name: 'Nick Williams', email: 'nick@tylerhillcamp.com', role: 'Admin', roleColor: '#ef4444', tags: [] },
-        { id: '5', name: 'Mike Davidowitz', email: 'mike@camptlc.com', role: 'Admin', roleColor: '#ef4444', tags: [] },
-        { id: '6', name: 'ansaralyh@gmail.com', email: 'ansaralyh@gmail.com', role: 'Viewer', roleColor: '#0ea5e9', tags: [] },
-        { id: '7', name: 'Courtney Sloan Parker', email: 'courtney@tylerhillcamp.com', role: 'Staff', roleColor: '#2563eb', tags: [] },
-        { id: '8', name: 'raeessajidali10', email: 'raeessajidali10@gmail.com', role: 'Admin', roleColor: '#ef4444', tags: [] },
-    ]);
+
+
+    const { data: adminUsers = [] } = useAdminUsers();
+    const { data: fetchedEmailConfigs = [] } = useEmailConfigs();
+    const { data: fetchedHistory = [] } = useEditHistory();
+
+    const updateUserRoleMutation = useUpdateUserRole();
+    const deleteUserMutation = useDeleteUser();
+    const updateEmailConfigMutation = useUpdateEmailConfig();
+
+    const users = adminUsers as any[];
+    const emailConfigs = fetchedEmailConfigs as any[];
+    const editHistoryEntries = fetchedHistory as any[];
 
     const [currentTab, setCurrentTab] = useState<'userManagement' | 'userTags' | 'emailAutomation' | 'dataImport' | 'editHistory'>('userManagement');
     const [showRolePicker, setShowRolePicker] = useState(false);
@@ -46,30 +41,6 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     const [selectedFilterTag, setSelectedFilterTag] = useState('All Tags');
     const [showFilterTagPicker, setShowFilterTagPicker] = useState(false);
 
-    // Email Automation State
-    interface EmailConfig {
-        id: string;
-        title: string;
-        description: string;
-        enabled: boolean;
-        selectedTags: string[];
-        selectedTimings: string[];
-        lastUpdated: string;
-    }
-
-    const [emailConfigs, setEmailConfigs] = useState<EmailConfig[]>([
-        { id: '1', title: 'Health Center Admissions', description: 'Division leaders see only their divisions.', enabled: true, selectedTags: ['nurse', 'transportation', 'food service'], selectedTimings: ['When Created'], lastUpdated: '1/24/2026, 3:00:39 PM' },
-        { id: '2', title: 'Health Center Checkouts', description: 'Division leaders see only their divisions.', enabled: true, selectedTags: ['director', 'admin staff'], selectedTimings: ['When Created'], lastUpdated: '11/2/2025, 0:22:20 PM' },
-        { id: '3', title: 'Incident Reports', description: 'Division leaders see only their divisions.', enabled: true, selectedTags: ['director', 'admin staff'], selectedTimings: ['When Created'], lastUpdated: '11/2/2025, 5:22:20 PM' },
-        { id: '4', title: 'Missed Medication Alerts', description: 'When scheduled medications are not administered - division leaders see only their divisions.', enabled: true, selectedTags: ['division leader'], selectedTimings: ['When Created'], lastUpdated: '11/22/2005, 8:30:16 PM' },
-        { id: '5', title: 'Sports Academy', description: 'Division leaders see only their divisions, specialists see only their sports.', enabled: true, selectedTags: [], selectedTimings: ['When Created'], lastUpdated: '11/22/2025, 5:53:08 PM' },
-        { id: '6', title: 'Sports Events (Away)', description: 'Division leaders see only their divisions, specialists see only their sports.', enabled: true, selectedTags: ['transportation', 'food service'], selectedTimings: ['When Created'], lastUpdated: '12/3/2025, 10:34:30 PM' },
-        { id: '7', title: 'Sports Events (Home)', description: 'Division leaders see only their divisions, specialists see only their sports.', enabled: true, selectedTags: [], selectedTimings: ['When Created'], lastUpdated: '11/22/2025, 6:53:08 PM' },
-        { id: '8', title: 'Transportation Events', description: 'When transportation events are scheduled or updated.', enabled: false, selectedTags: [], selectedTimings: ['When Created'], lastUpdated: '11/22/2025, 5:53:08 PM' },
-        { id: '9', title: 'Trip Updates', description: 'Division leaders see only their divisions.', enabled: true, selectedTags: ['division leader', 'director', 'admin staff', 'head of girls side'], selectedTimings: ['When Created'], lastUpdated: '11/2/2025, 3:22:20 PM' },
-        { id: '10', title: 'Tutoring & Therapy', description: 'Division leaders see only their divisions.', enabled: false, selectedTags: ['division leader'], selectedTimings: ['When Created'], lastUpdated: '12/3/2025, 10:33:46 PM' },
-        { id: '11', title: 'User Approval Requests', description: 'When new users request access to the system.', enabled: true, selectedTags: ['director', 'admin staff'], selectedTimings: ['When Created'], lastUpdated: '11/2/2025, 5:22:20 PM' },
-    ]);
 
     const sendTimingOptions = [
         { value: 'When Created', label: 'When Created', description: 'Send immediately when record is created.' },
@@ -84,33 +55,20 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     const emailTags = ['nurse', 'transportation', 'food service', 'specialist', 'division leader', 'director', 'general staff', 'admin staff', 'head of girls side', 'head of boys side'];
 
     const handleToggleEmailConfig = (id: string) => {
-        setEmailConfigs(emailConfigs.map(config =>
-            config.id === id ? { ...config, enabled: !config.enabled } : config
-        ));
-    };
-
-    const handleTagToggle = (configId: string, tag: string) => {
-        setEmailConfigs(emailConfigs.map(config => {
-            if (config.id === configId) {
-                const selectedTags = config.selectedTags.includes(tag)
-                    ? config.selectedTags.filter(t => t !== tag)
-                    : [...config.selectedTags, tag];
-                return { ...config, selectedTags, lastUpdated: new Date().toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) };
-            }
-            return config;
-        }));
+        const config = emailConfigs.find(c => c.id === id);
+        if (config) {
+            updateEmailConfigMutation.mutate({ ...config, enabled: !config.enabled });
+        }
     };
 
     const handleTimingToggle = (configId: string, timing: string) => {
-        setEmailConfigs(emailConfigs.map(config => {
-            if (config.id === configId) {
-                const selectedTimings = config.selectedTimings.includes(timing)
-                    ? config.selectedTimings.filter(t => t !== timing)
-                    : [...config.selectedTimings, timing];
-                return { ...config, selectedTimings, lastUpdated: new Date().toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) };
-            }
-            return config;
-        }));
+        const config = emailConfigs.find(c => c.id === configId);
+        if (config) {
+            const selectedTimings = config.selectedTimings.includes(timing)
+                ? config.selectedTimings.filter((t: string) => t !== timing)
+                : [...config.selectedTimings, timing];
+            updateEmailConfigMutation.mutate({ ...config, selectedTimings });
+        }
     };
 
     // Data Import State
@@ -123,15 +81,6 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     const [activeFileButton, setActiveFileButton] = useState<'campers' | 'awards'>('campers');
 
     // Edit History State
-    interface EditHistoryEntry {
-        id: string;
-        dateTime: string;
-        user: string;
-        table: string;
-        action: string;
-        recordId: string;
-    }
-
     const [editHistorySearch, setEditHistorySearch] = useState('');
     const [selectedTableFilter, setSelectedTableFilter] = useState('All Tables');
     const [showTableFilterPicker, setShowTableFilterPicker] = useState(false);
@@ -139,23 +88,6 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     const [downloadFileName, setDownloadFileName] = useState('aucit-log-2026-01-25');
     const [selectedLocation, setSelectedLocation] = useState('Private folder');
 
-    const [editHistoryEntries, setEditHistoryEntries] = useState<EditHistoryEntry[]>([
-        { id: '1', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'ad8a9f7e3c2b1a0d9e8f7c6b5a4d3e2f1' },
-        { id: '2', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '72a9d0e8f7c6b5a4d3e2f1a0b9c8d7e6' },
-        { id: '3', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '6e8d41c3b2a1f0e9d8c7b6a5d4e3f2a1' },
-        { id: '4', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '2236974a8b9c0d1e2f3a4b5c6d7e8f9' },
-        { id: '5', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'a844225b3c4d5e6f7a8b9c0d1e2f3a4' },
-        { id: '6', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '53b3f1d2e3f4a5b6c7d8e9f0a1b2c3' },
-        { id: '7', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '902c4f7e8d9c0b1a2f3e4d5c6b7a8' },
-        { id: '8', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '4006521c2d3e4f5a6b7c8d9e0f1a2' },
-        { id: '9', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'b1ac0f7f8e9d0c1b2a3f4e5d6c7b8' },
-        { id: '10', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'ac4a251a3b4c5d6e7f8a9b0c1d2e3' },
-        { id: '11', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'f2a0d113e4f5a6b7c8d9e0f1a2b3' },
-        { id: '12', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '219c57a8b9c0d1e2f3a4b5c6d7e8' },
-        { id: '13', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: 'b41478a9b0c1d2e3f4a5b6c7d8e9' },
-        { id: '14', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '81a1a1a2b3c4d5e6f7a8b9c0d1' },
-        { id: '15', dateTime: 'Jan 25, 2026 01:35:27', user: 'System', table: 'children', action: 'UPDATE', recordId: '21a27ac3d4e5f6a7b8c9d0e1f2a3' },
-    ]);
 
     const tableFilters = ['All Tables', 'children', 'users', 'staff', 'divisions', 'sessions', 'awards'];
 
@@ -208,17 +140,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
     const handleRoleSelect = (newRole: string) => {
         if (selectedUser) {
-            setUsers(users.map(u => {
-                if (u.id === selectedUser.id) {
-                    let color = '#ef4444'; // Default Admin/Super Admin
-                    if (newRole === 'Viewer') color = '#0ea5e9'; // Teal
-                    if (newRole === 'Staff') color = '#2563eb'; // Blue
-                    if (newRole === 'Division Leader') color = '#8b5cf6'; // Purple
-                    // Add more color mappings as needed
-                    return { ...u, role: newRole, roleColor: color };
-                }
-                return u;
-            }));
+            updateUserRoleMutation.mutate({ userId: selectedUser.id, role: newRole });
             setShowRolePicker(false);
             setSelectedUser(null);
         }
@@ -226,7 +148,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
     const handleDeleteUser = () => {
         if (userToDelete) {
-            setUsers(users.filter(u => u.id !== userToDelete.id));
+            deleteUserMutation.mutate(userToDelete.id);
             setShowDeleteModal(false);
             setUserToDelete(null);
         }
@@ -244,15 +166,8 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
     const handleAddTagSelect = (tag: string) => {
         if (userForTags) {
-            setUsers(users.map(u => {
-                if (u.id === userForTags.id) {
-                    const currentTags = u.tags || [];
-                    if (!currentTags.includes(tag)) {
-                        return { ...u, tags: [...currentTags, tag] };
-                    }
-                }
-                return u;
-            }));
+            // Usually this requires a separate API call to add tags for a user.
+            // Placeholder for real logic.
             setShowAddTagModal(false);
             setUserForTags(null);
         }
@@ -275,7 +190,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
             </View>
 
             <View style={styles.usersList}>
-                {users.map((user) => (
+                {users.map((user: any) => (
                     <View key={user.id} style={styles.userRow}>
                         <View style={styles.userHeaderRow}>
                             <Text style={styles.userName}>{user.name}</Text>
@@ -348,7 +263,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
             </View>
 
             <View style={styles.usersList}>
-                {users.map((user) => (
+                {users.map((user: any) => (
                     <View key={user.id} style={styles.userCard}>
                         <View style={styles.userInfo}>
                             <Text style={styles.userName}>{user.name}</Text>
@@ -390,7 +305,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
             </View>
 
             <View style={styles.emailConfigsList}>
-                {emailConfigs.map((config) => (
+                {emailConfigs.map((config: any) => (
                     <StyledCard key={config.id} style={styles.emailConfigCard}>
                         {/* Header */}
                         <View style={styles.emailConfigHeader}>
@@ -647,7 +562,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
                 {/* Table Rows */}
                 <View style={styles.tableRows}>
-                    {editHistoryEntries.map((entry) => (
+                    {editHistoryEntries.map((entry: any) => (
                         <View key={entry.id} style={styles.tableRow}>
                             <View style={styles.tableCell}>
                                 <Ionicons name="chevron-down" size={14} color={theme.colors.textSecondary} />

@@ -14,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCompany } from '../contexts/CompanyContext';
+import { useSpecialEvents, useAddSpecialEvent } from '../api/calendar_events';
 
 interface SpecialEventsScreenProps {
     navigation: any;
@@ -120,6 +122,9 @@ const HELP_CONTENT: Record<string, { title: string, subtitle: string, columns: s
 };
 
 export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) => {
+    const { companyId, season } = useCompany();
+    const { data: specialEventsData = [], isLoading: isLoadingEvents } = useSpecialEvents(companyId, season);
+    const addSpecialEventMutation = useAddSpecialEvent();
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [selectedHelpTab, setSelectedHelpTab] = useState('Staff');
 
@@ -335,25 +340,31 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     };
 
     const handleAddEvent = () => {
-        // TODO: Implement event creation
-        console.log('Adding event:', {
-            eventDate,
+        if (!title || !eventType) return;
+        // Parse date from MM/DD/YYYY to YYYY-MM-DD
+        const dateParts = eventDate.split('/');
+        const isoDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[0]}-${dateParts[1]}` : eventDate;
+        addSpecialEventMutation.mutate({
             title,
-            eventType,
-            startTime,
-            endTime,
-            selectedDivisions,
-            location,
+            event_date: isoDate,
+            event_type: eventType.toLowerCase().replace(/ /g, '-'),
+            start_time: startTime || undefined,
+            location: location || undefined,
+            company_id: companyId as string,
+            season,
+            divisions: selectedDivisions,
+        }, {
+            onSuccess: () => {
+                setEventDate('01/22/2026');
+                setTitle('');
+                setEventType('');
+                setStartTime('');
+                setEndTime('');
+                setSelectedDivisions([]);
+                setLocation('');
+                setShowAddEventModal(false);
+            },
         });
-        // Reset form
-        setEventDate('01/22/2026');
-        setTitle('');
-        setEventType('');
-        setStartTime('');
-        setEndTime('');
-        setSelectedDivisions([]);
-        setLocation('');
-        setShowAddEventModal(false);
     };
 
     const handleCloseAddEventModal = () => {
@@ -461,13 +472,39 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                     </View>
                 </View>
 
-                {/* Empty State */}
+                {/* Events List */}
                 <View style={[styles.emptyStateContainer, showDivisionDropdown && styles.emptyStateContainerWithDropdown]}>
-                    <StyledCard style={styles.emptyStateCard}>
-                        <Text style={styles.emptyStateText}>
-                            No events scheduled for this period
-                        </Text>
-                    </StyledCard>
+                    {isLoadingEvents ? (
+                        <StyledCard style={styles.emptyStateCard}>
+                            <Text style={styles.emptyStateText}>Loading events...</Text>
+                        </StyledCard>
+                    ) : specialEventsData.length === 0 ? (
+                        <StyledCard style={styles.emptyStateCard}>
+                            <Text style={styles.emptyStateText}>
+                                No events scheduled for this period
+                            </Text>
+                        </StyledCard>
+                    ) : (
+                        specialEventsData.map((event: any) => (
+                            <StyledCard key={event.id} style={{ marginBottom: 8, padding: 12 }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                                    <Text style={{ fontWeight: '600', color: '#374151', fontSize: 14, flex: 1 }}>{event.title}</Text>
+                                    <Text style={{ fontSize: 12, color: '#6b7280' }}>{new Date(event.event_date).toLocaleDateString()}</Text>
+                                </View>
+                                {event.event_type && (
+                                    <View style={{ backgroundColor: '#f3e8ff', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 4 }}>
+                                        <Text style={{ fontSize: 11, color: '#6b21a8' }}>{event.event_type.replace(/-/g, ' ')}</Text>
+                                    </View>
+                                )}
+                                {event.start_time && (
+                                    <Text style={{ fontSize: 12, color: '#9ca3af' }}>{event.start_time}</Text>
+                                )}
+                                {event.location && (
+                                    <Text style={{ fontSize: 12, color: '#9ca3af' }}>{event.location}</Text>
+                                )}
+                            </StyledCard>
+                        ))
+                    )}
                 </View>
             </ScrollView>
 

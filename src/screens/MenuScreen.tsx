@@ -5,13 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 
-interface MenuItem {
-    id: string;
-    date: Date;
-    mealType: string;
-    menuItems: string;
-    allergens: string;
-}
+import { useCompany } from '../contexts/CompanyContext';
+import { useMenuItems, useAddMenuItem, useDeleteMenuItem, MenuItem } from '../api/menu';
 
 export const MenuScreen = ({ navigation }: any) => {
     const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
@@ -20,12 +15,15 @@ export const MenuScreen = ({ navigation }: any) => {
     const [showAddMenuItemModal, setShowAddMenuItemModal] = useState(false);
     const [activeTab, setActiveTab] = useState('Children');
     const [activeSubTab, setActiveSubTab] = useState('Roster');
-    const [menuItemsList, setMenuItemsList] = useState<MenuItem[]>([]);
+    const { companyId } = useCompany();
+    const { data: menuItemsList = [] } = useMenuItems(companyId);
+    const addMenuItemMutation = useAddMenuItem();
+    const deleteMenuItemMutation = useDeleteMenuItem();
 
     // Add Menu Item form states
     const [menuDate, setMenuDate] = useState(new Date(2026, 0, 22));
     const [mealType, setMealType] = useState('');
-    const [menuItems, setMenuItems] = useState('');
+    const [menuItemsText, setMenuItemsText] = useState('');
     const [allergens, setAllergens] = useState('');
     const [showMealTypePicker, setShowMealTypePicker] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -58,33 +56,35 @@ export const MenuScreen = ({ navigation }: any) => {
         // Reset form
         setMenuDate(new Date(2026, 0, 22));
         setMealType('');
-        setMenuItems('');
+        setMenuItemsText('');
         setAllergens('');
     };
 
     const handleSaveMenuItem = () => {
-        if (!mealType || !menuItems.trim()) {
+        if (!mealType || !menuItemsText.trim() || !companyId) {
             // Basic validation - could show an alert here
             return;
         }
 
-        const newMenuItem: MenuItem = {
-            id: Date.now().toString(),
-            date: new Date(menuDate),
-            mealType,
-            menuItems: menuItems.trim(),
-            allergens: allergens.trim(),
-        };
+        const formattedDate = `${menuDate.getFullYear()}-${String(menuDate.getMonth() + 1).padStart(2, '0')}-${String(menuDate.getDate()).padStart(2, '0')}`;
 
-        setMenuItemsList([...menuItemsList, newMenuItem]);
-        handleCloseAddMenuItem();
+        addMenuItemMutation.mutate({
+            company_id: companyId,
+            date: formattedDate,
+            meal_type: mealType,
+            items: menuItemsText.trim(),
+            allergens: allergens.trim() || null,
+        }, {
+            onSuccess: handleCloseAddMenuItem
+        });
     };
 
-    const handleDeleteMenuItem = (id: string) => {
-        setMenuItemsList(menuItemsList.filter(item => item.id !== id));
+    const handleDeleteMenuItem = (id: string | undefined) => {
+        if (id) deleteMenuItemMutation.mutate(id);
     };
 
-    const getMealTypeColor = (type: string) => {
+    const getMealTypeColor = (type?: string) => {
+        if (!type) return '#f3f4f6';
         switch (type.toLowerCase()) {
             case 'breakfast':
                 return '#fef3c7';
@@ -166,13 +166,13 @@ export const MenuScreen = ({ navigation }: any) => {
                                     key={item.id}
                                     style={[
                                         viewMode === 'grid' ? styles.gridItem : styles.listItem,
-                                        { backgroundColor: getMealTypeColor(item.mealType) }
+                                        { backgroundColor: getMealTypeColor(item.meal_type) }
                                     ]}
                                 >
                                     <View style={styles.menuItemHeader}>
                                         <View style={styles.menuItemHeaderLeft}>
-                                            <Text style={styles.menuItemMealType}>{item.mealType}</Text>
-                                            <Text style={styles.menuItemDate}>{formatDate(item.date)}</Text>
+                                            <Text style={styles.menuItemMealType}>{item.meal_type}</Text>
+                                            <Text style={styles.menuItemDate}>{item.date}</Text>
                                         </View>
                                         <TouchableOpacity
                                             onPress={() => handleDeleteMenuItem(item.id)}
@@ -181,7 +181,7 @@ export const MenuScreen = ({ navigation }: any) => {
                                             <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
                                         </TouchableOpacity>
                                     </View>
-                                    <Text style={styles.menuItemText}>{item.menuItems}</Text>
+                                    <Text style={styles.menuItemText}>{item.items}</Text>
                                     {item.allergens && (
                                         <View style={styles.allergenContainer}>
                                             <Ionicons name="warning-outline" size={14} color={theme.colors.warning} />
@@ -434,8 +434,8 @@ export const MenuScreen = ({ navigation }: any) => {
                                     multiline
                                     numberOfLines={4}
                                     textAlignVertical="top"
-                                    value={menuItems}
-                                    onChangeText={setMenuItems}
+                                    value={menuItemsText}
+                                    onChangeText={setMenuItemsText}
                                 />
                             </View>
 

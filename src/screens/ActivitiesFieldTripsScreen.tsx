@@ -1590,7 +1590,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             onPress={() => {
                                                 setFormData({
                                                     ...formData,
-                                                    division_ids: MOCK_DIVISIONS.filter(d => d.id !== '1').map(d => d.id),
+                                                    division_ids: divisions.filter(d => d.id !== '1').map(d => d.id),
                                                 });
                                             }}
                                         >

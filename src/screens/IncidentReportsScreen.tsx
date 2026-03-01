@@ -4,8 +4,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCompany } from '../contexts/CompanyContext';
+import { useCampers } from '../api/campers';
+import { useIncidentReports, useAddIncidentReport } from '../api/incidents_approvals';
 
 export const IncidentReportsScreen = ({ navigation }: any) => {
+    const { companyId, season } = useCompany();
+    const { data: incidentReports = [], isLoading: isLoadingReports } = useIncidentReports(companyId, season);
+    const { data: campersList = [] } = useCampers(companyId, season);
+    const addIncidentMutation = useAddIncidentReport();
+    const childrenNames = campersList.map((c: any) => ({ id: c.id, name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim() }));
     const [showBottomSheet, setShowBottomSheet] = useState(false);
     const [showAddIncidentModal, setShowAddIncidentModal] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
@@ -154,9 +162,31 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
 
                 {/* Main Content Card */}
                 <StyledCard style={styles.contentCard}>
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>No incident reports found</Text>
-                    </View>
+                    {isLoadingReports ? (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>Loading incident reports...</Text>
+                        </View>
+                    ) : incidentReports.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>No incident reports found</Text>
+                        </View>
+                    ) : (
+                        <View>
+                            {incidentReports.map((report: any) => (
+                                <View key={report.id} style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                                        <Text style={{ fontWeight: '600', color: '#374151', fontSize: 14 }}>{report.type}</Text>
+                                        <Text style={{ fontSize: 12, color: report.status === 'open' ? '#ef4444' : report.status === 'resolved' ? '#10b981' : '#f59e0b' }}>{report.status}</Text>
+                                    </View>
+                                    <Text style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }} numberOfLines={2}>{report.description}</Text>
+                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                        <Text style={{ fontSize: 11, color: '#9ca3af' }}>{new Date(report.date).toLocaleDateString()}</Text>
+                                        {report.severity && <Text style={{ fontSize: 11, color: report.severity === 'Critical' ? '#ef4444' : report.severity === 'High' ? '#f59e0b' : '#6b7280' }}>• {report.severity}</Text>}
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    )}
                 </StyledCard>
 
             </ScrollView>
@@ -366,29 +396,18 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     nestedScrollEnabled={true}
                                     showsVerticalScrollIndicator={true}
                                 >
-                                    {[
-                                        'Abby Weiss',
-                                        'Adam Elliott',
-                                        'Addison Brewer',
-                                        'Adrianna Gelb',
-                                        'Aiden Feld',
-                                        'Aiden Leon',
-                                        'Alexandra Stone',
-                                        'Amelia Chen',
-                                        'Andrew Martinez',
-                                        'Anna Johnson'
-                                    ].map((child) => (
+                                    {childrenNames.map((child: any) => (
                                         <TouchableOpacity
-                                            key={child}
+                                            key={child.id}
                                             style={styles.childItem}
-                                            onPress={() => toggleChildSelection(child)}
+                                            onPress={() => toggleChildSelection(child.id)}
                                         >
-                                            <View style={[styles.checkbox, selectedChildren.includes(child) && styles.checkboxChecked]}>
-                                                {selectedChildren.includes(child) && (
+                                            <View style={[styles.checkbox, selectedChildren.includes(child.id) && styles.checkboxChecked]}>
+                                                {selectedChildren.includes(child.id) && (
                                                     <Ionicons name="checkmark" size={16} color="white" />
                                                 )}
                                             </View>
-                                            <Text style={styles.childName}>{child}</Text>
+                                            <Text style={styles.childName}>{child.name}</Text>
                                         </TouchableOpacity>
                                     ))}
                                 </ScrollView>
@@ -526,8 +545,24 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                 <TouchableOpacity style={styles.cancelBtn} onPress={handleCloseAddIncident}>
                                     <Text style={styles.cancelBtnText}>Cancel</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={styles.submitBtn}>
-                                    <Text style={styles.submitBtnText}>Add Incident</Text>
+                                <TouchableOpacity style={styles.submitBtn} onPress={() => {
+                                        if (!incidentType || !description) return;
+                                        addIncidentMutation.mutate({
+                                            type: incidentType,
+                                            description,
+                                            severity: severity || undefined,
+                                            status,
+                                            reported_by: reportedBy || undefined,
+                                            date: date.toISOString().split('T')[0],
+                                            tags: tags.length > 0 ? tags : undefined,
+                                            company_id: companyId as string,
+                                            season,
+                                            childIds: selectedChildren,
+                                        }, {
+                                            onSuccess: () => handleCloseAddIncident(),
+                                        });
+                                    }}>
+                                    <Text style={styles.submitBtnText}>{addIncidentMutation.isPending ? 'Adding...' : 'Add Incident'}</Text>
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>

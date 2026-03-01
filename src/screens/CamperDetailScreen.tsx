@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useStaff } from '../api/staff';
+import { useCompany } from '../contexts/CompanyContext';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -30,20 +32,6 @@ const DIVISIONS = [
     'CIT Boys',
 ];
 
-// Mock leaders data
-const MOCK_LEADERS = [
-    { name: 'Abel Hernandez Gallardo', role: 'Soccer / General Counselor' },
-    { name: 'Abigail Sheridan', role: 'General Counselor - Freshmen Boys' },
-    { name: 'Adrian Chamu Ochoa', role: 'Lead Counselor' },
-    { name: 'Alanah Mutch', role: 'Tennis / General Counselor' },
-    { name: 'ALEJO RODRÍGUEZ ALONSO', role: 'Climbing Wall / General' },
-    { name: 'Aleksandra Makuch', role: 'Support Staff' },
-    { name: 'Alex Devitt', role: 'General Counselor' },
-    { name: 'Alex Weisenthal', role: 'General Counselor' },
-    { name: 'Alexandra Forman', role: 'General Counselor' },
-    { name: 'Alexandra Sproul', role: 'General Counselor' },
-    { name: 'Alicia Ford', role: 'Climbing Wall / General Counselor' },
-];
 
 type TabType = 'overview' | 'birthday' | 'allergies' | 'achievements' | 'activities' | 'sports-academy' | 'incidents' | 'appointments';
 type BirthdaySubTabType = 'info' | 'party';
@@ -84,6 +72,9 @@ const mockAchievements = [
 
 export const CamperDetailScreen = ({ route, navigation }: any) => {
     const { camper } = route.params || {};
+    const { companyId, season } = useCompany();
+    const { data: staffLeaders = [] } = useStaff(companyId, season);
+    const MOCK_LEADERS = staffLeaders.map((s: any) => ({ name: s.name, role: s.role || s.staff_type || 'Staff' }));
     const [activeTab, setActiveTab] = useState<TabType>('overview');
     const [activeBirthdaySubTab, setActiveBirthdaySubTab] = useState<BirthdaySubTabType>('info');
     const [showEditProfileModal, setShowEditProfileModal] = useState(false);

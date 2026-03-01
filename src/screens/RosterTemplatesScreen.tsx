@@ -8,11 +8,16 @@ import {
     TextInput,
     Modal,
     FlatList,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { supabase } from '../lib/supabase';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCompany } from '../contexts/CompanyContext';
 
 interface RosterTemplatesScreenProps {
     navigation: any;
@@ -24,42 +29,12 @@ interface Camper {
     division: string;
 }
 
-const MOCK_CAMPERS: Camper[] = [
-    { id: '1', name: 'Abby Weiss', division: 'CIT Girls' },
-    { id: '2', name: 'Adam Elliott', division: 'Freshmen B Boys' },
-    { id: '3', name: 'Addison Brewer', division: 'Sophomore Girls' },
-    { id: '4', name: 'Adrianna Gelb', division: 'CIT Girls' },
-    { id: '5', name: 'Aiden Feld', division: 'Freshmen B Boys' },
-    { id: '6', name: 'Aiden Leon', division: 'Sophomore Boys' },
-    { id: '7', name: 'Aiden Weisz', division: 'Freshmen B Boys' },
-    { id: '8', name: 'Alex Johnson', division: 'Junior Girls' },
-    { id: '9', name: 'Alex Smith', division: 'Senior Boys' },
-    { id: '10', name: 'Amanda Brown', division: 'Cadet Girls' },
-];
 
-const DIVISIONS = [
-    'All Divisions',
-    'Freshmen A Girls',
-    'Freshmen B Girls',
-    'Cadet Girls',
-    'Sophomore Girls',
-    'Junior Girls',
-    'Senior Girls',
-    'Super Girls',
-    'Teen Girls',
-    'CIT Girls',
-    'Freshmen A Boys',
-    'Freshmen B Boys',
-    'Cadet Boys',
-    'Sophomore Boys',
-    'Junior Boys',
-    'Senior Boys',
-    'Super Boys',
-    'Teen Boys',
-    'CIT Boys',
-];
 
 export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps) => {
+    const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
+
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [templateName, setTemplateName] = useState('');
     const [description, setDescription] = useState('');
@@ -68,7 +43,98 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
 
-    const filteredCampers = MOCK_CAMPERS.filter((camper) => {
+    // Fetch campers from Supabase
+    const { data: campers = [] } = useQuery({
+        queryKey: ['children_with_division', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('children')
+                .select('id, first_name, last_name, division')
+                .eq('company_id', companyId)
+                .order('last_name', { ascending: true });
+            if (error) throw error;
+            return (data || []).map((c: any) => ({
+                id: c.id,
+                name: `${c.first_name} ${c.last_name}`.trim(),
+                division: c.division || 'Unassigned',
+            }));
+        },
+        enabled: !!companyId,
+    });
+
+    // Fetch divisions from Supabase
+    const { data: divisions = ['All Divisions'] } = useQuery({
+        queryKey: ['divisions', companyId],
+        queryFn: async () => {
+            if (!companyId) return ['All Divisions'];
+            const { data, error } = await supabase
+                .from('divisions')
+                .select('name')
+                .eq('company_id', companyId)
+                .order('name', { ascending: true });
+            if (error) return ['All Divisions'];
+            return ['All Divisions', ...(data || []).map((d: any) => d.name)];
+        },
+        enabled: !!companyId,
+    });
+
+    // Fetch existing roster templates
+    const { data: existingTemplates = [], isLoading: isLoadingTemplates } = useQuery({
+        queryKey: ['roster_templates', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('roster_templates')
+                .select('*, roster_template_children(child_id)')
+                .eq('company_id', companyId)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId,
+    });
+
+    // Create template mutation
+    const createTemplateMutation = useMutation({
+        mutationFn: async (templateData: any) => {
+            // 1. Create the template
+            const { data: template, error: templateError } = await supabase
+                .from('roster_templates')
+                .insert([{
+                    company_id: companyId,
+                    name: templateData.name,
+                    description: templateData.description || null,
+                    season: season,
+                }])
+                .select()
+                .single();
+            if (templateError) throw templateError;
+
+            // 2. Add children to the template
+            if (templateData.camperIds.length > 0) {
+                const childrenRecords = templateData.camperIds.map((childId: string) => ({
+                    roster_template_id: template.id,
+                    child_id: childId,
+                }));
+                const { error: childrenError } = await supabase
+                    .from('roster_template_children')
+                    .insert(childrenRecords);
+                if (childrenError) throw childrenError;
+            }
+
+            return template;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['roster_templates'] });
+            Alert.alert('Success', 'Roster template created successfully');
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to create template');
+        },
+    });
+
+    const filteredCampers = campers.filter((camper: any) => {
         const matchesSearch = camper.name.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesDivision =
             selectedDivision === 'All Divisions' || camper.division === selectedDivision;
@@ -96,8 +162,15 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
     };
 
     const handleCreateTemplate = () => {
-        // TODO: Implement template creation logic
-        console.log('Creating template:', { templateName, description, selectedCampers });
+        if (!templateName.trim()) {
+            Alert.alert('Validation', 'Please enter a template name');
+            return;
+        }
+        createTemplateMutation.mutate({
+            name: templateName,
+            description,
+            camperIds: selectedCampers,
+        });
         // Reset form
         setTemplateName('');
         setDescription('');
@@ -298,7 +371,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                                     </TouchableOpacity>
                                                 </View>
                                                 <FlatList
-                                                    data={DIVISIONS}
+                                                    data={divisions}
                                                     keyExtractor={(item) => item}
                                                     renderItem={({ item }) => (
                                                         <TouchableOpacity

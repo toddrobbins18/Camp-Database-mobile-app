@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { supabase } from '../lib/supabase';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCompany } from '../contexts/CompanyContext';
 
 interface StaffMember {
     id: string;
@@ -14,23 +17,122 @@ interface StaffMember {
 }
 
 export const ODManagementScreen = ({ navigation }: any) => {
+    const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
+
     const [activeTab, setActiveTab] = useState<'OD' | 'OFF'>('OD');
-    const [selectedDate, setSelectedDate] = useState(new Date(2026, 0, 25));
+    const [selectedDate, setSelectedDate] = useState(new Date());
     const [searchQuery, setSearchQuery] = useState('');
     const [showManageBanksModal, setShowManageBanksModal] = useState(false);
     const [showNewModal, setShowNewModal] = useState(false);
     const [showModeModal, setShowModeModal] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [newBankName, setNewBankName] = useState('');
-    
-    // Sample staff data
-    const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
-    const [banks, setBanks] = useState<string[]>([]);
+
+    const dateString = selectedDate.toISOString().split('T')[0];
+
+    // Fetch days off / OD records for the selected date
+    const { data: staffMembers = [], isLoading: isLoadingStaff } = useQuery({
+        queryKey: ['days_off', companyId, dateString],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('days_off')
+                .select('*, profiles(full_name)')
+                .eq('company_id', companyId)
+                .eq('date', dateString);
+            if (error) throw error;
+            return (data || []).map((record: any) => ({
+                id: record.id,
+                staffId: record.staff_id,
+                name: record.profiles?.full_name || 'Unknown',
+                bank: record.bank || '',
+                isOut: record.is_out || false,
+                isSleepingOut: record.is_sleeping_out || false,
+            }));
+        },
+        enabled: !!companyId,
+    });
+
+    // Fetch banks from Supabase
+    const { data: banks = [] } = useQuery({
+        queryKey: ['bunks', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('bunks')
+                .select('id, name')
+                .eq('company_id', companyId)
+                .order('name', { ascending: true });
+            if (error) throw error;
+            return (data || []).map((b: any) => b.name);
+        },
+        enabled: !!companyId,
+    });
+
+    // Add day-off record mutation
+    const addDayOffMutation = useMutation({
+        mutationFn: async (newRecord: any) => {
+            const { error } = await supabase
+                .from('days_off')
+                .insert([{
+                    company_id: companyId,
+                    staff_id: newRecord.staffId,
+                    date: dateString,
+                    bank: newRecord.bank || null,
+                    is_out: newRecord.isOut || false,
+                    is_sleeping_out: newRecord.isSleepingOut || false,
+                }]);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['days_off'] });
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to add record');
+        },
+    });
+
+    // Add bank mutation
+    const addBankMutation = useMutation({
+        mutationFn: async (bankName: string) => {
+            const { error } = await supabase
+                .from('bunks')
+                .insert([{ company_id: companyId, name: bankName }]);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['bunks'] });
+            setNewBankName('');
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to add bank');
+        },
+    });
+
+    // Delete bank mutation
+    const deleteBankMutation = useMutation({
+        mutationFn: async (bankName: string) => {
+            const { error } = await supabase
+                .from('bunks')
+                .delete()
+                .eq('company_id', companyId)
+                .eq('name', bankName);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['bunks'] });
+            queryClient.invalidateQueries({ queryKey: ['days_off'] });
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to delete bank');
+        },
+    });
 
     const formatDate = (date: Date): string => {
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                       'July', 'August', 'September', 'October', 'November', 'December'];
+        const months = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
         return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
     };
 
@@ -47,7 +149,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const filteredStaff = staffMembers.filter(staff => {
         if (activeTab === 'OD' && (staff.isOut || staff.isSleepingOut)) return false;
         if (activeTab === 'OFF' && !staff.isOut && !staff.isSleepingOut) return false;
-        if (searchQuery && !staff.name.toLowerCase().includes(searchQuery.toLowerCase()) && 
+        if (searchQuery && !staff.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
             !staff.bank.toLowerCase().includes(searchQuery.toLowerCase())) return false;
         return true;
     });
@@ -58,15 +160,19 @@ export const ODManagementScreen = ({ navigation }: any) => {
 
     const handleAddBank = () => {
         if (newBankName.trim() && !banks.includes(newBankName.trim())) {
-            setBanks([...banks, newBankName.trim()]);
-            setNewBankName('');
+            addBankMutation.mutate(newBankName.trim());
         }
     };
 
     const handleDeleteBank = (bankName: string) => {
-        setBanks(banks.filter(bank => bank !== bankName));
-        // Also remove staff from this bank
-        setStaffMembers(staffMembers.filter(staff => staff.bank !== bankName));
+        Alert.alert(
+            'Delete Bank',
+            `Are you sure you want to delete "${bankName}"?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => deleteBankMutation.mutate(bankName) },
+            ]
+        );
     };
 
     return (
@@ -96,7 +202,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         <Ionicons name="barcode-outline" size={18} color={theme.colors.text} />
                         <Text style={styles.actionButtonText}>Scan Wristband</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.actionButton}
                         onPress={handleManageBanks}
                     >
@@ -110,7 +216,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     <TouchableOpacity onPress={() => navigateDate('prev')}>
                         <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.dateDisplay}
                         onPress={() => setShowDatePicker(true)}
                     >
@@ -123,13 +229,13 @@ export const ODManagementScreen = ({ navigation }: any) => {
 
                 {/* Additional Action Buttons */}
                 <View style={styles.additionalActions}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.newButton}
                         onPress={() => setShowNewModal(true)}
                     >
                         <Text style={styles.newButtonText}>NEW</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.modeButton}
                         onPress={() => setShowModeModal(true)}
                     >

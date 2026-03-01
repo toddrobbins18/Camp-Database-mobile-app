@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useRolePermissions, useUpdateRolePermission } from '../api/permissions';
 
 interface Permission {
     id: string;
@@ -240,6 +241,10 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
         },
     ];
 
+    // Fetch role permissions from Supabase
+    const { data: dbPermissions = [], isLoading: permLoading } = useRolePermissions();
+    const updatePermMutation = useUpdateRolePermission();
+
     const [rolePermissions, setRolePermissions] = useState<RolePermissions>(
         roles.reduce((acc, role) => {
             acc[role.id] = role.permissions;
@@ -247,14 +252,34 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
         }, {} as RolePermissions)
     );
 
+    // Hydrate local state from Supabase data
+    useEffect(() => {
+        if (dbPermissions.length > 0) {
+            const newPerms = { ...rolePermissions };
+            const roleMap: Record<string, string> = { admin: 'administrator', staff: 'staff', viewer: 'viewer' };
+            dbPermissions.forEach((p: any) => {
+                const uiRole = roleMap[p.role] || p.role;
+                if (newPerms[uiRole]) {
+                    newPerms[uiRole][p.menu_item] = p.can_access;
+                }
+            });
+            setRolePermissions(newPerms);
+        }
+    }, [dbPermissions]);
+
     const handleTogglePermission = (roleId: string, permissionId: string) => {
+        const newValue = !rolePermissions[roleId][permissionId];
         setRolePermissions(prev => ({
             ...prev,
             [roleId]: {
                 ...prev[roleId],
-                [permissionId]: !prev[roleId][permissionId],
+                [permissionId]: newValue,
             }
         }));
+        // Map UI role ID back to DB role enum
+        const dbRoleMap: Record<string, string> = { administrator: 'admin', staff: 'staff', viewer: 'viewer', divisionLeader: 'division_leader', healthCenter: 'health_center', specialist: 'specialist' };
+        const dbRole = dbRoleMap[roleId] || roleId;
+        updatePermMutation.mutate({ role: dbRole, menu_item: permissionId, can_access: newValue });
     };
 
     return (

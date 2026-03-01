@@ -1,11 +1,52 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCompany } from '../contexts/CompanyContext';
+import { useTodayBirthdays, useTodayEvents, useTodayMeals } from '../api/dashboard';
+import { supabase } from '../lib/supabase';
 
 export const DashboardScreen = ({ navigation }: any) => {
+    const { companyId } = useCompany();
+    const currentDate = new Date();
+    const todayString = currentDate.toISOString().split('T')[0];
+    const todayMonth = currentDate.getMonth() + 1;
+    const todayDay = currentDate.getDate();
+
+    const { data: birthdays = [] } = useTodayBirthdays(companyId, todayMonth, todayDay);
+    const { data: todayEvents = [] } = useTodayEvents(companyId, todayString);
+    const { data: meals = null } = useTodayMeals(companyId, todayString);
+
+    const athleticsEvents = todayEvents.filter((e: any) => {
+        const str = `${e.title} ${e.description}`.toLowerCase();
+        return str.includes('sport') || str.includes('game') || str.includes('tournament') || str.includes('league') || str.includes('athletic');
+    });
+
+    const specialEvents = todayEvents.filter((e: any) => !athleticsEvents.includes(e));
+
+    // Weather data from Supabase Edge Function
+    const [weather, setWeather] = useState<any>(null);
+    const [weatherLoading, setWeatherLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchWeather = async () => {
+            try {
+                const { data, error } = await supabase.functions.invoke('get-weather', {
+                    body: { zipCode: '18469' }, // Tyler Hill, PA
+                });
+                if (error) throw error;
+                setWeather(data);
+            } catch (err) {
+                console.warn('Weather fetch failed:', err);
+            } finally {
+                setWeatherLoading(false);
+            }
+        };
+        fetchWeather();
+    }, []);
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -65,10 +106,59 @@ export const DashboardScreen = ({ navigation }: any) => {
                         <Ionicons name="cloud-outline" size={20} color={theme.colors.text} />
                         <Text style={styles.cardTitle}>Weather</Text>
                     </View>
-                    <View style={styles.weatherPlaceholders}>
-                        <View style={styles.weatherPlaceholder} />
-                        <View style={styles.weatherPlaceholder} />
-                    </View>
+                    {weatherLoading ? (
+                        <ActivityIndicator size="small" color={theme.colors.secondary} style={{ marginTop: 16 }} />
+                    ) : weather ? (
+                        <View style={styles.weatherContent}>
+                            {/* Today */}
+                            <View style={styles.weatherTodayCard}>
+                                <Text style={styles.weatherTodayLabel}>TODAY</Text>
+                                <View style={styles.weatherTodayRow}>
+                                    <View>
+                                        <Text style={styles.weatherTemp}>{weather.today.temp_f}°</Text>
+                                        <Text style={styles.weatherCondition}>{weather.today.condition}</Text>
+                                        <Text style={styles.weatherHighLow}>H: {weather.today.high}° L: {weather.today.low}°</Text>
+                                    </View>
+                                    <Ionicons
+                                        name={weather.today.condition?.toLowerCase().includes('clear') || weather.today.condition?.toLowerCase().includes('sunny')
+                                            ? 'sunny-outline'
+                                            : weather.today.condition?.toLowerCase().includes('cloud')
+                                                ? 'cloudy-outline'
+                                                : weather.today.condition?.toLowerCase().includes('rain')
+                                                    ? 'rainy-outline'
+                                                    : 'partly-sunny-outline'}
+                                        size={40}
+                                        color={theme.colors.secondary}
+                                    />
+                                </View>
+                            </View>
+                            {/* Tomorrow */}
+                            <View style={styles.weatherTomorrowCard}>
+                                <View style={styles.weatherTomorrowRow}>
+                                    <View>
+                                        <Text style={styles.weatherTomorrowLabel}>TOMORROW</Text>
+                                        <Text style={styles.weatherTomorrowCondition}>{weather.tomorrow.condition}</Text>
+                                    </View>
+                                    <Ionicons
+                                        name={weather.tomorrow.condition?.toLowerCase().includes('clear') || weather.tomorrow.condition?.toLowerCase().includes('sunny')
+                                            ? 'sunny-outline'
+                                            : weather.tomorrow.condition?.toLowerCase().includes('cloud')
+                                                ? 'cloudy-outline'
+                                                : weather.tomorrow.condition?.toLowerCase().includes('rain')
+                                                    ? 'rainy-outline'
+                                                    : 'partly-sunny-outline'}
+                                        size={28}
+                                        color={theme.colors.textSecondary}
+                                    />
+                                </View>
+                                <Text style={styles.weatherHighLow}>H: {weather.tomorrow.high}° L: {weather.tomorrow.low}°</Text>
+                            </View>
+                        </View>
+                    ) : (
+                        <View style={styles.weatherPlaceholders}>
+                            <Text style={{ color: theme.colors.textSecondary, textAlign: 'center', padding: 16 }}>Weather data unavailable</Text>
+                        </View>
+                    )}
                 </StyledCard>
 
                 {/* Today's Menu Widget */}
@@ -80,19 +170,19 @@ export const DashboardScreen = ({ navigation }: any) => {
                     <Text style={styles.cardSubtitle}>Meal schedule for today</Text>
                     <View style={styles.menuGrid}>
                         <TouchableOpacity style={styles.menuItem}>
-                            <Text style={styles.menuLabel}>BREAKFAST</Text>
+                            <Text style={styles.menuLabel}>BREAKFAST: {meals?.breakfast || 'TBD'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.menuItem}>
                             <View style={styles.menuItemWithDot}>
-                                <Text style={styles.menuLabel}>LUNCH</Text>
+                                <Text style={styles.menuLabel}>LUNCH: {meals?.lunch || 'TBD'}</Text>
                                 <View style={styles.blueDot} />
                             </View>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.menuItem}>
-                            <Text style={styles.menuLabel}>SNACK</Text>
+                            <Text style={styles.menuLabel}>SNACK: {meals?.snack || 'TBD'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.menuItem}>
-                            <Text style={styles.menuLabel}>DINNER</Text>
+                            <Text style={styles.menuLabel}>DINNER: {meals?.dinner || 'TBD'}</Text>
                         </TouchableOpacity>
                     </View>
                     <TouchableOpacity
@@ -110,9 +200,18 @@ export const DashboardScreen = ({ navigation }: any) => {
                         <Text style={styles.cardTitle}>Athletics Schedule</Text>
                     </View>
                     <Text style={styles.cardSubtitle}>Today & upcoming events</Text>
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>No sports events today</Text>
-                    </View>
+                    {athleticsEvents.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>No sports events today</Text>
+                        </View>
+                    ) : (
+                        athleticsEvents.map((evt: any) => (
+                            <View key={evt.id} style={{ marginBottom: 8 }}>
+                                <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{evt.time || 'TBD'} • {evt.location || 'TBD'}</Text>
+                            </View>
+                        ))
+                    )}
                     <TouchableOpacity
                         style={styles.outlineBtn}
                         onPress={() => navigation.navigate('SportsCalendar')}
@@ -128,9 +227,18 @@ export const DashboardScreen = ({ navigation }: any) => {
                         <Text style={styles.cardTitle}>Special Events & Activities</Text>
                     </View>
                     <Text style={styles.cardSubtitle}>Today's schedule</Text>
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>No special events today</Text>
-                    </View>
+                    {specialEvents.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>No special events today</Text>
+                        </View>
+                    ) : (
+                        specialEvents.map((evt: any) => (
+                            <View key={evt.id} style={{ marginBottom: 8 }}>
+                                <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{evt.time || 'TBD'} • {evt.location || 'TBD'}</Text>
+                            </View>
+                        ))
+                    )}
                     <TouchableOpacity
                         style={styles.outlineBtn}
                         onPress={() => navigation.navigate('SpecialEvents')}
@@ -147,27 +255,23 @@ export const DashboardScreen = ({ navigation }: any) => {
                     </View>
                     <Text style={styles.cardSubtitle}>Celebrate with them!</Text>
                     <View style={styles.birthdaysList}>
-                        <View style={[styles.birthdayItem, styles.birthdayItemGreen]}>
-                            <Ionicons name="balloon-outline" size={16} color="#10b981" />
-                            <View style={styles.birthdayContent}>
-                                <Text style={styles.birthdayName}>Spencer Weinberg</Text>
-                                <Text style={styles.birthdayDesc}>Turning 12 today! 🎉</Text>
+                        {birthdays.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyText}>No birthdays today</Text>
                             </View>
-                        </View>
-                        <View style={[styles.birthdayItem, styles.birthdayItemBlue]}>
-                            <Ionicons name="balloon-outline" size={16} color={theme.colors.secondary} />
-                            <View style={styles.birthdayContent}>
-                                <Text style={styles.birthdayName}>George Talbot</Text>
-                                <Text style={styles.birthdayDesc}>Staff Member 🎂</Text>
-                            </View>
-                        </View>
-                        <View style={[styles.birthdayItem, styles.birthdayItemBlue]}>
-                            <Ionicons name="balloon-outline" size={16} color={theme.colors.secondary} />
-                            <View style={styles.birthdayContent}>
-                                <Text style={styles.birthdayName}>Logan Rosenberg</Text>
-                                <Text style={styles.birthdayDesc}>Staff Member 🎉</Text>
-                            </View>
-                        </View>
+                        ) : (
+                            birthdays.map((person: any, index: number) => (
+                                <View key={`${person.id}-${index}`} style={[styles.birthdayItem, person.type === 'child' ? styles.birthdayItemGreen : styles.birthdayItemBlue]}>
+                                    <Ionicons name="balloon-outline" size={16} color={person.type === 'child' ? "#10b981" : theme.colors.secondary} />
+                                    <View style={styles.birthdayContent}>
+                                        <Text style={styles.birthdayName}>{person.name}</Text>
+                                        <Text style={styles.birthdayDesc}>
+                                            {person.type === 'child' ? `Turning ${person.age} today! 🎉` : `Staff Member 🎉`}
+                                        </Text>
+                                    </View>
+                                </View>
+                            ))
+                        )}
                     </View>
                 </StyledCard>
 
@@ -280,6 +384,64 @@ const styles = StyleSheet.create({
         height: 60,
         backgroundColor: '#f1f5f9',
         borderRadius: theme.borderRadius.md,
+    },
+    weatherContent: {
+        marginTop: theme.spacing.sm,
+        gap: theme.spacing.sm,
+    },
+    weatherTodayCard: {
+        backgroundColor: '#eff6ff',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+    },
+    weatherTodayLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: theme.colors.secondary,
+        letterSpacing: 0.5,
+        marginBottom: 4,
+    },
+    weatherTodayRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    weatherTemp: {
+        fontSize: 36,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    weatherCondition: {
+        fontSize: 14,
+        color: theme.colors.secondary,
+        marginTop: 2,
+    },
+    weatherHighLow: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        marginTop: 4,
+    },
+    weatherTomorrowCard: {
+        backgroundColor: '#f8fafc',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+    },
+    weatherTomorrowRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    weatherTomorrowLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: theme.colors.textSecondary,
+        letterSpacing: 0.5,
+    },
+    weatherTomorrowCondition: {
+        fontSize: 14,
+        color: theme.colors.text,
+        marginTop: 2,
     },
     menuGrid: {
         flexDirection: 'row',

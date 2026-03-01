@@ -3,6 +3,9 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
+import { useCompany } from '../contexts/CompanyContext';
+import { useStaff, useAddStaff, useEditStaff, useDeleteStaff } from '../api/staff';
+import { useRole } from '../hooks/useRole';
 
 const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
     <View style={styles.header}>
@@ -17,6 +20,16 @@ const ScreenHeader = ({ title, navigation }: { title: string, navigation: any })
 );
 
 export const StaffScreen = ({ navigation }: any) => {
+    const { companyId, season } = useCompany();
+    const { data: staffData = [], isLoading, isError } = useStaff(companyId, season);
+    const { data: roleData } = useRole();
+    const isSuperAdmin = roleData?.isSuperAdmin || false;
+    const isAdmin = roleData?.isAdmin || false;
+
+    const addStaffMutation = useAddStaff();
+    const editStaffMutation = useEditStaff();
+    const deleteStaffMutation = useDeleteStaff();
+
     const [isScannerActive, setIsScannerActive] = useState(false);
     const [scanInput, setScanInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -151,10 +164,12 @@ export const StaffScreen = ({ navigation }: any) => {
                         <Text style={styles.btnText}>Upload CSV</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.primaryBtn} onPress={() => toggleModal('addStaff', true)}>
-                        <Ionicons name="add" size={18} color="white" />
-                        <Text style={styles.primaryBtnText}>Add Staff Member</Text>
-                    </TouchableOpacity>
+                    {isAdmin && (
+                        <TouchableOpacity style={styles.primaryBtn} onPress={() => toggleModal('addStaff', true)}>
+                            <Ionicons name="add" size={18} color="white" />
+                            <Text style={styles.primaryBtnText}>Add Staff Member</Text>
+                        </TouchableOpacity>
+                    )}
                 </ScrollView>
 
                 {/* Scanner Section */}
@@ -191,16 +206,20 @@ export const StaffScreen = ({ navigation }: any) => {
                     />
                 </View>
 
-                <Text style={styles.resultsText}>Showing {mockStaff.length} of {mockStaff.length} staff members for 2026</Text>
+                {isLoading ? (
+                    <Text style={styles.resultsText}>Loading staff...</Text>
+                ) : (
+                    <Text style={styles.resultsText}>Showing {staffData.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase())).length} of {staffData.length} staff members for {season}</Text>
+                )}
 
                 {/* Staff List Grid */}
                 <View style={styles.grid}>
-                    {mockStaff.map((staff, index) => (
+                    {staffData.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase())).map((staff, index) => (
                         <View key={index} style={styles.staffCardWrapper}>
                             <View style={styles.staffCard}>
                                 <View style={styles.staffHeader}>
                                     <View style={styles.avatar}>
-                                        <Text style={styles.avatarText}>{staff.initials}</Text>
+                                        <Text style={styles.avatarText}>{staff.name?.substring(0, 2).toUpperCase() || 'NA'}</Text>
                                     </View>
                                     <View style={{ flex: 1, marginLeft: 12 }}>
                                         <Text style={styles.staffName} numberOfLines={2}>{staff.name}</Text>
@@ -500,7 +519,22 @@ export const StaffScreen = ({ navigation }: any) => {
                             <TouchableOpacity
                                 style={styles.primaryBtnBlock}
                                 onPress={() => {
-                                    console.log('Saving staff member:', addStaffData);
+                                    addStaffMutation.mutate({
+                                        company_id: companyId as string,
+                                        season,
+                                        name: addStaffData.name,
+                                        department: addStaffData.department,
+                                        email: addStaffData.email,
+                                        phone: addStaffData.phone,
+                                        hire_date: addStaffData.hireDate, // Map to DB column names 
+                                        date_of_birth: addStaffData.dob,
+                                        staff_type: addStaffData.staffType,
+                                        allergies: addStaffData.allergies,
+                                        reports_to: addStaffData.reportsTo,
+                                        rfid: addStaffData.rfid,
+                                        role: addStaffData.role || 'Staff', // Requires a role
+                                        status: 'active'
+                                    });
                                     toggleModal('addStaff', false);
                                 }}
                             >

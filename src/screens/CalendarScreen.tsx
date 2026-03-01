@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCompany } from '../contexts/CompanyContext';
+import { useCalendarEvents } from '../api/calendar_events';
 
 interface Event {
     id: string;
@@ -16,6 +18,8 @@ interface Event {
 }
 
 export const CalendarScreen = ({ navigation }: any) => {
+    const { companyId, season } = useCompany();
+    const { data: liveEvents = [], isLoading: isLoadingEvents } = useCalendarEvents(companyId, season);
     const [activeView, setActiveView] = useState('Month');
     const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1)); // July 2026
     const [selectedDate, setSelectedDate] = useState(new Date(2026, 6, 1));
@@ -35,30 +39,18 @@ export const CalendarScreen = ({ navigation }: any) => {
     const [showLocationTypePicker, setShowLocationTypePicker] = useState(false);
     const [showSortPicker, setShowSortPicker] = useState(false);
 
-    // Sample event data matching the screenshots
-    const events: Event[] = [
-        { id: '1', title: 'Kamen Cup', date: new Date(2026, 6, 5), location: 'Equinunk', tags: ['Sports', 'Soccer', 'Teen Boys'], type: 'sports' },
-        { id: '2', title: 'Soccer Cup', date: new Date(2026, 6, 6), location: 'Blue Ridge', tags: ['Sports', 'Soccer'], type: 'sports' },
-        { id: '3', title: 'Equinunk Cup', date: new Date(2026, 6, 8), location: 'Equinunk', tags: ['Sports', 'Hockey', 'Junior Boys'], type: 'sports' },
-        { id: '4', title: 'Falki Open', date: new Date(2026, 6, 8), location: 'Equinunk', tags: ['Sports', 'Tennis', 'Freshmen A Girls'], type: 'sports' },
-        { id: '5', title: 'Boys Basketball Invitational', date: new Date(2026, 6, 13), location: 'Home', tags: ['Sports', 'Basketball', 'CIT Boys'], type: 'sports' },
-        { id: '6', title: '3 v 3 Basketball Tourney', date: new Date(2026, 6, 15), location: 'Equinunk', tags: ['Sports', 'Basketball', 'Senior Boys'], type: 'sports' },
-        { id: '7', title: 'Basketball Tourney', date: new Date(2026, 6, 16), location: 'Blue Ridge', tags: ['Sports', 'Basketball', 'Senior Girls'], type: 'sports' },
-        { id: '8', title: 'Silent DJ Disco', date: new Date(2026, 6, 17), location: '', tags: ['Special Event', 'evening-activity'], type: 'special-event', time: '7:00 - 23 PM' },
-        { id: '9', title: 'Girls Basketball Invitational', date: new Date(2026, 6, 20), location: 'Home', tags: ['Sports', 'Basketball', 'CIT Girls'], type: 'sports' },
-        { id: '10', title: 'THC Dance Competition', date: new Date(2026, 6, 22), location: 'THC', tags: ['Sports', 'Dance', 'Freshmen A Girls'], type: 'sports' },
-        { id: '11', title: 'Jacobs Cup', date: new Date(2026, 6, 22), location: 'Timber Lake Camp', tags: ['Sports', 'Basketball', 'Super Boys'], type: 'sports' },
-        { id: '12', title: 'Soccer Cup', date: new Date(2026, 6, 23), location: 'Blue Ridge', tags: ['Sports', 'Soccer', 'Junior Girls'], type: 'sports' },
-        { id: '13', title: 'Sixes Lax Tourney', date: new Date(2026, 6, 24), location: 'THC', tags: ['Sports', 'Lacrosse', 'Cadet Boys'], type: 'sports' },
-        { id: '14', title: 'Laz Bowl', date: new Date(2026, 6, 27), location: 'Home', tags: ['Sports', 'Football', 'CIT Boys'], type: 'sports' },
-        { id: '15', title: 'Junior Hershey/Dorney Trip', date: new Date(2026, 6, 28), location: '', tags: ['Field Trip', 'field-trip'], type: 'field-trip' },
-        { id: '16', title: 'Franko Cup', date: new Date(2026, 6, 29), location: 'THC', tags: ['Sports', 'Football', 'Senior Girls'], type: 'sports' },
-        { id: '17', title: 'Gordon Cup', date: new Date(2026, 6, 29), location: 'Timber Lake Camp', tags: ['Sports', 'Hockey'], type: 'sports' },
-        { id: '18', title: 'Teen/CIT Cali Trip', date: new Date(2026, 6, 29), location: '', tags: ['Field Trip', 'field-trip'], type: 'field-trip' },
-        { id: '19', title: 'Super Montreal Trip', date: new Date(2026, 6, 30), location: '', tags: ['Field Trip', 'field-trip'], type: 'field-trip' },
-        { id: '20', title: 'Cubs Cup', date: new Date(2026, 7, 3), location: '', tags: ['Sports', 'Hockey', 'Freshmen B Boys'], type: 'sports' },
-        { id: '21', title: 'Party Hardy- DJ - End of Year Bash', date: new Date(2026, 7, 12), location: '', tags: ['Special Event', 'evening-activity'], type: 'special-event', time: '7:00 - 22 PM' },
-    ];
+    // Events from Supabase
+    const events: Event[] = liveEvents.length > 0
+        ? liveEvents.map((e: any) => ({
+            id: e.id,
+            title: e.title,
+            date: new Date(e.date + 'T00:00:00'),
+            location: e.location || '',
+            tags: e.tags || [],
+            type: e.type,
+            time: e.time || undefined,
+        }))
+        : [];
 
     // Options
     const divisions = ['All Divisions', 'Sports Academy', 'Field Trips', 'Special Events', 'Activities'];

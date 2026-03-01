@@ -1,35 +1,49 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useMessages, useSendMessage, useMarkMessageRead } from '../api/messages';
+import { supabase } from '../lib/supabase';
+import { useQuery } from '@tanstack/react-query';
 
 export const MessagesScreen = ({ navigation }: any) => {
-    const [messageCount] = useState(0);
-    const [activeView, setActiveView] = useState('inbox'); // 'inbox' or 'compose'
+    const [activeView, setActiveView] = useState('inbox');
     const [showComposeModal, setShowComposeModal] = useState(false);
-    const [deliveryMethod, setDeliveryMethod] = useState('in-app'); // 'in-app' or 'email'
+    const [deliveryMethod, setDeliveryMethod] = useState('in-app');
     const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
     const [searchUsers, setSearchUsers] = useState('');
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
     const [showRecipientPreview, setShowRecipientPreview] = useState(false);
+    const [selectedMessage, setSelectedMessage] = useState<any>(null);
 
-    // Sample users (10 total)
-    const users = [
-        { id: '1', name: 'Unknown', email: 'raeessajidoli10@gmail.com' },
-        { id: '2', name: 'ansaralyh@gmail.com', email: 'ansara ym@gmail.com' },
-        { id: '3', name: 'Athletics', email: 'athletics@tylerhillcamp.com' },
-        { id: '4', name: 'Courtney Sloan Parker', email: 'courtney@tylerhillcamp.com' },
-        { id: '5', name: 'John Smith', email: 'john.smith@tylerhillcamp.com' },
-        { id: '6', name: 'Sarah Johnson', email: 'sarah.johnson@tylerhillcamp.com' },
-        { id: '7', name: 'Michael Brown', email: 'michael.brown@tylerhillcamp.com' },
-        { id: '8', name: 'Emily Davis', email: 'emily.davis@tylerhillcamp.com' },
-        { id: '9', name: 'David Wilson', email: 'david.wilson@tylerhillcamp.com' },
-        { id: '10', name: 'Jessica Martinez', email: 'jessica.martinez@tylerhillcamp.com' },
-    ];
+    // Get current user ID
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null));
+    }, []);
+
+    // Fetch messages from Supabase
+    const { data: messages = [], isLoading: messagesLoading } = useMessages(currentUserId);
+    const sendMutation = useSendMessage();
+    const markReadMutation = useMarkMessageRead();
+
+    // Fetch users (profiles) from Supabase
+    const { data: users = [] } = useQuery({
+        queryKey: ['profiles_for_messages'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('id, full_name, email')
+                .order('full_name', { ascending: true });
+            if (error) throw error;
+            return (data || []).map((p: any) => ({ id: p.id, name: p.full_name || p.email || 'Unknown', email: p.email || '' }));
+        },
+    });
+    const messageCount = messages.length;
 
     const handleInbox = () => {
         setActiveView('inbox');
@@ -136,17 +150,50 @@ export const MessagesScreen = ({ navigation }: any) => {
                         <StyledCard style={styles.messagesListCard}>
                             <Text style={styles.cardTitle}>Notifications & Messages</Text>
                             <Text style={styles.messageCount}>{messageCount} total messages</Text>
-                            <View style={styles.emptyState}>
-                                <Text style={styles.emptyText}>No messages yet</Text>
-                            </View>
+                            {messagesLoading ? (
+                                <ActivityIndicator size="large" color={theme.colors.secondary} style={{ marginTop: 20 }} />
+                            ) : messages.length === 0 ? (
+                                <View style={styles.emptyState}>
+                                    <Text style={styles.emptyText}>No messages yet</Text>
+                                </View>
+                            ) : (
+                                <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled>
+                                    {messages.map((msg: any) => (
+                                        <TouchableOpacity
+                                            key={msg.id}
+                                            style={[styles.messageItem, !msg.read && styles.messageUnread]}
+                                            onPress={() => {
+                                                setSelectedMessage(msg);
+                                                if (!msg.read && msg.recipient_id === currentUserId) {
+                                                    markReadMutation.mutate(msg.id);
+                                                }
+                                            }}
+                                        >
+                                            <Text style={styles.messageSender}>{msg.sender?.full_name || 'Unknown'}</Text>
+                                            <Text style={styles.messageSubject} numberOfLines={1}>{msg.subject}</Text>
+                                            <Text style={styles.messageDate}>{new Date(msg.created_at).toLocaleDateString()}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            )}
                         </StyledCard>
 
-                        {/* Select Message Card */}
+                        {/* Selected Message Card */}
                         <StyledCard style={styles.selectMessageCard}>
-                            <Text style={styles.selectMessageTitle}>Select a message</Text>
-                            <View style={styles.selectMessageEmpty}>
-                                <Text style={styles.selectMessageText}>Select a message to view its contents</Text>
-                            </View>
+                            {selectedMessage ? (
+                                <View>
+                                    <Text style={styles.selectMessageTitle}>{selectedMessage.subject}</Text>
+                                    <Text style={styles.messageSender}>From: {selectedMessage.sender?.full_name || 'Unknown'}</Text>
+                                    <Text style={[styles.selectMessageText, { marginTop: 12, textAlign: 'left' }]}>{selectedMessage.content}</Text>
+                                </View>
+                            ) : (
+                                <View>
+                                    <Text style={styles.selectMessageTitle}>Select a message</Text>
+                                    <View style={styles.selectMessageEmpty}>
+                                        <Text style={styles.selectMessageText}>Select a message to view its contents</Text>
+                                    </View>
+                                </View>
+                            )}
                         </StyledCard>
                     </View>
                 )}
@@ -288,7 +335,22 @@ export const MessagesScreen = ({ navigation }: any) => {
                                 <TouchableOpacity style={styles.clearBtn} onPress={handleClear}>
                                     <Text style={styles.clearBtnText}>Clear</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={styles.sendBtn}>
+                                <TouchableOpacity style={styles.sendBtn} onPress={() => {
+                                    if (!subject.trim() || !message.trim() || selectedUsers.length === 0 || !currentUserId) {
+                                        Alert.alert('Error', 'Please fill in subject, message, and select recipients.');
+                                        return;
+                                    }
+                                    selectedUsers.forEach(recipientId => {
+                                        sendMutation.mutate({
+                                            sender_id: currentUserId,
+                                            recipient_id: recipientId,
+                                            subject: subject.trim(),
+                                            content: message.trim(),
+                                        });
+                                    });
+                                    Alert.alert('Success', 'Message sent!');
+                                    handleCloseCompose();
+                                }}>
                                     <Ionicons name="send" size={18} color="white" />
                                     <Text style={styles.sendBtnText}>Send Notification</Text>
                                 </TouchableOpacity>
@@ -881,5 +943,32 @@ const styles = StyleSheet.create({
         ...theme.typography.bodySmall,
         fontSize: 14,
         color: theme.colors.text,
+    },
+    messageItem: {
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    messageUnread: {
+        backgroundColor: '#eef2ff',
+    },
+    messageSender: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    messageSubject: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+        marginTop: 2,
+    },
+    messageDate: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
     },
 });

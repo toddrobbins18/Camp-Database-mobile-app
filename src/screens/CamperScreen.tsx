@@ -4,6 +4,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCompany } from '../contexts/CompanyContext';
+import { useCampers, useAddCamper, useEditCamper, useDeleteCamper } from '../api/campers';
+import { useRole } from '../hooks/useRole';
+import { useStaff } from '../api/staff';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 600; // Mobile: full width cards
@@ -33,20 +37,6 @@ const DIVISIONS = [
     'CIT Boys',
 ];
 
-// Mock leaders data
-const MOCK_LEADERS = [
-    { name: 'Abel Hernandez Gallardo', role: 'Soccer / General Counselor' },
-    { name: 'Abigail Sheridan', role: 'General Counselor - Freshmen Boys' },
-    { name: 'Adrian Chamu Ochoa', role: 'Lead Counselor' },
-    { name: 'Alanah Mutch', role: 'Tennis / General Counselor' },
-    { name: 'ALEJO RODRÍGUEZ ALONSO', role: 'Climbing Wall / General' },
-    { name: 'Aleksandra Makuch', role: 'Support Staff' },
-    { name: 'Alex Devitt', role: 'General Counselor' },
-    { name: 'Alex Weisenthal', role: 'General Counselor' },
-    { name: 'Alexandra Forman', role: 'General Counselor' },
-    { name: 'Alexandra Sproul', role: 'General Counselor' },
-    { name: 'Alicia Ford', role: 'Climbing Wall / General Counselor' },
-];
 
 // Header Component (Resusable for sub-screens)
 const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
@@ -62,6 +52,18 @@ const ScreenHeader = ({ title, navigation }: { title: string, navigation: any })
 );
 
 export const CamperScreen = ({ navigation }: any) => {
+    const { companyId, season } = useCompany();
+    const { data: campersData = [], isLoading, isError } = useCampers(companyId, season);
+    const { data: roleData } = useRole();
+    const isAdmin = roleData?.isAdmin || false;
+
+    const addCamperMutation = useAddCamper();
+    const editCamperMutation = useEditCamper();
+    const deleteCamperMutation = useDeleteCamper();
+
+    // Fetch staff for the "Assigned Leader" dropdown (replaces old MOCK_LEADERS)
+    const { data: staffList = [] } = useStaff(companyId, season);
+
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
@@ -143,7 +145,19 @@ export const CamperScreen = ({ navigation }: any) => {
         medicalNotes: '',
     });
     const campersPerPage = 50;
-    const totalCampers = mockCampers.length;
+
+    const filteredCampers = useMemo(() => {
+        return campersData.filter(camper => {
+            if (selectedDivision !== 'All Divisions' && camper.division !== selectedDivision) return false;
+            // Also apply search query here if needed
+            return true;
+        }).sort((a, b) => {
+            if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
+            return (a.division || '').localeCompare(b.division || '');
+        });
+    }, [campersData, selectedDivision, sortBy]);
+
+    const totalCampers = filteredCampers.length;
     const totalPages = Math.ceil(totalCampers / campersPerPage);
 
     // Keep scanner input focused when in scanner mode
@@ -177,7 +191,7 @@ export const CamperScreen = ({ navigation }: any) => {
     // Calculate pagination
     const startIndex = (currentPage - 1) * campersPerPage;
     const endIndex = startIndex + campersPerPage;
-    const currentCampers = mockCampers.slice(startIndex, endIndex);
+    const currentCampers = filteredCampers.slice(startIndex, endIndex);
     const showingStart = totalCampers > 0 ? startIndex + 1 : 0;
     const showingEnd = Math.min(endIndex, totalCampers);
 
@@ -475,8 +489,8 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     onChangeText={setSearchCamperName}
                                                     onSubmitEditing={() => {
                                                         // TODO: Implement search
-                                                        const results = mockCampers.filter(c =>
-                                                            c.name.toLowerCase().includes(searchCamperName.toLowerCase())
+                                                        const results = campersData.filter(c =>
+                                                            c.name?.toLowerCase().includes(searchCamperName.toLowerCase())
                                                         ).slice(0, 10);
                                                         setSearchResults(results);
                                                     }}
@@ -484,8 +498,8 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 <TouchableOpacity
                                                     style={styles.searchButton}
                                                     onPress={() => {
-                                                        const results = mockCampers.filter(c =>
-                                                            c.name.toLowerCase().includes(searchCamperName.toLowerCase())
+                                                        const results = campersData.filter(c =>
+                                                            c.name?.toLowerCase().includes(searchCamperName.toLowerCase())
                                                         ).slice(0, 10);
                                                         setSearchResults(results);
                                                     }}
@@ -521,7 +535,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 <View style={styles.selectedCamperHeader}>
                                                     <View>
                                                         <Text style={styles.selectedCamperName}>{selectedCamper.name}</Text>
-                                                        <Text style={styles.selectedCamperInfo}>{selectedCamper.grade} • {selectedCamper.division}</Text>
+                                                        <Text style={styles.selectedCamperInfo}>{selectedCamper.division || 'No Division'}</Text>
                                                     </View>
                                                     <TouchableOpacity onPress={() => setSelectedCamper(null)}>
                                                         <Ionicons name="close-circle" size={24} color={theme.colors.textSecondary} />
@@ -929,8 +943,20 @@ export const CamperScreen = ({ navigation }: any) => {
                                         <TouchableOpacity
                                             style={styles.submitButton}
                                             onPress={() => {
-                                                // TODO: Implement submit logic
-                                                console.log('Add child:', formData);
+                                                addCamperMutation.mutate({
+                                                    company_id: companyId as string,
+                                                    season: formData.season || season,
+                                                    name: formData.name,
+                                                    age: Number(formData.age) || null,
+                                                    gender: formData.gender,
+                                                    division: formData.division,
+                                                    person_id: formData.person_id,
+                                                    emergency_contact: formData.emergencyContact,
+                                                    rfid: formData.rfid,
+                                                    allergies: formData.allergies,
+                                                    medical_notes: formData.medicalNotes,
+                                                    assigned_leader: formData.assignedLeader,
+                                                });
                                                 setShowAddChildModal(false);
                                             }}
                                         >
@@ -1068,7 +1094,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 nestedScrollEnabled={true}
                                 showsVerticalScrollIndicator={true}
                             >
-                                {MOCK_LEADERS.map((leader) => {
+                                {staffList.map((leader: any) => {
                                     const leaderDisplay = `${leader.name} - ${leader.role}`;
                                     const isSelected = formData.assignedLeader === leaderDisplay;
                                     return (
@@ -1146,8 +1172,13 @@ export const CamperScreen = ({ navigation }: any) => {
                                 <TouchableOpacity
                                     style={styles.deleteConfirmButton}
                                     onPress={() => {
-                                        // TODO: Implement delete functionality
-                                        console.log('Delete camper:', camperToDelete?.name);
+                                        if (camperToDelete?.id) {
+                                            deleteCamperMutation.mutate({
+                                                id: camperToDelete.id,
+                                                company_id: companyId as string,
+                                                season: camperToDelete.season || season
+                                            });
+                                        }
                                         setShowDeleteModal(false);
                                         setCamperToDelete(null);
                                     }}
@@ -1549,8 +1580,25 @@ export const CamperScreen = ({ navigation }: any) => {
                                         <TouchableOpacity
                                             style={styles.submitButton}
                                             onPress={() => {
-                                                // TODO: Implement Edit Child submission logic
-                                                console.log('Edit Child Form Data:', editFormData);
+                                                if (camperToEdit?.id) {
+                                                    editCamperMutation.mutate({
+                                                        id: camperToEdit.id,
+                                                        company_id: companyId as string,
+                                                        season: editFormData.season || season,
+                                                        name: editFormData.name,
+                                                        age: Number(editFormData.age) || null,
+                                                        gender: editFormData.gender,
+                                                        division: editFormData.division,
+                                                        bunk: editFormData.bunk,
+                                                        person_id: editFormData.person_id,
+                                                        emergency_contact: editFormData.emergencyContact,
+                                                        rfid: editFormData.rfid,
+                                                        allergies: editFormData.allergies,
+                                                        medical_notes: editFormData.medicalNotes,
+                                                        assigned_leader: editFormData.assignedLeader,
+                                                        date_of_birth: editFormData.dateOfBirth
+                                                    });
+                                                }
                                                 setShowEditChildModal(false);
                                                 setCamperToEdit(null);
                                             }}
@@ -1822,7 +1870,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 nestedScrollEnabled={true}
                                 showsVerticalScrollIndicator={true}
                             >
-                                {MOCK_LEADERS.map((leader) => {
+                                {staffList.map((leader: any) => {
                                     const leaderDisplay = `${leader.name} - ${leader.role}`;
                                     const isSelected = editFormData.assignedLeader === leaderDisplay;
                                     return (
@@ -1878,7 +1926,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 <View style={styles.cardTop}>
                                     <View style={styles.cardTopLeft}>
                                         <Text style={styles.camperName} numberOfLines={1} ellipsizeMode="tail">{camper.name}</Text>
-                                        <Text style={styles.camperGrade}>{camper.grade || "N/A"}</Text>
+                                        <Text style={styles.camperGrade}>{camper.division || "N/A"}</Text>
                                     </View>
                                     <View style={styles.cardTopRight}>
                                         <TouchableOpacity
@@ -1895,7 +1943,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     gender: (camper as any).gender || '',
                                                     division: (camper as any).division || camper.division || '',
                                                     bunk: (camper as any).bunk || '',
-                                                    grade: (camper as any).grade || camper.grade || '',
+                                                    grade: (camper as any).grade || '',
                                                     group: (camper as any).group || '',
                                                     season: (camper as any).season || '2026',
                                                     assignedLeader: (camper as any).assignedLeader || '',
@@ -1995,30 +2043,6 @@ export const CamperScreen = ({ navigation }: any) => {
         </SafeAreaView>
     );
 };
-
-// Mock Data - matching screenshot (expanded to show pagination)
-const mockCampers = [
-    { name: 'Abby Weiss', grade: '11th', division: 'CIT Girls', guardianEmail: 'abbyw8135@icloud.com', guardianPhone: '5167880571', gender: 'Female' },
-    { name: 'Adam Elliott', grade: '4th', division: 'Freshmen B Boys' },
-    { name: 'Addison Brewer', grade: '6th', division: 'Sophomore Girls' },
-    { name: 'Adrianna Gelb', grade: '11th', division: 'CIT Girls' },
-    { name: 'Aiden Feld', grade: '4th', division: 'Freshmen B Boys' },
-    { name: 'Aiden Leon', grade: '6th', division: 'Sophomore Boys' },
-    { name: 'Aiden Weisz', grade: '4th', division: 'Freshmen B Boys' },
-    { name: 'AJ Goldberg', grade: '4th', division: 'Freshmen B Boys' },
-    { name: 'Alaia Khalili', grade: '4th', division: 'Freshmen B Girls' },
-    { name: 'Alex Haboush', grade: '11th', division: 'CIT Boys' },
-    { name: 'Alex Stumacher', grade: '5th', division: 'Cadet Boys' },
-    { name: 'Alexa Alfred', grade: '9th', division: 'Super Senior Girls' },
-    { name: 'Aloha Friedland', grade: '7th', division: 'Junior Girls' },
-    { name: 'Alex Horowitz', grade: '8th', division: 'Senior Boys' },
-    // Add more campers to demonstrate pagination (593 total as per screenshot)
-    ...Array.from({ length: 579 }, (_, i) => ({
-        name: `Camper ${i + 15}`,
-        grade: `${(i % 12) + 1}th`,
-        division: ['CIT Girls', 'Freshmen B Boys', 'Sophomore Girls', 'CIT Boys', 'Junior Girls', 'Senior Boys'][i % 6]
-    }))
-];
 
 const styles = StyleSheet.create({
     container: {

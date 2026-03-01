@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCompany } from '../contexts/CompanyContext';
+import { usePendingApprovals, useApproveUser, useRejectUser } from '../api/incidents_approvals';
 
 interface PendingApproval {
     id: string;
@@ -13,12 +15,16 @@ interface PendingApproval {
 }
 
 export const UserApprovalsScreen = ({ navigation }: any) => {
-    // User Approvals state
-    const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([
-        // Mock data - in production, this would be fetched from Supabase
-        // { id: '1', name: 'John Doe', email: 'john.doe@example.com', requestedAt: '2026-01-23T10:30:00Z' },
-        // { id: '2', name: 'Jane Smith', email: 'jane.smith@example.com', requestedAt: '2026-01-23T09:15:00Z' },
-    ]);
+    const { companyId } = useCompany();
+    const { data: pendingApprovalsData = [], isLoading } = usePendingApprovals(companyId);
+    const approveUserMutation = useApproveUser();
+    const rejectUserMutation = useRejectUser();
+    const pendingApprovals = pendingApprovalsData.map((u: any) => ({
+        id: u.id,
+        name: u.name || u.email?.split('@')[0] || 'Unknown',
+        email: u.email || '',
+        requestedAt: u.created_at,
+    }));
     const [showApproveModal, setShowApproveModal] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [userToApprove, setUserToApprove] = useState<PendingApproval | null>(null);
@@ -26,26 +32,24 @@ export const UserApprovalsScreen = ({ navigation }: any) => {
 
     // User Approval handlers
     const handleApproveUser = () => {
-        if (userToApprove) {
-            // In production, this would call Supabase to update the user's approved status
-            // For now, just remove from pending list
-            setPendingApprovals(pendingApprovals.filter(approval => approval.id !== userToApprove.id));
-            setShowApproveModal(false);
-            setUserToApprove(null);
-            // TODO: Call Supabase API to approve user
-            // await supabase.from('profiles').update({ approved: true }).eq('id', userToApprove.id);
+        if (userToApprove && companyId) {
+            approveUserMutation.mutate({ userId: userToApprove.id, companyId }, {
+                onSuccess: () => {
+                    setShowApproveModal(false);
+                    setUserToApprove(null);
+                },
+            });
         }
     };
 
     const handleRejectUser = () => {
-        if (userToReject) {
-            // In production, this would call Supabase to reject/delete the user
-            // For now, just remove from pending list
-            setPendingApprovals(pendingApprovals.filter(approval => approval.id !== userToReject.id));
-            setShowRejectModal(false);
-            setUserToReject(null);
-            // TODO: Call Supabase API to reject user (delete or mark as rejected)
-            // await supabase.from('profiles').delete().eq('id', userToReject.id);
+        if (userToReject && companyId) {
+            rejectUserMutation.mutate({ userId: userToReject.id, companyId }, {
+                onSuccess: () => {
+                    setShowRejectModal(false);
+                    setUserToReject(null);
+                },
+            });
         }
     };
 
