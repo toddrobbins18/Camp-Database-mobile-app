@@ -20,7 +20,7 @@ import { useCampers, useDivisions } from '../api/campers';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 
-// Mock Data Interfaces
+// Trip Interfaces
 interface Trip {
     id: string;
     name: string;
@@ -43,7 +43,6 @@ interface Trip {
     location_type?: string;
 }
 
-// Mock Data - Expanded for testing filters
 
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -68,7 +67,7 @@ const StatusBadge = ({ status }: { status: string }) => {
     );
 };
 
-// Mock Data for Roster
+// Roster Interfaces
 interface Camper {
     id: string;
     name: string;
@@ -269,7 +268,7 @@ const CalendarWidget = ({ selectedDate, onSelectDate }: { selectedDate: string, 
 
                     const dayNum = dateStr.split('-')[2]; // Extract day part
                     const isSelected = selectedDate === dateStr;
-                    const isToday = dateStr === '2026-01-27'; // Mock 'today'
+                    const isToday = dateStr === new Date().toISOString().split('T')[0];
 
                     return (
                         <TouchableOpacity

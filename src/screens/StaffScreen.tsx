@@ -1148,15 +1148,6 @@ export const StaffScreen = ({ navigation }: any) => {
     );
 };
 
-const mockStaff = [
-    { initials: 'AHG', name: 'Abel Hernandez Gallardo', role: 'Soccer / General Counselor' },
-    { initials: 'AS', name: 'Abigail Sheridan', role: 'General Counselor - Freshmen Boys' },
-    { initials: 'AZ', name: 'Addison Zucker', role: 'General Counselor' },
-    { initials: 'ACO', name: 'Adrian Chamu Ochoa', role: 'Lead Counselor' },
-    { initials: 'JD', name: 'John Doe', role: 'Activity Lead' },
-    { initials: 'MS', name: 'Mary Smith', role: 'Nurse' },
-];
-
 const styles = StyleSheet.create({
     container: {
         flex: 1,

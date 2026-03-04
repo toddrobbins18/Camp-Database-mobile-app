@@ -48,8 +48,8 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const { data: camperData = [] } = useCampers(companyId, season);
     const { data: staffData = [] } = useStaff(companyId, season);
-    const MOCK_CAMPERS = camperData.map((c: any) => ({ id: c.id, name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim(), grade: c.grade || '' }));
-    const MOCK_STAFF = staffData.map((s: any) => ({ id: s.id, name: s.name, role: s.role || s.staff_type || 'Staff' }));
+    const campers = camperData.map((c: any) => ({ id: c.id, name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim(), grade: c.grade || '' }));
+    const staffMembers = staffData.map((s: any) => ({ id: s.id, name: s.name, role: s.role || s.staff_type || 'Staff' }));
     const [activeView, setActiveView] = useState('Month');
     const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1)); // January 2026
     const [selectedDate, setSelectedDate] = useState(new Date(2026, 0, 25));
@@ -118,7 +118,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     const [manageRosterActiveTab, setManageRosterActiveTab] = useState<'campers' | 'staff' | 'templates'>('campers');
     const [rosterSearchTerm, setRosterSearchTerm] = useState('');
     const [selectedRosterEvent, setSelectedRosterEvent] = useState<any>(null);
-    const [selectedCampers, setSelectedCampers] = useState<Set<string>>(new Set(['6'])); // Mock selection (Aiden Leon)
+    const [selectedCampers, setSelectedCampers] = useState<Set<string>>(new Set());
     const [showRosterSortModal, setShowRosterSortModal] = useState(false);
     const [rosterSortBy, setRosterSortBy] = useState('Name');
     const [showEventOptionsModal, setShowEventOptionsModal] = useState(false);
@@ -493,12 +493,12 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     </View>
 
                                     <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>
-                                        {selectedCampers.size} of {MOCK_CAMPERS.length} campers selected
+                                        {selectedCampers.size} of {campers.length} campers selected
                                     </Text>
 
                                     {/* Campers List */}
                                     <ScrollView style={{ flex: 1 }}>
-                                        {MOCK_CAMPERS.filter(c => c.name.toLowerCase().includes(rosterSearchTerm.toLowerCase())).map((camper) => (
+                                        {campers.filter(c => c.name.toLowerCase().includes(rosterSearchTerm.toLowerCase())).map((camper) => (
                                             <TouchableOpacity
                                                 key={camper.id}
                                                 style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}
@@ -555,7 +555,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
                                         <View style={{ gap: 8 }}>
                                             {assignedRefs.map(staffId => {
-                                                const ref = MOCK_STAFF.find(s => s.id === staffId);
+                                                const ref = staffMembers.find(s => s.id === staffId);
                                                 return (
                                                     <View key={staffId} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, backgroundColor: theme.colors.surface, borderRadius: 8 }}>
                                                         <View style={{ flex: 1 }}>
@@ -694,7 +694,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             </View>
 
                             <ScrollView style={{ maxHeight: 400 }}>
-                                {MOCK_STAFF
+                                {staffMembers
                                     .filter(s =>
                                         s.name.toLowerCase().includes(staffSearchTerm.toLowerCase()) &&
                                         !assignedRefs.includes(s.id)
@@ -725,7 +725,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                             <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
                                         </TouchableOpacity>
                                     ))}
-                                {MOCK_STAFF.filter(s => s.name.toLowerCase().includes(staffSearchTerm.toLowerCase()) && !assignedRefs.includes(s.id)).length === 0 && (
+                                {staffMembers.filter(s => s.name.toLowerCase().includes(staffSearchTerm.toLowerCase()) && !assignedRefs.includes(s.id)).length === 0 && (
                                     <View style={{ padding: 20, alignItems: 'center' }}>
                                         <Text style={{ color: theme.colors.textSecondary }}>No staff found</Text>
                                     </View>

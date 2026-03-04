@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Pressable } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useStaff } from '../api/staff';
 import { useCompany } from '../contexts/CompanyContext';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '../lib/supabase';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -36,45 +38,35 @@ const DIVISIONS = [
 type TabType = 'overview' | 'birthday' | 'allergies' | 'achievements' | 'activities' | 'sports-academy' | 'incidents' | 'appointments';
 type BirthdaySubTabType = 'info' | 'party';
 
-// Mock achievements data matching the screenshot
-const mockAchievements = [
-    {
-        title: 'End of Year Award - achievement',
-        type: 'achievement',
-        tag: 'eoy',
-        date: '01/07/2025',
-    },
-    {
-        title: 'Starfish Award - friendship',
-        type: 'friendship',
-        tag: 'starfish',
-        date: '01/07/2023',
-    },
-    {
-        title: 'Starfish Award - appreciation',
-        type: 'appreciation',
-        tag: 'starfish',
-        date: '01/07/2022',
-    },
-    {
-        title: 'Starfish Award - friendship',
-        type: 'friendship',
-        tag: 'starfish',
-        date: '01/07/2021',
-    },
-    {
-        title: 'Starfish Award - achievement',
-        type: 'achievement',
-        tag: 'starfish',
-        date: '01/07/2020',
-    },
-];
+
 
 export const CamperDetailScreen = ({ route, navigation }: any) => {
     const { camper } = route.params || {};
     const { companyId, season } = useCompany();
     const { data: staffLeaders = [] } = useStaff(companyId, season);
-    const MOCK_LEADERS = staffLeaders.map((s: any) => ({ name: s.name, role: s.role || s.staff_type || 'Staff' }));
+    const leaders = staffLeaders.map((s: any) => ({ name: s.name, role: s.role || s.staff_type || 'Staff' }));
+
+    // Fetch achievements/awards from Supabase for this camper
+    const { data: achievements = [], isLoading: achievementsLoading } = useQuery({
+        queryKey: ['camper_awards', camper?.id, companyId],
+        queryFn: async () => {
+            if (!camper?.id || !companyId) return [];
+            const { data, error } = await supabase
+                .from('awards')
+                .select('*')
+                .eq('company_id', companyId)
+                .eq('child_id', camper.id)
+                .order('date', { ascending: false });
+            if (error) throw error;
+            return (data || []).map((a: any) => ({
+                title: a.award_type ? `${a.award_type} Award${a.starfish_value ? ' - ' + a.starfish_value : ''}` : 'Award',
+                type: a.starfish_value || a.award_type || '',
+                tag: a.award_type?.toLowerCase() || '',
+                date: a.date ? new Date(a.date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '',
+            }));
+        },
+        enabled: !!camper?.id && !!companyId,
+    });
     const [activeTab, setActiveTab] = useState<TabType>('overview');
     const [activeBirthdaySubTab, setActiveBirthdaySubTab] = useState<BirthdaySubTabType>('info');
     const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -444,18 +436,22 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                         {/* Achievements Count */}
                         <View style={styles.achievementsHeader}>
                             <Text style={styles.achievementsCountText}>
-                                {mockAchievements.length} total achievements
+                                {achievementsLoading ? 'Loading...' : `${achievements.length} total achievements`}
                             </Text>
                         </View>
 
                         {/* Achievements List */}
-                        {mockAchievements.length === 0 ? (
+                        {achievementsLoading ? (
+                            <View style={{ padding: 20, alignItems: 'center' }}>
+                                <ActivityIndicator size="small" color={theme.colors.secondary} />
+                            </View>
+                        ) : achievements.length === 0 ? (
                             <StyledCard style={styles.emptyCard}>
                                 <Text style={styles.emptyText}>No awards recorded yet</Text>
                             </StyledCard>
                         ) : (
                             <View style={styles.achievementsList}>
-                                {mockAchievements.map((achievement, index) => (
+                                {achievements.map((achievement, index) => (
                                     <StyledCard key={index} style={styles.achievementCard}>
                                         <View style={styles.achievementContent}>
                                             <View style={styles.achievementIconContainer}>
@@ -1187,7 +1183,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                            {MOCK_LEADERS.map((leader) => {
+                            {leaders.map((leader: any) => {
                                 const leaderDisplay = `${leader.name} - ${leader.role}`;
                                 const isSelected = editProfileFormData.assignedLeader === leaderDisplay;
                                 return (
