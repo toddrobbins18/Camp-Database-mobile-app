@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     View,
     Text,
@@ -15,34 +15,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
+import { useDivisions } from '../api/campers';
 import { useSpecialEvents, useAddSpecialEvent } from '../api/calendar_events';
 
 interface SpecialEventsScreenProps {
     navigation: any;
 }
-
-// Reuse divisions from existing code
-const DIVISIONS = [
-    'All Divisions',
-    'Freshmen A Girls',
-    'Freshmen B Girls',
-    'Cadet Girls',
-    'Sophomore Girls',
-    'Junior Girls',
-    'Senior Girls',
-    'Super Girls',
-    'Teen Girls',
-    'CIT Girls',
-    'Freshmen A Boys',
-    'Freshmen B Boys',
-    'Cadet Boys',
-    'Sophomore Boys',
-    'Junior Boys',
-    'Senior Boys',
-    'Super Boys',
-    'Teen Boys',
-    'CIT Boys',
-];
 
 const EVENT_TYPES = [
     'Special Event',
@@ -123,8 +101,28 @@ const HELP_CONTENT: Record<string, { title: string, subtitle: string, columns: s
 
 export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) => {
     const { companyId, season } = useCompany();
+    const { data: divisionsData = [] } = useDivisions();
     const { data: specialEventsData = [], isLoading: isLoadingEvents } = useSpecialEvents(companyId, season);
     const addSpecialEventMutation = useAddSpecialEvent();
+
+    const filteredEvents = useMemo(() => {
+        let filtered = specialEventsData || [];
+        if (selectedDivision !== 'All Divisions') {
+            filtered = filtered.filter((event: any) => {
+                // If divisions array exists and includes the ID
+                if (event.divisions && Array.isArray(event.divisions)) {
+                    return event.divisions.includes(selectedDivision);
+                }
+                // Fallback check if it stores by name anywhere or string CSV
+                if (typeof event.divisions === 'string') {
+                    return event.divisions.includes(selectedDivision);
+                }
+                return false;
+            });
+        }
+        return filtered;
+    }, [specialEventsData, selectedDivision]);
+
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [selectedHelpTab, setSelectedHelpTab] = useState('Staff');
 
@@ -317,10 +315,10 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
 
     const handleDivisionToggle = (division: string) => {
         if (division === 'All Divisions') {
-            if (selectedDivisions.length === DIVISIONS.length - 1) {
+            if (selectedDivisions.length === divisionsData.length) {
                 setSelectedDivisions([]);
             } else {
-                setSelectedDivisions(DIVISIONS.filter((d) => d !== 'All Divisions'));
+                setSelectedDivisions(divisionsData.map(d => d.id));
             }
         } else {
             setSelectedDivisions((prev) =>
@@ -332,7 +330,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     };
 
     const handleSelectAllDivisions = () => {
-        setSelectedDivisions(DIVISIONS.filter((d) => d !== 'All Divisions'));
+        setSelectedDivisions(divisionsData.map((d) => d.id));
     };
 
     const handleDeselectAllDivisions = () => {
@@ -461,7 +459,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 style={styles.divisionDropdownButton}
                                 onPress={() => setShowDivisionDropdown(true)}
                             >
-                                <Text style={styles.divisionDropdownText}>{selectedDivision}</Text>
+                                <Text style={styles.divisionDropdownText}>{selectedDivision === 'All Divisions' ? 'All Divisions' : divisionsData.find(d => d.id === selectedDivision)?.name || 'Select Division'}</Text>
                                 <Ionicons
                                     name="chevron-down"
                                     size={20}
@@ -478,14 +476,14 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                         <StyledCard style={styles.emptyStateCard}>
                             <Text style={styles.emptyStateText}>Loading events...</Text>
                         </StyledCard>
-                    ) : specialEventsData.length === 0 ? (
+                    ) : filteredEvents.length === 0 ? (
                         <StyledCard style={styles.emptyStateCard}>
                             <Text style={styles.emptyStateText}>
                                 No events scheduled for this period
                             </Text>
                         </StyledCard>
                     ) : (
-                        specialEventsData.map((event: any) => (
+                        filteredEvents.map((event: any) => (
                             <StyledCard key={event.id} style={{ marginBottom: 8, padding: 12 }}>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                                     <Text style={{ fontWeight: '600', color: '#374151', fontSize: 14, flex: 1 }}>{event.title}</Text>
@@ -664,15 +662,16 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                     </View>
                                 </View>
                                 <View style={styles.divisionsListContainer}>
+                                    
                                     <FlatList
-                                        data={DIVISIONS.filter((d) => d !== 'All Divisions')}
-                                        keyExtractor={(item) => item}
+                                        data={divisionsData}
+                                        keyExtractor={(item) => item.id}
                                         renderItem={({ item }) => {
-                                            const isSelected = selectedDivisions.includes(item);
+                                            const isSelected = selectedDivisions.includes(item.id);
                                             return (
                                                 <TouchableOpacity
                                                     style={styles.divisionCheckboxItem}
-                                                    onPress={() => handleDivisionToggle(item)}
+                                                    onPress={() => handleDivisionToggle(item.id)}
                                                 >
                                                     <View
                                                         style={[
@@ -689,7 +688,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                                         )}
                                                     </View>
                                                     <Text style={styles.divisionCheckboxText}>
-                                                        {item}
+                                                        {item.name}
                                                     </Text>
                                                 </TouchableOpacity>
                                             );
@@ -697,6 +696,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                         nestedScrollEnabled={true}
                                         scrollEnabled={true}
                                     />
+
                                 </View>
                             </View>
 
@@ -877,24 +877,24 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                         </View>
 
                         <FlatList
-                            data={DIVISIONS}
-                            keyExtractor={(item) => item}
+                            data={[{ id: 'All Divisions', name: 'All Divisions' }, ...divisionsData]}
+                            keyExtractor={(item: any) => item.id}
                             renderItem={({ item }) => (
                                 <TouchableOpacity
                                     style={styles.bottomSheetOption}
                                     onPress={() => {
-                                        setSelectedDivision(item);
+                                        setSelectedDivision(item.id);
                                         setShowDivisionDropdown(false);
                                     }}
                                 >
                                     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <Text style={[
                                             styles.bottomSheetOptionText,
-                                            selectedDivision === item && styles.bottomSheetOptionTextSelected
+                                            selectedDivision === item.id && styles.bottomSheetOptionTextSelected
                                         ]}>
-                                            {item}
+                                            {item.name}
                                         </Text>
-                                        {selectedDivision === item && (
+                                        {selectedDivision === item.id && (
                                             <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
                                         )}
                                     </View>

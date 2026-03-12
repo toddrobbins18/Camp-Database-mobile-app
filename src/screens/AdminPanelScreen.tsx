@@ -6,7 +6,6 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useAdminUsers, useUpdateUserRole, useDeleteUser, useEmailConfigs, useUpdateEmailConfig, useEditHistory } from '../api/admin';
 
-
 export const AdminPanelScreen = ({ navigation }: any) => {
 
 
@@ -21,6 +20,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     const users = adminUsers as any[];
     const emailConfigs = fetchedEmailConfigs as any[];
     const editHistoryEntries = fetchedHistory as any[];
+
 
     const [currentTab, setCurrentTab] = useState<'userManagement' | 'userTags' | 'emailAutomation' | 'dataImport' | 'editHistory'>('userManagement');
     const [showRolePicker, setShowRolePicker] = useState(false);
@@ -40,7 +40,6 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedFilterTag, setSelectedFilterTag] = useState('All Tags');
     const [showFilterTagPicker, setShowFilterTagPicker] = useState(false);
-
 
     const sendTimingOptions = [
         { value: 'When Created', label: 'When Created', description: 'Send immediately when record is created.' },
@@ -2315,4 +2314,5 @@ const styles = StyleSheet.create({
         paddingBottom: theme.spacing.xl,
         paddingHorizontal: theme.spacing.md,
     },
+
 });

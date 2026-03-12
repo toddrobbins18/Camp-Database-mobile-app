@@ -70,6 +70,74 @@ export const useDeleteUser = () => {
     });
 };
 
+// --------- User Approvals --------- //
+export const usePendingUsers = () => {
+    return useQuery({
+        queryKey: ['pendingUsers'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('approved', false);
+
+            if (error) throw error;
+
+            return (data || []).map((u: any) => ({
+                id: u.id,
+                name: u.full_name || u.email?.split('@')[0] || 'Unknown',
+                email: u.email || '',
+                requestedAt: u.created_at || new Date().toISOString()
+            }));
+        }
+    });
+};
+
+export const useApproveUser = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ userId, companyId }: { userId: string, companyId: string }) => {
+            // 1. Approve the profile and assign company
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .update({ approved: true, company_id: companyId })
+                .eq('id', userId);
+
+            if (profileError) throw profileError;
+
+            // 2. Add standard Staff role for that company
+            const { error: roleError } = await supabase
+                .from('user_roles')
+                .insert([{ user_id: userId, company_id: companyId, role: 'Staff' }]);
+
+            // Ignore duplicate key errors if role somehow exists
+            if (roleError && roleError.code !== '23505') throw roleError;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['pendingUsers'] });
+            queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+        }
+    });
+};
+
+export const useRejectUser = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (userId: string) => {
+            // For now, we'll just delete the profile record to reject them.
+            // Alternatively, we could set a 'rejected' flag if the schema supported it.
+            const { error } = await supabase
+                .from('profiles')
+                .delete()
+                .eq('id', userId);
+
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['pendingUsers'] });
+        }
+    });
+};
+
 // --------- Email Automation --------- //
 export interface EmailConfig {
     id: string;

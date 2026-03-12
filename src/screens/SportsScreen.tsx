@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     View,
     Text,
@@ -15,34 +15,13 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useSportsEnrollments, useAddSportsEnrollment, useDeleteSportsEnrollment } from '../api/sports';
-import { useCampers } from '../api/campers';
+import { useCampers, useDivisions } from '../api/campers';
 
 interface SportsScreenProps {
     navigation: any;
 }
 
-// Reuse divisions from existing code
-const DIVISIONS = [
-    'All Divisions',
-    'Freshmen A Girls',
-    'Freshmen B Girls',
-    'Cadet Girls',
-    'Sophomore Girls',
-    'Junior Girls',
-    'Senior Girls',
-    'Super Girls',
-    'Teen Girls',
-    'CIT Girls',
-    'Freshmen A Boys',
-    'Freshmen B Boys',
-    'Cadet Boys',
-    'Sophomore Boys',
-    'Junior Boys',
-    'Senior Boys',
-    'Super Boys',
-    'Teen Boys',
-    'CIT Boys',
-];
+
 
 const GENDERS = ['All Genders', 'Boys', 'Girls'];
 const SPORTS = ['All Sports', 'Soccer', 'Basketball', 'Tennis', 'Swimming', 'Baseball', 'Volleyball'];
@@ -87,6 +66,32 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const { companyId, season } = useCompany();
     const { data: campersData = [] } = useCampers(companyId, season);
     const { data: enrollmentsData = [] } = useSportsEnrollments(companyId, season);
+    const { data: divisionsData = [] } = useDivisions();
+    
+    const filteredEnrollments = useMemo(() => {
+        let filtered = enrollmentsData;
+        
+        if (selectedDivision !== 'All Divisions') {
+            filtered = filtered.filter(e => e.children?.division_id === selectedDivision);
+        }
+        if (selectedGender !== 'All Genders') {
+            const genderFilter = selectedGender === 'Boys' ? 'boy' : 'girl';
+            filtered = filtered.filter(e => e.children?.gender === genderFilter);
+        }
+        if (selectedSport !== 'All Sports') {
+            filtered = filtered.filter(e => e.sport_name === selectedSport);
+        }
+        if (searchQuery) {
+            const lowerQuery = searchQuery.toLowerCase();
+            filtered = filtered.filter(e => 
+                (e.children?.name && e.children.name.toLowerCase().includes(lowerQuery)) ||
+                (e.sport_name && e.sport_name.toLowerCase().includes(lowerQuery)) ||
+                (e.instructor && e.instructor.toLowerCase().includes(lowerQuery))
+            );
+        }
+        return filtered;
+    }, [enrollmentsData, selectedDivision, selectedGender, selectedSport, searchQuery]);
+    
     const addEnrollmentMutation = useAddSportsEnrollment();
     const deleteEnrollmentMutation = useDeleteSportsEnrollment();
 
@@ -395,7 +400,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
             ? `${selectedDateObj.getFullYear()}-${String(selectedDateObj.getMonth() + 1).padStart(2, '0')}-${String(selectedDateObj.getDate()).padStart(2, '0')}`
             : null;
 
-        const todaysEnrollments = enrollmentsData.filter(e => {
+        const todaysEnrollments = filteredEnrollments.filter(e => {
             if (!selectedDateStr) return false;
             if (e.start_date && e.end_date) {
                 return selectedDateStr >= e.start_date && selectedDateStr <= e.end_date;
@@ -638,7 +643,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                     setShowSportDropdown(false);
                                 }}
                             >
-                                <Text style={styles.filterDropdownText}>{selectedDivision}</Text>
+                                <Text style={styles.filterDropdownText}>{selectedDivision === 'All Divisions' ? 'All Divisions' : divisionsData.find(d => d.id === selectedDivision)?.name || 'Select Division'}</Text>
                                 <Ionicons
                                     name="chevron-down"
                                     size={16}
@@ -697,7 +702,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                 {/* List View / Empty State */}
                 {viewMode === 'list' && (
                     <View style={styles.listContainer}>
-                        {enrollmentsData.length === 0 ? (
+                        {filteredEnrollments.length === 0 ? (
                             <View style={styles.emptyStateContainer}>
                                 <StyledCard style={styles.emptyStateCard}>
                                     <Text style={styles.emptyStateText}>
@@ -706,7 +711,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </StyledCard>
                             </View>
                         ) : (
-                            enrollmentsData.map(enroll => (
+                            filteredEnrollments.map(enroll => (
                                 <StyledCard key={enroll.id} style={{ padding: theme.spacing.md, marginBottom: theme.spacing.md }}>
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm }}>
                                         <Text style={{ ...theme.typography.h3 }}>{enroll.children?.name || 'Unknown Camper'}</Text>
@@ -753,31 +758,32 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                         <Ionicons name="close" size={24} color={theme.colors.text} />
                                     </TouchableOpacity>
                                 </View>
-                                <FlatList
-                                    data={DIVISIONS}
-                                    keyExtractor={(item) => item}
+                                
+                               <FlatList
+                                    data={[{id: 'All Divisions', name: 'All Divisions'}, ...divisionsData]}
+                                    keyExtractor={(item) => item.id}
                                     renderItem={({ item }) => (
                                         <TouchableOpacity
                                             style={[
                                                 styles.filterDropdownItem,
-                                                selectedDivision === item &&
+                                                selectedDivision === item.id &&
                                                 styles.filterDropdownItemSelected,
                                             ]}
                                             onPress={() => {
-                                                setSelectedDivision(item);
+                                                setSelectedDivision(item.id);
                                                 setShowDivisionDropdown(false);
                                             }}
                                         >
                                             <Text
                                                 style={[
                                                     styles.filterDropdownItemText,
-                                                    selectedDivision === item &&
+                                                    selectedDivision === item.id &&
                                                     styles.filterDropdownItemTextSelected,
                                                 ]}
                                             >
-                                                {item}
+                                                {item.name}
                                             </Text>
-                                            {selectedDivision === item && (
+                                            {selectedDivision === item.id && (
                                                 <Ionicons
                                                     name="checkmark"
                                                     size={20}
@@ -789,6 +795,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                     )}
                                     nestedScrollEnabled={true}
                                 />
+    
                             </View>
                         </View>
                     </TouchableOpacity>

@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
-import { useCampers, useAddCamper, useEditCamper, useDeleteCamper } from '../api/campers';
+import { useCampers, useAddCamper, useEditCamper, useDeleteCamper, useDivisions } from '../api/campers';
 import { useRole } from '../hooks/useRole';
 import { useStaff } from '../api/staff';
 
@@ -13,30 +13,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 600; // Mobile: full width cards
 const isMediumScreen = SCREEN_WIDTH >= 600 && SCREEN_WIDTH < 1024; // Tablet: 2 columns
 const isLargeScreen = SCREEN_WIDTH >= 1024; // Desktop: 3 columns
-
-// Division options matching the screenshot
-const DIVISIONS = [
-    'All Divisions',
-    'Freshmen A Girls',
-    'Freshmen B Girls',
-    'Cadet Girls',
-    'Sophomore Girls',
-    'Junior Girls',
-    'Senior Girls',
-    'Super Girls',
-    'Teen Girls',
-    'CIT Girls',
-    'Freshmen A Boys',
-    'Freshmen B Boys',
-    'Cadet Boys',
-    'Sophomore Boys',
-    'Junior Boys',
-    'Senior Boys',
-    'Super Boys',
-    'Teen Boys',
-    'CIT Boys',
-];
-
 
 // Header Component (Resusable for sub-screens)
 const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
@@ -56,6 +32,8 @@ export const CamperScreen = ({ navigation }: any) => {
     const { data: campersData = [], isLoading, isError } = useCampers(companyId, season);
     const { data: roleData } = useRole();
     const isAdmin = roleData?.isAdmin || false;
+
+    const { data: divisionsData = [] } = useDivisions();
 
     const addCamperMutation = useAddCamper();
     const editCamperMutation = useEditCamper();
@@ -148,12 +126,12 @@ export const CamperScreen = ({ navigation }: any) => {
 
     const filteredCampers = useMemo(() => {
         return campersData.filter(camper => {
-            if (selectedDivision !== 'All Divisions' && camper.division !== selectedDivision) return false;
+            if (selectedDivision !== 'All Divisions' && camper.division_id !== selectedDivision) return false;
             // Also apply search query here if needed
             return true;
         }).sort((a, b) => {
             if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
-            return (a.division || '').localeCompare(b.division || '');
+            return (a.division?.name || '').localeCompare(b.division?.name || '');
         });
     }, [campersData, selectedDivision, sortBy]);
 
@@ -380,30 +358,30 @@ export const CamperScreen = ({ navigation }: any) => {
                                 nestedScrollEnabled={true}
                                 showsVerticalScrollIndicator={true}
                             >
-                                {DIVISIONS.map((division) => (
+                                {[{ id: 'All Divisions', name: 'All Divisions' }, ...divisionsData].map((division: any) => (
                                     <TouchableOpacity
-                                        key={division}
+                                        key={division.id}
                                         style={[
                                             styles.bottomSheetOption,
-                                            selectedDivision === division && styles.bottomSheetOptionSelected
+                                            selectedDivision === division.id && styles.bottomSheetOptionSelected
                                         ]}
                                         onPress={() => {
-                                            setSelectedDivision(division);
+                                            setSelectedDivision(division.id);
                                             setShowDivisionDropdown(false);
                                         }}
                                     >
                                         <Ionicons
                                             name="people-outline"
                                             size={24}
-                                            color={selectedDivision === division ? theme.colors.secondary : theme.colors.textSecondary}
+                                            color={selectedDivision === division.id ? theme.colors.secondary : theme.colors.textSecondary}
                                         />
                                         <Text style={[
                                             styles.bottomSheetOptionText,
-                                            selectedDivision === division && styles.bottomSheetOptionTextSelected
+                                            selectedDivision === division.id && styles.bottomSheetOptionTextSelected
                                         ]}>
-                                            {division}
+                                            {division.name}
                                         </Text>
-                                        {selectedDivision === division && (
+                                        {selectedDivision === division.id && (
                                             <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
                                         )}
                                     </TouchableOpacity>
@@ -535,7 +513,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 <View style={styles.selectedCamperHeader}>
                                                     <View>
                                                         <Text style={styles.selectedCamperName}>{selectedCamper.name}</Text>
-                                                        <Text style={styles.selectedCamperInfo}>{selectedCamper.division || 'No Division'}</Text>
+                                                        <Text style={styles.selectedCamperInfo}>{selectedCamper.division?.name || 'No Division'}</Text>
                                                     </View>
                                                     <TouchableOpacity onPress={() => setSelectedCamper(null)}>
                                                         <Ionicons name="close-circle" size={24} color={theme.colors.textSecondary} />
@@ -745,7 +723,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 }}
                                             >
                                                 <Text style={[styles.formSelectText, !formData.division && styles.formSelectPlaceholder]}>
-                                                    {formData.division || 'Select division'}
+                                                    {divisionsData.find(d => d.id === formData.division)?.name || 'Select division'}
                                                 </Text>
                                                 <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                                             </TouchableOpacity>
@@ -949,7 +927,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     name: formData.name,
                                                     age: Number(formData.age) || null,
                                                     gender: formData.gender,
-                                                    division: formData.division,
+                                                    division_id: formData.division,
                                                     person_id: formData.person_id,
                                                     emergency_contact: formData.emergencyContact,
                                                     rfid: formData.rfid,
@@ -1043,25 +1021,25 @@ export const CamperScreen = ({ navigation }: any) => {
                                 nestedScrollEnabled={true}
                                 showsVerticalScrollIndicator={true}
                             >
-                                {DIVISIONS.filter(div => div !== 'All Divisions').map((division) => (
+                                {divisionsData.map((division: any) => (
                                     <TouchableOpacity
-                                        key={division}
+                                        key={division.id}
                                         style={[
                                             styles.bottomSheetOption,
-                                            formData.division === division && styles.bottomSheetOptionSelected
+                                            formData.division === division.id && styles.bottomSheetOptionSelected
                                         ]}
                                         onPress={() => {
-                                            setFormData({ ...formData, division: division });
+                                            setFormData({ ...formData, division: division.id });
                                             setShowAddDivisionDropdown(false);
                                         }}
                                     >
                                         <Text style={[
                                             styles.bottomSheetOptionText,
-                                            formData.division === division && styles.bottomSheetOptionTextSelected
+                                            formData.division === division.id && styles.bottomSheetOptionTextSelected
                                         ]}>
-                                            {division}
+                                            {division.name}
                                         </Text>
-                                        {formData.division === division && (
+                                        {formData.division === division.id && (
                                             <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
                                         )}
                                     </TouchableOpacity>
@@ -1361,7 +1339,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 }}
                                             >
                                                 <Text style={[styles.formSelectText, !editFormData.division && styles.formSelectPlaceholder]}>
-                                                    {editFormData.division || 'Select division'}
+                                                    {divisionsData.find(d => d.id === editFormData.division)?.name || 'Select division'}
                                                 </Text>
                                                 <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                                             </TouchableOpacity>
@@ -1588,7 +1566,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                         name: editFormData.name,
                                                         age: Number(editFormData.age) || null,
                                                         gender: editFormData.gender,
-                                                        division: editFormData.division,
+                                                        division_id: editFormData.division,
                                                         bunk: editFormData.bunk,
                                                         person_id: editFormData.person_id,
                                                         emergency_contact: editFormData.emergencyContact,
@@ -1819,25 +1797,25 @@ export const CamperScreen = ({ navigation }: any) => {
                                 nestedScrollEnabled={true}
                                 showsVerticalScrollIndicator={true}
                             >
-                                {DIVISIONS.filter(div => div !== 'All Divisions').map((division) => (
+                                {divisionsData.map((division: any) => (
                                     <TouchableOpacity
-                                        key={division}
+                                        key={division.id}
                                         style={[
                                             styles.bottomSheetOption,
-                                            editFormData.division === division && styles.bottomSheetOptionSelected
+                                            editFormData.division === division.id && styles.bottomSheetOptionSelected
                                         ]}
                                         onPress={() => {
-                                            setEditFormData({ ...editFormData, division: division });
+                                            setEditFormData({ ...editFormData, division: division.id });
                                             setShowEditDivisionDropdown(false);
                                         }}
                                     >
                                         <Text style={[
                                             styles.bottomSheetOptionText,
-                                            editFormData.division === division && styles.bottomSheetOptionTextSelected
+                                            editFormData.division === division.id && styles.bottomSheetOptionTextSelected
                                         ]}>
-                                            {division}
+                                            {division.name}
                                         </Text>
-                                        {editFormData.division === division && (
+                                        {editFormData.division === division.id && (
                                             <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
                                         )}
                                     </TouchableOpacity>
@@ -1926,7 +1904,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 <View style={styles.cardTop}>
                                     <View style={styles.cardTopLeft}>
                                         <Text style={styles.camperName} numberOfLines={1} ellipsizeMode="tail">{camper.name}</Text>
-                                        <Text style={styles.camperGrade}>{camper.division || "N/A"}</Text>
+                                        <Text style={styles.camperGrade}>{camper.division?.name || "N/A"}</Text>
                                     </View>
                                     <View style={styles.cardTopRight}>
                                         <TouchableOpacity
@@ -1941,7 +1919,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     age: (camper as any).age || '',
                                                     dateOfBirth: (camper as any).dateOfBirth || '08/23/2010',
                                                     gender: (camper as any).gender || '',
-                                                    division: (camper as any).division || camper.division || '',
+                                                    division: camper.division_id || (camper as any).division?.id || '',
                                                     bunk: (camper as any).bunk || '',
                                                     grade: (camper as any).grade || '',
                                                     group: (camper as any).group || '',
@@ -1973,7 +1951,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 </View>
 
                                 <View style={styles.cardFooter}>
-                                    <Text style={styles.divisionText}>Division: {camper.division || "N/A"}</Text>
+                                    <Text style={styles.divisionText}>Division: {camper.division?.name || "N/A"}</Text>
                                     <View style={styles.statusBadge}>
                                         <Text style={styles.statusText}>active</Text>
                                     </View>

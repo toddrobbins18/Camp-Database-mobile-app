@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     View,
     Text,
@@ -23,27 +23,7 @@ interface TutoringTherapyScreenProps {
     navigation: any;
 }
 
-const DIVISIONS = [
-    'All Divisions',
-    'Freshmen A Girls',
-    'Freshmen B Girls',
-    'Cadet Girls',
-    'Sophomore Girls',
-    'Junior Girls',
-    'Senior Girls',
-    'Super Girls',
-    'Teen Girls',
-    'CIT Girls',
-    'Freshmen A Boys',
-    'Freshmen B Boys',
-    'Cadet Boys',
-    'Sophomore Boys',
-    'Junior Boys',
-    'Senior Boys',
-    'Super Boys',
-    'Teen Boys',
-    'CIT Boys',
-];
+
 
 const GENDERS = ['All Genders', 'Boys', 'Girls'];
 
@@ -67,7 +47,34 @@ const SCHEDULE_PERIODS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'
 export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps) => {
     // Fetch tutoring data from Supabase
     const { data: enrollments = [], isLoading: enrollmentsLoading } = useTutoringTherapy('2026');
+    const { data: divisionsData = [] } = useDivisions();
     const addEntryMutation = useAddTutoringEntry();
+
+    const filteredEnrollments = useMemo(() => {
+        let filtered = enrollments;
+
+        if (selectedDivision !== 'All Divisions') {
+            filtered = filtered.filter(e => e.children?.division_id === selectedDivision);
+        }
+        if (selectedGender !== 'All Genders') {
+            const genderValue = selectedGender === 'Boys' ? 'boy' : 'girl';
+            filtered = filtered.filter(e => e.children?.gender === genderValue);
+        }
+        if (selectedService !== 'All Services') {
+            filtered = filtered.filter(e => e.service_type === selectedService);
+        }
+        if (searchQuery) {
+            const lowerQuery = searchQuery.toLowerCase();
+            filtered = filtered.filter(e => {
+                const childName = `${e.children?.first_name || ''} ${e.children?.last_name || ''}`.toLowerCase();
+                return childName.includes(lowerQuery) || 
+                       (e.service_type && e.service_type.toLowerCase().includes(lowerQuery)) ||
+                       (e.instructor && e.instructor.toLowerCase().includes(lowerQuery));
+            });
+        }
+        return filtered;
+    }, [enrollments, selectedDivision, selectedGender, selectedService, searchQuery]);
+    
     const deleteEntryMutation = useDeleteTutoringEntry();
 
     // Fetch campers from Supabase
@@ -190,7 +197,7 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                             selected === item && styles.bottomSheetItemTextSelected,
                                         ]}
                                     >
-                                        {item}
+                                        {formatter ? formatter(item) : item}
                                     </Text>
                                 </TouchableOpacity>
                             )}
@@ -389,7 +396,7 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                             }}
                         >
                             <Text style={[styles.dropdownText, !selectedDivision && styles.placeholder]}>
-                                {selectedDivision || 'Select Division'}
+                                {selectedDivision === 'All Divisions' ? 'All Divisions' : divisionsData.find((d: any) => d.id === selectedDivision)?.name || 'Select Division'}
                             </Text>
                             <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
@@ -436,14 +443,14 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                 <View style={styles.contentArea}>
                     {enrollmentsLoading ? (
                         <ActivityIndicator size="large" color={theme.colors.secondary} />
-                    ) : enrollments.length === 0 ? (
+                    ) : filteredEnrollments.length === 0 ? (
                         <Text style={styles.emptyStateText}>No enrollments found</Text>
                     ) : (
-                        enrollments.map((entry: any) => (
+                        filteredEnrollments.map((entry: any) => (
                             <StyledCard key={entry.id} style={{ marginBottom: 8, padding: 12 }}>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <View style={{ flex: 1 }}>
-                                        <Text style={{ fontWeight: '600', color: theme.colors.text }}>{entry.service_type}</Text>
+                                        <Text style={{ fontWeight: '600', color: theme.colors.text }}>{entry.children ? `${entry.children.first_name} ${entry.children.last_name}` : 'Unknown Camper'} - {entry.service_type}</Text>
                                         <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 2 }}>
                                             Instructor: {entry.instructor || 'N/A'} • Periods: {(entry.schedule_periods || []).join(', ') || 'N/A'}
                                         </Text>
@@ -463,10 +470,11 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
             {renderBottomSheetDropdown(
                 showDivisionDropdown,
                 () => setShowDivisionDropdown(false),
-                DIVISIONS,
+                ['All Divisions', ...divisionsData.map((d: any) => d.id)],
                 selectedDivision,
                 setSelectedDivision,
-                'Select Division'
+                'Select Division',
+                (item) => item === 'All Divisions' ? 'All Divisions' : divisionsData.find((d:any) => d.id === item)?.name
             )}
             {renderBottomSheetDropdown(
                 showGenderDropdown,

@@ -28,7 +28,7 @@ export const useSportsEnrollments = (companyId: string | null, season: string) =
                 .from('sports_academy')
                 .select(`
                     *,
-                    children!inner(*)
+                    children!inner(*, division:divisions(id, name, gender, sort_order))
                 `)
                 .eq('children.company_id', companyId)
                 .eq('children.season', season)

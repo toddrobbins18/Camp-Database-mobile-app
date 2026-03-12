@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
-import { useCampers } from '../api/campers';
+import { useCampers, useDivisions } from '../api/campers';
 import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
 
 export const HealthScreen = ({ navigation }: any) => {
     const { companyId } = useCompany();
     const { data: campersData = [] } = useCampers(companyId, '2026');
+    const { data: divisionsData = [] } = useDivisions();
 
     const [activeView, setActiveView] = useState('list'); // 'list' or 'calendar'
     const [activeTab, setActiveTab] = useState('Daily Log');
@@ -35,27 +36,7 @@ export const HealthScreen = ({ navigation }: any) => {
     const [showChildPicker, setShowChildPicker] = useState(false);
     const [showUploadModal, setShowUploadModal] = useState(false);
 
-    const divisions = [
-        'All Divisions',
-        'Freshmen A Girls',
-        'Freshmen B Girls',
-        'Cadet Girls',
-        'Sophomore Girls',
-        'Junior Girls',
-        'Senior Girls',
-        'Super Girls',
-        'Teen Girls',
-        'CIT Girls',
-        'Freshmen A Boys',
-        'Freshmen B Boys',
-        'Cadet Boys',
-        'Sophomore Boys',
-        'Junior Boys',
-        'Senior Boys',
-        'Super Boys',
-        'Teen Boys',
-        'CIT Boys',
-    ];
+    
 
     const dateString = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
 
@@ -70,14 +51,22 @@ export const HealthScreen = ({ navigation }: any) => {
     const checkoutMutation = useCheckoutHealthCenterAdmission();
 
     // Filter children based on search query
-    const filteredChildren = campersData.filter((child: any) =>
-        `${child.first_name} ${child.last_name}`.toLowerCase().includes(searchChildrenQuery.toLowerCase()) ||
-        (child.group_name || '').toLowerCase().includes(searchChildrenQuery.toLowerCase())
-    ).map((child: any) => ({
-        id: child.id,
-        name: `${child.first_name} ${child.last_name}`,
-        division: child.group_name || 'N/A'
-    }));
+    
+    const filteredChildren = useMemo(() => {
+        return campersData.filter((child: any) => {
+            const matchesSearch = `${child.first_name} ${child.last_name}`.toLowerCase().includes(searchChildrenQuery.toLowerCase()) ||
+                (child.division?.name || child.group_name || '').toLowerCase().includes(searchChildrenQuery.toLowerCase());
+            
+            const matchesDivision = selectedDivision === 'All Divisions' || child.division_id === selectedDivision;
+            
+            return matchesSearch && matchesDivision;
+        }).map((child: any) => ({
+            id: child.id,
+            name: `${child.first_name} ${child.last_name}`,
+            division: child.division?.name || child.group_name || 'N/A'
+        }));
+    }, [campersData, searchChildrenQuery, selectedDivision]);
+    
 
     const handleAdmitChild = () => {
         if (!childToAdmit || !admitReason || !companyId) return;
@@ -300,7 +289,7 @@ export const HealthScreen = ({ navigation }: any) => {
                         style={styles.dropdownContainer}
                         onPress={() => setShowDivisionPicker(true)}
                     >
-                        <Text style={styles.dropdownText}>{selectedDivision}</Text>
+                        <Text style={styles.dropdownText}>{selectedDivision === 'All Divisions' ? 'All Divisions' : divisionsData.find(d => d.id === selectedDivision)?.name || 'Select Division'}</Text>
                         <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                     </TouchableOpacity>
                 </View>

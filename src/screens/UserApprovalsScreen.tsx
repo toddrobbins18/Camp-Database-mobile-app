@@ -1,219 +1,127 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { useCompany } from '../contexts/CompanyContext';
-import { usePendingApprovals, useApproveUser, useRejectUser } from '../api/incidents_approvals';
-
-interface PendingApproval {
-    id: string;
-    name: string;
-    email: string;
-    requestedAt: string;
-}
+import { usePendingUsers, useApproveUser, useRejectUser } from '../api/admin';
+import { supabase } from '../lib/supabase';
 
 export const UserApprovalsScreen = ({ navigation }: any) => {
-    const { companyId } = useCompany();
-    const { data: pendingApprovalsData = [], isLoading } = usePendingApprovals(companyId);
+    // Companies for assigning users
+    const [companies, setCompanies] = useState<any[]>([]);
+    React.useEffect(() => {
+        const fetchCompanies = async () => {
+            const { data } = await supabase.from('companies').select('id, name');
+            if (data) setCompanies(data);
+        };
+        fetchCompanies();
+    }, []);
+
+    // User Approvals State
+    const { data: pendingUsers = [] } = usePendingUsers();
     const approveUserMutation = useApproveUser();
     const rejectUserMutation = useRejectUser();
-    const pendingApprovals = pendingApprovalsData.map((u: any) => ({
-        id: u.id,
-        name: u.name || u.email?.split('@')[0] || 'Unknown',
-        email: u.email || '',
-        requestedAt: u.created_at,
-    }));
-    const [showApproveModal, setShowApproveModal] = useState(false);
-    const [showRejectModal, setShowRejectModal] = useState(false);
-    const [userToApprove, setUserToApprove] = useState<PendingApproval | null>(null);
-    const [userToReject, setUserToReject] = useState<PendingApproval | null>(null);
-
-    // User Approval handlers
-    const handleApproveUser = () => {
-        if (userToApprove && companyId) {
-            approveUserMutation.mutate({ userId: userToApprove.id, companyId }, {
-                onSuccess: () => {
-                    setShowApproveModal(false);
-                    setUserToApprove(null);
-                },
-            });
-        }
-    };
-
-    const handleRejectUser = () => {
-        if (userToReject && companyId) {
-            rejectUserMutation.mutate({ userId: userToReject.id, companyId }, {
-                onSuccess: () => {
-                    setShowRejectModal(false);
-                    setUserToReject(null);
-                },
-            });
-        }
-    };
-
-    const handleCancelApprove = () => {
-        setShowApproveModal(false);
-        setUserToApprove(null);
-    };
-
-    const handleCancelReject = () => {
-        setShowRejectModal(false);
-        setUserToReject(null);
-    };
+    const [selectedCompanyForUser, setSelectedCompanyForUser] = useState<Record<string, string>>({});
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView 
-                contentContainerStyle={styles.scrollContent} 
-                showsVerticalScrollIndicator={false}
-            >
-                {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.openDrawer()}>
-                        <Ionicons name="menu" size={28} color={theme.colors.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity>
-                        <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
-                    </TouchableOpacity>
-                </View>
+            {/* Header */}
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                    <Ionicons name="menu" size={28} color={theme.colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity>
+                    <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
+                </TouchableOpacity>
+            </View>
 
-                {/* Title and Description Section */}
-                <View style={styles.titleSection}>
-                    <View style={styles.titleContainer}>
-                        <Text style={styles.title}>User Approvals</Text>
-                        <Text style={styles.subtitle}>Approve or reject pending user registrations</Text>
-                    </View>
-                </View>
-
-                {/* User Approvals Section */}
-                <StyledCard style={styles.contentCard}>
-
-                    {/* Pending Approvals List */}
-                    {pendingApprovals.length === 0 ? (
-                        <View style={styles.emptyStateContainer}>
-                            <Text style={styles.emptyStateText}>No pending user approvals</Text>
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                <View style={styles.approvalsContainer}>
+                    <View style={styles.titleSection}>
+                        <View style={styles.titleContainer}>
+                            <Text style={styles.cardTitle}>User Approvals</Text>
+                            <Text style={styles.cardSubtitle}>Approve or reject pending user registrations</Text>
                         </View>
-                    ) : (
-                        <View style={styles.pendingApprovalsList}>
-                            {pendingApprovals.map((approval) => (
-                                <View key={approval.id} style={styles.approvalCard}>
-                                    <View style={styles.approvalInfo}>
-                                        <Text style={styles.approvalName}>{approval.name}</Text>
-                                        <Text style={styles.approvalEmail}>{approval.email}</Text>
-                                        <Text style={styles.approvalDate}>
-                                            Requested: {new Date(approval.requestedAt).toLocaleDateString('en-US', {
-                                                year: 'numeric',
-                                                month: 'short',
-                                                day: 'numeric',
-                                                hour: '2-digit',
-                                                minute: '2-digit'
-                                            })}
-                                        </Text>
+                    </View>
+
+                    {/* Banner matching the UI */}
+                    <View style={styles.approvalsBanner}>
+                        <Ionicons name="shield-checkmark-outline" size={20} color={theme.colors.secondary} />
+                        <View style={styles.approvalsBannerBadge}>
+                            <Text style={styles.approvalsBannerText}>Super Admin</Text>
+                        </View>
+                        <Ionicons name="business-outline" size={16} color={theme.colors.textSecondary} />
+                        <Text style={styles.approvalsBannerViewing}>Viewing: All Camps</Text>
+                    </View>
+
+                    <View style={styles.approvalsGrid}>
+                        {pendingUsers.length === 0 ? (
+                            <Text style={styles.noPendingText}>No pending users to approve.</Text>
+                        ) : (
+                            pendingUsers.map((user: any) => (
+                                <StyledCard key={user.id} style={styles.approvalCard}>
+                                    <View style={styles.approvalCardHeader}>
+                                        <View style={styles.approvalUserInfo}>
+                                            <Text style={styles.approvalUserName}>{user.name}</Text>
+                                            <Text style={styles.approvalUserEmail}>{user.email}</Text>
+                                        </View>
+                                        <View style={styles.pendingBadge}>
+                                            <Ionicons name="time-outline" size={14} color={theme.colors.textSecondary} />
+                                            <Text style={styles.pendingBadgeText}>Pending</Text>
+                                        </View>
                                     </View>
+
+                                    <Text style={styles.approvalRequestedText}>
+                                        Requested: {new Date(user.requestedAt).toLocaleString()}
+                                    </Text>
+
+                                    <Text style={styles.assignToCampLabel}>Assign to Camp</Text>
+                                    <View style={styles.assignDropdownContainer}>
+                                        <select
+                                            style={styles.htmlSelect}
+                                            value={selectedCompanyForUser[user.id] || ''}
+                                            onChange={(e) => setSelectedCompanyForUser(prev => ({ ...prev, [user.id]: e.target.value }))}
+                                        >
+                                            <option value="" disabled>Select a camp...</option>
+                                            {companies.map(camp => (
+                                                <option key={camp.id} value={camp.id}>{camp.name}</option>
+                                            ))}
+                                        </select>
+                                    </View>
+
                                     <View style={styles.approvalActions}>
                                         <TouchableOpacity
-                                            style={styles.rejectButton}
+                                            style={[styles.approveButton, !selectedCompanyForUser[user.id] && styles.buttonDisabled]}
                                             onPress={() => {
-                                                setUserToReject(approval);
-                                                setShowRejectModal(true);
+                                                if (selectedCompanyForUser[user.id]) {
+                                                    approveUserMutation.mutate({
+                                                        userId: user.id,
+                                                        companyId: selectedCompanyForUser[user.id]
+                                                    });
+                                                }
                                             }}
+                                            disabled={!selectedCompanyForUser[user.id] || approveUserMutation.isPending}
                                         >
-                                            <Ionicons name="close-circle-outline" size={18} color={theme.colors.danger} />
-                                            <Text style={styles.rejectButtonText}>Reject</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={styles.approveButton}
-                                            onPress={() => {
-                                                setUserToApprove(approval);
-                                                setShowApproveModal(true);
-                                            }}
-                                        >
-                                            <Ionicons name="checkmark-circle-outline" size={18} color="#10b981" />
+                                            <Ionicons name="checkmark-circle-outline" size={16} color="white" />
                                             <Text style={styles.approveButtonText}>Approve</Text>
                                         </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={styles.rejectButton}
+                                            onPress={() => rejectUserMutation.mutate(user.id)}
+                                            disabled={rejectUserMutation.isPending}
+                                        >
+                                            <Ionicons name="close-circle-outline" size={16} color="white" />
+                                            <Text style={styles.rejectButtonText}>Reject</Text>
+                                        </TouchableOpacity>
                                     </View>
-                                </View>
-                            ))}
-                        </View>
-                    )}
-                </StyledCard>
+                                </StyledCard>
+                            ))
+                        )}
+                    </View>
+                </View>
             </ScrollView>
-
-            {/* Approve User Modal */}
-            <Modal
-                visible={showApproveModal}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={handleCancelApprove}
-            >
-                <Pressable style={styles.modalOverlay} onPress={handleCancelApprove}>
-                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.deleteModalHeader}>
-                            <Text style={styles.deleteModalTitle}>Approve User</Text>
-                        </View>
-
-                        <View style={styles.deleteModalBody}>
-                            <Text style={styles.deleteModalMessage}>
-                                Are you sure you want to approve {userToApprove?.name} ({userToApprove?.email})? They will be granted access to the system.
-                            </Text>
-                        </View>
-
-                        <View style={styles.deleteModalFooter}>
-                            <TouchableOpacity
-                                style={styles.cancelDeleteButton}
-                                onPress={handleCancelApprove}
-                            >
-                                <Text style={styles.cancelDeleteButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.deleteButton, { backgroundColor: '#10b981' }]}
-                                onPress={handleApproveUser}
-                            >
-                                <Text style={styles.deleteButtonText}>Approve</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Reject User Modal */}
-            <Modal
-                visible={showRejectModal}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={handleCancelReject}
-            >
-                <Pressable style={styles.modalOverlay} onPress={handleCancelReject}>
-                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.deleteModalHeader}>
-                            <Text style={styles.deleteModalTitle}>Reject User</Text>
-                        </View>
-
-                        <View style={styles.deleteModalBody}>
-                            <Text style={styles.deleteModalMessage}>
-                                Are you sure you want to reject {userToReject?.name} ({userToReject?.email})? This action cannot be undone.
-                            </Text>
-                        </View>
-
-                        <View style={styles.deleteModalFooter}>
-                            <TouchableOpacity
-                                style={styles.cancelDeleteButton}
-                                onPress={handleCancelReject}
-                            >
-                                <Text style={styles.cancelDeleteButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.deleteButton}
-                                onPress={handleRejectUser}
-                            >
-                                <Text style={styles.deleteButtonText}>Reject</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
         </SafeAreaView>
     );
 };
@@ -223,194 +131,183 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: theme.colors.background,
     },
-    scrollContent: {
-        padding: theme.spacing.md,
-        paddingBottom: 100,
-    },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: theme.spacing.lg,
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    scrollContent: {
+        padding: theme.spacing.md,
+        paddingBottom: 100,
     },
     titleSection: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
         marginBottom: theme.spacing.lg,
-        flexWrap: 'wrap',
     },
     titleContainer: {
-        flex: 1,
-        minWidth: '50%',
         marginBottom: theme.spacing.sm,
     },
-    title: {
+    cardTitle: {
         ...theme.typography.h1,
         fontSize: 32,
         fontWeight: '700',
         color: theme.colors.text,
         marginBottom: theme.spacing.xs,
     },
-    subtitle: {
+    cardSubtitle: {
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.textSecondary,
     },
-    contentCard: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.md,
-        marginTop: theme.spacing.sm,
-        minHeight: 400,
+    approvalsContainer: {
+        width: '100%',
     },
-    // User Approvals Styles
-    emptyStateContainer: {
-        padding: theme.spacing.xl,
+    approvalsBanner: {
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: 200,
+        backgroundColor: '#eef2ff',
+        padding: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: '#c7d2fe',
+        marginBottom: theme.spacing.xl,
+        gap: 8,
     },
-    emptyStateText: {
-        ...theme.typography.body,
-        fontSize: 16,
+    approvalsBannerBadge: {
+        backgroundColor: '#2563eb', // Blue theme match
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 16,
+        marginRight: 8,
+    },
+    approvalsBannerText: {
+        color: 'white',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    approvalsBannerViewing: {
+        fontSize: 14,
         color: theme.colors.textSecondary,
+        fontWeight: '500',
     },
-    pendingApprovalsList: {
-        gap: theme.spacing.sm,
+    approvalsGrid: {
+        width: '100%',
+        maxWidth: 400, // Matching the narrow card style in screenshot
     },
     approvalCard: {
-        backgroundColor: theme.colors.surface,
+        padding: theme.spacing.lg,
+        marginBottom: theme.spacing.md,
         borderWidth: 1,
         borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        padding: theme.spacing.md,
-        marginBottom: theme.spacing.sm,
     },
-    approvalInfo: {
+    approvalCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
         marginBottom: theme.spacing.md,
     },
-    approvalName: {
-        ...theme.typography.h3,
+    approvalUserInfo: {
+        flex: 1,
+    },
+    approvalUserName: {
         fontSize: 16,
         fontWeight: '700',
         color: theme.colors.text,
-        marginBottom: theme.spacing.xs,
+        marginBottom: 2,
     },
-    approvalEmail: {
-        ...theme.typography.bodySmall,
+    approvalUserEmail: {
         fontSize: 14,
         color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.xs,
     },
-    approvalDate: {
-        ...theme.typography.bodySmall,
+    pendingBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        backgroundColor: '#f1f5f9',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    pendingBadgeText: {
         fontSize: 12,
         color: theme.colors.textSecondary,
+        fontWeight: '500',
+    },
+    approvalRequestedText: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.md,
+    },
+    assignToCampLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
+    },
+    assignDropdownContainer: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.surface,
+        marginBottom: theme.spacing.lg,
+        height: 40,
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    htmlSelect: {
+        width: '100%',
+        height: '100%',
+        paddingHorizontal: theme.spacing.md,
+        fontSize: 14,
+        color: theme.colors.text,
+        borderWidth: 0,
+        backgroundColor: 'transparent',
     },
     approvalActions: {
         flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: theme.spacing.sm,
+        gap: theme.spacing.md,
     },
     approveButton: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#d1fae5',
-        borderWidth: 1,
-        borderColor: '#10b981',
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        gap: theme.spacing.xs,
-    },
-    approveButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#10b981',
+        justifyContent: 'center',
+        backgroundColor: '#6366f1', // Indigo matched to screenshot
+        paddingVertical: 10,
+        borderRadius: 8,
+        gap: 6,
     },
     rejectButton: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#fee2e2',
-        borderWidth: 1,
-        borderColor: theme.colors.danger,
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        gap: theme.spacing.xs,
+        justifyContent: 'center',
+        backgroundColor: '#dc2626', // Red matched to screenshot
+        paddingVertical: 10,
+        borderRadius: 8,
+        gap: 6,
+    },
+    buttonDisabled: {
+        opacity: 0.5,
+    },
+    approveButtonText: {
+        color: 'white',
+        fontWeight: '600',
+        fontSize: 14,
     },
     rejectButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: theme.colors.danger,
-    },
-    // Modal Styles
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    deleteModalContent: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.xl,
-        width: '85%',
-        maxWidth: 400,
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 10,
-    },
-    deleteModalHeader: {
-        padding: theme.spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    deleteModalTitle: {
-        ...theme.typography.h2,
-        fontSize: 20,
-        fontWeight: '700',
-        color: theme.colors.text,
-    },
-    deleteModalBody: {
-        padding: theme.spacing.lg,
-    },
-    deleteModalMessage: {
-        ...theme.typography.body,
-        fontSize: 16,
-        color: theme.colors.text,
-        lineHeight: 24,
-    },
-    deleteModalFooter: {
-        padding: theme.spacing.lg,
-        paddingTop: theme.spacing.md,
-        gap: theme.spacing.sm,
-    },
-    deleteButton: {
-        backgroundColor: theme.colors.secondary,
-        paddingVertical: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-        alignItems: 'center',
-    },
-    deleteButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
         color: 'white',
-    },
-    cancelDeleteButton: {
-        backgroundColor: theme.colors.surface,
-        paddingVertical: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    cancelDeleteButtonText: {
-        fontSize: 16,
         fontWeight: '600',
-        color: theme.colors.text,
+        fontSize: 14,
+    },
+    noPendingText: {
+        fontSize: 16,
+        color: theme.colors.textSecondary,
+        fontStyle: 'italic',
+        marginTop: theme.spacing.md,
     },
 });
-
-

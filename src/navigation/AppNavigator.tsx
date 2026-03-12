@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer } from '@react-navigation/native';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Modal, Pressable, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useCompany } from '../contexts/CompanyContext';
 import { LoginScreen } from '../screens/LoginScreen';
 import { SignUpScreen } from '../screens/SignUpScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
@@ -50,6 +51,8 @@ const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const [selectedYear, setSelectedYear] = useState('2026');
     const { data: roleData } = useRole();
+    const { availableCompanies, switchCompany, companyId, isSuperAdmin: isSuperAdminCompany } = useCompany();
+    const [showCampPicker, setShowCampPicker] = useState(false);
 
     // Role flags (default to showing Main Menu items while loading)
     const isSuperAdmin = roleData?.isSuperAdmin ?? false;
@@ -66,6 +69,8 @@ const CustomDrawerContent = (props: any) => {
         labelStyle: styles.drawerLabel,
         inactiveTintColor: '#94a3b8',
     };
+
+    const currentCompanyName = availableCompanies.find(c => c.id === companyId)?.name || 'Select Camp';
 
     return (
         <View style={{ flex: 1, backgroundColor: theme.colors.primary }}>
@@ -100,6 +105,60 @@ const CustomDrawerContent = (props: any) => {
                         <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                     </TouchableOpacity>
                 </View>
+
+                {/* Camp Switcher (Super Admin only) */}
+                {(isSuperAdmin || isSuperAdminCompany) && availableCompanies.length > 1 && (
+                    <>
+                        <TouchableOpacity
+                            style={styles.campSwitcher}
+                            onPress={() => setShowCampPicker(true)}
+                        >
+                            <Ionicons name="business-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                            <Text style={styles.campSwitcherText} numberOfLines={1}>{currentCompanyName}</Text>
+                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                        </TouchableOpacity>
+
+                        <Modal
+                            visible={showCampPicker}
+                            transparent
+                            animationType="fade"
+                            onRequestClose={() => setShowCampPicker(false)}
+                        >
+                            <Pressable style={styles.campPickerOverlay} onPress={() => setShowCampPicker(false)}>
+                                <Pressable style={styles.campPickerContainer} onPress={e => e.stopPropagation()}>
+                                    <Text style={styles.campPickerTitle}>Switch Camp</Text>
+                                    <ScrollView style={{ maxHeight: 300 }}>
+                                        {availableCompanies.map(company => (
+                                            <TouchableOpacity
+                                                key={company.id}
+                                                style={[
+                                                    styles.campPickerItem,
+                                                    company.id === companyId && styles.campPickerItemActive,
+                                                ]}
+                                                onPress={() => {
+                                                    switchCompany(company.id);
+                                                    setShowCampPicker(false);
+                                                }}
+                                            >
+                                                <Ionicons
+                                                    name={company.id === companyId ? 'radio-button-on' : 'radio-button-off'}
+                                                    size={20}
+                                                    color={company.id === companyId ? '#6366f1' : theme.colors.textSecondary}
+                                                />
+                                                <Text style={[
+                                                    styles.campPickerItemText,
+                                                    company.id === companyId && styles.campPickerItemTextActive,
+                                                ]}>
+                                                    {company.name}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </Pressable>
+                            </Pressable>
+                        </Modal>
+                    </>
+                )}
 
                 <Text style={styles.sectionHeader}>Main Menu</Text>
 
@@ -467,5 +526,60 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: 'rgba(255,255,255,0.1)',
         paddingBottom: theme.spacing.lg,
-    }
+    },
+    campSwitcher: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        marginBottom: theme.spacing.md,
+        paddingHorizontal: theme.spacing.sm,
+        height: 44,
+    },
+    campSwitcherText: {
+        flex: 1,
+        fontSize: 14,
+        color: theme.colors.text,
+        fontWeight: '600',
+    },
+    campPickerOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    campPickerContainer: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.xl,
+        padding: theme.spacing.lg,
+        width: '85%',
+        maxWidth: 360,
+    },
+    campPickerTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.md,
+        textAlign: 'center',
+    },
+    campPickerItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        gap: 12,
+        marginBottom: 4,
+    },
+    campPickerItemActive: {
+        backgroundColor: '#eef2ff',
+    },
+    campPickerItemText: {
+        fontSize: 15,
+        color: theme.colors.text,
+    },
+    campPickerItemTextActive: {
+        fontWeight: '700',
+        color: '#6366f1',
+    },
 });

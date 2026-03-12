@@ -44,7 +44,7 @@ export const useCampers = (companyId: string | null, season: string) => {
 
             const { data, error } = await supabase
                 .from('children')
-                .select('*')
+                .select('*, division:divisions(id, name, gender, sort_order)')
                 .eq('company_id', companyId)
                 .eq('season', season)
                 .order('name', { ascending: true });

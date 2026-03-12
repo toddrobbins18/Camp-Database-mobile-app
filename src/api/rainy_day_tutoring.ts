@@ -23,7 +23,7 @@ export const useRainyDaySchedule = () => {
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('rainy_day_schedule')
-                .select('*')
+                .select('*, children(id, first_name, last_name, gender, division_id)')
                 .order('date', { ascending: true });
             if (error) throw error;
             return (data || []) as RainyDayEvent[];

@@ -5,35 +5,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useStaff } from '../api/staff';
+import { useDivisions } from '../api/campers';
 import { useCompany } from '../contexts/CompanyContext';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
-
-// Division options (excluding "All Divisions")
-const DIVISIONS = [
-    'Freshmen A Girls',
-    'Freshmen B Girls',
-    'Cadet Girls',
-    'Sophomore Girls',
-    'Junior Girls',
-    'Senior Girls',
-    'Super Girls',
-    'Teen Girls',
-    'CIT Girls',
-    'Freshmen A Boys',
-    'Freshmen B Boys',
-    'Cadet Boys',
-    'Sophomore Boys',
-    'Junior Boys',
-    'Senior Boys',
-    'Super Boys',
-    'Teen Boys',
-    'CIT Boys',
-];
-
 
 type TabType = 'overview' | 'birthday' | 'allergies' | 'achievements' | 'activities' | 'sports-academy' | 'incidents' | 'appointments';
 type BirthdaySubTabType = 'info' | 'party';
@@ -43,6 +21,7 @@ type BirthdaySubTabType = 'info' | 'party';
 export const CamperDetailScreen = ({ route, navigation }: any) => {
     const { camper } = route.params || {};
     const { companyId, season } = useCompany();
+    const { data: divisionsData = [] } = useDivisions();
     const { data: staffLeaders = [] } = useStaff(companyId, season);
     const leaders = staffLeaders.map((s: any) => ({ name: s.name, role: s.role || s.staff_type || 'Staff' }));
 
@@ -124,7 +103,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                 age: (camper as any).age?.toString() || '',
                 dateOfBirth: (camper as any).dateOfBirth || (camper as any).date_of_birth || '',
                 gender: (camper as any).gender || '',
-                division: camper.division || '',
+                division: camper.division_id || (camper as any).division?.id || '',
                 bunk: (camper as any).bunk || '',
                 grade: camper.grade || '',
                 group: (camper as any).group || '',
@@ -705,7 +684,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                             }}
                                         >
                                             <Text style={[styles.formSelectText, !editProfileFormData.division && styles.formSelectPlaceholder]}>
-                                                {editProfileFormData.division || 'Select division'}
+                                                {divisionsData.find(d => d.id === editProfileFormData.division)?.name || 'Select division'}
                                             </Text>
                                             <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                                         </TouchableOpacity>
@@ -1086,25 +1065,25 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                            {DIVISIONS.map((division) => (
+                            {divisionsData.map((division: any) => (
                                 <Pressable
-                                    key={division}
+                                    key={division.id}
                                     style={[
                                         styles.dropdownItem,
-                                        editProfileFormData.division === division && styles.genderDropdownItemSelected
+                                        editProfileFormData.division === division.id && styles.genderDropdownItemSelected
                                     ]}
                                     onPress={() => {
-                                        setEditProfileFormData({ ...editProfileFormData, division });
+                                        setEditProfileFormData({ ...editProfileFormData, division: division.id });
                                         setShowDivisionDropdown(false);
                                     }}
                                 >
                                     <Text style={[
                                         styles.dropdownItemText,
-                                        editProfileFormData.division === division && styles.genderDropdownItemTextSelected
+                                        editProfileFormData.division === division.id && styles.genderDropdownItemTextSelected
                                     ]}>
-                                        {division}
+                                        {division.name}
                                     </Text>
-                                    {editProfileFormData.division === division && (
+                                    {editProfileFormData.division === division.id && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.surface} />
                                     )}
                                 </Pressable>
