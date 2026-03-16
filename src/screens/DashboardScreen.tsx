@@ -2,11 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useTodayBirthdays, useTodayEvents, useTodayMeals } from '../api/dashboard';
 import { supabase } from '../lib/supabase';
+
+const DEFAULT_WEATHER_ZIP = '18469';
+
+function weatherIconName(condition: string | undefined): keyof typeof Ionicons.glyphMap {
+    const c = (condition ?? '').toLowerCase();
+    if (c.includes('clear') || c.includes('sunny')) return 'sunny-outline';
+    if (c.includes('snow')) return 'snow-outline';
+    if (c.includes('rain') || c.includes('drizzle')) return 'rainy-outline';
+    if (c.includes('cloud') || c.includes('overcast')) return 'cloudy-outline';
+    return 'partly-sunny-outline';
+}
 
 export const DashboardScreen = ({ navigation }: any) => {
     const { companyId } = useCompany();
@@ -14,6 +26,16 @@ export const DashboardScreen = ({ navigation }: any) => {
     const todayString = currentDate.toISOString().split('T')[0];
     const todayMonth = currentDate.getMonth() + 1;
     const todayDay = currentDate.getDate();
+
+    const { data: companyZip } = useQuery({
+        queryKey: ['companyZip', companyId],
+        queryFn: async () => {
+            if (!companyId) return null;
+            const { data } = await supabase.from('companies').select('zip_code').eq('id', companyId).single();
+            return (data?.zip_code && String(data.zip_code).trim()) || null;
+        },
+        enabled: !!companyId,
+    });
 
     const { data: birthdays = [] } = useTodayBirthdays(companyId, todayMonth, todayDay);
     const { data: todayEvents = [] } = useTodayEvents(companyId, todayString);
@@ -26,26 +48,35 @@ export const DashboardScreen = ({ navigation }: any) => {
 
     const specialEvents = todayEvents.filter((e: any) => !athleticsEvents.includes(e));
 
-    // Weather data from Supabase Edge Function
     const [weather, setWeather] = useState<any>(null);
     const [weatherLoading, setWeatherLoading] = useState(true);
 
     useEffect(() => {
-        const fetchWeather = async () => {
+        const zip = companyZip ?? DEFAULT_WEATHER_ZIP;
+        let cancelled = false;
+        setWeatherLoading(true);
+        (async () => {
             try {
                 const { data, error } = await supabase.functions.invoke('get-weather', {
-                    body: { zipCode: '18469' }, // Tyler Hill, PA
+                    body: { zipCode: zip },
                 });
+                if (cancelled) return;
                 if (error) throw error;
-                setWeather(data);
+                if (data?.error) {
+                    setWeather(null);
+                    return;
+                }
+                if (data?.today && data?.tomorrow) setWeather(data);
+                else setWeather(null);
             } catch (err) {
+                if (!cancelled) setWeather(null);
                 console.warn('Weather fetch failed:', err);
             } finally {
-                setWeatherLoading(false);
+                if (!cancelled) setWeatherLoading(false);
             }
-        };
-        fetchWeather();
-    }, []);
+        })();
+        return () => { cancelled = true; };
+    }, [companyZip]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -120,13 +151,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                                         <Text style={styles.weatherHighLow}>H: {weather.today.high}° L: {weather.today.low}°</Text>
                                     </View>
                                     <Ionicons
-                                        name={weather.today.condition?.toLowerCase().includes('clear') || weather.today.condition?.toLowerCase().includes('sunny')
-                                            ? 'sunny-outline'
-                                            : weather.today.condition?.toLowerCase().includes('cloud')
-                                                ? 'cloudy-outline'
-                                                : weather.today.condition?.toLowerCase().includes('rain')
-                                                    ? 'rainy-outline'
-                                                    : 'partly-sunny-outline'}
+                                        name={weatherIconName(weather.today.condition)}
                                         size={40}
                                         color={theme.colors.secondary}
                                     />
@@ -140,13 +165,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                                         <Text style={styles.weatherTomorrowCondition}>{weather.tomorrow.condition}</Text>
                                     </View>
                                     <Ionicons
-                                        name={weather.tomorrow.condition?.toLowerCase().includes('clear') || weather.tomorrow.condition?.toLowerCase().includes('sunny')
-                                            ? 'sunny-outline'
-                                            : weather.tomorrow.condition?.toLowerCase().includes('cloud')
-                                                ? 'cloudy-outline'
-                                                : weather.tomorrow.condition?.toLowerCase().includes('rain')
-                                                    ? 'rainy-outline'
-                                                    : 'partly-sunny-outline'}
+                                        name={weatherIconName(weather.tomorrow.condition)}
                                         size={28}
                                         color={theme.colors.textSecondary}
                                     />
@@ -247,7 +266,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                     </TouchableOpacity>
                 </StyledCard>
 
-                {/* Today's Birthdays */}
+                {/* Today's Birthdays — matches original app: list in their section with Celebrate with them! */}
                 <StyledCard style={styles.widgetCard}>
                     <View style={styles.cardHeader}>
                         <Ionicons name="gift-outline" size={20} color="#10b981" />
@@ -262,13 +281,14 @@ export const DashboardScreen = ({ navigation }: any) => {
                         ) : (
                             birthdays.map((person: any, index: number) => (
                                 <View key={`${person.id}-${index}`} style={[styles.birthdayItem, person.type === 'child' ? styles.birthdayItemGreen : styles.birthdayItemBlue]}>
-                                    <Ionicons name="balloon-outline" size={16} color={person.type === 'child' ? "#10b981" : theme.colors.secondary} />
+                                    <Ionicons name="gift-outline" size={18} color={person.type === 'child' ? '#10b981' : theme.colors.secondary} />
                                     <View style={styles.birthdayContent}>
                                         <Text style={styles.birthdayName}>{person.name}</Text>
                                         <Text style={styles.birthdayDesc}>
-                                            {person.type === 'child' ? `Turning ${person.age} today! 🎉` : `Staff Member 🎉`}
+                                            {person.type === 'child' ? `Turning ${person.age} today! 🎉` : 'Staff Member'}
                                         </Text>
                                     </View>
+                                    <Ionicons name="balloon-outline" size={16} color={theme.colors.textSecondary} />
                                 </View>
                             ))
                         )}

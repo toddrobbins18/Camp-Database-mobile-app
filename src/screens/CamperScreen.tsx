@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -941,22 +941,59 @@ export const CamperScreen = ({ navigation }: any) => {
                                         </TouchableOpacity>
                                         <TouchableOpacity
                                             style={styles.submitButton}
-                                            onPress={() => {
-                                                addCamperMutation.mutate({
-                                                    company_id: companyId as string,
-                                                    season: formData.season || season,
-                                                    name: formData.name,
-                                                    age: Number(formData.age) || null,
-                                                    gender: formData.gender,
-                                                    division_id: formData.division,
-                                                    person_id: formData.person_id,
-                                                    emergency_contact: formData.emergencyContact,
-                                                    rfid: formData.rfid,
-                                                    allergies: formData.allergies,
-                                                    medical_notes: formData.medicalNotes,
-                                                    assigned_leader: formData.assignedLeader,
-                                                });
-                                                setShowAddChildModal(false);
+                                            onPress={async () => {
+                                                // Basic client-side validation
+                                                if (!formData.name.trim() || !formData.person_id.trim()) {
+                                                    Alert.alert('Missing required fields', 'Please enter both Name and Person ID.');
+                                                    return;
+                                                }
+                                                if (!companyId || !season) {
+                                                    Alert.alert('Missing company info', 'Company or season is not set. Please try again.');
+                                                    return;
+                                                }
+
+                                                try {
+                                                    const payload = {
+                                                        company_id: companyId as string,
+                                                        season: formData.season || season,
+                                                        name: formData.name.trim(),
+                                                        age: Number(formData.age) || null,
+                                                        gender: formData.gender || null,
+                                                        division_id: formData.division || null,
+                                                        person_id: formData.person_id.trim(),
+                                                        emergency_contact: formData.emergencyContact || null,
+                                                        rfid: formData.rfid || null,
+                                                        allergies: formData.allergies || null,
+                                                        medical_notes: formData.medicalNotes || null,
+                                                        assigned_leader: formData.assignedLeader || null,
+                                                    };
+
+                                                    // Use mutateAsync so we can await and catch errors reliably
+                                                    await addCamperMutation.mutateAsync(payload as any);
+
+                                                    Alert.alert('Child created', 'The camper has been added successfully.');
+                                                    setShowAddChildModal(false);
+                                                    setFormData({
+                                                        name: '',
+                                                        person_id: '',
+                                                        age: '',
+                                                        gender: '',
+                                                        division: '',
+                                                        grade: '',
+                                                        group: '',
+                                                        season: '2026',
+                                                        assignedLeader: '',
+                                                        guardianEmail: '',
+                                                        guardianPhone: '',
+                                                        emergencyContact: '',
+                                                        rfid: '',
+                                                        allergies: '',
+                                                        medicalNotes: '',
+                                                    });
+                                                } catch (error: any) {
+                                                    const message = error?.message || 'Could not add child.';
+                                                    Alert.alert('Add child failed', message);
+                                                }
                                             }}
                                         >
                                             <Text style={styles.submitButtonText}>Add Child</Text>

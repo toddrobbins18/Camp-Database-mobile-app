@@ -1,50 +1,50 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
-// Fetch today's birthdays from children and staff tables
+// Fetch today's birthdays from children and staff tables (matches original app: Today's Birthdays section)
 export const useTodayBirthdays = (companyId: string | null, todayMonth: number, todayDay: number) => {
     return useQuery({
         queryKey: ['dashboard_birthdays', companyId, todayMonth, todayDay],
         queryFn: async () => {
             if (!companyId) return [];
 
-            // Get all children
-            const { data: childrenData, error: childrenError } = await supabase
-                .from('children')
-                .select('id, first_name, last_name, name, date_of_birth')
-                .eq('company_id', companyId);
-
-            if (childrenError) throw childrenError;
-
-            // Get all staff
-            const { data: staffData, error: staffError } = await supabase
-                .from('staff')
-                .select('id, name, first_name, last_name, date_of_birth')
-                .eq('company_id', companyId);
-
-            if (staffError) throw staffError;
-
             const birthdays: any[] = [];
 
             const addBirthdays = (data: any[], type: string) => {
                 (data || []).forEach((person: any) => {
                     if (!person.date_of_birth) return;
-                    const dob = new Date(person.date_of_birth);
-                    if (dob.getMonth() + 1 === todayMonth && dob.getDate() === todayDay) {
-                        const fullName = person.name || `${person.first_name} ${person.last_name}`.trim();
-                        const age = new Date().getFullYear() - dob.getFullYear();
+                    // Parse YYYY-MM-DD directly to avoid timezone shifting (matches web dashboard logic)
+                    const parts = String(person.date_of_birth).split('-').map(Number);
+                    if (parts.length < 3) return;
+                    const [, month, day] = parts;
+                    if (month === todayMonth && day === todayDay) {
+                        const fullName =
+                            person.name ||
+                            [person.first_name, person.last_name].filter(Boolean).join(' ').trim() ||
+                            'Unknown';
+                        const birthYear = parts[0] || new Date().getFullYear();
+                        const age = new Date().getFullYear() - birthYear;
                         birthdays.push({
                             id: person.id,
                             name: fullName,
-                            type: type,
-                            age: age
+                            type,
+                            age,
                         });
                     }
                 });
             };
 
-            addBirthdays(childrenData, 'child');
-            addBirthdays(staffData, 'staff');
+            const { data: childrenData, error: childrenError } = await supabase
+                .from('children')
+                .select('id, first_name, last_name, name, date_of_birth')
+                .eq('company_id', companyId);
+            if (!childrenError) addBirthdays(childrenData ?? [], 'child');
+
+            const { data: staffData, error: staffError } = await supabase
+                .from('staff')
+                .select('id, name, first_name, last_name, date_of_birth')
+                .eq('company_id', companyId);
+            if (!staffError) addBirthdays(staffData ?? [], 'staff');
 
             return birthdays;
         },

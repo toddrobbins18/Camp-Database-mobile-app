@@ -1,20 +1,24 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { useAdminUsers, useUpdateUserRole, useDeleteUser, useEmailConfigs, useUpdateEmailConfig, useEditHistory } from '../api/admin';
+import { useAdminUsers, useUpdateUserRole, useDeleteUser, useSendPasswordReset, useCreateUser, useEmailConfigs, useUpdateEmailConfig, useEditHistory } from '../api/admin';
+import { useCompany } from '../contexts/CompanyContext';
 
 export const AdminPanelScreen = ({ navigation }: any) => {
 
 
+    const { companyId } = useCompany();
     const { data: adminUsers = [] } = useAdminUsers();
     const { data: fetchedEmailConfigs = [] } = useEmailConfigs();
     const { data: fetchedHistory = [] } = useEditHistory();
 
     const updateUserRoleMutation = useUpdateUserRole();
     const deleteUserMutation = useDeleteUser();
+    const sendPasswordResetMutation = useSendPasswordReset();
+    const createUserMutation = useCreateUser();
     const updateEmailConfigMutation = useUpdateEmailConfig();
 
     const users = adminUsers as any[];
@@ -33,6 +37,9 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     // Add User Modal State
     const [showAddUserModal, setShowAddUserModal] = useState(false);
     const [activeTab, setActiveTab] = useState<'create' | 'invite'>('create');
+    const [newUserFullName, setNewUserFullName] = useState('');
+    const [newUserEmail, setNewUserEmail] = useState('');
+    const [newUserPassword, setNewUserPassword] = useState('');
     const [newUserRole, setNewUserRole] = useState('Staff');
     const [showNewUserRolePicker, setShowNewUserRolePicker] = useState(false);
 
@@ -118,6 +125,36 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         'Super Admin'
     ];
 
+    const runCreateUser = (fullName: string, email: string, password: string) => {
+        const roleMap: Record<string, string> = {
+            'Viewer': 'viewer',
+            'Staff': 'staff',
+            'Division Leader': 'division_leader',
+            'Specialist': 'specialist',
+            'Health Center': 'health_center',
+            'Admin': 'admin',
+            'Super Admin': 'super_admin',
+        };
+        const apiRole = roleMap[newUserRole] || 'staff';
+        createUserMutation.mutate(
+            { fullName, email, password, role: apiRole, companyId },
+            {
+                onSuccess: () => {
+                    setNewUserFullName('');
+                    setNewUserEmail('');
+                    setNewUserPassword('');
+                    setNewUserRole('Staff');
+                    setShowAddUserModal(false);
+                    Alert.alert('User created', `${email} can sign in now.`);
+                },
+                onError: (err: unknown) => {
+                    const msg = err instanceof Error ? err.message : (err != null && typeof err === 'object' && 'error' in err ? (err as { error?: string }).error : null) ?? 'Could not create user.';
+                    Alert.alert('Create failed', msg || 'Could not create user.');
+                },
+            }
+        );
+    };
+
     const availableTags = [
         'All Tags',
         'Nurse',
@@ -147,10 +184,28 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
     const handleDeleteUser = () => {
         if (userToDelete) {
-            deleteUserMutation.mutate(userToDelete.id);
-            setShowDeleteModal(false);
-            setUserToDelete(null);
+            deleteUserMutation.mutate(userToDelete.id, {
+                onSuccess: () => {
+                    setShowDeleteModal(false);
+                    setUserToDelete(null);
+                    Alert.alert('Success', 'User has been deleted.');
+                },
+                onError: (err: Error) => {
+                    Alert.alert('Delete Failed', err.message || 'Could not delete user.');
+                },
+            });
         }
+    };
+
+    const handleSendPasswordReset = (email: string, name: string) => {
+        sendPasswordResetMutation.mutate(email, {
+            onSuccess: () => {
+                Alert.alert('Reset link sent', `Password reset instructions were sent to ${email}.`);
+            },
+            onError: (err: Error) => {
+                Alert.alert('Send failed', err.message || 'Could not send password reset email.');
+            },
+        });
     };
 
     const handleFilterTagSelect = (tag: string) => {
@@ -194,7 +249,11 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                         <View style={styles.userHeaderRow}>
                             <Text style={styles.userName}>{user.name}</Text>
                             <View style={styles.userActions}>
-                                <TouchableOpacity style={styles.actionIcon}>
+                                <TouchableOpacity
+                                    style={styles.actionIcon}
+                                    onPress={() => handleSendPasswordReset(user.email, user.name)}
+                                    disabled={sendPasswordResetMutation.isPending}
+                                >
                                     <Ionicons name="key-outline" size={18} color={theme.colors.text} />
                                 </TouchableOpacity>
                                 <TouchableOpacity
@@ -1031,6 +1090,8 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                                     style={styles.input}
                                     placeholder="John Doe"
                                     placeholderTextColor={theme.colors.textSecondary}
+                                    value={newUserFullName}
+                                    onChangeText={setNewUserFullName}
                                 />
                             </View>
 
@@ -1042,6 +1103,8 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                                     placeholderTextColor={theme.colors.textSecondary}
                                     keyboardType="email-address"
                                     autoCapitalize="none"
+                                    value={newUserEmail}
+                                    onChangeText={setNewUserEmail}
                                 />
                             </View>
 
@@ -1052,6 +1115,8 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                                     placeholder="•••••••"
                                     placeholderTextColor={theme.colors.textSecondary}
                                     secureTextEntry
+                                    value={newUserPassword}
+                                    onChangeText={setNewUserPassword}
                                 />
                             </View>
 
@@ -1068,8 +1133,36 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
                             {/* Role Picker moved to external modal */}
 
-                            <TouchableOpacity style={styles.createButton}>
-                                <Text style={styles.createButtonText}>Create User</Text>
+                            <TouchableOpacity
+                                style={[styles.createButton, createUserMutation.isPending && { opacity: 0.7 }]}
+                                onPress={() => {
+                                    const fullName = newUserFullName.trim();
+                                    const email = newUserEmail.trim();
+                                    const password = newUserPassword;
+                                    if (!fullName || !email || !password) {
+                                        Alert.alert('Missing fields', 'Please enter Full Name, Email, and Password.');
+                                        return;
+                                    }
+                                    if (password.length < 6) {
+                                        Alert.alert('Invalid password', 'Password must be at least 6 characters.');
+                                        return;
+                                    }
+                                    if (!companyId) {
+                                        Alert.alert(
+                                            'No camp selected',
+                                            'Select a camp from the menu so the new user is assigned to it. If your account has a default company, you can try anyway.',
+                                            [
+                                                { text: 'Cancel', style: 'cancel' },
+                                                { text: 'Try anyway', onPress: () => runCreateUser(fullName, email, password) },
+                                            ]
+                                        );
+                                        return;
+                                    }
+                                    runCreateUser(fullName, email, password);
+                                }}
+                                disabled={createUserMutation.isPending}
+                            >
+                                <Text style={styles.createButtonText}>{createUserMutation.isPending ? 'Creating...' : 'Create User'}</Text>
                             </TouchableOpacity>
                         </ScrollView>
                     </Pressable>

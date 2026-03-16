@@ -8,12 +8,14 @@ import { StyledCard } from '../components/StyledCard';
 import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
+import { useCompany } from '../contexts/CompanyContext';
 
 // Calendar view types
 type CalendarView = 'Month' | 'Week' | 'Day' | 'Agenda';
 
 export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
+    const { companyId, season } = useCompany();
 
     const addActivityMutation = useMutation({
         mutationFn: async (newActivity: any) => {
@@ -136,24 +138,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         });
     };
 
-    // Fetch profile to get company_id
-    const { data: profile } = useQuery({
-        queryKey: ['profile'],
-        queryFn: async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('No user found');
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', user.id)
-                .single();
-            if (error) throw error;
-            return data;
-        }
-    });
-
-    const companyId = profile?.company_id;
-    const [selectedYear, setSelectedYear] = useState('2026');
+    // Use global company/season context for consistency with other screens
+    const [selectedYear, setSelectedYear] = useState(season || '2026');
 
     // Fetch divisions
     const { data: divisions = [] } = useQuery({
@@ -1373,12 +1359,18 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     </TouchableOpacity>
                                     <TouchableOpacity
                                         style={styles.addActivitySaveButton}
-                                        onPress={() => {
+                                        onPress={async () => {
                                             if (!formData.title || !formData.event_date) {
                                                 Alert.alert('Error', 'Please fill in required fields (Title and Event Date)');
                                                 return;
                                             }
-                                            addActivityMutation.mutate(formData);
+
+                                            try {
+                                                await addActivityMutation.mutateAsync(formData as any);
+                                            } catch (error: any) {
+                                                const message = error?.message || 'Failed to add activity';
+                                                Alert.alert('Error', message);
+                                            }
                                         }}
                                     >
                                         <Text style={styles.addActivitySaveButtonText}>Save</Text>

@@ -11,14 +11,14 @@ serve(async (req) => {
   }
 
   try {
-    const { zipCode } = await req.json();
-    
-    if (!zipCode) {
-      return new Response(
-        JSON.stringify({ error: 'Zip code is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    let zipCode: string | undefined;
+    try {
+      const body = await req.json().catch(() => ({}));
+      zipCode = body?.zipCode ?? undefined;
+    } catch {
+      zipCode = undefined;
     }
+    const resolvedZip = (zipCode && String(zipCode).trim()) || '18469';
 
     const WEATHER_API_KEY = Deno.env.get('WEATHER_API_KEY');
     
@@ -30,10 +30,10 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Fetching weather for zip code: ${zipCode}`);
-    
+    console.log(`Fetching weather for zip code: ${resolvedZip}`);
+
     const response = await fetch(
-      `https://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=${zipCode}&days=2&aqi=no`
+      `https://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=${resolvedZip}&days=2&aqi=no`
     );
 
     if (!response.ok) {

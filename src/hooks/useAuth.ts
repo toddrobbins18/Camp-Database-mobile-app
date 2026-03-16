@@ -32,12 +32,31 @@ export const useLogin = (onSuccess: (data: any) => void) => {
                     onSuccess(data);
                 }
             } catch (error: any) {
-                Alert.alert("Error", error.message || "Failed to verify account.");
+                const msg = error?.message || "Failed to verify account.";
+                const isUnconfirmed = /confirm|verification|email.*confirm/i.test(msg);
+                Alert.alert(
+                    isUnconfirmed ? "Confirm your email" : "Error",
+                    isUnconfirmed
+                        ? "Please open the confirmation link sent to your email, then try signing in again."
+                        : msg
+                );
                 await authApi.signOut();
             }
         },
         onError: (error: any) => {
-            Alert.alert("Login Failed", error.message || "Invalid credentials.");
+            const msg = (error?.message || '').toLowerCase();
+            if (msg.includes('email not confirmed') || msg.includes('confirm your email')) {
+                Alert.alert(
+                    "Confirm your email",
+                    "Please open the confirmation link sent to your email, then try signing in again."
+                );
+                return;
+            }
+            const message =
+                msg.includes('invalid') || msg.includes('credentials') || msg.includes('password')
+                    ? "Incorrect email or password. Please try again."
+                    : (error?.message || "Incorrect email or password. Please try again.");
+            Alert.alert("Login Failed", message);
         },
     });
 };
@@ -47,17 +66,19 @@ export const useRegister = (onSuccess: () => void, onError?: (error: any) => voi
         mutationFn: authApi.signUp,
         onSuccess: () => {
             Alert.alert(
-                "Success",
-                "Registration successful! Your account is pending administrator approval.",
+                "Request Received",
+                "Your request has been received. Please wait for confirmation from an administrator before you can sign in.",
                 [{ text: "OK", onPress: onSuccess }]
             );
         },
         onError: (error: any) => {
-            if (onError) {
-                onError(error);
-            } else {
-                Alert.alert("Registration Failed", error.message || "Failed to create account.");
-            }
+            const message =
+                error?.message?.toLowerCase().includes('already registered') ||
+                error?.message?.toLowerCase().includes('already been registered')
+                    ? "This email is already registered. Please sign in or use a different email."
+                    : (error?.message || "Registration failed. Please try again.");
+            Alert.alert("Sign Up Failed", message);
+            if (onError) onError(error);
         },
     });
 };

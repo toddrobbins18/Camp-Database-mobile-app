@@ -16,6 +16,9 @@ Use these in **Supabase Dashboard → SQL Editor** so the app behaves like Lovab
    - Fills `role_permissions` with the Lovable-style matrix (all roles × menu items).  
    - Run only if `role_permissions` and `app_role` already exist. Only inserts missing rows.
 
+4. **04_allow_super_admin_delete_profiles_reject.sql**  
+   - Lets super_admins (and admins) delete profiles so the **Reject** button in User Approvals removes the user from the list.
+
 ## One-shot option
 
 You can run everything in one go using **run_in_sql_editor.sql** (scripts 1, 2, and 3 in order).  

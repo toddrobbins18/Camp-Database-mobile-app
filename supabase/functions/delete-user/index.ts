@@ -46,16 +46,22 @@ Deno.serve(async (req) => {
       throw new Error('Failed to fetch user roles');
     }
 
-    const roles = rolesData?.map(r => r.role) || [];
+    const roles = (rolesData ?? []).map((r: { role?: string }) => String(r?.role ?? '').toLowerCase());
     const isAdmin = roles.includes('admin') || roles.includes('super_admin');
 
     if (!isAdmin) {
       throw new Error('Unauthorized: Admin access required');
     }
 
-    const { userId } = await req.json();
+    let body: { userId?: string };
+    try {
+      body = await req.json();
+    } catch {
+      throw new Error('Invalid JSON body');
+    }
+    const userId = body?.userId;
 
-    if (!userId) {
+    if (!userId || typeof userId !== 'string') {
       throw new Error('userId is required');
     }
 

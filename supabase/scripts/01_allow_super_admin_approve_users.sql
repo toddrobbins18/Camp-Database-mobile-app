@@ -1,4 +1,5 @@
--- SCRIPT 1: Allow super_admins to approve users (profiles UPDATE + user_roles INSERT)
+-- SCRIPT 1: Allow super_admins to approve and reject users
+-- (profiles UPDATE + user_roles INSERT + profiles DELETE for reject)
 -- Run in Supabase SQL Editor. Safe to run multiple times.
 
 DROP POLICY IF EXISTS "Admins can approve users" ON public.profiles;

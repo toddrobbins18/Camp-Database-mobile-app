@@ -58,17 +58,118 @@ export const useUpdateUserRole = () => {
     });
 };
 
+/** Send password reset email to a user (admin/super_admin). Uses Supabase auth. */
+export const useSendPasswordReset = () => {
+    return useMutation({
+        mutationFn: async (email: string) => {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: undefined, // Uses Supabase project default URL
+            });
+            if (error) throw error;
+        },
+    });
+};
+
+/**
+ * Delete a user. Tries RPC (bypasses RLS) then falls back to direct table delete.
+ */
+async function adminDeleteUser(userId: string): Promise<void> {
+    // Method 1: RPC (SECURITY DEFINER — works if run_in_sql_editor.sql was executed)
+    const { error: rpcError } = await supabase.rpc('admin_delete_user', { target_user_id: userId });
+    if (!rpcError) return; // success
+
+    // Method 2: Direct table operations (if RPC function doesn't exist yet)
+    console.log('RPC failed, falling back to direct delete:', rpcError.message);
+
+    // Delete user_roles first
+    await supabase.from('user_roles').delete().eq('user_id', userId);
+    // Nullify incident_reports FKs
+    await supabase.from('incident_reports').update({ resolved_by: null }).eq('resolved_by', userId);
+    await supabase.from('incident_reports').update({ created_by: null }).eq('created_by', userId);
+    // Delete the profile — use .select() to verify it actually deleted
+    const { data, error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId)
+        .select('id');
+
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) {
+        throw new Error('Could not delete user. RLS may be blocking. Run run_in_sql_editor.sql in Supabase SQL Editor.');
+    }
+}
+
+/** Permanently delete user from Admin Panel. */
 export const useDeleteUser = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (userId: string) => {
-            // Usually we don't delete auth.users from client; just deactivate profile/staff
-            const { error } = await supabase.from('staff').update({ status: 'inactive' }).eq('id', userId);
-            if (error) throw error;
+        mutationFn: adminDeleteUser,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+        },
+    });
+};
+
+/** Get error message from edge function invoke (4xx/5xx body or Supabase error). */
+async function getCreateUserErrorMessage(error: unknown): Promise<string> {
+    const e = error as Error & {
+        context?: {
+            json?: () => Promise<{ error?: string }>;
+            body?: string;
+            status?: number;
+        };
+    };
+    const fallback = e?.message ?? (error != null ? String(error) : 'Create user failed.');
+    if (!e?.context) return fallback || 'Create user failed.';
+    try {
+        if (typeof e.context.json === 'function') {
+            const body = await e.context.json();
+            if (body?.error && typeof body.error === 'string') return body.error;
+        }
+        if (typeof e.context.body === 'string') {
+            try {
+                const parsed = JSON.parse(e.context.body) as { error?: string };
+                if (parsed?.error) return parsed.error;
+            } catch (_) {}
+            if (e.context.body.length < 200) return e.context.body;
+        }
+    } catch (_) {}
+    return fallback || 'Create user failed.';
+}
+
+/** Create a new user (admin/super_admin). Calls create-user edge function; user can log in immediately. */
+export const useCreateUser = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (params: { email: string; password: string; fullName: string; role: string; companyId: string | null }) => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session?.access_token) throw new Error('You must be signed in to create users.');
+                const { data, error } = await supabase.functions.invoke('create-user', {
+                    body: {
+                        email: params.email.trim(),
+                        password: params.password,
+                        fullName: params.fullName.trim(),
+                        role: params.role,
+                        companyId: params.companyId || undefined,
+                    },
+                    headers: { Authorization: `Bearer ${session.access_token}` },
+                });
+                const result = (data ?? null) as { error?: string } | null;
+                if (result?.error && typeof result.error === 'string') throw new Error(result.error);
+                if (error) {
+                    const msg = await getCreateUserErrorMessage(error);
+                    throw new Error(msg || 'Create user failed. Deploy the create-user edge function and try again.');
+                }
+                return data;
+            } catch (err) {
+                if (err instanceof Error) throw err;
+                throw new Error(err != null ? String(err) : 'Create user failed.');
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
-        }
+        },
     });
 };
 
@@ -128,22 +229,15 @@ export const useApproveUser = () => {
     });
 };
 
+/** Reject a pending user from User Approvals. */
 export const useRejectUser = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (userId: string) => {
-            // For now, we'll just delete the profile record to reject them.
-            // Alternatively, we could set a 'rejected' flag if the schema supported it.
-            const { error } = await supabase
-                .from('profiles')
-                .delete()
-                .eq('id', userId);
-
-            if (error) throw error;
-        },
+        mutationFn: adminDeleteUser,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['pendingUsers'] });
-        }
+            queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+        },
     });
 };
 

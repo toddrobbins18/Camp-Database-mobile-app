@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -76,21 +76,28 @@ export const HealthScreen = ({ navigation }: any) => {
     }, [safeCampers, searchChildrenQuery, selectedDivision]);
     
 
-    const handleAdmitChild = () => {
-        if (!childToAdmit || !admitReason || !companyId) return;
+    const handleAdmitChild = async () => {
+        if (!childToAdmit || !companyId) {
+            Alert.alert('Cannot admit child', 'Missing child or company information.');
+            return;
+        }
 
-        addAdmissionMutation.mutate({
-            company_id: companyId,
-            child_id: childToAdmit.id,
-            reason: admitReason,
-            season: '2026',
-        }, {
-            onSuccess: () => {
-                setShowAdmitModal(false);
-                setAdmitReason('');
-                setChildToAdmit(null);
-            }
-        });
+        try {
+            await addAdmissionMutation.mutateAsync({
+                company_id: companyId,
+                child_id: childToAdmit.id,
+                reason: admitReason.trim() || null,
+                season: '2026',
+            } as any);
+
+            Alert.alert('Child admitted', `${childToAdmit.name} has been admitted to the health center.`);
+            setShowAdmitModal(false);
+            setAdmitReason('');
+            setChildToAdmit(null);
+        } catch (error: any) {
+            const message = error?.message || 'Could not admit child to health center.';
+            Alert.alert('Admit failed', message);
+        }
     };
 
     const handleCheckoutChild = (admissionId: string) => {
@@ -222,6 +229,9 @@ export const HealthScreen = ({ navigation }: any) => {
     };
 
     const tabs = ['Daily Log', "Today's Medications", 'Health Center', 'Health Center Log', 'Add Medication'];
+
+    // Build a list of division option ids for the picker
+    const divisions = ['All Divisions', ...safeDivisions.map((division: any) => division.id)];
 
     const hasError = campersError || divisionsError;
     const isLoadingCompany = !companyId || campersLoading;
