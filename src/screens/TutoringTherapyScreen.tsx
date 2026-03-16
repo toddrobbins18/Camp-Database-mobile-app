@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useTutoringTherapy, useAddTutoringEntry, useDeleteTutoringEntry } from '../api/rainy_day_tutoring';
+import { useDivisions } from '../api/campers';
+import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 
@@ -45,9 +47,9 @@ const SERVICES = [
 const SCHEDULE_PERIODS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
 
 export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps) => {
-    // Fetch tutoring data from Supabase
-    const { data: enrollments = [], isLoading: enrollmentsLoading } = useTutoringTherapy('2026');
-    const { data: divisionsData = [] } = useDivisions();
+    const { companyId, season } = useCompany();
+    const { data: enrollments = [], isLoading: enrollmentsLoading } = useTutoringTherapy(season || '2026');
+    const { data: divisionsData = [] } = useDivisions(companyId);
     const addEntryMutation = useAddTutoringEntry();
 
     const filteredEnrollments = useMemo(() => {

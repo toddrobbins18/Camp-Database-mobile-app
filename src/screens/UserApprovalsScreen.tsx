@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -8,21 +8,72 @@ import { usePendingUsers, useApproveUser, useRejectUser } from '../api/admin';
 import { supabase } from '../lib/supabase';
 
 export const UserApprovalsScreen = ({ navigation }: any) => {
-    // Companies for assigning users
     const [companies, setCompanies] = useState<any[]>([]);
+    const [campPickerUserId, setCampPickerUserId] = useState<string | null>(null);
+
     React.useEffect(() => {
         const fetchCompanies = async () => {
-            const { data } = await supabase.from('companies').select('id, name');
+            const { data } = await supabase.from('companies').select('id, name').eq('is_active', true).order('name');
             if (data) setCompanies(data);
         };
         fetchCompanies();
     }, []);
 
-    // User Approvals State
-    const { data: pendingUsers = [] } = usePendingUsers();
+    const { data: pendingUsers = [], refetch: refetchPending } = usePendingUsers();
     const approveUserMutation = useApproveUser();
     const rejectUserMutation = useRejectUser();
     const [selectedCompanyForUser, setSelectedCompanyForUser] = useState<Record<string, string>>({});
+
+    const handleApprove = (user: any) => {
+        const companyId = selectedCompanyForUser[user.id];
+        if (!companyId) {
+            Alert.alert('Select a camp', 'Please choose a camp for this user first.');
+            return;
+        }
+        approveUserMutation.mutate(
+            { userId: user.id, companyId },
+            {
+                onSuccess: () => {
+                    setSelectedCompanyForUser(prev => {
+                        const next = { ...prev };
+                        delete next[user.id];
+                        return next;
+                    });
+                    refetchPending();
+                    Alert.alert('Approved', `${user.email} has been approved and assigned to the camp.`);
+                },
+                onError: (e: any) => Alert.alert('Error', e?.message || 'Failed to approve user.'),
+            }
+        );
+    };
+
+    const handleReject = (user: any) => {
+        Alert.alert(
+            'Reject user',
+            `Reject ${user.email}? They will need to sign up again.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Reject',
+                    style: 'destructive',
+                    onPress: () => {
+                        rejectUserMutation.mutate(user.id, {
+                            onSuccess: () => {
+                                setSelectedCompanyForUser(prev => {
+                                    const next = { ...prev };
+                                    delete next[user.id];
+                                    return next;
+                                });
+                                refetchPending();
+                                Alert.alert('Rejected', 'User has been rejected.');
+                            },
+                            onError: (e: any) => Alert.alert('Error', e?.message || 'Failed to reject user.'),
+                        });
+                    },
+                },
+            ]
+        );
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -77,43 +128,47 @@ export const UserApprovalsScreen = ({ navigation }: any) => {
                                     </Text>
 
                                     <Text style={styles.assignToCampLabel}>Assign to Camp</Text>
-                                    <View style={styles.assignDropdownContainer}>
-                                        <select
-                                            style={styles.htmlSelect}
-                                            value={selectedCompanyForUser[user.id] || ''}
-                                            onChange={(e) => setSelectedCompanyForUser(prev => ({ ...prev, [user.id]: e.target.value }))}
-                                        >
-                                            <option value="" disabled>Select a camp...</option>
-                                            {companies.map(camp => (
-                                                <option key={camp.id} value={camp.id}>{camp.name}</option>
-                                            ))}
-                                        </select>
-                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.assignDropdownContainer}
+                                        onPress={() => setCampPickerUserId(user.id)}
+                                    >
+                                        <Text style={styles.assignDropdownText}>
+                                            {selectedCompanyForUser[user.id]
+                                                ? companies.find(c => c.id === selectedCompanyForUser[user.id])?.name || 'Selected'
+                                                : 'Select a camp...'}
+                                        </Text>
+                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                    </TouchableOpacity>
 
                                     <View style={styles.approvalActions}>
                                         <TouchableOpacity
-                                            style={[styles.approveButton, !selectedCompanyForUser[user.id] && styles.buttonDisabled]}
-                                            onPress={() => {
-                                                if (selectedCompanyForUser[user.id]) {
-                                                    approveUserMutation.mutate({
-                                                        userId: user.id,
-                                                        companyId: selectedCompanyForUser[user.id]
-                                                    });
-                                                }
-                                            }}
+                                            style={[styles.approveButton, (!selectedCompanyForUser[user.id] || approveUserMutation.isPending) && styles.buttonDisabled]}
+                                            onPress={() => handleApprove(user)}
                                             disabled={!selectedCompanyForUser[user.id] || approveUserMutation.isPending}
                                         >
-                                            <Ionicons name="checkmark-circle-outline" size={16} color="white" />
-                                            <Text style={styles.approveButtonText}>Approve</Text>
+                                            {approveUserMutation.isPending ? (
+                                                <ActivityIndicator color="white" size="small" />
+                                            ) : (
+                                                <>
+                                                    <Ionicons name="checkmark-circle-outline" size={16} color="white" />
+                                                    <Text style={styles.approveButtonText}>Approve</Text>
+                                                </>
+                                            )}
                                         </TouchableOpacity>
 
                                         <TouchableOpacity
-                                            style={styles.rejectButton}
-                                            onPress={() => rejectUserMutation.mutate(user.id)}
+                                            style={[styles.rejectButton, rejectUserMutation.isPending && styles.buttonDisabled]}
+                                            onPress={() => handleReject(user)}
                                             disabled={rejectUserMutation.isPending}
                                         >
-                                            <Ionicons name="close-circle-outline" size={16} color="white" />
-                                            <Text style={styles.rejectButtonText}>Reject</Text>
+                                            {rejectUserMutation.isPending ? (
+                                                <ActivityIndicator color="white" size="small" />
+                                            ) : (
+                                                <>
+                                                    <Ionicons name="close-circle-outline" size={16} color="white" />
+                                                    <Text style={styles.rejectButtonText}>Reject</Text>
+                                                </>
+                                            )}
                                         </TouchableOpacity>
                                     </View>
                                 </StyledCard>
@@ -122,6 +177,47 @@ export const UserApprovalsScreen = ({ navigation }: any) => {
                     </View>
                 </View>
             </ScrollView>
+
+            {/* Camp picker modal (React Native doesn't support <select>) */}
+            <Modal
+                visible={campPickerUserId !== null}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setCampPickerUserId(null)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setCampPickerUserId(null)}>
+                    <Pressable style={styles.campPickerModal} onPress={e => e.stopPropagation()}>
+                        <View style={styles.campPickerHeader}>
+                            <Text style={styles.campPickerTitle}>Assign to Camp</Text>
+                            <TouchableOpacity onPress={() => setCampPickerUserId(null)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.campPickerList}>
+                            {companies.map(camp => (
+                                <TouchableOpacity
+                                    key={camp.id}
+                                    style={[
+                                        styles.campPickerItem,
+                                        campPickerUserId && selectedCompanyForUser[campPickerUserId] === camp.id && styles.campPickerItemSelected,
+                                    ]}
+                                    onPress={() => {
+                                        if (campPickerUserId) {
+                                            setSelectedCompanyForUser(prev => ({ ...prev, [campPickerUserId]: camp.id }));
+                                            setCampPickerUserId(null);
+                                        }
+                                    }}
+                                >
+                                    <Text style={styles.campPickerItemText}>{camp.name}</Text>
+                                    {campPickerUserId && selectedCompanyForUser[campPickerUserId] === camp.id && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -249,23 +345,60 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.xs,
     },
     assignDropdownContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         borderWidth: 1,
         borderColor: theme.colors.border,
         borderRadius: theme.borderRadius.md,
         backgroundColor: theme.colors.surface,
         marginBottom: theme.spacing.lg,
-        height: 40,
-        justifyContent: 'center',
-        overflow: 'hidden',
-    },
-    htmlSelect: {
-        width: '100%',
-        height: '100%',
+        minHeight: 44,
         paddingHorizontal: theme.spacing.md,
+    },
+    assignDropdownText: {
         fontSize: 14,
         color: theme.colors.text,
-        borderWidth: 0,
-        backgroundColor: 'transparent',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'flex-end',
+    },
+    campPickerModal: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.lg,
+        borderTopRightRadius: theme.borderRadius.lg,
+        maxHeight: '60%',
+    },
+    campPickerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    campPickerTitle: {
+        ...theme.typography.h3,
+    },
+    campPickerList: {
+        padding: theme.spacing.sm,
+    },
+    campPickerItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+    },
+    campPickerItemSelected: {
+        backgroundColor: theme.colors.primary + '20',
+    },
+    campPickerItemText: {
+        fontSize: 16,
+        color: theme.colors.text,
     },
     approvalActions: {
         flexDirection: 'row',

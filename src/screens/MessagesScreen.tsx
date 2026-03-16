@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useMessages, useSendMessage, useMarkMessageRead } from '../api/messages';
+import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 
@@ -20,28 +21,30 @@ export const MessagesScreen = ({ navigation }: any) => {
     const [showRecipientPreview, setShowRecipientPreview] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<any>(null);
 
-    // Get current user ID
+    const { companyId } = useCompany();
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null));
     }, []);
 
-    // Fetch messages from Supabase
     const { data: messages = [], isLoading: messagesLoading } = useMessages(currentUserId);
     const sendMutation = useSendMessage();
     const markReadMutation = useMarkMessageRead();
 
-    // Fetch users (profiles) from Supabase
+    // Fetch users (profiles) for same company only, same as web
     const { data: users = [] } = useQuery({
-        queryKey: ['profiles_for_messages'],
+        queryKey: ['profiles_for_messages', companyId],
         queryFn: async () => {
+            if (!companyId) return [];
             const { data, error } = await supabase
                 .from('profiles')
                 .select('id, full_name, email')
+                .eq('company_id', companyId)
                 .order('full_name', { ascending: true });
             if (error) throw error;
             return (data || []).map((p: any) => ({ id: p.id, name: p.full_name || p.email || 'Unknown', email: p.email || '' }));
         },
+        enabled: !!companyId,
     });
     const messageCount = messages.length;
 

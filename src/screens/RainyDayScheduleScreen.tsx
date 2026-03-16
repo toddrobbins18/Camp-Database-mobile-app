@@ -15,18 +15,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import * as DocumentPicker from 'expo-document-picker';
-import { useRainyDaySchedule, useAddRainyDayEvent } from '../api/rainy_day_tutoring';
+import { useRainyDaySchedule, useRainyDayDocuments } from '../api/rainy_day_tutoring';
+import { useCompany } from '../contexts/CompanyContext';
+import { supabase } from '../lib/supabase';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface RainyDayScheduleScreenProps {
     navigation: any;
 }
 
 export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenProps) => {
+    const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
     const [date, setDate] = useState('01/24/2026');
     const [fileName, setFileName] = useState('');
+    const [selectedFileUri, setSelectedFileUri] = useState<string | null>(null);
+    const [uploading, setUploading] = useState(false);
 
-    // Fetch rainy day schedule from Supabase
     const { data: scheduleEvents = [], isLoading: scheduleLoading } = useRainyDaySchedule();
+    const { data: uploadedDocs = [], isLoading: docsLoading } = useRainyDayDocuments(companyId, season || '2026');
 
     // Date Picker State
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -51,14 +58,46 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                 type: 'application/pdf',
                 copyToCacheDirectory: true,
             });
-
             if (result.assets && result.assets[0]) {
                 setFileName(result.assets[0].name);
-                // Here you would typically handle the file upload to your backend
-                // const fileUri = result.assets[0].uri;
+                setSelectedFileUri(result.assets[0].uri);
             }
         } catch (err) {
             console.error('Error picking document:', err);
+        }
+    };
+
+    const handleUploadSchedule = async () => {
+        if (!selectedFileUri || !fileName || !companyId || !season) {
+            Alert.alert('Missing info', 'Please choose a PDF file first.');
+            return;
+        }
+        const dateParts = date.split('/');
+        const dateStr = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}` : new Date().toISOString().split('T')[0];
+        setUploading(true);
+        try {
+            const response = await fetch(selectedFileUri);
+            const arrayBuffer = await response.arrayBuffer();
+            const path = `${companyId}/${season || '2026'}/${Date.now()}_${fileName}`;
+            const { data: uploadData, error: uploadError } = await supabase.storage.from('rainy-day-documents').upload(path, arrayBuffer, { contentType: 'application/pdf' });
+            if (uploadError) throw uploadError;
+            const { data: urlData } = supabase.storage.from('rainy-day-documents').getPublicUrl(uploadData.path);
+            const { error: insertError } = await supabase.from('rainy_day_documents').insert({
+                company_id: companyId,
+                season: season || '2026',
+                date: dateStr,
+                file_name: fileName,
+                file_url: urlData.publicUrl,
+            });
+            if (insertError) throw insertError;
+            Alert.alert('Uploaded', 'Schedule uploaded successfully.');
+            setFileName('');
+            setSelectedFileUri(null);
+            queryClient.invalidateQueries({ queryKey: ['rainy_day_documents'] });
+        } catch (e: any) {
+            Alert.alert('Error', e?.message || 'Upload failed');
+        } finally {
+            setUploading(false);
         }
     };
 
@@ -241,8 +280,12 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                         </View>
                     </View>
 
-                    <TouchableOpacity style={styles.uploadButton}>
-                        <Text style={styles.uploadButtonText}>Upload Schedule</Text>
+                    <TouchableOpacity
+                        style={[styles.uploadButton, uploading && { opacity: 0.7 }]}
+                        onPress={handleUploadSchedule}
+                        disabled={uploading}
+                    >
+                        {uploading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.uploadButtonText}>Upload Schedule</Text>}
                     </TouchableOpacity>
                 </StyledCard>
 
@@ -252,14 +295,21 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                         <Text style={styles.uploadedTitle}>Uploaded Schedules</Text>
                     </View>
 
-                    {scheduleLoading ? (
+                    {(scheduleLoading || docsLoading) ? (
                         <ActivityIndicator size="large" color={theme.colors.secondary} style={{ marginTop: 20 }} />
-                    ) : scheduleEvents.length === 0 ? (
+                    ) : uploadedDocs.length === 0 && scheduleEvents.length === 0 ? (
                         <StyledCard style={styles.emptyStateCard}>
                             <Text style={styles.emptyStateText}>No schedules uploaded yet</Text>
                         </StyledCard>
                     ) : (
-                        scheduleEvents.map((event: any) => (
+                        <>
+                        {uploadedDocs.map((doc: any) => (
+                            <StyledCard key={doc.id} style={{ ...styles.emptyStateCard, alignItems: 'flex-start' as const, marginBottom: 8 }}>
+                                <Text style={{ fontWeight: '600', color: theme.colors.text, marginBottom: 4 }}>{doc.file_name}</Text>
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{doc.date}</Text>
+                            </StyledCard>
+                        ))}
+                        {scheduleEvents.map((event: any) => (
                             <StyledCard key={event.id} style={{ ...styles.emptyStateCard, alignItems: 'flex-start' as const }}>
                                 <Text style={{ fontWeight: '600', color: theme.colors.text, marginBottom: 4 }}>{event.name}</Text>
                                 <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
@@ -267,7 +317,8 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                                 </Text>
                                 {event.location && <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }}>📍 {event.location}</Text>}
                             </StyledCard>
-                        ))
+                        ))}
+                        </>
                     )}
                 </View>
 

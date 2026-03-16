@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { useLogin } from '../hooks/useAuth';
 import { loginSchema } from '../lib/authSchemas';
+import { supabase } from '../lib/supabase';
 
 interface LoginScreenProps {
     navigation: any;
@@ -152,15 +153,22 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
 
                                     <TouchableOpacity
                                         style={styles.signInButton}
-                                        onPress={() => {
+                                        onPress={async () => {
+                                            setError('');
                                             if (!email.trim()) {
                                                 setResetStatus('error');
                                                 setError('Email is required for password recovery');
-                                            } else {
-                                                setResetStatus('success');
-                                                setError('');
-                                                // TODO: Implement forgot password logic
+                                                return;
                                             }
+                                            const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+                                                redirectTo: undefined,
+                                            });
+                                            if (resetError) {
+                                                setResetStatus('error');
+                                                setError(resetError.message || 'Failed to send reset email');
+                                                return;
+                                            }
+                                            setResetStatus('success');
                                         }}
                                         activeOpacity={0.8}
                                     >

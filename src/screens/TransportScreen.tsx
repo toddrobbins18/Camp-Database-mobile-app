@@ -305,7 +305,7 @@ export const TransportScreen = ({ navigation }: any) => {
 
     const { data: rawTrips = [], isLoading } = useTrips(companyId, season);
     const { data: rawCampers = [] } = useCampers(companyId, season);
-    const { data: rawDivisions = [] } = useDivisions();
+    const { data: rawDivisions = [] } = useDivisions(companyId);
 
     const addTripMutation = useAddTrip();
     const updateTripMutation = useUpdateTrip();

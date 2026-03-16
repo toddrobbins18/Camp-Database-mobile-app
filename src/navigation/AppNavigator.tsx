@@ -37,6 +37,8 @@ import { AwardsScreen } from '../screens/AwardsScreen';
 import { DailyNewsScreen } from '../screens/DailyNewsScreen';
 import { UserApprovalsScreen } from '../screens/UserApprovalsScreen';
 import { AccessDeniedScreen } from '../screens/AccessDeniedScreen';
+import { SpecialistSportAssignmentsScreen } from '../screens/SpecialistSportAssignmentsScreen';
+import { NotificationPreferencesScreen } from '../screens/NotificationPreferencesScreen';
 
 import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { useRole } from '../hooks/useRole';
@@ -51,7 +53,7 @@ const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const [selectedYear, setSelectedYear] = useState('2026');
     const { data: roleData } = useRole();
-    const { availableCompanies, switchCompany, companyId, isSuperAdmin: isSuperAdminCompany } = useCompany();
+    const { availableCompanies, switchCompany, companyId, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad } = useCompany();
     const [showCampPicker, setShowCampPicker] = useState(false);
 
     // Role flags (default to showing Main Menu items while loading)
@@ -74,6 +76,14 @@ const CustomDrawerContent = (props: any) => {
 
     return (
         <View style={{ flex: 1, backgroundColor: theme.colors.primary }}>
+            {loadError ? (
+                <View style={styles.loadErrorBanner}>
+                    <Text style={styles.loadErrorText} numberOfLines={2}>{loadError}</Text>
+                    <TouchableOpacity style={styles.retryButton} onPress={retryLoad}>
+                        <Text style={styles.retryButtonText}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : null}
             <DrawerContentScrollView {...props} contentContainerStyle={styles.drawerContent}>
                 {/* Header / Logo */}
                 <View style={styles.header}>
@@ -187,12 +197,18 @@ const CustomDrawerContent = (props: any) => {
                     onPress={() => props.navigation.navigate('Menu')}
                     {...drawerItemProps}
                 />
-                <DrawerItem
-                    label="Messages"
-                    icon={({ color }) => <Ionicons name="mail-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Messages')}
-                    {...drawerItemProps}
-                />
+                        <DrawerItem
+                            label="Messages"
+                            icon={({ color }) => <Ionicons name="mail-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('Messages')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Notification Preferences"
+                            icon={({ color }) => <Ionicons name="notifications-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('NotificationPreferences')}
+                            {...drawerItemProps}
+                        />
 
                 {/* ── Staff + Admin + Super Admin ── */}
                 {canSeeStaffScreens && (
@@ -335,7 +351,7 @@ const CustomDrawerContent = (props: any) => {
                         <DrawerItem
                             label="Specialist Sport Assignments"
                             icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('AccessDenied')}
+                            onPress={() => props.navigation.navigate('SpecialistSportAssignments')}
                             {...drawerItemProps}
                         />
                     </>
@@ -451,7 +467,9 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Awards" component={AwardsScreen} />
             <Drawer.Screen name="DailyNews" component={DailyNewsScreen} />
             <Drawer.Screen name="UserApprovals" component={UserApprovalsScreen} />
+            <Drawer.Screen name="NotificationPreferences" component={NotificationPreferencesScreen} />
             <Drawer.Screen name="AccessDenied" component={AccessDeniedScreen} />
+            <Drawer.Screen name="SpecialistSportAssignments" component={SpecialistSportAssignmentsScreen} />
             <Drawer.Screen name="ODManagement" component={ODManagementScreen} />
         </Drawer.Navigator>
     );
@@ -476,6 +494,28 @@ export const AppNavigator = () => {
 };
 
 const styles = StyleSheet.create({
+    loadErrorBanner: {
+        backgroundColor: theme.colors.danger || '#dc2626',
+        padding: theme.spacing.sm,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    loadErrorText: {
+        color: '#fff',
+        fontSize: 13,
+        flex: 1,
+    },
+    retryButton: {
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.xs,
+        borderRadius: theme.borderRadius.sm,
+    },
+    retryButtonText: {
+        color: '#fff',
+        fontWeight: '600',
+    },
     drawerContent: {
         paddingTop: theme.spacing.lg,
         paddingHorizontal: theme.spacing.md,

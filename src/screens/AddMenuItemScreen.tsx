@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCompany } from '../contexts/CompanyContext';
+import { useAddMenuItem } from '../api/menu';
 
 export const AddMenuItemScreen = ({ navigation }: any) => {
-    const [menuDate, setMenuDate] = useState(new Date(2026, 0, 22));
+    const { companyId } = useCompany();
+    const addMenuItemMutation = useAddMenuItem();
+    const [menuDate, setMenuDate] = useState(new Date());
     const [mealType, setMealType] = useState('');
     const [menuItems, setMenuItems] = useState('');
     const [allergens, setAllergens] = useState('');
@@ -22,16 +26,41 @@ export const AddMenuItemScreen = ({ navigation }: any) => {
         return `${month}/${day}/${year}`;
     };
 
+    const dateToISO = (date: Date): string => {
+        return date.toISOString().split('T')[0];
+    };
+
     const handleSave = () => {
-        // TODO: Implement save logic
-        console.log('Saving menu item:', {
-            date: formatDate(menuDate),
-            mealType,
-            menuItems,
-            allergens,
-        });
-        // Navigate back after saving
-        navigation.goBack();
+        if (!companyId) {
+            Alert.alert('Error', 'Company not loaded.');
+            return;
+        }
+        const meal = (mealType || '').trim().toLowerCase();
+        if (!meal || !['breakfast', 'lunch', 'dinner', 'snack'].includes(meal)) {
+            Alert.alert('Required', 'Please select a meal type.');
+            return;
+        }
+        if (!(menuItems || '').trim()) {
+            Alert.alert('Required', 'Please enter menu items.');
+            return;
+        }
+        addMenuItemMutation.mutate(
+            {
+                company_id: companyId,
+                date: dateToISO(menuDate),
+                meal_type: meal,
+                items: (menuItems || '').trim(),
+                allergens: (allergens || '').trim() || null,
+            },
+            {
+                onSuccess: () => {
+                    navigation.goBack();
+                },
+                onError: (err: any) => {
+                    Alert.alert('Error', err?.message || 'Failed to add menu item.');
+                },
+            }
+        );
     };
 
     const handleCancel = () => {
@@ -126,8 +155,16 @@ export const AddMenuItemScreen = ({ navigation }: any) => {
                         <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
                             <Text style={styles.cancelBtnText}>Cancel</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-                            <Text style={styles.saveBtnText}>Add Menu Item</Text>
+                        <TouchableOpacity
+                            style={[styles.saveBtn, addMenuItemMutation.isPending && styles.saveBtnDisabled]}
+                            onPress={handleSave}
+                            disabled={addMenuItemMutation.isPending}
+                        >
+                            {addMenuItemMutation.isPending ? (
+                                <ActivityIndicator color="#fff" size="small" />
+                            ) : (
+                                <Text style={styles.saveBtnText}>Add Menu Item</Text>
+                            )}
                         </TouchableOpacity>
                     </View>
                 </StyledCard>
@@ -391,6 +428,9 @@ const styles = StyleSheet.create({
         paddingVertical: theme.spacing.md,
         borderRadius: theme.borderRadius.md,
         alignItems: 'center',
+    },
+    saveBtnDisabled: {
+        opacity: 0.7,
     },
     saveBtnText: {
         ...theme.typography.body,

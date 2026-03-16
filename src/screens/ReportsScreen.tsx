@@ -18,6 +18,7 @@ import { StyledCard } from '../components/StyledCard';
 import { useCamperReports } from '../api/evaluations';
 import { useDivisionsLookup } from '../api/permissions';
 import { supabase } from '../lib/supabase';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ReportsScreenProps {
     navigation: any;
@@ -37,12 +38,11 @@ const REPORT_TYPES = [
 ];
 
 export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
-    // Fetch divisions from Supabase
-    const { data: dbDivisions = [] } = useDivisionsLookup();
-    const DIVISIONS = ['All Divisions', ...dbDivisions.map((d: any) => d.name)];
-
-    // Get company_id for reports query
+    const queryClient = useQueryClient();
     const [companyId, setCompanyId] = useState<string | null>(null);
+    const [reportGenerated, setReportGenerated] = useState(false);
+    const { data: dbDivisions = [] } = useDivisionsLookup(companyId);
+    const DIVISIONS = ['All Divisions', ...dbDivisions.map((d: any) => d.name)];
     useEffect(() => {
         supabase.auth.getUser().then(async ({ data }) => {
             if (data.user) {
@@ -422,9 +422,20 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                         </View>
 
                         {/* Generate Report Button */}
-                        <TouchableOpacity style={styles.generateButton}>
+                        <TouchableOpacity
+                            style={styles.generateButton}
+                            onPress={() => {
+                                queryClient.invalidateQueries({ queryKey: ['camper_reports'] });
+                                setReportGenerated(true);
+                            }}
+                        >
                             <Text style={styles.generateButtonText}>Generate Report</Text>
                         </TouchableOpacity>
+                        {reportGenerated ? (
+                            <Text style={[styles.subtitle, { marginTop: 8, color: theme.colors.primary }]}>
+                                Report refreshed. Summary below.
+                            </Text>
+                        ) : null}
                     </View>
 
                     {/* Summary Cards */}

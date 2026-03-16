@@ -125,16 +125,20 @@ export const useDeleteCamper = () => {
     });
 };
 
-export const useDivisions = () => {
+export const useDivisions = (companyId: string | null) => {
     return useQuery({
-        queryKey: ['divisions'],
+        queryKey: ['divisions', companyId],
         queryFn: async () => {
+            if (!companyId) return [];
             const { data, error } = await supabase
                 .from('divisions')
                 .select('*')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
                 .order('sort_order', { ascending: true });
             if (error) throw error;
-            return data;
-        }
+            return data ?? [];
+        },
+        enabled: !!companyId,
     });
 };

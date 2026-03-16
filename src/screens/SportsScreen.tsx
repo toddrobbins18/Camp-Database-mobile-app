@@ -66,7 +66,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const { companyId, season } = useCompany();
     const { data: campersData = [] } = useCampers(companyId, season);
     const { data: enrollmentsData = [] } = useSportsEnrollments(companyId, season);
-    const { data: divisionsData = [] } = useDivisions();
+    const { data: divisionsData = [] } = useDivisions(companyId);
     
     const filteredEnrollments = useMemo(() => {
         let filtered = enrollmentsData;

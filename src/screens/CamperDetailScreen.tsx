@@ -21,7 +21,7 @@ type BirthdaySubTabType = 'info' | 'party';
 export const CamperDetailScreen = ({ route, navigation }: any) => {
     const { camper } = route.params || {};
     const { companyId, season } = useCompany();
-    const { data: divisionsData = [] } = useDivisions();
+    const { data: divisionsData = [] } = useDivisions(companyId);
     const { data: staffLeaders = [] } = useStaff(companyId, season);
     const leaders = staffLeaders.map((s: any) => ({ name: s.name, role: s.role || s.staff_type || 'Staff' }));
 

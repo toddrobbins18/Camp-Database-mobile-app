@@ -67,27 +67,33 @@ export const useDivisionPermissions = () => {
     });
 };
 
-export const useDivisionsLookup = () => {
+export const useDivisionsLookup = (companyId: string | null) => {
     return useQuery({
-        queryKey: ['divisions_lookup'],
+        queryKey: ['divisions_lookup', companyId],
         queryFn: async () => {
+            if (!companyId) return [];
             const { data, error } = await supabase
                 .from('divisions')
                 .select('*')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
                 .order('sort_order', { ascending: true });
             if (error) throw error;
             return data || [];
         },
+        enabled: !!companyId,
     });
 };
 
 export const useUpdateDivisionPermission = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ user_id, division_id, can_access }: { user_id: string; division_id: string; can_access: boolean }) => {
+        mutationFn: async ({ user_id, division_id, company_id, can_access }: { user_id: string; division_id: string; company_id?: string; can_access: boolean }) => {
+            const row: Record<string, unknown> = { user_id, division_id, can_access };
+            if (company_id) row.company_id = company_id;
             const { data, error } = await supabase
                 .from('division_permissions')
-                .upsert({ user_id, division_id, can_access }, { onConflict: 'user_id,division_id' })
+                .upsert(row, { onConflict: 'user_id,division_id' })
                 .select()
                 .single();
             if (error) throw error;

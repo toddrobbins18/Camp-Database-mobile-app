@@ -15,10 +15,12 @@ interface CompanyContextType {
     isTylerHill: boolean;
     isLoading: boolean;
     profile: any | null;
-    // Super Admin multi-camp support
     availableCompanies: Company[];
     switchCompany: (companyId: string) => void;
     isSuperAdmin: boolean;
+    /** Set when profile/company fetch fails; clear on retry */
+    loadError: string | null;
+    retryLoad: () => void;
 }
 
 const CompanyContext = createContext<CompanyContextType>({
@@ -32,6 +34,8 @@ const CompanyContext = createContext<CompanyContextType>({
     availableCompanies: [],
     switchCompany: () => { },
     isSuperAdmin: false,
+    loadError: null,
+    retryLoad: () => { },
 });
 
 export const useCompany = () => useContext(CompanyContext);
@@ -49,6 +53,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
     const [profile, setProfile] = useState<any | null>(null);
     const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const switchCompany = (newCompanyId: string) => {
         const company = availableCompanies.find(c => c.id === newCompanyId);
@@ -116,13 +121,15 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                         setIsTylerHill(companyData.slug === 'tyler-hill-camp');
                     }
                 }
-            } catch (error) {
+            } catch (error: any) {
                 console.error('Error fetching company data:', error);
+                setLoadError(error?.message ?? 'Failed to load company. Check your connection.');
             } finally {
                 setIsLoading(false);
             }
         };
 
+        setLoadError(null);
         fetchCompanyData();
 
         // Listen for auth state changes to refetch company data
@@ -138,6 +145,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                     setAvailableCompanies([]);
                     setIsSuperAdmin(false);
                     setIsLoading(false);
+                    setLoadError(null);
                 }
             }
         );
@@ -146,6 +154,42 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
             subscription.unsubscribe();
         };
     }, []);
+
+    const retryLoad = () => {
+        setLoadError(null);
+        setIsLoading(true);
+        supabase.auth.getUser().then(async ({ data: { user } }) => {
+            if (!user) {
+                setIsLoading(false);
+                return;
+            }
+            try {
+                const { data: profileData, error: profileError } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+                if (profileError) throw profileError;
+                setProfile(profileData);
+                const { data: roleData } = await supabase.from('user_roles').select('role').eq('user_id', user.id);
+                const superAdmin = roleData?.some((r: any) => r.role === 'super_admin') || false;
+                setIsSuperAdmin(superAdmin);
+                if (superAdmin) {
+                    const { data: allCompanies } = await supabase.from('companies').select('id, name, slug').order('name');
+                    if (allCompanies) setAvailableCompanies(allCompanies);
+                }
+                setCompanyId(profileData.company_id);
+                if (profileData.company_id) {
+                    const { data: companyData, error: companyError } = await supabase.from('companies').select('slug, name').eq('id', profileData.company_id).single();
+                    if (!companyError && companyData) {
+                        setCompanySlug(companyData.slug);
+                        setIsTylerHill(companyData.slug === 'tyler-hill-camp');
+                    }
+                }
+                setLoadError(null);
+            } catch (err: any) {
+                setLoadError(err?.message ?? 'Failed to load');
+            } finally {
+                setIsLoading(false);
+            }
+        });
+    };
 
     return (
         <CompanyContext.Provider
@@ -160,6 +204,8 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 availableCompanies,
                 switchCompany,
                 isSuperAdmin,
+                loadError,
+                retryLoad,
             }}
         >
             {children}

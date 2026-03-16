@@ -101,7 +101,7 @@ const HELP_CONTENT: Record<string, { title: string, subtitle: string, columns: s
 
 export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) => {
     const { companyId, season } = useCompany();
-    const { data: divisionsData = [] } = useDivisions();
+    const { data: divisionsData = [] } = useDivisions(companyId);
     const { data: specialEventsData = [], isLoading: isLoadingEvents } = useSpecialEvents(companyId, season);
     const addSpecialEventMutation = useAddSpecialEvent();
 

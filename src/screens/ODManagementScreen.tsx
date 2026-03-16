@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { StyledCard } from '../components/StyledCard';
 import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
+import { useStaff } from '../api/staff';
 
 interface StaffMember {
     id: string;
@@ -28,77 +29,90 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const [showModeModal, setShowModeModal] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [newBankName, setNewBankName] = useState('');
+    const [newEntryStaffId, setNewEntryStaffId] = useState<string | null>(null);
+    const [newEntrySleepingOut, setNewEntrySleepingOut] = useState(false);
+    const [scannerMode, setScannerMode] = useState(false);
+    const [rfidInput, setRfidInput] = useState('');
+    const [isScanning, setIsScanning] = useState(false);
+    const rfidInputRef = useRef<TextInput>(null);
 
     const dateString = selectedDate.toISOString().split('T')[0];
+    const { data: staffList = [] } = useStaff(companyId, season);
 
-    // Fetch days off / OD records for the selected date
+    // Fetch staff_days_off for the selected date (same schema as web)
     const { data: staffMembers = [], isLoading: isLoadingStaff } = useQuery({
-        queryKey: ['days_off', companyId, dateString],
+        queryKey: ['staff_days_off', companyId, season, dateString],
         queryFn: async () => {
             if (!companyId) return [];
             const { data, error } = await supabase
-                .from('days_off')
-                .select('*, profiles(full_name)')
+                .from('staff_days_off')
+                .select('id, staff_id, date, is_day_off, is_night_off, is_sleeping_out, checked_out, checked_in, staff:staff_id(id, name)')
                 .eq('company_id', companyId)
+                .eq('season', season)
                 .eq('date', dateString);
             if (error) throw error;
             return (data || []).map((record: any) => ({
                 id: record.id,
                 staffId: record.staff_id,
-                name: record.profiles?.full_name || 'Unknown',
-                bank: record.bank || '',
-                isOut: record.is_out || false,
-                isSleepingOut: record.is_sleeping_out || false,
+                name: record.staff?.name ?? 'Unknown',
+                bank: '', // Bunk comes from bunk_staff; optional to add later
+                isOut: record.checked_out ?? false,
+                isSleepingOut: record.is_sleeping_out ?? false,
             }));
         },
-        enabled: !!companyId,
+        enabled: !!companyId && !!season,
     });
 
-    // Fetch banks from Supabase
-    const { data: banks = [] } = useQuery({
-        queryKey: ['bunks', companyId],
+    // Fetch bunks (web schema: bunk_number, bunk_name; no "name" column)
+    const { data: banksList = [] } = useQuery({
+        queryKey: ['bunks', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
             const { data, error } = await supabase
                 .from('bunks')
-                .select('id, name')
+                .select('id, bunk_number, bunk_name')
                 .eq('company_id', companyId)
-                .order('name', { ascending: true });
+                .eq('season', season)
+                .order('bunk_number', { ascending: true });
             if (error) throw error;
-            return (data || []).map((b: any) => b.name);
+            return (data || []).map((b: any) => ({ id: b.id, displayName: b.bunk_name || `Bunk ${b.bunk_number}` }));
         },
-        enabled: !!companyId,
+        enabled: !!companyId && !!season,
     });
+    const banks = banksList.map((b: { id: string; displayName: string }) => b.displayName);
 
-    // Add day-off record mutation
+    // Add day-off record (staff_days_off table, same as web)
     const addDayOffMutation = useMutation({
         mutationFn: async (newRecord: any) => {
             const { error } = await supabase
-                .from('days_off')
+                .from('staff_days_off')
                 .insert([{
                     company_id: companyId,
                     staff_id: newRecord.staffId,
                     date: dateString,
-                    bank: newRecord.bank || null,
-                    is_out: newRecord.isOut || false,
-                    is_sleeping_out: newRecord.isSleepingOut || false,
+                    season,
+                    is_day_off: true,
+                    is_night_off: newRecord.isNightOff ?? false,
+                    is_sleeping_out: newRecord.isSleepingOut ?? false,
                 }]);
             if (error) throw error;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['days_off'] });
+            queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
         },
         onError: (error: any) => {
             Alert.alert('Error', error.message || 'Failed to add record');
         },
     });
 
-    // Add bank mutation
+    // Add bunk (web schema: bunk_number, bunk_name; season required)
     const addBankMutation = useMutation({
         mutationFn: async (bankName: string) => {
+            const { data: existing } = await supabase.from('bunks').select('bunk_number').eq('company_id', companyId).eq('season', season).order('bunk_number', { ascending: false }).limit(1);
+            const nextNum = (existing?.[0]?.bunk_number ?? 0) + 1;
             const { error } = await supabase
                 .from('bunks')
-                .insert([{ company_id: companyId, name: bankName }]);
+                .insert([{ company_id: companyId, season, bunk_number: nextNum, bunk_name: bankName || null }]);
             if (error) throw error;
         },
         onSuccess: () => {
@@ -106,26 +120,22 @@ export const ODManagementScreen = ({ navigation }: any) => {
             setNewBankName('');
         },
         onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to add bank');
+            Alert.alert('Error', error.message || 'Failed to add bunk');
         },
     });
 
-    // Delete bank mutation
+    // Delete bunk by id (reliable; displayName can be "Bunk N" when bunk_name is null)
     const deleteBankMutation = useMutation({
-        mutationFn: async (bankName: string) => {
-            const { error } = await supabase
-                .from('bunks')
-                .delete()
-                .eq('company_id', companyId)
-                .eq('name', bankName);
+        mutationFn: async (bunkId: string) => {
+            const { error } = await supabase.from('bunks').delete().eq('id', bunkId);
             if (error) throw error;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bunks'] });
-            queryClient.invalidateQueries({ queryKey: ['days_off'] });
+            queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
         },
         onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to delete bank');
+            Alert.alert('Error', error.message || 'Failed to delete bunk');
         },
     });
 
@@ -164,15 +174,61 @@ export const ODManagementScreen = ({ navigation }: any) => {
         }
     };
 
-    const handleDeleteBank = (bankName: string) => {
+    const handleDeleteBank = (bunkId: string, displayName: string) => {
         Alert.alert(
-            'Delete Bank',
-            `Are you sure you want to delete "${bankName}"?`,
+            'Delete Bunk',
+            `Are you sure you want to delete "${displayName}"?`,
             [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => deleteBankMutation.mutate(bankName) },
+                { text: 'Delete', style: 'destructive', onPress: () => deleteBankMutation.mutate(bunkId) },
             ]
         );
+    };
+
+    const handleRfidScan = async () => {
+        const value = (rfidInput || '').trim();
+        if (!value || !companyId) return;
+        setIsScanning(true);
+        try {
+            const { data: staffMember, error: staffErr } = await supabase
+                .from('staff')
+                .select('id, name')
+                .eq('rfid', value)
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .maybeSingle();
+            if (staffErr || !staffMember) {
+                Alert.alert('Not found', `Wristband not recognized (RFID: ${value.slice(0, 12)}...)`);
+                setRfidInput('');
+                return;
+            }
+            const existing = staffMembers.find((m: any) => m.staffId === staffMember.id);
+            if (!existing) {
+                Alert.alert('No day off', `${staffMember.name} is not scheduled off for this date. Add an entry first.`);
+                setRfidInput('');
+                return;
+            }
+            const { data: row } = await supabase.from('staff_days_off').select('id, checked_out, checked_in').eq('staff_id', staffMember.id).eq('company_id', companyId).eq('date', dateString).maybeSingle();
+            if (!row) {
+                setRfidInput('');
+                return;
+            }
+            if (!row.checked_out) {
+                await supabase.from('staff_days_off').update({ checked_out: true, checked_out_at: new Date().toISOString() }).eq('id', row.id);
+                Alert.alert('Checked out', `${staffMember.name} signed out.`);
+            } else if (!row.checked_in) {
+                await supabase.from('staff_days_off').update({ checked_in: true, checked_in_at: new Date().toISOString() }).eq('id', row.id);
+                Alert.alert('Checked in', `${staffMember.name} signed in.`);
+            } else {
+                Alert.alert('Done', `${staffMember.name} has already checked out and back in today.`);
+            }
+            queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+            setRfidInput('');
+        } catch (e: any) {
+            Alert.alert('Error', e?.message || 'Scan failed');
+        } finally {
+            setIsScanning(false);
+        }
     };
 
     return (
@@ -198,9 +254,14 @@ export const ODManagementScreen = ({ navigation }: any) => {
 
                 {/* Action Buttons */}
                 <View style={styles.actionButtonsContainer}>
-                    <TouchableOpacity style={styles.actionButton}>
-                        <Ionicons name="barcode-outline" size={18} color={theme.colors.text} />
-                        <Text style={styles.actionButtonText}>Scan Wristband</Text>
+                    <TouchableOpacity
+                        style={[styles.actionButton, scannerMode && { backgroundColor: theme.colors.primary }]}
+                        onPress={() => setScannerMode(!scannerMode)}
+                    >
+                        <Ionicons name="barcode-outline" size={18} color={scannerMode ? theme.colors.surface : theme.colors.text} />
+                        <Text style={[styles.actionButtonText, scannerMode && { color: theme.colors.surface }]}>
+                            {scannerMode ? 'Scanner active' : 'Scan Wristband'}
+                        </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={styles.actionButton}
@@ -210,6 +271,29 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         <Text style={styles.actionButtonText}>Manage Banks</Text>
                     </TouchableOpacity>
                 </View>
+
+                {scannerMode ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.md, gap: 8 }}>
+                        <TextInput
+                            ref={rfidInputRef}
+                            style={[styles.bankInput, { flex: 1 }]}
+                            placeholder="Scan or enter RFID..."
+                            placeholderTextColor={theme.colors.textSecondary}
+                            value={rfidInput}
+                            onChangeText={setRfidInput}
+                            onSubmitEditing={handleRfidScan}
+                            editable={!isScanning}
+                            autoFocus
+                        />
+                        <TouchableOpacity
+                            style={[styles.addBankButton, (!rfidInput.trim() || isScanning) && { opacity: 0.6 }]}
+                            onPress={handleRfidScan}
+                            disabled={!rfidInput.trim() || isScanning}
+                        >
+                            {isScanning ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="checkmark" size={24} color="#fff" />}
+                        </TouchableOpacity>
+                    </View>
+                ) : null}
 
                 {/* Date Selector */}
                 <View style={styles.dateSelector}>
@@ -380,10 +464,10 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             </View>
                             <View style={styles.banksList}>
-                                {banks.map((bank, index) => (
-                                    <View key={index} style={styles.bankItem}>
-                                        <Text style={styles.bankName}>{bank}</Text>
-                                        <TouchableOpacity onPress={() => handleDeleteBank(bank)}>
+                                {banksList.map((b) => (
+                                    <View key={b.id} style={styles.bankItem}>
+                                        <Text style={styles.bankName}>{b.displayName}</Text>
+                                        <TouchableOpacity onPress={() => handleDeleteBank(b.id, b.displayName)}>
                                             <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
                                         </TouchableOpacity>
                                     </View>
@@ -404,14 +488,65 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 <Pressable style={styles.modalOverlay} onPress={() => setShowNewModal(false)}>
                     <Pressable style={styles.modal} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>New Entry</Text>
+                            <Text style={styles.modalTitle}>New Day Off Entry</Text>
                             <TouchableOpacity onPress={() => setShowNewModal(false)}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
-                        <View style={styles.modalContent}>
-                            <Text style={styles.modalSubtitle}>Add new staff entry functionality coming soon...</Text>
-                        </View>
+                        <ScrollView style={styles.modalContent}>
+                            <Text style={styles.modalSubtitle}>Add a staff member as off duty for {dateString}</Text>
+                            <View style={{ marginBottom: theme.spacing.md }}>
+                                <Text style={styles.formLabel}>Staff</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
+                                    {staffList.map((s: any) => (
+                                        <TouchableOpacity
+                                            key={s.id}
+                                            style={[
+                                                { paddingVertical: 8, paddingHorizontal: 12, marginRight: 8, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border },
+                                                newEntryStaffId === s.id && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+                                            ]}
+                                            onPress={() => setNewEntryStaffId(newEntryStaffId === s.id ? null : s.id)}
+                                        >
+                                            <Text style={[styles.formLabel, newEntryStaffId === s.id && { color: theme.colors.surface }]}>{s.name}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                            <TouchableOpacity
+                                style={{ flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.lg }}
+                                onPress={() => setNewEntrySleepingOut(!newEntrySleepingOut)}
+                            >
+                                <Ionicons name={newEntrySleepingOut ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
+                                <Text style={[styles.modalSubtitle, { marginLeft: 8 }]}>Sleeping out</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.newButton, { alignSelf: 'center' }]}
+                                onPress={() => {
+                                    if (!newEntryStaffId) {
+                                        Alert.alert('Required', 'Please select a staff member.');
+                                        return;
+                                    }
+                                    addDayOffMutation.mutate(
+                                        { staffId: newEntryStaffId, isSleepingOut: newEntrySleepingOut },
+                                        {
+                                            onSuccess: () => {
+                                                setShowNewModal(false);
+                                                setNewEntryStaffId(null);
+                                                setNewEntrySleepingOut(false);
+                                            },
+                                            onError: (e: any) => Alert.alert('Error', e?.message || 'Failed to add entry'),
+                                        }
+                                    );
+                                }}
+                                disabled={addDayOffMutation.isPending || !newEntryStaffId}
+                            >
+                                {addDayOffMutation.isPending ? (
+                                    <ActivityIndicator color="#fff" size="small" />
+                                ) : (
+                                    <Text style={styles.newButtonText}>Add Entry</Text>
+                                )}
+                            </TouchableOpacity>
+                        </ScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -426,13 +561,15 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 <Pressable style={styles.modalOverlay} onPress={() => setShowModeModal(false)}>
                     <Pressable style={styles.modal} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Mode Settings</Text>
+                            <Text style={styles.modalTitle}>Scanner mode</Text>
                             <TouchableOpacity onPress={() => setShowModeModal(false)}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
                         <View style={styles.modalContent}>
-                            <Text style={styles.modalSubtitle}>Mode settings functionality coming soon...</Text>
+                            <Text style={styles.modalSubtitle}>
+                                When scanner mode is on, use the RFID input to check staff out or in for their day off. Tap "Scan Wristband" on the main screen to toggle scanner mode.
+                            </Text>
                         </View>
                     </Pressable>
                 </Pressable>
@@ -694,6 +831,12 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.textSecondary,
+    },
+    formLabel: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
     },
     addBankSection: {
         flexDirection: 'row',

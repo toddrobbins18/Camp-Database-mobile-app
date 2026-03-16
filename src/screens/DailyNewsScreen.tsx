@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -65,20 +65,26 @@ export const DailyNewsScreen = ({ navigation }: any) => {
         enabled: !!companyId,
     });
 
-    // Fetch today's menu/meals
+    // Fetch today's menu from menu_items (same schema as web)
     const { data: meals = null } = useQuery({
         queryKey: ['daily_meals', companyId, todayString],
         queryFn: async () => {
             if (!companyId) return null;
             try {
                 const { data, error } = await supabase
-                    .from('meals')
+                    .from('menu_items')
                     .select('*')
                     .eq('company_id', companyId)
-                    .eq('date', todayString)
-                    .single();
+                    .eq('date', todayString);
                 if (error) return null;
-                return data;
+                // Build { breakfast, lunch, dinner, snack } from menu_items by meal_type
+                const out: Record<string, string> = { breakfast: '', lunch: '', dinner: '', snack: '' };
+                (data || []).forEach((item: any) => {
+                    const type = (item.meal_type || '').toLowerCase();
+                    const content = item.items ?? item.description ?? '';
+                    if (type in out) out[type] = content;
+                });
+                return out;
             } catch {
                 return null;
             }
@@ -86,8 +92,26 @@ export const DailyNewsScreen = ({ navigation }: any) => {
         enabled: !!companyId,
     });
 
-    const handlePrint = () => {
-        // TODO: Implement print functionality
+    const handlePrint = async () => {
+        try {
+            const lines = [
+                `Daily News – ${formattedDate}`,
+                '',
+                'Birthdays: ' + (birthdays.length ? birthdays.join(', ') : 'None today'),
+                '',
+                'Today’s events: ' + (todayEvents.length ? todayEvents.map((e: any) => e.title || e.description).join('; ') : 'None'),
+                '',
+                'Meals – Breakfast: ' + (meals?.breakfast || 'TBD'),
+                'Lunch: ' + (meals?.lunch || 'TBD'),
+                'Dinner: ' + (meals?.dinner || 'TBD'),
+            ];
+            await Share.share({
+                message: lines.join('\n'),
+                title: 'Daily News',
+            });
+        } catch (e) {
+            // User cancelled or share failed
+        }
     };
 
     return (

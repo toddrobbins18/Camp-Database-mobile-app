@@ -12,15 +12,17 @@ export interface AdminUser {
     tags?: string[];
 }
 
+// Only approved users (they belong in Admin Panel after approval, not in User Approvals).
 export const useAdminUsers = () => {
     return useQuery({
         queryKey: ['adminUsers'],
         queryFn: async () => {
-            // First try fetching profiles and user_roles if they exist
-            let { data: users, error } = await supabase.from('profiles').select('*');
+            let { data: users, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('approved', true);
 
             if (error) {
-                // Fallback to staff if profiles is well-protected or doesn't exist
                 const { data: staff, error: staffError } = await supabase.from('staff').select('*');
                 if (staffError) throw staffError;
                 users = staff;
@@ -71,6 +73,7 @@ export const useDeleteUser = () => {
 };
 
 // --------- User Approvals --------- //
+// Only users who have applied and are NOT yet approved (pending). Exclude approved and rejected.
 export const usePendingUsers = () => {
     return useQuery({
         queryKey: ['pendingUsers'],
@@ -78,15 +81,18 @@ export const usePendingUsers = () => {
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
-                .eq('approved', false);
+                .or('approved.eq.false,approved.is.null')
+                .order('approval_requested_at', { ascending: false });
 
             if (error) throw error;
 
-            return (data || []).map((u: any) => ({
+            // Exclude any profile that is explicitly approved (defensive)
+            const pending = (data || []).filter((u: any) => u.approved !== true);
+            return pending.map((u: any) => ({
                 id: u.id,
-                name: u.full_name || u.email?.split('@')[0] || 'Unknown',
+                name: u.full_name || u.email?.split('@')[0] || 'No Name',
                 email: u.email || '',
-                requestedAt: u.created_at || new Date().toISOString()
+                requestedAt: u.approval_requested_at || u.created_at || new Date().toISOString()
             }));
         }
     });
@@ -97,17 +103,20 @@ export const useApproveUser = () => {
     return useMutation({
         mutationFn: async ({ userId, companyId }: { userId: string, companyId: string }) => {
             // 1. Approve the profile and assign company
-            const { error: profileError } = await supabase
+            const { data: updated, error: profileError } = await supabase
                 .from('profiles')
                 .update({ approved: true, company_id: companyId })
-                .eq('id', userId);
+                .eq('id', userId)
+                .select('id')
+                .single();
 
             if (profileError) throw profileError;
+            if (!updated) throw new Error('Profile update had no effect. You may not have permission to approve users.');
 
             // 2. Add standard Staff role for that company
             const { error: roleError } = await supabase
                 .from('user_roles')
-                .insert([{ user_id: userId, company_id: companyId, role: 'Staff' }]);
+                .insert([{ user_id: userId, company_id: companyId, role: 'staff' }]);
 
             // Ignore duplicate key errors if role somehow exists
             if (roleError && roleError.code !== '23505') throw roleError;

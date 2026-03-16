@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -8,10 +8,17 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useDivisions } from '../api/campers';
 import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
 
+const getChildDisplayName = (child: any) =>
+    (child?.name != null && child.name !== '')
+        ? String(child.name)
+        : [child?.first_name, child?.last_name].filter(Boolean).join(' ').trim() || 'Unknown';
+
 export const HealthScreen = ({ navigation }: any) => {
     const { companyId } = useCompany();
-    const { data: campersData = [] } = useCampers(companyId, '2026');
-    const { data: divisionsData = [] } = useDivisions();
+    const { data: campersData, isLoading: campersLoading, isError: campersError } = useCampers(companyId, '2026');
+    const { data: divisionsData, isError: divisionsError } = useDivisions(companyId);
+    const safeCampers = Array.isArray(campersData) ? campersData : [];
+    const safeDivisions = Array.isArray(divisionsData) ? divisionsData : [];
 
     const [activeView, setActiveView] = useState('list'); // 'list' or 'calendar'
     const [activeTab, setActiveTab] = useState('Daily Log');
@@ -41,31 +48,32 @@ export const HealthScreen = ({ navigation }: any) => {
     const dateString = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
 
     // Medications
-    const { data: medicationsData = [] } = useMedicationLogs(companyId, dateString);
+    const { data: medicationsData } = useMedicationLogs(companyId, dateString);
     const addMedicationMutation = useAddMedicationLog();
     const administerMutation = useAdministerMedication();
+    const safeMedications = Array.isArray(medicationsData) ? medicationsData : [];
 
     // Admissions
-    const { data: admissionsData = [] } = useHealthCenterAdmissions(companyId);
+    const { data: admissionsData } = useHealthCenterAdmissions(companyId);
+    const safeAdmissions = Array.isArray(admissionsData) ? admissionsData : [];
     const addAdmissionMutation = useAddHealthCenterAdmission();
     const checkoutMutation = useCheckoutHealthCenterAdmission();
 
     // Filter children based on search query
-    
     const filteredChildren = useMemo(() => {
-        return campersData.filter((child: any) => {
-            const matchesSearch = `${child.first_name} ${child.last_name}`.toLowerCase().includes(searchChildrenQuery.toLowerCase()) ||
-                (child.division?.name || child.group_name || '').toLowerCase().includes(searchChildrenQuery.toLowerCase());
-            
+        return safeCampers.filter((child: any) => {
+            const displayName = getChildDisplayName(child);
+            const divisionName = child.division?.name || child.group_name || '';
+            const matchesSearch = displayName.toLowerCase().includes(searchChildrenQuery.toLowerCase()) ||
+                divisionName.toLowerCase().includes(searchChildrenQuery.toLowerCase());
             const matchesDivision = selectedDivision === 'All Divisions' || child.division_id === selectedDivision;
-            
             return matchesSearch && matchesDivision;
         }).map((child: any) => ({
             id: child.id,
-            name: `${child.first_name} ${child.last_name}`,
+            name: getChildDisplayName(child),
             division: child.division?.name || child.group_name || 'N/A'
         }));
-    }, [campersData, searchChildrenQuery, selectedDivision]);
+    }, [safeCampers, searchChildrenQuery, selectedDivision]);
     
 
     const handleAdmitChild = () => {
@@ -92,7 +100,7 @@ export const HealthScreen = ({ navigation }: any) => {
     const handleAddMedication = () => {
         if (!selectedMedicationChild || !medicationName || !companyId) return;
 
-        const child = campersData.find((c: any) => `${c.first_name} ${c.last_name}` === selectedMedicationChild);
+        const child = safeCampers.find((c: any) => getChildDisplayName(c) === selectedMedicationChild);
         if (!child) return;
 
         let time = '08:00';
@@ -215,6 +223,50 @@ export const HealthScreen = ({ navigation }: any) => {
 
     const tabs = ['Daily Log', "Today's Medications", 'Health Center', 'Health Center Log', 'Add Medication'];
 
+    const hasError = campersError || divisionsError;
+    const isLoadingCompany = !companyId || campersLoading;
+
+    if (isLoadingCompany) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                        <Ionicons name="menu" size={28} color={theme.colors.text} />
+                    </TouchableOpacity>
+                    <View style={{ flex: 1 }} />
+                    <TouchableOpacity>
+                        <Ionicons name="person-circle-outline" size={28} color={theme.colors.text} />
+                    </TouchableOpacity>
+                </View>
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={theme.colors.secondary} />
+                    <Text style={styles.loadingText}>Loading...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (hasError) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                        <Ionicons name="menu" size={28} color={theme.colors.text} />
+                    </TouchableOpacity>
+                    <View style={{ flex: 1 }} />
+                    <TouchableOpacity>
+                        <Ionicons name="person-circle-outline" size={28} color={theme.colors.text} />
+                    </TouchableOpacity>
+                </View>
+                <View style={styles.loadingContainer}>
+                    <Ionicons name="warning-outline" size={48} color={theme.colors.danger} />
+                    <Text style={styles.errorTitle}>Something went wrong</Text>
+                    <Text style={styles.errorMessage}>Unable to load nurse data. Try again later.</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -289,7 +341,7 @@ export const HealthScreen = ({ navigation }: any) => {
                         style={styles.dropdownContainer}
                         onPress={() => setShowDivisionPicker(true)}
                     >
-                        <Text style={styles.dropdownText}>{selectedDivision === 'All Divisions' ? 'All Divisions' : divisionsData.find(d => d.id === selectedDivision)?.name || 'Select Division'}</Text>
+                        <Text style={styles.dropdownText}>{selectedDivision === 'All Divisions' ? 'All Divisions' : safeDivisions.find((d: any) => d.id === selectedDivision)?.name || 'Select Division'}</Text>
                         <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                     </TouchableOpacity>
                 </View>
@@ -434,13 +486,13 @@ export const HealthScreen = ({ navigation }: any) => {
                                 </StyledCard>
 
                                 {/* Empty State or List */}
-                                {medicationsData.length === 0 ? (
+                                {safeMedications.length === 0 ? (
                                     <View style={styles.emptyStateRow}>
                                         <Text style={styles.emptyText}>No medications scheduled for today</Text>
                                         <View style={styles.emptyDot} />
                                     </View>
                                 ) : (
-                                    medicationsData.map(med => (
+                                    safeMedications.map((med: any) => (
                                         <View key={med.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
                                             <View>
                                                 <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>{med.medication_name} {med.dosage ? `(${med.dosage})` : ''}</Text>
@@ -593,13 +645,13 @@ export const HealthScreen = ({ navigation }: any) => {
                                 <Text style={styles.healthCenterLogSubtitle}>
                                     Past health center admissions this season
                                 </Text>
-                                {admissionsData.length === 0 ? (
+                                {safeAdmissions.length === 0 ? (
                                     <View style={styles.emptyState}>
                                         <Text style={styles.emptyText}>No admission history found for this season</Text>
                                     </View>
                                 ) : (
                                     <ScrollView style={{ marginTop: 16 }}>
-                                        {admissionsData.map(admission => (
+                                        {safeAdmissions.map((admission: any) => (
                                             <View key={admission.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
                                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                                                     <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>{admission.children?.name}</Text>
@@ -1013,6 +1065,27 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: theme.spacing.xl,
+        gap: theme.spacing.md,
+    },
+    loadingText: {
+        ...theme.typography.body,
+        color: theme.colors.textSecondary,
+    },
+    errorTitle: {
+        ...theme.typography.h2,
+        color: theme.colors.text,
+        textAlign: 'center',
+    },
+    errorMessage: {
+        ...theme.typography.body,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
     },
     scrollContent: {
         padding: theme.spacing.md,

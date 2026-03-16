@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useDivisionsLookup, useDivisionPermissions, useUpdateDivisionPermission } from '../api/permissions';
+import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 
@@ -12,7 +13,7 @@ interface User {
     id: string;
     name: string;
     email: string;
-    role: 'admin' | 'viewer' | 'staff' | 'super_admin';
+    role: 'admin' | 'viewer' | 'staff' | 'super_admin' | 'division_leader' | 'specialist' | 'health_center';
 }
 
 interface UserDivisionPermissions {
@@ -22,26 +23,49 @@ interface UserDivisionPermissions {
 }
 
 export const DivisionPermissionsScreen = ({ navigation }: any) => {
-    // Fetch divisions from Supabase
-    const { data: dbDivisions = [], isLoading: divLoading } = useDivisionsLookup();
+    const { companyId } = useCompany();
+    const { data: dbDivisions = [], isLoading: divLoading } = useDivisionsLookup(companyId);
     const divisions = dbDivisions.map((d: any) => ({ id: d.id, name: d.name }));
 
-    // Fetch users from Supabase profiles
+    // Fetch approved users in current company (match Lovable), then their roles from user_roles
     const { data: users = [], isLoading: usersLoading } = useQuery({
-        queryKey: ['profiles_division_perms'],
+        queryKey: ['profiles_division_perms', companyId],
         queryFn: async () => {
-            const { data, error } = await supabase
+            if (!companyId) return [];
+            const { data: profilesData, error: profError } = await supabase
                 .from('profiles')
                 .select('id, full_name, email')
+                .eq('approved', true)
+                .eq('company_id', companyId)
                 .order('full_name', { ascending: true });
-            if (error) throw error;
-            return (data || []).map((p: any) => ({
+            if (profError) throw profError;
+            const profiles = profilesData || [];
+            if (profiles.length === 0) return [];
+
+            const userIds = profiles.map((p: any) => p.id);
+            const { data: rolesData, error: rolesError } = await supabase
+                .from('user_roles')
+                .select('user_id, role')
+                .in('user_id', userIds)
+                .eq('company_id', companyId);
+            if (rolesError) throw rolesError;
+
+            const roleByUser: Record<string, string> = {};
+            (rolesData || []).forEach((r: any) => {
+                const existing = roleByUser[r.user_id];
+                const order = ['super_admin', 'admin', 'health_center', 'staff', 'division_leader', 'specialist', 'viewer'];
+                const idx = (role: string) => order.indexOf(role);
+                if (existing == null || idx(r.role) < idx(existing)) roleByUser[r.user_id] = r.role;
+            });
+
+            return profiles.map((p: any) => ({
                 id: p.id,
                 name: p.full_name || p.email || 'Unknown',
                 email: p.email || '',
-                role: 'staff' as const,
+                role: (roleByUser[p.id] || 'viewer') as User['role'],
             }));
         },
+        enabled: !!companyId,
     });
 
     // Fetch existing division permissions from Supabase
@@ -79,7 +103,7 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
             }
         }));
         // Persist to Supabase
-        updateDivPermMutation.mutate({ user_id: userId, division_id: divisionId, can_access: newValue });
+        updateDivPermMutation.mutate({ user_id: userId, division_id: divisionId, company_id: companyId ?? undefined, can_access: newValue });
     };
 
     const getRoleColor = (role: string) => {
@@ -87,8 +111,11 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
             case 'super_admin':
             case 'admin':
                 return theme.colors.secondary;
+            case 'division_leader':
+            case 'specialist':
+                return '#f59e0b';
+            case 'health_center':
             case 'viewer':
-                return '#3b82f6';
             case 'staff':
                 return '#3b82f6';
             default:
@@ -98,16 +125,14 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
 
     const formatRole = (role: string) => {
         switch (role) {
-            case 'super_admin':
-                return 'super_admin';
-            case 'admin':
-                return 'admin';
-            case 'viewer':
-                return 'viewer';
-            case 'staff':
-                return 'staff';
-            default:
-                return role;
+            case 'super_admin': return 'Super Admin';
+            case 'admin': return 'Admin';
+            case 'division_leader': return 'Division Leader';
+            case 'specialist': return 'Specialist';
+            case 'health_center': return 'Health Center';
+            case 'viewer': return 'Viewer';
+            case 'staff': return 'Staff';
+            default: return role;
         }
     };
 
@@ -144,6 +169,9 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
                                 <View style={styles.userDetails}>
                                     <Text style={styles.userName}>{user.name}</Text>
                                     <Text style={styles.userEmail}>{user.email}</Text>
+                                    {user.role === 'super_admin' && (
+                                        <Text style={styles.fullAccessNote}>Full access to entire app</Text>
+                                    )}
                                 </View>
                             </View>
                             <View style={[styles.roleBadge, { backgroundColor: getRoleColor(user.role) }]}>
@@ -271,6 +299,12 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.textSecondary,
     },
+    fullAccessNote: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+        fontStyle: 'italic',
+    },
     roleBadge: {
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.xs,
@@ -281,7 +315,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         color: 'white',
-        textTransform: 'lowercase',
     },
     divisionsListContainer: {
         maxHeight: 400,

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Dimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -33,7 +33,7 @@ export const CamperScreen = ({ navigation }: any) => {
     const { data: roleData } = useRole();
     const isAdmin = roleData?.isAdmin || false;
 
-    const { data: divisionsData = [] } = useDivisions();
+    const { data: divisionsData = [] } = useDivisions(companyId);
 
     const addCamperMutation = useAddCamper();
     const editCamperMutation = useEditCamper();
@@ -68,6 +68,7 @@ export const CamperScreen = ({ navigation }: any) => {
     const [showAddLeaderDropdown, setShowAddLeaderDropdown] = useState(false);
     const [addLeaderButtonLayout, setAddLeaderButtonLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const addLeaderButtonRef = useRef<any>(null);
+    const [searchQuery, setSearchQuery] = useState('');
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [camperToDelete, setCamperToDelete] = useState<any>(null);
     const [showEditChildModal, setShowEditChildModal] = useState(false);
@@ -125,15 +126,21 @@ export const CamperScreen = ({ navigation }: any) => {
     const campersPerPage = 50;
 
     const filteredCampers = useMemo(() => {
+        const q = (searchQuery || '').trim().toLowerCase();
         return campersData.filter(camper => {
             if (selectedDivision !== 'All Divisions' && camper.division_id !== selectedDivision) return false;
-            // Also apply search query here if needed
+            if (q) {
+                const name = (camper.name || '').toLowerCase();
+                const grade = (camper.grade ?? '').toString().toLowerCase();
+                const divName = (camper.division?.name ?? '').toLowerCase();
+                if (!name.includes(q) && !grade.includes(q) && !divName.includes(q)) return false;
+            }
             return true;
         }).sort((a, b) => {
             if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
             return (a.division?.name || '').localeCompare(b.division?.name || '');
         });
-    }, [campersData, selectedDivision, sortBy]);
+    }, [campersData, selectedDivision, sortBy, searchQuery]);
 
     const totalCampers = filteredCampers.length;
     const totalPages = Math.ceil(totalCampers / campersPerPage);
@@ -306,9 +313,23 @@ export const CamperScreen = ({ navigation }: any) => {
                             placeholder="Search by name, grade, or division..."
                             style={styles.searchInput}
                             placeholderTextColor={theme.colors.textSecondary}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
                         />
                     </View>
                 </View>
+
+                {isLoading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color={theme.colors.primary} />
+                        <Text style={styles.loadingText}>Loading campers...</Text>
+                    </View>
+                ) : isError ? (
+                    <View style={styles.errorContainer}>
+                        <Ionicons name="alert-circle-outline" size={48} color={theme.colors.danger} />
+                        <Text style={styles.errorText}>Failed to load campers. Pull to retry or check connection.</Text>
+                    </View>
+                ) : null}
 
                 <View style={styles.filterRow2}>
                     <View style={styles.divisionFilterContainer}>
@@ -1888,6 +1909,8 @@ export const CamperScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Modal>
 
+                {!isLoading && !isError && (
+                <>
                 <Text style={styles.resultsText}>Showing {showingStart}-{showingEnd} of {totalCampers} campers</Text>
 
                 {/* Camper Grid */}
@@ -2011,6 +2034,8 @@ export const CamperScreen = ({ navigation }: any) => {
                             <Ionicons name="chevron-forward" size={16} color={currentPage === totalPages ? theme.colors.textSecondary : theme.colors.text} />
                         </TouchableOpacity>
                     </View>
+                )}
+                </>
                 )}
 
             </ScrollView>
@@ -3044,5 +3069,22 @@ const styles = StyleSheet.create({
     leaderRoleTextSelected: {
         color: theme.colors.surface,
         opacity: 0.9,
+    },
+    loadingContainer: {
+        padding: theme.spacing.xl,
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: theme.spacing.sm,
+        color: theme.colors.textSecondary,
+    },
+    errorContainer: {
+        padding: theme.spacing.xl,
+        alignItems: 'center',
+    },
+    errorText: {
+        marginTop: theme.spacing.sm,
+        color: theme.colors.danger || '#dc2626',
+        textAlign: 'center',
     },
 });
