@@ -968,6 +968,8 @@ export const CamperScreen = ({ navigation }: any) => {
                                                         age: Number(formData.age) || null,
                                                         gender: formData.gender || null,
                                                         division_id: formData.division || null,
+                                                        grade: formData.grade || null,
+                                                        group_name: formData.group || null,
                                                         person_id: formData.person_id.trim(),
                                                         emergency_contact: formData.emergencyContact || null,
                                                         rfid: formData.rfid || null,
