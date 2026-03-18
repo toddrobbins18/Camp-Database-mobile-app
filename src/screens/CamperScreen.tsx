@@ -43,7 +43,7 @@ export const CamperScreen = ({ navigation }: any) => {
     const { data: staffList = [] } = useStaff(companyId, season);
 
     const [currentPage, setCurrentPage] = useState(1);
-    const [selectedDivision, setSelectedDivision] = useState('All Divisions');
+    const [selectedDivisionId, setSelectedDivisionId] = useState<string>('all');
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
     const [divisionButtonLayout, setDivisionButtonLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const [sortBy, setSortBy] = useState<'division' | 'name'>('division');
@@ -127,10 +127,16 @@ export const CamperScreen = ({ navigation }: any) => {
     });
     const campersPerPage = 50;
 
+    const selectedDivisionLabel = useMemo(() => {
+        if (selectedDivisionId === 'all') return 'All Divisions';
+        const match = divisionsData.find((d: any) => String(d?.id) === String(selectedDivisionId));
+        return match?.name ?? 'All Divisions';
+    }, [divisionsData, selectedDivisionId]);
+
     const filteredCampers = useMemo(() => {
         const q = (searchQuery || '').trim().toLowerCase();
         return campersData.filter(camper => {
-            if (selectedDivision !== 'All Divisions' && camper.division_id !== selectedDivision) return false;
+            if (selectedDivisionId !== 'all' && String(camper.division_id) !== String(selectedDivisionId)) return false;
             if (q) {
                 const name = (camper.name || '').toLowerCase();
                 const grade = (camper.grade ?? '').toString().toLowerCase();
@@ -142,7 +148,7 @@ export const CamperScreen = ({ navigation }: any) => {
             if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
             return (a.division?.name || '').localeCompare(b.division?.name || '');
         });
-    }, [campersData, selectedDivision, sortBy, searchQuery]);
+    }, [campersData, selectedDivisionId, sortBy, searchQuery]);
 
     const totalCampers = filteredCampers.length;
     const totalPages = Math.ceil(totalCampers / campersPerPage);
@@ -343,7 +349,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 setDivisionButtonLayout({ x, y, width, height });
                             }}
                         >
-                            <Text style={styles.divisionFilterText}>{selectedDivision}</Text>
+                            <Text style={styles.divisionFilterText}>{selectedDivisionLabel}</Text>
                             <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
@@ -381,30 +387,30 @@ export const CamperScreen = ({ navigation }: any) => {
                                 nestedScrollEnabled={true}
                                 showsVerticalScrollIndicator={true}
                             >
-                                {[{ id: 'All Divisions', name: 'All Divisions' }, ...divisionsData].map((division: any) => (
+                                {[{ id: 'all', name: 'All Divisions' }, ...divisionsData].map((division: any) => (
                                     <TouchableOpacity
                                         key={division.id}
                                         style={[
                                             styles.bottomSheetOption,
-                                            selectedDivision === division.id && styles.bottomSheetOptionSelected
+                                            selectedDivisionId === division.id && styles.bottomSheetOptionSelected
                                         ]}
                                         onPress={() => {
-                                            setSelectedDivision(division.id);
+                                            setSelectedDivisionId(division.id);
                                             setShowDivisionDropdown(false);
                                         }}
                                     >
                                         <Ionicons
                                             name="people-outline"
                                             size={24}
-                                            color={selectedDivision === division.id ? theme.colors.secondary : theme.colors.textSecondary}
+                                            color={selectedDivisionId === division.id ? theme.colors.secondary : theme.colors.textSecondary}
                                         />
                                         <Text style={[
                                             styles.bottomSheetOptionText,
-                                            selectedDivision === division.id && styles.bottomSheetOptionTextSelected
+                                            selectedDivisionId === division.id && styles.bottomSheetOptionTextSelected
                                         ]}>
                                             {division.name}
                                         </Text>
-                                        {selectedDivision === division.id && (
+                                        {selectedDivisionId === division.id && (
                                             <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
                                         )}
                                     </TouchableOpacity>
