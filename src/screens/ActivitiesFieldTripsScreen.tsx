@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Switch, Pressable } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Switch, Pressable, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 import { useCompany } from '../contexts/CompanyContext';
+import * as DocumentPicker from 'expo-document-picker';
 
 // Calendar view types
 type CalendarView = 'Month' | 'Week' | 'Day' | 'Agenda';
@@ -267,6 +268,142 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         meal_options: [] as string[],
         meal_notes: '',
     });
+    const [csvUploading, setCsvUploading] = useState(false);
+    const [csvUploadError, setCsvUploadError] = useState<string | null>(null);
+
+    // Parse CSV text into rows of objects (first line = headers)
+    const parseCSV = (text: string): Record<string, string>[] => {
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        if (lines.length < 2) return [];
+        const headers = lines[0].split(',').map((h) => h.replace(/^"|"$/g, '').trim());
+        const rows: Record<string, string>[] = [];
+        for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(',').map((v) => v.replace(/^"|"$/g, '').trim());
+            const row: Record<string, string> = {};
+            headers.forEach((h, j) => { row[h] = values[j] ?? ''; });
+            rows.push(row);
+        }
+        return rows;
+    };
+
+    // Build activity payload from CSV row (match buildSubmitData + division_ids)
+    const csvRowToActivity = (row: Record<string, string>) => {
+        const raw = row.meal_options?.trim();
+        let meal_options: string[] = [];
+        if (raw) {
+            try {
+                meal_options = JSON.parse(raw) as string[];
+            } catch {
+                meal_options = raw.replace(/^\[|\]$/g, '').split(',').map((s) => s.trim()).filter(Boolean);
+            }
+        }
+        let division_ids: string[] = [];
+        const divRaw = row.division_ids?.trim();
+        if (divRaw) {
+            try {
+                division_ids = JSON.parse(divRaw) as string[];
+            } catch {
+                division_ids = divRaw.replace(/^\[|\]$/g, '').split(',').map((s) => String(s).trim()).filter(Boolean);
+            }
+        }
+        return {
+            event_date: row.event_date?.trim() || null,
+            end_date: row.end_date?.trim() || null,
+            is_multi_day: /^(true|1|yes)$/i.test(row.is_multi_day?.trim() ?? ''),
+            title: row.title?.trim() || '',
+            activity_type: row.activity_type?.trim() || '',
+            home_away: row.home_away?.trim() || null,
+            division_ids,
+            depart_from_camp: row.depart_from_camp?.trim() || null,
+            depart_from_activity: row.depart_from_activity?.trim() || null,
+            location: row.location?.trim() || null,
+            capacity: row.capacity?.trim() || '',
+            chaperone: row.chaperone?.trim() || null,
+            description: row.description?.trim() || null,
+            meal_options,
+            meal_notes: null,
+        };
+    };
+
+    const handleUploadCSV = async () => {
+        if (!companyId) {
+            setCsvUploadError('No company selected');
+            return;
+        }
+        setCsvUploadError(null);
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: ['text/csv', 'text/comma-separated-values', 'application/csv'],
+                copyToCacheDirectory: true,
+            });
+            const asset = result.assets?.[0];
+            if (!asset?.uri) {
+                return;
+            }
+            setCsvUploading(true);
+            const response = await fetch(asset.uri);
+            const text = await response.text();
+            const rows = parseCSV(text);
+            if (rows.length === 0) {
+                setCsvUploadError('CSV has no data rows (need header + at least one row)');
+                setCsvUploading(false);
+                return;
+            }
+            if (rows.length > 1000) {
+                setCsvUploadError('Maximum 1000 rows per upload');
+                setCsvUploading(false);
+                return;
+            }
+            let inserted = 0;
+            const errors: string[] = [];
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const activityData = csvRowToActivity(row);
+                if (!activityData.title?.trim() || !activityData.event_date?.trim()) {
+                    errors.push(`Row ${i + 2}: title and event_date required`);
+                    continue;
+                }
+                try {
+                    const { division_ids, ...rest } = activityData;
+                    const payload = buildSubmitData(rest);
+                    const { data: activity, error: activityError } = await supabase
+                        .from('activities_field_trips')
+                        .insert(payload)
+                        .select()
+                        .single();
+                    if (activityError) {
+                        errors.push(`Row ${i + 2}: ${activityError.message}`);
+                        continue;
+                    }
+                    if (division_ids && division_ids.length > 0) {
+                        const links = division_ids.map((divId: string) => ({
+                            activity_id: activity.id,
+                            division_id: divId,
+                            company_id: companyId,
+                        }));
+                        const { error: linksError } = await supabase
+                            .from('activities_field_trips_divisions')
+                            .insert(links);
+                        if (linksError) errors.push(`Row ${i + 2} divisions: ${linksError.message}`);
+                    }
+                    inserted++;
+                } catch (e: any) {
+                    errors.push(`Row ${i + 2}: ${e?.message || String(e)}`);
+                }
+            }
+            queryClient.invalidateQueries({ queryKey: ['activities'] });
+            setIsUploadCSVModalOpen(false);
+            setCsvUploading(false);
+            if (inserted > 0) {
+                Alert.alert('Upload complete', `Inserted ${inserted} activity(ies).${errors.length ? ` ${errors.length} row(s) had errors.` : ''}`);
+            } else {
+                Alert.alert('Upload failed', errors.slice(0, 5).join('\n') || 'No rows could be inserted.');
+            }
+        } catch (e: any) {
+            setCsvUploading(false);
+            setCsvUploadError(e?.message || 'Failed to pick or read file');
+        }
+    };
 
     // Generate calendar days for the month
     const getDaysInMonth = (date: Date) => {
@@ -743,7 +880,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         {/* Upload CSV Button */}
                         <TouchableOpacity
                             style={styles.uploadButton}
-                            onPress={() => setIsUploadCSVModalOpen(true)}
+                            onPress={() => { setCsvUploadError(null); setIsUploadCSVModalOpen(true); }}
                         >
                             <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.surface} />
                             <Text style={styles.uploadButtonText}>Upload CSV</Text>
@@ -1216,46 +1353,40 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                 visible={isUploadCSVModalOpen}
                 transparent={true}
                 animationType="slide"
-                onRequestClose={() => setIsUploadCSVModalOpen(false)}
+                onRequestClose={() => !csvUploading && setIsUploadCSVModalOpen(false)}
             >
                 <Pressable
                     style={styles.bottomSheetOverlay}
-                    onPress={() => setIsUploadCSVModalOpen(false)}
+                    onPress={() => !csvUploading && setIsUploadCSVModalOpen(false)}
                 >
                     <Pressable
                         style={styles.bottomSheet}
                         onPress={(e) => e.stopPropagation()}
                     >
-                        {/* Bottom Sheet Header */}
                         <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select file</Text>
+                            <Text style={styles.bottomSheetTitle}>Upload activities CSV</Text>
                         </View>
-
-                        {/* Bottom Sheet Options */}
                         <View style={styles.bottomSheetContent}>
+                            {csvUploadError ? (
+                                <Text style={[styles.helpModalBullet, { color: theme.colors.danger, marginBottom: 12 }]}>{csvUploadError}</Text>
+                            ) : null}
                             <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => {
-                                    // TODO: Handle file selection
-                                    console.log('Selected: Aloha downloads');
-                                    setIsUploadCSVModalOpen(false);
-                                }}
+                                style={[styles.bottomSheetOption, csvUploading && { opacity: 0.7 }]}
+                                onPress={handleUploadCSV}
+                                disabled={csvUploading}
                             >
-                                <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
+                                {csvUploading ? (
+                                    <ActivityIndicator size="small" color={theme.colors.secondary} style={{ marginRight: 8 }} />
+                                ) : (
+                                    <Ionicons name="document-attach-outline" size={24} color={theme.colors.secondary} />
+                                )}
+                                <Text style={styles.bottomSheetOptionText}>
+                                    {csvUploading ? 'Uploading…' : 'Choose CSV file'}
+                                </Text>
                             </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => {
-                                    // TODO: Handle file selection
-                                    console.log('Selected: Other files');
-                                    setIsUploadCSVModalOpen(false);
-                                }}
-                            >
-                                <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Other files</Text>
-                            </TouchableOpacity>
+                            <Text style={[styles.helpModalBullet, { marginTop: 8, fontSize: 12 }]}>
+                                Columns: title, event_date, end_date, is_multi_day, activity_type, home_away, division_ids, depart_from_camp, depart_from_activity, location, capacity, chaperone, description, meal_options. Max 1000 rows.
+                            </Text>
                         </View>
                     </Pressable>
                 </Pressable>
