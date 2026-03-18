@@ -192,8 +192,9 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         queryFn: async () => {
             if (!companyId) return [];
 
-            // Parallel fetch for activities and their division links
-            const [activitiesResult, divisionsResult] = await Promise.all([
+            // Parallel fetch for activities, division links, and division metadata.
+            // (Avoid nested selects which can 400 depending on PostgREST relationship names.)
+            const [activitiesResult, linksResult, divisionsMetaResult] = await Promise.all([
                 supabase
                     .from("activities_field_trips")
                     .select("*")
@@ -202,27 +203,39 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     .order("event_date", { ascending: true }),
                 supabase
                     .from("activities_field_trips_divisions")
-                    .select("activity_id, division_id, divisions(id, name, gender)")
+                    .select("activity_id, division_id")
+                    .eq('company_id', companyId),
+                supabase
+                    .from('divisions')
+                    .select('id, name, gender')
                     .eq('company_id', companyId)
             ]);
 
             if (activitiesResult.error) throw activitiesResult.error;
-            if (divisionsResult.error) throw divisionsResult.error;
 
-            // Map divisions to activities
+            // Build a divisionId -> division meta lookup
+            const divisionById: Record<string, any> = {};
+            if (!divisionsMetaResult.error) {
+                (divisionsMetaResult.data || []).forEach((d: any) => {
+                    if (d?.id) divisionById[String(d.id)] = d;
+                });
+            }
+
+            // Map division links to activities (normalize keys to string for reliable lookup)
             const divisionMap: Record<string, any[]> = {};
-            (divisionsResult.data || []).forEach(link => {
-                if (!divisionMap[link.activity_id]) {
-                    divisionMap[link.activity_id] = [];
-                }
-                if (link.divisions) {
-                    divisionMap[link.activity_id].push(link.divisions);
-                }
+            const divisionLinks = linksResult.error ? [] : (linksResult.data || []);
+            divisionLinks.forEach((link: any) => {
+                const aid = link?.activity_id != null ? String(link.activity_id) : '';
+                const did = link?.division_id != null ? String(link.division_id) : '';
+                if (!aid || !did) return;
+                if (!divisionMap[aid]) divisionMap[aid] = [];
+                const meta = divisionById[did];
+                divisionMap[aid].push(meta ? { id: meta.id, name: meta.name, gender: meta.gender } : { id: did, name: did, gender: null });
             });
 
             return (activitiesResult.data || []).map(activity => ({
                 ...activity,
-                divisions: divisionMap[activity.id] || []
+                divisions: divisionMap[activity.id != null ? String(activity.id) : ''] || []
             }));
         },
         enabled: !!companyId
@@ -1244,9 +1257,9 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                                         </Text>
                                                     </View>
                                                 )}
-                                                {activity.divisions?.map((div: any) => (
-                                                    <View key={div.id} style={[styles.badge, styles.badgeDivision]}>
-                                                        <Text style={styles.badgeDivisionText}>{div.name}</Text>
+                                                {(activity.divisions ?? []).map((div: any, idx: number) => (
+                                                    <View key={div.id ?? div.name ?? `div-${idx}`} style={[styles.badge, styles.badgeDivision]}>
+                                                        <Text style={styles.badgeDivisionText}>{div.name ?? String(div.id ?? '')}</Text>
                                                     </View>
                                                 ))}
                                             </View>
@@ -3351,16 +3364,17 @@ const styles = StyleSheet.create({
     activityCardBadges: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: theme.spacing.xs,
         marginBottom: theme.spacing.sm,
+        marginHorizontal: -2,
     },
     badge: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: theme.spacing.sm,
         paddingVertical: theme.spacing.xs,
-        borderRadius: theme.borderRadius.sm,
-        gap: 4,
+        borderRadius: theme.borderRadius.lg,
+        marginRight: theme.spacing.xs,
+        marginBottom: theme.spacing.xs,
     },
     badgeType: {
         backgroundColor: '#2563eb',
