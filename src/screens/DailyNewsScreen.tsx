@@ -1,18 +1,27 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator, Share } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator, Share, Modal, Pressable, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { supabase } from '../lib/supabase';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
+import * as DocumentPicker from 'expo-document-picker';
+import { uploadDailyWolfDocument, pathFromFileUrl, getSignedUrl } from '../api/storage';
+import { Linking } from 'react-native';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
 
 export const DailyNewsScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
+    const [showDailyWolfUpload, setShowDailyWolfUpload] = useState(false);
+    const [dailyWolfDate, setDailyWolfDate] = useState(new Date().toISOString().split('T')[0]);
+    const [dailyWolfFileUri, setDailyWolfFileUri] = useState<string | null>(null);
+    const [dailyWolfFileName, setDailyWolfFileName] = useState('');
+    const [dailyWolfUploading, setDailyWolfUploading] = useState(false);
 
     const currentDate = new Date();
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -91,6 +100,72 @@ export const DailyNewsScreen = ({ navigation }: any) => {
         },
         enabled: !!companyId,
     });
+
+    // Daily Wolf documents (PDFs)
+    const { data: dailyWolfDocs = [] } = useQuery({
+        queryKey: ['daily_wolf_documents', companyId, season],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('daily_wolf_documents')
+                .select('*')
+                .eq('company_id', companyId)
+                .eq('season', season || '2026')
+                .order('date', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId,
+    });
+
+    const pickDailyWolfFile = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
+            if (result.assets?.[0]) {
+                setDailyWolfFileName(result.assets[0].name);
+                setDailyWolfFileUri(result.assets[0].uri);
+            }
+        } catch (_) {}
+    };
+
+    const uploadDailyWolf = async () => {
+        if (!companyId || !dailyWolfFileUri || !dailyWolfFileName) {
+            Alert.alert('Missing info', 'Please select a PDF and date.');
+            return;
+        }
+        setDailyWolfUploading(true);
+        try {
+            const response = await fetch(dailyWolfFileUri);
+            const arrayBuffer = await response.arrayBuffer();
+            const storagePath = await uploadDailyWolfDocument({
+                companyId,
+                season: season || '2026',
+                date: dailyWolfDate,
+                fileName: dailyWolfFileName,
+                file: arrayBuffer,
+            });
+            const { data: { user } } = await supabase.auth.getUser();
+            const { data: urlData } = supabase.storage.from('daily-wolf-documents').getPublicUrl(storagePath);
+            const { error } = await supabase.from('daily_wolf_documents').insert({
+                company_id: companyId,
+                season: season || '2026',
+                date: dailyWolfDate,
+                file_name: dailyWolfFileName,
+                file_url: urlData.publicUrl,
+                uploaded_by: user?.id ?? null,
+            });
+            if (error) throw error;
+            Alert.alert('Uploaded', 'Daily Wolf PDF uploaded successfully.');
+            setShowDailyWolfUpload(false);
+            setDailyWolfFileUri(null);
+            setDailyWolfFileName('');
+            queryClient.invalidateQueries({ queryKey: ['daily_wolf_documents'] });
+        } catch (e: any) {
+            Alert.alert('Error', e?.message || 'Upload failed');
+        } finally {
+            setDailyWolfUploading(false);
+        }
+    };
 
     const handlePrint = async () => {
         try {
@@ -196,7 +271,73 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                         </View>
                     </View>
                 </StyledCard>
+
+                {/* Daily Wolf PDFs */}
+                <View style={styles.section}>
+                    <View style={styles.sectionHeader}>
+                        <Ionicons name="document-text-outline" size={20} color={theme.colors.text} style={styles.sectionIcon} />
+                        <Text style={styles.sectionTitle}>Daily Wolf PDFs</Text>
+                        <TouchableOpacity style={styles.uploadPdfButton} onPress={() => setShowDailyWolfUpload(true)}>
+                            <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+                            <Text style={styles.uploadPdfButtonText}>Upload PDF</Text>
+                        </TouchableOpacity>
+                    </View>
+                    {dailyWolfDocs.length === 0 ? (
+                        <Text style={styles.emptyMessage}>No Daily Wolf PDFs uploaded yet</Text>
+                    ) : (
+                        dailyWolfDocs.slice(0, 10).map((doc: any) => (
+                            <View key={doc.id} style={styles.docRow}>
+                                <Text style={styles.docName}>{doc.file_name}</Text>
+                                <Text style={styles.docDate}>{doc.date}</Text>
+                                <TouchableOpacity
+                                    onPress={async () => {
+                                        const path = pathFromFileUrl(doc.file_url, 'daily-wolf-documents');
+                                        if (path) {
+                                            try {
+                                                const url = await getSignedUrl('dailyWolfDocuments', path);
+                                                Linking.openURL(url);
+                                            } catch (_) {}
+                                        }
+                                    }}
+                                >
+                                    <Text style={styles.viewPdfLink}>View</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ))
+                    )}
+                </View>
             </ScrollView>
+
+            <Modal visible={showDailyWolfUpload} transparent animationType="slide">
+                <Pressable style={styles.modalOverlay} onPress={() => setShowDailyWolfUpload(false)}>
+                    <Pressable style={styles.modalContent} onPress={e => e.stopPropagation()}>
+                        <Text style={styles.modalTitle}>Upload Daily Wolf PDF</Text>
+                        <Text style={styles.label}>Date</Text>
+                        <TextInput
+                            style={styles.input}
+                            value={dailyWolfDate}
+                            onChangeText={setDailyWolfDate}
+                            placeholder="YYYY-MM-DD"
+                        />
+                        <Text style={styles.label}>PDF File</Text>
+                        <TouchableOpacity style={styles.chooseFileBtn} onPress={pickDailyWolfFile}>
+                            <Text style={styles.chooseFileBtnText}>{dailyWolfFileName || 'Choose file'}</Text>
+                        </TouchableOpacity>
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowDailyWolfUpload(false)}>
+                                <Text style={styles.cancelBtnText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.uploadBtn, dailyWolfUploading && { opacity: 0.7 }]}
+                                onPress={uploadDailyWolf}
+                                disabled={dailyWolfUploading}
+                            >
+                                {dailyWolfUploading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.uploadBtnText}>Upload</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -341,5 +482,68 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         flex: 1,
     },
+    uploadPdfButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.primary,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: theme.spacing.xs,
+        borderRadius: theme.borderRadius.sm,
+        gap: 4,
+        marginLeft: 'auto',
+    },
+    uploadPdfButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+    docRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.xs,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        gap: theme.spacing.sm,
+    },
+    docName: { flex: 1, fontSize: 14, color: theme.colors.text },
+    docDate: { fontSize: 13, color: theme.colors.textSecondary },
+    viewPdfLink: { fontSize: 14, color: theme.colors.primary, fontWeight: '500' },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        padding: theme.spacing.lg,
+    },
+    modalContent: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.lg,
+    },
+    modalTitle: { ...theme.typography.h3, marginBottom: theme.spacing.md },
+    label: { fontSize: 14, fontWeight: '500', color: theme.colors.text, marginBottom: 4 },
+    input: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.sm,
+        padding: theme.spacing.sm,
+        marginBottom: theme.spacing.md,
+        fontSize: 14,
+    },
+    chooseFileBtn: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.sm,
+        padding: theme.spacing.sm,
+        marginBottom: theme.spacing.md,
+    },
+    chooseFileBtnText: { fontSize: 14, color: theme.colors.text },
+    modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: theme.spacing.sm, marginTop: theme.spacing.sm },
+    cancelBtn: { paddingVertical: theme.spacing.sm, paddingHorizontal: theme.spacing.md },
+    cancelBtnText: { fontSize: 14, color: theme.colors.textSecondary },
+    uploadBtn: {
+        backgroundColor: theme.colors.primary,
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.lg,
+        borderRadius: theme.borderRadius.sm,
+        minWidth: 80,
+        alignItems: 'center',
+    },
+    uploadBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 });
 

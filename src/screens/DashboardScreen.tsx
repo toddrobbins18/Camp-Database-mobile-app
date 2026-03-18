@@ -66,8 +66,20 @@ export const DashboardScreen = ({ navigation }: any) => {
                     setWeather(null);
                     return;
                 }
-                if (data?.today && data?.tomorrow) setWeather(data);
-                else setWeather(null);
+                // Accept when we have at least today; tomorrow may be missing from API
+                if (data?.today) {
+                    setWeather({
+                        today: data.today,
+                        tomorrow: data.tomorrow ?? {
+                            high: data.today.high,
+                            low: data.today.low,
+                            condition: '—',
+                        },
+                        location: data.location,
+                    });
+                } else {
+                    setWeather(null);
+                }
             } catch (err) {
                 if (!cancelled) setWeather(null);
                 console.warn('Weather fetch failed:', err);
@@ -410,7 +422,7 @@ const styles = StyleSheet.create({
         gap: theme.spacing.sm,
     },
     weatherTodayCard: {
-        backgroundColor: '#eff6ff',
+        backgroundColor: '#f0f4ff', // light lavender/blue (match web dashboard)
         borderRadius: theme.borderRadius.md,
         padding: theme.spacing.md,
     },
@@ -443,7 +455,7 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     weatherTomorrowCard: {
-        backgroundColor: '#f8fafc',
+        backgroundColor: '#f9fafb', // light gray (match web dashboard)
         borderRadius: theme.borderRadius.md,
         padding: theme.spacing.md,
     },

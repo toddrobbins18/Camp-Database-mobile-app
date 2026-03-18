@@ -1,0 +1,46 @@
+id;event_date;title;description;activity_type;time;location;capacity;chaperone;division_id;created_by;created_at;season;meal_options;meal_notes;company_id;home_away;depart_from_camp;depart_from_activity;end_date;is_multi_day
+99e5e502-d77d-431f-88a7-cc6dc3346664;2025-12-05;Cadet Boys and Girls Trampoline Park ;;field-trip;;;;;;;2025-12-05 15:23:21.339822+00;2025;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;away;;;;false
+8195a51f-b3be-406c-ab4b-1e3c930f332e;2025-12-05;Cadet Boys and Girls Trampoline Park ;;field-trip;;;;;;;2025-12-05 15:23:21.885352+00;2025;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;away;;;;false
+e2763c0e-7b2c-4014-80be-2a4bd297b367;2026-07-28;Junior Hershey/Dorney Trip;;field-trip;;;;;;;2026-01-12 15:54:03.10317+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;away;;;2026-07-29;true
+eb2ff597-556e-4352-8e93-eb666a845d77;2026-06-27;🚌 Paramus P/U;2 Buses;other;;Paramus South West Parking Lot;;Jackie Diamond;;;2026-01-30 19:16:36.904237+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;12:00;14:15;;false
+4c155116-2429-4e5d-96cb-0e6569e98b91;2026-07-30;Super Montreal Trip;;field-trip;;;;;;;2026-01-12 15:56:49.664818+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;away;;;2026-08-01;true
+cf7d76e2-c0f9-471a-b2ce-db92c3531e45;2026-08-15;🚌 Florida D/O;"JetBlue Flight 105 
+Departs Newark Liberty (EWR) at 2:47pm 
+Arrives at Fort Lauderdale (FLL) at 6:05pm ";other;;Newark Airport (EWR) ;;JayRo;;;2026-01-30 19:20:00.922249+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;09:15;11:30;;false
+20cde0b8-65b9-414c-9080-2feb5bff6f23;2026-07-18;Visiting Day;;other;;;;;;;2026-02-02 17:08:55.070745+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;home;10:00;15:30;;false
+b112c2ae-21ec-4fb2-bfd5-f186afcdb8a7;2026-07-29;Teen/CIT Cali Trip;;field-trip;;;;;;;2026-01-26 14:38:02.17952+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;away;;;2026-08-03;true
+daeab5ad-cd72-443a-b6b1-0291f48b2eb4;2026-07-30;Seniors Boston Trip;;field-trip;;;;;;;2026-01-26 14:41:10.86339+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;away;;;2026-08-01;true
+7e0f37c9-05c7-488c-b08b-650a7448dde5;2026-07-15;Freshmen A to the Movies;Still waiting on Callicoon Theater to confirm the date.;field-trip;;Callicoon Theater;;;;;2026-01-29 17:15:18.975926+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;away;13:00;;;false
+028bff16-b071-4262-ae11-6c34de997146;2026-07-29;Fresh B / Cadets - Urban Air;;field-trip;;1 North Galleria Drive  Middletown, New York 10941;;;;;2026-02-02 18:52:10.053828+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;away;12:30;16:30;;false
+bcd33e2c-6bcf-41ad-9b66-980606eb3e77;2026-08-02;Collegiate Trip: Montreal;;field-trip;;Montreal, Canada. ;44;Mindy Jacobs/ Jesse Corben;;;2026-01-30 18:33:05.210683+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;08:00;22:00;2026-08-04;true
+a4b8ad2e-369b-42c4-be94-afcb9806d752;2026-07-30;Teens: California Trip ;"Hunter Motor Coaches
+P/U @TLC: 5:30am (JetBlue Flight #1123) 
+P/U @JFK: 6:15am - August 4th (JetBlue Flight #1190)";field-trip;;California, U.S.A. ;70;Liz Mayo;;;2026-01-30 18:27:42.245578+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;05:30;05:00;2026-08-04;true
+4a27b794-75e1-4b37-b828-ace85439f514;2026-08-02;Senior Trip: Boston;;field-trip;;Boston, U.S.A.;48;TBD;;;2026-01-30 18:37:48.425278+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;07:15;21:30;2026-08-04;true
+d2f92eaa-8987-48be-a6fc-6a96b4ac5595;2026-08-03;Junior Trip: Hershey;;field-trip;;Hershey, U.S.A.;63;Noah Barron;;;2026-01-30 18:42:27.487274+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;07:00;23:00;2026-08-04;true
+0f62b837-86c4-4695-a1bf-67272d8fa8d0;2026-07-15;Juniors - SplashDown Beach Waterpark;;field-trip;;16 Old Rte 9 W, Fishkill, NY 12524;;;;;2026-02-03 16:49:59.162926+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;away;09:00;14:00;;false
+7b8905d3-accd-4dfb-b3da-88a88b737c78;2026-08-15;🚌 Long Island D/O;5 Buses;other;;Mitchel Field Sports Complex;;TBD;;;2026-01-30 19:21:19.866419+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;09:45;12:30;;false
+5539ca12-4115-4078-8bf8-83e49390ca78;2026-08-15;🚌 Paramus D/O;2 Buses;other;;Paramus South West Parking Lot ;;Jackie Diamond;;;2026-01-30 19:22:19.849959+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;09:45;12:30;;false
+e277314b-0ae2-41e9-938f-0649ca07ccf0;2026-08-15;🚌 Westchester D/O;3 Buses ;other;;Westchester Community College Parking Lot B ;;TBD ;;;2026-01-30 19:23:28.616992+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;09:45;12:30;;false
+7b28e609-db01-4988-a01b-e50cb49a9b6e;2026-08-15;🚌 Staff D/O ;3 Buses ;other;;Port Authority Bus Term;;TBD ;;;2026-01-30 19:24:57.613733+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;14:45;16:30;;false
+b89ce3de-2bc5-4beb-8de2-5813c2421c89;2026-08-23;🚌 Support Staff D/O ;1 Bus ;other;;Port Authority Bus Terminal;;TBD ;;;2026-01-30 19:26:10.42228+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;09:30;11:30;;false
+d3f0fbc2-716a-41f8-ae7a-74614b1e1932;2026-06-15;🚌 Support/Media/WF/OA/Elective/Arts & DL P/U ;2 Buses ;other;;Newark Airport (EWR - Terminal B) ;;;;;2026-01-30 19:03:12.560057+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;17:00;20:45;;false
+da90ae45-e052-43ec-b6d9-3456c6cf126a;2026-06-19;🚌 General Counselors, Athletic, & All Other Staff Arrive ;2 Buses;other;;Newark Airport (EWR - Terminal B) ;;;;;2026-01-30 19:11:52.865946+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;17:00;20:45;;false
+da1d44d4-ab40-4673-a68f-255ca894cf3f;2026-06-26;🚌 Florida Campers Arrive;"✈️ FLL to LGA | Flight 172
+Depart: 9:40am
+Arrive: 12:32pm
+
+Hunter Motor Coaches - 1 Bus 
+Depart: 12:30pm  
+Arrive @ TLC: 5:00pm ";other;;;;Liz Mayo;;;2026-01-30 16:30:44.060682+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;;12:30;17:00;;false
+6132f873-144d-4639-8856-30c1ce29a8c6;2026-06-27;🚌 Long Island P/U;5 Buses;other;;Mitchel Field Park;;Jay Jacobs;;;2026-01-30 19:15:10.600429+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;09:15;12:50;;false
+dadf4607-4c55-423c-9412-1ee48e90bd5a;2026-06-27;🚌 Westchester P/U;3 Buses;other;;Westchester Community College Parking Lot B ;;Scott Glick;;;2026-01-30 19:17:47.346963+00;2026;"[""Snack""]";;1d296ccf-31e1-4176-af57-50a4a4820f82;away;11:30;13:45;;false
+4003b048-f96b-4448-a8bf-e538b799562b;2026-07-06;Kartrite Trip;;field-trip;;Kartrite Waterpark;;;;;2026-03-03 16:26:45.694479+00;2026;[];;9cbae52b-cdf8-4fab-88f5-fb949f0bde2a;;10:15;15:00;;false
+14c9e7e9-7f03-4daa-acbb-90e0219e5ff0;2026-07-09;Seniors to The Castle;Early Dinner;field-trip;;The Castle Fun Center, 109 Brookside Ave, Chester, NY 10918;;;;;2026-01-28 20:04:47.779771+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;;17:30;21:00;;false
+d91e846a-89af-4702-84b1-0de1225a84fa;2026-06-26;CIT and Teens ;;field-trip;;Walmart and Dunkin ;;;;;2026-02-13 22:46:11.370605+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;away;15:00;17:30;;false
+b16a1185-6933-4b2e-a248-e4f8084ec1ba;2026-07-09;Middletown Mall & The Castle;;field-trip;;;;;;;2026-03-03 16:27:24.916117+00;2026;[];;9cbae52b-cdf8-4fab-88f5-fb949f0bde2a;;17:00;21:00;;false
+fd960ca3-4bd6-4bac-86a5-72b9736239ac;2026-07-15;Melter Cup & Bocian Bowl @ TLC;;other;;Timber Lake Camp;;;;;2026-03-03 16:31:02.908577+00;2026;[];;9cbae52b-cdf8-4fab-88f5-fb949f0bde2a;;;;;false
+1aecba7d-b595-4efa-96eb-2b750b731d4a;2026-08-06;Kartrite Trip;;field-trip;;Kartrite Waterpark;;;;;2026-03-03 16:35:23.628896+00;2026;[];;9cbae52b-cdf8-4fab-88f5-fb949f0bde2a;;10:15;15:00;;false
+1c507b6d-9d9b-4809-979a-b30bbf050d7e;2026-07-16;Olympics;;other;;;;;;;2026-03-04 18:40:55.426186+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;home;;;;false
+48ebba2a-6c73-4f35-b893-05000b6e05c9;2026-07-10;Teens/CITs Rafting Trip;Timing TBD. Will update asap.;field-trip;;;;;;;2026-02-06 14:24:31.141944+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;away;;;;false
+3761b71b-894b-46ae-b812-f1bf1b7d2556;2026-07-12;CIT to Walmart ;;field-trip;;Walmart and Dunkin ;;;;;2026-03-13 13:27:08.038638+00;2026;[];;0d0b7f4f-327e-4497-83ff-3aa501ffc295;;10:00;;;false

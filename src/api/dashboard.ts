@@ -20,7 +20,6 @@ export const useTodayBirthdays = (companyId: string | null, todayMonth: number, 
                     if (month === todayMonth && day === todayDay) {
                         const fullName =
                             person.name ||
-                            [person.first_name, person.last_name].filter(Boolean).join(' ').trim() ||
                             'Unknown';
                         const birthYear = parts[0] || new Date().getFullYear();
                         const age = new Date().getFullYear() - birthYear;
@@ -36,15 +35,25 @@ export const useTodayBirthdays = (companyId: string | null, todayMonth: number, 
 
             const { data: childrenData, error: childrenError } = await supabase
                 .from('children')
-                .select('id, first_name, last_name, name, date_of_birth')
+                // Mobile schema does not include first_name/last_name; keep in sync with web
+                .select('id, name, date_of_birth, division_id, status')
                 .eq('company_id', companyId);
-            if (!childrenError) addBirthdays(childrenData ?? [], 'child');
+            if (childrenError) {
+                console.warn('Birthday children query failed:', childrenError.message);
+            } else {
+                addBirthdays((childrenData ?? []).filter((c: any) => !c.status || c.status === 'active'), 'child');
+            }
 
             const { data: staffData, error: staffError } = await supabase
                 .from('staff')
-                .select('id, name, first_name, last_name, date_of_birth')
+                // Mobile schema does not include first_name/last_name; keep in sync with web
+                .select('id, name, date_of_birth, status')
                 .eq('company_id', companyId);
-            if (!staffError) addBirthdays(staffData ?? [], 'staff');
+            if (staffError) {
+                console.warn('Birthday staff query failed:', staffError.message);
+            } else {
+                addBirthdays((staffData ?? []).filter((s: any) => !s.status || s.status === 'active'), 'staff');
+            }
 
             return birthdays;
         },

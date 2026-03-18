@@ -12,13 +12,18 @@ import {
     useWindowDimensions,
     Switch,
     Platform,
+    Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCompany } from '../contexts/CompanyContext';
-import { useTrips, useAddTrip, useUpdateTrip, useDeleteTrip, useManageTripRoster, useTripAttendees } from '../api/transport';
+import { useTrips, useAddTrip, useUpdateTrip, useDeleteTrip, useManageTripRoster, useTripAttendees, useTripAttachments } from '../api/transport';
 import { useCampers, useDivisions } from '../api/campers';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
+import * as DocumentPicker from 'expo-document-picker';
+import { uploadTripAttachment, getSignedUrl, pathFromFileUrl } from '../api/storage';
+import { supabase } from '../lib/supabase';
 
 // Trip Interfaces
 interface Trip {
@@ -28,17 +33,18 @@ interface Trip {
     date: string; // ISO Date
     end_date?: string; // ISO Date
     is_multi_day: boolean;
-    departure_time: string; // HH:mm:ss
-    return_time: string; // HH:mm:ss
+    departure_time: string; // HH:mm or HH:mm:ss
+    return_time: string;
     attendingCount: number;
     chaperone: string;
     status: 'approved' | 'pending' | 'confirmed';
     type: string; // e.g., 'field_trip', 'sporting_event'
-    event_type: string; // e.g., 'field-trip', 'Basketball', 'Soccer'
-    transportation_type: string; // e.g., 'Bus', 'Van'
+    event_type: string; // e.g., 'Football', 'field-trip'
+    transportation_type: string; // e.g., 'bus', 'van'
+    event_length?: string; // e.g., 'tournament'
+    sports_event_id?: string | null;
     driver?: string;
     meal?: string;
-    event_length?: string;
     capacity?: string;
     location_type?: string;
 }
@@ -104,17 +110,24 @@ const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDe
     };
 
     const formatTime = (timeString: string) => {
-        // Simple HH:mm parser
-        const [hours, minutes] = timeString.split(':');
-        const h = parseInt(hours, 10);
+        if (!timeString || !timeString.trim()) return 'N/A';
+        const parts = timeString.trim().split(':');
+        const h = parseInt(parts[0], 10);
+        const m = parts[1] ? parts[1].replace(/\D/g, '').slice(0, 2) : '00';
+        if (isNaN(h)) return 'N/A';
         const ampm = h >= 12 ? 'PM' : 'AM';
         const h12 = h % 12 || 12;
-        return `${h12}:${minutes} ${ampm}`;
-
+        return `${h12}:${m.padStart(2, '0')} ${ampm}`;
     };
 
+    const typeLabel = trip.type === 'sporting_event' ? 'Sporting Event' : (trip.type === 'field_trip' ? 'Field Trip' : trip.type);
+
     return (
-        <View style={[styles.card, trip.status === 'pending' ? styles.cardBorderRed : styles.cardBorderGreen]}>
+        <View style={[
+            styles.card,
+            trip.status === 'pending' ? styles.cardBorderRed : styles.cardBorderGreen,
+            (trip.status === 'confirmed' || trip.status === 'approved') && styles.cardBgGreen,
+        ]}>
             {/* Header */}
             <View style={styles.cardHeader}>
                 <View style={styles.titleRow}>
@@ -123,7 +136,7 @@ const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDe
                         <Text style={styles.cardTitle}>{trip.name}</Text>
                         <View style={styles.tagsRow}>
                             <View style={styles.typeBadge}>
-                                <Text style={styles.typeBadgeText}>{trip.type}</Text>
+                                <Text style={styles.typeBadgeText}>{typeLabel}</Text>
                             </View>
                             <StatusBadge status={trip.status} />
                         </View>
@@ -202,9 +215,29 @@ const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDe
                 </View>
             </View>
 
-            {/* Footer */}
+            {/* Sports Event Roster (when sporting event / has sports_event_id) */}
+            {(trip.sports_event_id || trip.type === 'sporting_event') && (
+                <View style={styles.rosterRow}>
+                    <View style={[styles.iconContainer, { backgroundColor: trip.attendingCount === 0 ? '#fef2f2' : '#f0fdf4' }]}>
+                        <Ionicons name="people-outline" size={18} color={trip.attendingCount === 0 ? '#dc2626' : '#16a34a'} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.rosterLabel}>Sports Event Roster</Text>
+                        <Text style={styles.rosterCount}>{trip.attendingCount} people total</Text>
+                    </View>
+                    <TouchableOpacity style={styles.viewRosterBtn} onPress={onManageRoster}>
+                        <Text style={styles.viewRosterBtnText}>View Roster</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {/* Footer: Event Type, Duration, Transport (match web reference) */}
             <View style={styles.cardFooter}>
-                <Text style={styles.footerText}>Event Type: {trip.event_type}</Text>
+                <View style={styles.footerRow}>
+                    {trip.event_type ? <Text style={styles.footerText}>Event Type: {trip.event_type}</Text> : null}
+                    {trip.event_length ? <Text style={[styles.footerText, styles.footerTextRight]}>Duration: {trip.event_length}</Text> : null}
+                </View>
+                {trip.transportation_type ? <Text style={styles.footerText}>Transport: {trip.transportation_type}</Text> : null}
             </View>
         </View>
     );
@@ -307,26 +340,69 @@ export const TransportScreen = ({ navigation }: any) => {
     const { data: rawCampers = [] } = useCampers(companyId, season);
     const { data: rawDivisions = [] } = useDivisions(companyId);
 
+    const queryClient = useQueryClient();
     const addTripMutation = useAddTrip();
     const updateTripMutation = useUpdateTrip();
     const deleteTripMutation = useDeleteTrip();
     const manageRosterMutation = useManageTripRoster();
 
-    // Map fetched trips to UI expected Trips
+    const tripAttachmentTripId = modalState.visible && modalState.mode === 'edit' && modalState.tripId ? modalState.tripId : null;
+    const { data: tripAttachments = [] } = useTripAttachments(tripAttachmentTripId, companyId);
+    const [tripAttachmentUploading, setTripAttachmentUploading] = useState(false);
+
+    const handleAddTripAttachment = async () => {
+        if (!tripAttachmentTripId || !companyId) return;
+        try {
+            const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+            if (!result.assets?.[0]) return;
+            const asset = result.assets[0];
+            setTripAttachmentUploading(true);
+            const response = await fetch(asset.uri);
+            const arrayBuffer = await response.arrayBuffer();
+            const ext = asset.name?.split('.').pop() || 'bin';
+            const storagePath = await uploadTripAttachment({
+                companyId,
+                tripId: tripAttachmentTripId,
+                file: arrayBuffer,
+                fileExt: ext,
+            });
+            const { data: { user } } = await supabase.auth.getUser();
+            const { data: urlData } = supabase.storage.from('trip-attachments').getPublicUrl(storagePath);
+            const { error } = await supabase.from('trip_attachments').insert({
+                trip_id: tripAttachmentTripId,
+                company_id: companyId,
+                file_name: asset.name,
+                file_url: urlData.publicUrl,
+                file_type: asset.mimeType ?? null,
+                uploaded_by: user?.id ?? null,
+            });
+            if (error) throw error;
+            queryClient.invalidateQueries({ queryKey: ['trip_attachments'] });
+        } catch (e: any) {
+            alert(e?.message || 'Upload failed');
+        } finally {
+            setTripAttachmentUploading(false);
+        }
+    };
+
+    // Map fetched trips to UI expected Trips (API now returns attendingCount, event_type, etc.)
     const trips: Trip[] = React.useMemo(() => rawTrips.map(t => ({
         id: t.id || '',
         name: t.name,
         destination: t.destination || '',
         date: t.date,
-        is_multi_day: false,
-        departure_time: t.departure_time || '08:00',
-        return_time: t.return_time || '15:00',
-        attendingCount: t.trip_attendees?.[0]?.count || 0,
+        end_date: t.end_date || undefined,
+        is_multi_day: !!t.is_multi_day,
+        departure_time: t.departure_time || '',
+        return_time: t.return_time || '',
+        attendingCount: t.attendingCount ?? 0,
         chaperone: t.chaperone || '',
-        status: t.status || 'pending',
-        type: t.type,
-        event_type: t.type,
-        transportation_type: 'Bus'
+        status: (t.status as Trip['status']) || 'pending',
+        type: t.type || 'field_trip',
+        event_type: t.event_type || t.type || '',
+        transportation_type: t.transportation_type || '',
+        event_length: t.event_length,
+        sports_event_id: t.sports_event_id,
     })), [rawTrips]);
 
     // Derived unique values for filters
@@ -1127,6 +1203,44 @@ export const TransportScreen = ({ navigation }: any) => {
                             </View>
                         </View>
 
+                        {/* Trip Attachments (edit only) */}
+                        {modalState.mode === 'edit' && modalState.tripId && (
+                            <View style={[styles.formGroup, { marginTop: 16 }]}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                    <Text style={styles.label}>Attachments</Text>
+                                    <TouchableOpacity
+                                        style={[styles.actionButtonSecondary, tripAttachmentUploading && { opacity: 0.7 }]}
+                                        onPress={handleAddTripAttachment}
+                                        disabled={tripAttachmentUploading}
+                                    >
+                                        <Ionicons name="attach-outline" size={16} color={theme.colors.text} />
+                                        <Text style={styles.actionButtonTextSecondary}>{tripAttachmentUploading ? 'Uploading…' : 'Add file'}</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                {tripAttachments.length === 0 ? (
+                                    <Text style={{ fontSize: 13, color: theme.colors.textSecondary }}>No files attached</Text>
+                                ) : (
+                                    tripAttachments.map((att: any) => (
+                                        <View key={att.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+                                            <Text style={{ flex: 1, fontSize: 14, color: theme.colors.text }} numberOfLines={1}>{att.file_name}</Text>
+                                            <TouchableOpacity
+                                                onPress={async () => {
+                                                    const path = pathFromFileUrl(att.file_url, 'trip-attachments');
+                                                    if (path) {
+                                                        try {
+                                                            const url = await getSignedUrl('tripAttachments', path);
+                                                            Linking.openURL(url);
+                                                        } catch (_) {}
+                                                    }
+                                                }}
+                                            >
+                                                <Text style={{ fontSize: 14, color: theme.colors.primary }}>View</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    ))
+                                )}
+                            </View>
+                        )}
 
                         {/* Footer Buttons */}
                         <View style={styles.modalFooter}>
@@ -1550,7 +1664,10 @@ const styles = StyleSheet.create({
     },
     cardBorderGreen: {
         borderLeftColor: theme.colors.success,
-        backgroundColor: '#FFF8F5', // Light beige/pink background
+        backgroundColor: '#FFF8F5',
+    },
+    cardBgGreen: {
+        backgroundColor: '#f0fdf4', // Light green when confirmed/approved (match web reference)
     },
     cardHeader: {
         marginBottom: theme.spacing.md,
@@ -1944,9 +2061,50 @@ const styles = StyleSheet.create({
         borderTopColor: 'rgba(0,0,0,0.05)',
         paddingTop: theme.spacing.sm,
     },
+    footerRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        marginBottom: 2,
+    },
     footerText: {
         fontSize: 12,
         color: theme.colors.textSecondary,
+    },
+    footerTextRight: {
+        marginLeft: 'auto',
+    },
+    rosterRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: theme.spacing.md,
+        paddingTop: theme.spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.05)',
+    },
+    rosterLabel: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    rosterCount: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    viewRosterBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: '#f1f5f9',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    viewRosterBtnText: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: theme.colors.text,
     },
     // Toolbar Styles
     toolbarScroll: {

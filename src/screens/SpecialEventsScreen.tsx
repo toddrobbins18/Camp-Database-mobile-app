@@ -105,24 +105,6 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const { data: specialEventsData = [], isLoading: isLoadingEvents } = useSpecialEvents(companyId, season);
     const addSpecialEventMutation = useAddSpecialEvent();
 
-    const filteredEvents = useMemo(() => {
-        let filtered = specialEventsData || [];
-        if (selectedDivision !== 'All Divisions') {
-            filtered = filtered.filter((event: any) => {
-                // If divisions array exists and includes the ID
-                if (event.divisions && Array.isArray(event.divisions)) {
-                    return event.divisions.includes(selectedDivision);
-                }
-                // Fallback check if it stores by name anywhere or string CSV
-                if (typeof event.divisions === 'string') {
-                    return event.divisions.includes(selectedDivision);
-                }
-                return false;
-            });
-        }
-        return filtered;
-    }, [specialEventsData, selectedDivision]);
-
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [selectedHelpTab, setSelectedHelpTab] = useState('Staff');
 
@@ -155,6 +137,24 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const [datePickerYear, setDatePickerYear] = useState(new Date().getFullYear());
     const [eventDatePickerMonth, setEventDatePickerMonth] = useState(new Date().getMonth());
     const [eventDatePickerYear, setEventDatePickerYear] = useState(new Date().getFullYear());
+
+    const filteredEvents = useMemo(() => {
+        let filtered = specialEventsData || [];
+        if (selectedDivision !== 'All Divisions') {
+            filtered = filtered.filter((event: any) => {
+                // If divisions array exists and includes the ID
+                if (event.divisions && Array.isArray(event.divisions)) {
+                    return event.divisions.includes(selectedDivision);
+                }
+                // Fallback check if it stores by name anywhere or string CSV
+                if (typeof event.divisions === 'string') {
+                    return event.divisions.includes(selectedDivision);
+                }
+                return false;
+            });
+        }
+        return filtered;
+    }, [specialEventsData, selectedDivision]);
 
     // Reuse date formatting function
     const formatDate = (date: Date) => {

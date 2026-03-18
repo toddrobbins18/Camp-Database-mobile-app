@@ -42,6 +42,10 @@ DROP POLICY IF EXISTS "Users can view profile photos" ON storage.objects;
 DROP POLICY IF EXISTS "Users can upload profile photos" ON storage.objects;
 DROP POLICY IF EXISTS "Users can update profile photos" ON storage.objects;
 DROP POLICY IF EXISTS "Users can delete profile photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users can view their company profile photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload their company profile photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their company profile photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their company profile photos" ON storage.objects;
 
 CREATE POLICY "Users can view their company profile photos"
 ON storage.objects FOR SELECT TO authenticated
@@ -138,6 +142,14 @@ DROP POLICY IF EXISTS "Company members can view rainy day documents" ON storage.
 DROP POLICY IF EXISTS "Company members can upload rainy day documents" ON storage.objects;
 DROP POLICY IF EXISTS "Company members can update rainy day documents" ON storage.objects;
 DROP POLICY IF EXISTS "Company members can delete rainy day documents" ON storage.objects;
+DROP POLICY IF EXISTS "Users can view their company daily wolf documents" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload their company daily wolf documents" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their company daily wolf documents" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their company daily wolf documents" ON storage.objects;
+DROP POLICY IF EXISTS "Users can view their company rainy day documents" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload their company rainy day documents" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their company rainy day documents" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their company rainy day documents" ON storage.objects;
 
 CREATE POLICY "Users can view their company daily wolf documents"
 ON storage.objects FOR SELECT USING (

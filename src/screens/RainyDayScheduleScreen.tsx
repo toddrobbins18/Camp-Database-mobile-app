@@ -19,6 +19,8 @@ import { useRainyDaySchedule, useRainyDayDocuments } from '../api/rainy_day_tuto
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { useQueryClient } from '@tanstack/react-query';
+import { uploadRainyDayDocument, pathFromFileUrl, getSignedUrl } from '../api/storage';
+import { Linking } from 'react-native';
 
 interface RainyDayScheduleScreenProps {
     navigation: any;
@@ -78,16 +80,22 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
         try {
             const response = await fetch(selectedFileUri);
             const arrayBuffer = await response.arrayBuffer();
-            const path = `${companyId}/${season || '2026'}/${Date.now()}_${fileName}`;
-            const { data: uploadData, error: uploadError } = await supabase.storage.from('rainy-day-documents').upload(path, arrayBuffer, { contentType: 'application/pdf' });
-            if (uploadError) throw uploadError;
-            const { data: urlData } = supabase.storage.from('rainy-day-documents').getPublicUrl(uploadData.path);
+            const storagePath = await uploadRainyDayDocument({
+                companyId,
+                season: season || '2026',
+                date: dateStr,
+                fileName,
+                file: arrayBuffer,
+            });
+            const { data: { user } } = await supabase.auth.getUser();
+            const { data: urlData } = supabase.storage.from('rainy-day-documents').getPublicUrl(storagePath);
             const { error: insertError } = await supabase.from('rainy_day_documents').insert({
                 company_id: companyId,
                 season: season || '2026',
                 date: dateStr,
                 file_name: fileName,
                 file_url: urlData.publicUrl,
+                uploaded_by: user?.id ?? null,
             });
             if (insertError) throw insertError;
             Alert.alert('Uploaded', 'Schedule uploaded successfully.');
@@ -307,6 +315,20 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                             <StyledCard key={doc.id} style={{ ...styles.emptyStateCard, alignItems: 'flex-start' as const, marginBottom: 8 }}>
                                 <Text style={{ fontWeight: '600', color: theme.colors.text, marginBottom: 4 }}>{doc.file_name}</Text>
                                 <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{doc.date}</Text>
+                                <TouchableOpacity
+                                    style={{ marginTop: 8 }}
+                                    onPress={async () => {
+                                        const path = pathFromFileUrl(doc.file_url, 'rainy-day-documents');
+                                        if (path) {
+                                            try {
+                                                const url = await getSignedUrl('rainyDayDocuments', path);
+                                                Linking.openURL(url);
+                                            } catch (_) {}
+                                        }
+                                    }}
+                                >
+                                    <Text style={{ color: theme.colors.primary, fontSize: 14 }}>View PDF</Text>
+                                </TouchableOpacity>
                             </StyledCard>
                         ))}
                         {scheduleEvents.map((event: any) => (

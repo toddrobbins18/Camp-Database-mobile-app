@@ -17,6 +17,33 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const { companyId, season } = useCompany();
 
+    const toNullableString = (v: any) => {
+        if (v == null) return null;
+        const s = String(v).trim();
+        return s.length ? s : null;
+    };
+
+    const buildSubmitData = (data: any) => {
+        return {
+            event_date: data.event_date,
+            end_date: data.is_multi_day ? toNullableString(data.end_date) : null,
+            is_multi_day: !!data.is_multi_day,
+            title: data.title,
+            description: toNullableString(data.description),
+            activity_type: data.activity_type,
+            depart_from_camp: toNullableString(data.depart_from_camp),
+            depart_from_activity: toNullableString(data.depart_from_activity),
+            location: toNullableString(data.location),
+            capacity: data.capacity ? parseInt(String(data.capacity), 10) || null : null,
+            chaperone: toNullableString(data.chaperone),
+            home_away: toNullableString(data.home_away),
+            meal_options: Array.isArray(data.meal_options) ? data.meal_options : [],
+            meal_notes: toNullableString(data.meal_notes),
+            season: selectedYear,
+            company_id: companyId,
+        };
+    };
+
     const addActivityMutation = useMutation({
         mutationFn: async (newActivity: any) => {
             const { division_ids, ...activityData } = newActivity;
@@ -24,7 +51,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             // 1. Insert activity
             const { data: activity, error: activityError } = await supabase
                 .from('activities_field_trips')
-                .insert([{ ...activityData, company_id: companyId, season: selectedYear }])
+                .insert(buildSubmitData(activityData))
                 .select()
                 .single();
 
@@ -62,7 +89,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             // 1. Update activity
             const { error: activityError } = await supabase
                 .from('activities_field_trips')
-                .update(activityData)
+                .update(buildSubmitData(activityData))
                 .eq('id', id);
 
             if (activityError) throw activityError;
@@ -411,14 +438,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const weekDaysDates = getWeekDays(currentDate);
     const timeSlots = getTimeSlots();
 
-    // Format date for activity cards
+    // Format date for activity cards (match web: "Wed, Jul 8" or "Jul 28 - Jul 29, 2026")
     const formatActivityDate = (startDate: string, endDate?: string, isMultiDay?: boolean) => {
         const start = new Date(startDate + 'T00:00:00');
         if (isMultiDay && endDate) {
             const end = new Date(endDate + 'T00:00:00');
             return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
         }
-        return start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        return start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     };
 
     // Format time for display (12-hour format)
@@ -1060,14 +1087,15 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                                 </View>
                                             </View>
                                             <View style={styles.activityCardBadges}>
-                                                <View style={[styles.badge, styles.badgePrimary]}>
-                                                    <Text style={styles.badgeText}>
-                                                        {activity.activity_type ? activity.activity_type.split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Activity'}
+                                                <View style={[styles.badge, styles.badgeType]}>
+                                                    <Text style={styles.badgeTypeText}>
+                                                        {activity.activity_type || 'other'}
                                                     </Text>
                                                 </View>
                                                 {activity.is_multi_day && activity.end_date && (
-                                                    <View style={[styles.badge, styles.badgePrimary]}>
-                                                        <Text style={styles.badgeText}>
+                                                    <View style={[styles.badge, styles.badgeMultiDay]}>
+                                                        <Ionicons name="calendar-outline" size={12} color="#0d9488" />
+                                                        <Text style={styles.badgeMultiDayText}>
                                                             {calculateDays(activity.event_date, activity.end_date)}-Day
                                                         </Text>
                                                     </View>
@@ -1080,11 +1108,42 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                                     </View>
                                                 )}
                                                 {activity.divisions?.map((div: any) => (
-                                                    <View key={div.id} style={[styles.badge, styles.badgeSecondary]}>
-                                                        <Text style={[styles.badgeText, styles.badgeTextSecondary]}>{div.name}</Text>
+                                                    <View key={div.id} style={[styles.badge, styles.badgeDivision]}>
+                                                        <Text style={styles.badgeDivisionText}>{div.name}</Text>
                                                     </View>
                                                 ))}
                                             </View>
+                                            <View style={styles.activityCardDetailRow}>
+                                                <Ionicons name="time-outline" size={16} color={theme.colors.textSecondary} style={styles.detailIcon} />
+                                                <Text style={styles.activityCardDetailText}>
+                                                    {(activity.depart_from_camp || activity.depart_from_activity)
+                                                        ? (activity.depart_from_camp && `Depart: ${formatTime(activity.depart_from_camp)}`) +
+                                                            (activity.depart_from_camp && activity.depart_from_activity ? ' | ' : '') +
+                                                            (activity.depart_from_activity ? `Return: ${formatTime(activity.depart_from_activity)}` : '')
+                                                        : 'Timing TBD. Will update asap.'}
+                                                </Text>
+                                            </View>
+                                            {activity.location ? (
+                                                <View style={styles.activityCardDetailRow}>
+                                                    <Ionicons name="location-outline" size={16} color={theme.colors.textSecondary} style={styles.detailIcon} />
+                                                    <Text style={styles.activityCardDetailText}>{activity.location}</Text>
+                                                </View>
+                                            ) : null}
+                                            {activity.capacity != null && activity.capacity !== '' ? (
+                                                <View style={styles.activityCardDetailRow}>
+                                                    <Ionicons name="people-outline" size={16} color={theme.colors.textSecondary} style={styles.detailIcon} />
+                                                    <Text style={styles.activityCardDetailText}>Capacity: {activity.capacity}</Text>
+                                                </View>
+                                            ) : null}
+                                            {activity.chaperone ? (
+                                                <View style={styles.activityCardDetailRow}>
+                                                    <Ionicons name="person-outline" size={16} color={theme.colors.textSecondary} style={styles.detailIcon} />
+                                                    <Text style={styles.activityCardDetailText}>Staff: {activity.chaperone}</Text>
+                                                </View>
+                                            ) : null}
+                                            {activity.description ? (
+                                                <Text style={styles.activityCardNotes} numberOfLines={3}>{activity.description}</Text>
+                                            ) : null}
                                         </StyledCard>
                                     ))}
                                 </View>
@@ -1234,119 +1293,315 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
                             {/* Form Content - Reuse the edit form structure */}
                             <View style={styles.addActivityFormContent}>
-                                {/* Title Field */}
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Title *</Text>
-                                    <TextInput
-                                        style={styles.formTextInput}
-                                        placeholder="Enter activity title"
-                                        placeholderTextColor={theme.colors.textSecondary}
-                                        value={formData.title}
-                                        onChangeText={(text) => setFormData({ ...formData, title: text })}
+                                {/* Multi-Day Toggle (match edit/web) */}
+                                <View style={styles.multiDayToggle}>
+                                    <View style={styles.multiDayToggleContent}>
+                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.text} />
+                                        <View style={styles.multiDayToggleText}>
+                                            <Text style={styles.multiDayToggleLabel}>Multi-Day Event</Text>
+                                            <Text style={styles.multiDayToggleDescription}>
+                                                Enable this for events spanning multiple days
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <Switch
+                                        value={formData.is_multi_day}
+                                        onValueChange={(checked) => {
+                                            setFormData({
+                                                ...formData,
+                                                is_multi_day: checked,
+                                                end_date: checked ? formData.end_date : '',
+                                            });
+                                        }}
                                     />
                                 </View>
 
-                                {/* Event Date */}
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Event Date *</Text>
-                                    <TouchableOpacity
-                                        style={styles.formInput}
-                                        onPress={() => {
-                                            setDatePickerField('event_date');
-                                            setSelectedDate(formData.event_date ? new Date(formData.event_date) : new Date());
-                                            setIsDatePickerOpen(true);
-                                        }}
-                                    >
-                                        <Text style={[styles.formInputText, !formData.event_date && styles.formInputPlaceholder]}>
-                                            {formData.event_date || 'Select event date'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-
-                                {/* Multi-day Toggle */}
-                                <View style={styles.formField}>
-                                    <View style={styles.switchContainer}>
-                                        <Text style={styles.formLabel}>Multi-day Event</Text>
-                                        <Switch
-                                            value={formData.is_multi_day}
-                                            onValueChange={(value) => setFormData({ ...formData, is_multi_day: value })}
-                                            trackColor={{ false: theme.colors.border, true: theme.colors.secondary }}
-                                            thumbColor={theme.colors.surface}
-                                        />
-                                    </View>
-                                </View>
-
-                                {/* End Date (if multi-day) */}
-                                {formData.is_multi_day && (
+                                {/* Date Fields */}
+                                <View style={formData.is_multi_day ? styles.dateFieldsRow : {}}>
                                     <View style={styles.formField}>
-                                        <Text style={styles.formLabel}>End Date</Text>
+                                        <Text style={styles.formLabel}>
+                                            {formData.is_multi_day ? 'Start Date' : 'Event Date'}
+                                        </Text>
                                         <TouchableOpacity
-                                            style={styles.formInput}
+                                            style={styles.dateInputContainer}
                                             onPress={() => {
-                                                setDatePickerField('end_date');
-                                                setSelectedDate(formData.end_date ? new Date(formData.end_date) : new Date());
+                                                const current = formData.event_date
+                                                    ? new Date(formData.event_date + 'T00:00:00')
+                                                    : new Date();
+                                                setSelectedDate(current);
+                                                setDatePickerField('event_date');
                                                 setIsDatePickerOpen(true);
                                             }}
                                         >
-                                            <Text style={[styles.formInputText, !formData.end_date && styles.formInputPlaceholder]}>
-                                                {formData.end_date || 'Select end date'}
+                                            <Text style={[styles.dateInputText, !formData.event_date && styles.dateInputPlaceholder]}>
+                                                {formData.event_date ? formatDateForDisplay(formData.event_date) : 'mm/dd/yyyy'}
                                             </Text>
+                                            <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
                                         </TouchableOpacity>
                                     </View>
+                                    {formData.is_multi_day && (
+                                        <View style={styles.formField}>
+                                            <Text style={styles.formLabel}>End Date</Text>
+                                            <TouchableOpacity
+                                                style={styles.dateInputContainer}
+                                                onPress={() => {
+                                                    const current = formData.end_date
+                                                        ? new Date(formData.end_date + 'T00:00:00')
+                                                        : new Date();
+                                                    setSelectedDate(current);
+                                                    setDatePickerField('end_date');
+                                                    setIsDatePickerOpen(true);
+                                                }}
+                                            >
+                                                <Text style={[styles.dateInputText, !formData.end_date && styles.dateInputPlaceholder]}>
+                                                    {formData.end_date ? formatDateForDisplay(formData.end_date) : 'mm/dd/yyyy'}
+                                                </Text>
+                                                <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
+                                </View>
+
+                                {/* Duration Badge */}
+                                {formData.is_multi_day && formData.event_date && formData.end_date && (
+                                    <View style={[styles.badge, styles.badgePrimary, styles.durationBadge]}>
+                                        <Text style={styles.badgeText}>
+                                            {calculateDays(formData.event_date, formData.end_date)}-Day Event
+                                        </Text>
+                                    </View>
                                 )}
+
+                                {/* Title */}
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Title *</Text>
+                                    <TextInput
+                                        style={styles.formInput}
+                                        value={formData.title}
+                                        onChangeText={(text) => setFormData({ ...formData, title: text })}
+                                        placeholder="Activity title"
+                                    />
+                                </View>
 
                                 {/* Activity Type */}
                                 <View style={styles.formField}>
                                     <Text style={styles.formLabel}>Activity Type *</Text>
-                                    <TouchableOpacity
-                                        style={styles.formInput}
-                                        onPress={() => setIsActivityTypeDropdownOpen(true)}
-                                    >
-                                        <Text style={[styles.formInputText, !formData.activity_type && styles.formInputPlaceholder]}>
-                                            {formData.activity_type || 'Select activity type'}
-                                        </Text>
-                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                                    </TouchableOpacity>
+                                    <View style={styles.dropdownContainer}>
+                                        <TouchableOpacity
+                                            style={styles.formInput}
+                                            onPress={() => {
+                                                setIsActivityTypeDropdownOpen(!isActivityTypeDropdownOpen);
+                                                setIsLocationTypeDropdownOpen(false);
+                                            }}
+                                        >
+                                            <Text style={formData.activity_type ? styles.formInputText : styles.formInputPlaceholder}>
+                                                {formData.activity_type
+                                                    ? formData.activity_type.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                                                    : 'Select activity type'}
+                                            </Text>
+                                            <Ionicons
+                                                name={isActivityTypeDropdownOpen ? "chevron-up" : "chevron-down"}
+                                                size={20}
+                                                color={theme.colors.textSecondary}
+                                            />
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
 
-                                {/* Home/Away */}
+                                {/* Location Type */}
                                 <View style={styles.formField}>
                                     <Text style={styles.formLabel}>Location Type</Text>
-                                    <TouchableOpacity
-                                        style={styles.formInput}
-                                        onPress={() => setIsLocationTypeDropdownOpen(true)}
-                                    >
-                                        <Text style={[styles.formInputText, !formData.home_away && styles.formInputPlaceholder]}>
-                                            {formData.home_away || 'Select location type'}
+                                    <View style={styles.dropdownContainer}>
+                                        <TouchableOpacity
+                                            style={styles.formInput}
+                                            onPress={() => {
+                                                setIsLocationTypeDropdownOpen(!isLocationTypeDropdownOpen);
+                                                setIsActivityTypeDropdownOpen(false);
+                                            }}
+                                        >
+                                            <Text style={formData.home_away ? styles.formInputText : styles.formInputPlaceholder}>
+                                                {formData.home_away ? formData.home_away.toUpperCase() : 'Select location type (optional)'}
+                                            </Text>
+                                            <Ionicons
+                                                name={isLocationTypeDropdownOpen ? "chevron-up" : "chevron-down"}
+                                                size={20}
+                                                color={theme.colors.textSecondary}
+                                            />
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+
+                                {/* Divisions */}
+                                <View style={styles.formField}>
+                                    <View style={styles.divisionsHeader}>
+                                        <Text style={styles.formLabel}>Divisions (select multiple)</Text>
+                                        <View style={styles.divisionsActions}>
+                                            <TouchableOpacity
+                                                style={styles.selectAllButton}
+                                                onPress={() => setFormData({ ...formData, division_ids: divisions.map(d => d.id) })}
+                                            >
+                                                <Text style={styles.selectAllButtonText}>Select All</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.selectAllButton}
+                                                onPress={() => setFormData({ ...formData, division_ids: [] })}
+                                            >
+                                                <Text style={styles.selectAllButtonText}>Deselect All</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                    <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.divisionsList} nestedScrollEnabled>
+                                        {divisions.map((division) => (
+                                            <TouchableOpacity
+                                                key={division.id}
+                                                style={styles.divisionCheckbox}
+                                                onPress={() => {
+                                                    const isSelected = formData.division_ids.includes(division.id);
+                                                    setFormData({
+                                                        ...formData,
+                                                        division_ids: isSelected
+                                                            ? formData.division_ids.filter(id => id !== division.id)
+                                                            : [...formData.division_ids, division.id],
+                                                    });
+                                                }}
+                                            >
+                                                <Ionicons
+                                                    name={formData.division_ids.includes(division.id) ? 'checkbox' : 'checkbox-outline'}
+                                                    size={20}
+                                                    color={formData.division_ids.includes(division.id) ? theme.colors.secondary : theme.colors.textSecondary}
+                                                />
+                                                <Text style={styles.divisionCheckboxText}>{division.name}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </KeyboardAwareScrollView>
+                                </View>
+
+                                {/* Optional Fields */}
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Depart from Camp (optional)</Text>
+                                    <TouchableOpacity style={styles.formInput} onPress={() => openTimePicker('depart_from_camp')}>
+                                        <Text style={formData.depart_from_camp ? styles.formInputText : styles.formInputPlaceholder}>
+                                            {formData.depart_from_camp ? formatTime(formData.depart_from_camp) : '--:-- --'}
                                         </Text>
-                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                        <Ionicons name="time-outline" size={20} color={theme.colors.textSecondary} />
                                     </TouchableOpacity>
                                 </View>
 
-                                {/* Location */}
                                 <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Location</Text>
+                                    <Text style={styles.formLabel}>Depart from Activity (optional)</Text>
+                                    <TouchableOpacity style={styles.formInput} onPress={() => openTimePicker('depart_from_activity')}>
+                                        <Text style={formData.depart_from_activity ? styles.formInputText : styles.formInputPlaceholder}>
+                                            {formData.depart_from_activity ? formatTime(formData.depart_from_activity) : '--:-- --'}
+                                        </Text>
+                                        <Ionicons name="time-outline" size={20} color={theme.colors.textSecondary} />
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Location (optional)</Text>
                                     <TextInput
-                                        style={styles.formTextInput}
-                                        placeholder="Enter location"
-                                        placeholderTextColor={theme.colors.textSecondary}
+                                        style={styles.formInput}
                                         value={formData.location}
                                         onChangeText={(text) => setFormData({ ...formData, location: text })}
+                                        placeholder="Location"
                                     />
                                 </View>
 
-                                {/* Description */}
                                 <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Description</Text>
+                                    <Text style={styles.formLabel}>Capacity (optional)</Text>
+                                    <View style={styles.capacityStepper}>
+                                        <TextInput
+                                            style={styles.capacityInput}
+                                            value={formData.capacity}
+                                            onChangeText={(text) => {
+                                                const numericValue = text.replace(/[^0-9]/g, '');
+                                                setFormData({ ...formData, capacity: numericValue });
+                                            }}
+                                            placeholder="Maximum number of participants"
+                                            keyboardType="numeric"
+                                        />
+                                        <View style={styles.capacityButtons}>
+                                            <TouchableOpacity
+                                                style={[styles.capacityButton, styles.capacityButtonTop]}
+                                                onPress={() => {
+                                                    const current = parseInt(formData.capacity) || 0;
+                                                    setFormData({ ...formData, capacity: (current + 1).toString() });
+                                                }}
+                                            >
+                                                <Ionicons name="chevron-up" size={16} color={theme.colors.textSecondary} />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.capacityButton}
+                                                onPress={() => {
+                                                    const current = parseInt(formData.capacity) || 0;
+                                                    if (current > 0) setFormData({ ...formData, capacity: (current - 1).toString() });
+                                                }}
+                                            >
+                                                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Staff (optional)</Text>
                                     <TextInput
-                                        style={[styles.formTextInput, styles.formTextArea]}
-                                        placeholder="Enter description"
-                                        placeholderTextColor={theme.colors.textSecondary}
+                                        style={styles.formInput}
+                                        value={formData.chaperone}
+                                        onChangeText={(text) => setFormData({ ...formData, chaperone: text })}
+                                        placeholder="Search staff to assign..."
+                                    />
+                                </View>
+
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Description (optional)</Text>
+                                    <TextInput
+                                        style={[styles.formInput, styles.formTextArea]}
                                         value={formData.description}
                                         onChangeText={(text) => setFormData({ ...formData, description: text })}
+                                        placeholder="Description"
                                         multiline
-                                        numberOfLines={4}
+                                        numberOfLines={3}
                                     />
+                                </View>
+
+                                {/* Meal Options */}
+                                <View style={styles.mealOptionsSection}>
+                                    <Text style={styles.mealOptionsTitle}>Meal Options</Text>
+                                    {['Breakfast', 'Snack', 'Lunch', 'Dinner', 'Other'].map((meal) => (
+                                        <TouchableOpacity
+                                            key={meal}
+                                            style={styles.mealOption}
+                                            onPress={() => {
+                                                const isSelected = formData.meal_options.includes(meal);
+                                                setFormData({
+                                                    ...formData,
+                                                    meal_options: isSelected
+                                                        ? formData.meal_options.filter(m => m !== meal)
+                                                        : [...formData.meal_options, meal],
+                                                });
+                                            }}
+                                        >
+                                            <Ionicons
+                                                name={formData.meal_options.includes(meal) ? 'checkbox' : 'checkbox-outline'}
+                                                size={20}
+                                                color={formData.meal_options.includes(meal) ? theme.colors.secondary : theme.colors.textSecondary}
+                                            />
+                                            <Text style={styles.mealOptionText}>{meal}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                    {formData.meal_options.includes('Other') && (
+                                        <View style={styles.formField}>
+                                            <Text style={styles.formLabel}>Meal Notes</Text>
+                                            <TextInput
+                                                style={[styles.formInput, styles.formTextArea]}
+                                                value={formData.meal_notes}
+                                                onChangeText={(text) => setFormData({ ...formData, meal_notes: text })}
+                                                placeholder="e.g., Other location serves lunch"
+                                                multiline
+                                                numberOfLines={2}
+                                            />
+                                        </View>
+                                    )}
                                 </View>
 
                                 {/* Action Buttons */}
@@ -1360,8 +1615,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     <TouchableOpacity
                                         style={styles.addActivitySaveButton}
                                         onPress={async () => {
-                                            if (!formData.title || !formData.event_date) {
-                                                Alert.alert('Error', 'Please fill in required fields (Title and Event Date)');
+                                            if (!companyId) {
+                                                Alert.alert('Error', 'Missing company context. Please sign in again.');
+                                                return;
+                                            }
+                                            if (!formData.title || !formData.event_date || !formData.activity_type) {
+                                                Alert.alert('Error', 'Please fill in required fields (Activity Type, Title, and Event Date)');
                                                 return;
                                             }
 
@@ -2962,17 +3221,48 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: theme.spacing.xs,
+        marginBottom: theme.spacing.sm,
     },
     badge: {
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingHorizontal: theme.spacing.sm,
         paddingVertical: theme.spacing.xs,
         borderRadius: theme.borderRadius.sm,
+        gap: 4,
+    },
+    badgeType: {
+        backgroundColor: '#2563eb',
+    },
+    badgeTypeText: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: '#fff',
+        fontWeight: '500',
+    },
+    badgeMultiDay: {
+        backgroundColor: '#ccfbf1',
+    },
+    badgeMultiDayText: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: '#0d9488',
+        fontWeight: '500',
     },
     badgePrimary: {
         backgroundColor: theme.colors.secondary,
     },
+    badgeDivision: {
+        backgroundColor: '#26A69A',
+    },
+    badgeDivisionText: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: '#fff',
+        fontWeight: '500',
+    },
     badgeSecondary: {
-        backgroundColor: '#e0e7ff', // Light blue
+        backgroundColor: '#e0e7ff',
     },
     badgeOutline: {
         backgroundColor: 'transparent',
@@ -2990,6 +3280,27 @@ const styles = StyleSheet.create({
     },
     badgeTextSecondary: {
         color: theme.colors.text,
+    },
+    activityCardDetailRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: theme.spacing.xs,
+    },
+    detailIcon: {
+        marginRight: theme.spacing.xs,
+        marginTop: 2,
+    },
+    activityCardDetailText: {
+        ...theme.typography.bodySmall,
+        flex: 1,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    activityCardNotes: {
+        ...theme.typography.bodySmall,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginTop: theme.spacing.xs,
     },
     // Edit Modal Styles
     editModalContainer: {

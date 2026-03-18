@@ -97,6 +97,7 @@ export const CamperScreen = ({ navigation }: any) => {
         group: '',
         season: '2026',
         assignedLeader: '',
+        assignedLeaderId: '' as string,
         guardianEmail: '',
         guardianPhone: '',
         emergencyContact: '',
@@ -116,6 +117,7 @@ export const CamperScreen = ({ navigation }: any) => {
         group: '',
         season: '2026',
         assignedLeader: '',
+        assignedLeaderId: '' as string,
         guardianEmail: '',
         guardianPhone: '',
         emergencyContact: '',
@@ -965,7 +967,9 @@ export const CamperScreen = ({ navigation }: any) => {
                                                         rfid: formData.rfid || null,
                                                         allergies: formData.allergies || null,
                                                         medical_notes: formData.medicalNotes || null,
-                                                        assigned_leader: formData.assignedLeader || null,
+                                                        guardian_email: formData.guardianEmail || null,
+                                                        guardian_phone: formData.guardianPhone || null,
+                                                        leader_id: formData.assignedLeaderId || null,
                                                     };
 
                                                     // Use mutateAsync so we can await and catch errors reliably
@@ -983,6 +987,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                         group: '',
                                                         season: '2026',
                                                         assignedLeader: '',
+                                                        assignedLeaderId: '',
                                                         guardianEmail: '',
                                                         guardianPhone: '',
                                                         emergencyContact: '',
@@ -1132,16 +1137,16 @@ export const CamperScreen = ({ navigation }: any) => {
                             >
                                 {staffList.map((leader: any) => {
                                     const leaderDisplay = `${leader.name} - ${leader.role}`;
-                                    const isSelected = formData.assignedLeader === leaderDisplay;
+                                    const isSelected = formData.assignedLeaderId === leader.id || formData.assignedLeader === leaderDisplay;
                                     return (
                                         <TouchableOpacity
-                                            key={leader.name}
+                                            key={leader.id || leader.name}
                                             style={[
                                                 styles.bottomSheetOption,
                                                 isSelected && styles.bottomSheetOptionSelected
                                             ]}
                                             onPress={() => {
-                                                setFormData({ ...formData, assignedLeader: leaderDisplay });
+                                                setFormData({ ...formData, assignedLeader: leaderDisplay, assignedLeaderId: (leader as any).id ?? '' });
                                                 setShowAddLeaderDropdown(false);
                                             }}
                                         >
@@ -1624,14 +1629,16 @@ export const CamperScreen = ({ navigation }: any) => {
                                                         name: editFormData.name,
                                                         age: Number(editFormData.age) || null,
                                                         gender: editFormData.gender,
-                                                        division_id: editFormData.division,
-                                                        bunk: editFormData.bunk,
+                                                        division_id: editFormData.division || null,
+                                                        bunk_id: editFormData.bunk && /^[0-9a-f-]{36}$/i.test(editFormData.bunk) ? editFormData.bunk : null,
                                                         person_id: editFormData.person_id,
                                                         emergency_contact: editFormData.emergencyContact,
                                                         rfid: editFormData.rfid,
                                                         allergies: editFormData.allergies,
                                                         medical_notes: editFormData.medicalNotes,
-                                                        assigned_leader: editFormData.assignedLeader,
+                                                        guardian_email: editFormData.guardianEmail || null,
+                                                        guardian_phone: editFormData.guardianPhone || null,
+                                                        leader_id: editFormData.assignedLeaderId || null,
                                                         date_of_birth: editFormData.dateOfBirth
                                                     });
                                                 }
@@ -1908,16 +1915,16 @@ export const CamperScreen = ({ navigation }: any) => {
                             >
                                 {staffList.map((leader: any) => {
                                     const leaderDisplay = `${leader.name} - ${leader.role}`;
-                                    const isSelected = editFormData.assignedLeader === leaderDisplay;
+                                    const isSelected = editFormData.assignedLeaderId === (leader as any).id || editFormData.assignedLeader === leaderDisplay;
                                     return (
                                         <TouchableOpacity
-                                            key={leader.name}
+                                            key={(leader as any).id || (leader as any).name}
                                             style={[
                                                 styles.bottomSheetOption,
                                                 isSelected && styles.bottomSheetOptionSelected
                                             ]}
                                             onPress={() => {
-                                                setEditFormData({ ...editFormData, assignedLeader: leaderDisplay });
+                                                setEditFormData({ ...editFormData, assignedLeader: leaderDisplay, assignedLeaderId: (leader as any).id ?? '' });
                                                 setShowEditLeaderDropdown(false);
                                             }}
                                         >
@@ -1973,24 +1980,29 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 e.stopPropagation();
                                                 setCamperToEdit(camper);
                                                 // Pre-fill form with camper data
+                                                const camperAny = camper as any;
+                                                const leaderId = camperAny.leader_id ?? '';
+                                                const staffForLeader = staffList.find((s: any) => s.id === leaderId);
+                                                const leaderDisplay = staffForLeader ? `${staffForLeader.name} - ${staffForLeader.role}` : '';
                                                 setEditFormData({
-                                                    name: (camper as any).name || '',
-                                                    person_id: (camper as any).person_id || '12171924',
-                                                    age: (camper as any).age || '',
-                                                    dateOfBirth: (camper as any).dateOfBirth || '08/23/2010',
-                                                    gender: (camper as any).gender || '',
-                                                    division: camper.division_id || (camper as any).division?.id || '',
-                                                    bunk: (camper as any).bunk || '',
-                                                    grade: (camper as any).grade || '',
-                                                    group: (camper as any).group || '',
-                                                    season: (camper as any).season || '2026',
-                                                    assignedLeader: (camper as any).assignedLeader || '',
-                                                    guardianEmail: (camper as any).guardianEmail || 'abbyw8135@icloud.com',
-                                                    guardianPhone: (camper as any).guardianPhone || '5167880571',
-                                                    emergencyContact: (camper as any).emergencyContact || '',
-                                                    rfid: (camper as any).rfid || '',
-                                                    allergies: (camper as any).allergies || '',
-                                                    medicalNotes: (camper as any).medicalNotes || '',
+                                                    name: camperAny.name || '',
+                                                    person_id: camperAny.person_id || '',
+                                                    age: camperAny.age !== undefined && camperAny.age !== null ? String(camperAny.age) : '',
+                                                    dateOfBirth: camperAny.date_of_birth || camperAny.dateOfBirth || '',
+                                                    gender: camperAny.gender || '',
+                                                    division: camper.division_id || camperAny.division?.id || '',
+                                                    bunk: camperAny.bunk_id || camperAny.bunk || '',
+                                                    grade: camperAny.grade || '',
+                                                    group: camperAny.group || '',
+                                                    season: camperAny.season || '2026',
+                                                    assignedLeader: leaderDisplay,
+                                                    assignedLeaderId: leaderId,
+                                                    guardianEmail: camperAny.guardian_email || camperAny.guardianEmail || '',
+                                                    guardianPhone: camperAny.guardian_phone || camperAny.guardianPhone || '',
+                                                    emergencyContact: camperAny.emergency_contact || '',
+                                                    rfid: camperAny.rfid || '',
+                                                    allergies: camperAny.allergies || '',
+                                                    medicalNotes: camperAny.medical_notes || '',
                                                 });
                                                 setShowEditChildModal(true);
                                             }}

@@ -9,16 +9,25 @@ export interface TransportTrip {
     type: string;
     destination?: string | null;
     date: string;
+    end_date?: string | null;
+    is_multi_day?: boolean;
     departure_time?: string | null;
     return_time?: string | null;
     chaperone?: string | null;
     capacity?: number | null;
     status?: string;
+    event_type?: string | null;
+    event_length?: string | null;
+    transportation_type?: string | null;
+    driver?: string | null;
+    sports_event_id?: string | null;
     created_at?: string;
-    trip_attendees?: { count: number }[];
+    trip_attendees?: { id: string }[];
+    /** Populated by useTrips: trip_attendees + sports_event_roster + sports_event_staff when sports_event_id set */
+    attendingCount?: number;
 }
 
-// Hook to fetch all trips
+// Hook to fetch all trips (with attendingCount including sports event roster when linked)
 export const useTrips = (companyId: string | null, season: string) => {
     return useQuery({
         queryKey: ['trips', companyId, season],
@@ -29,14 +38,34 @@ export const useTrips = (companyId: string | null, season: string) => {
                 .from('trips')
                 .select(`
                     *,
-                    trip_attendees ( count )
+                    trip_attendees ( id )
                 `)
                 .eq('company_id', companyId)
                 .eq('season', season)
                 .order('date', { ascending: false });
 
             if (error) throw error;
-            return data as TransportTrip[];
+            const rows = (data ?? []) as TransportTrip[];
+
+            const withCounts = await Promise.all(
+                rows.map(async (trip) => {
+                    const tripAttendeesCount = Array.isArray(trip.trip_attendees) ? trip.trip_attendees.length : 0;
+                    let attendingCount = tripAttendeesCount;
+                    if (trip.sports_event_id) {
+                        const { count: rosterCount } = await supabase
+                            .from('sports_event_roster')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('event_id', trip.sports_event_id);
+                        const { count: staffCount } = await supabase
+                            .from('sports_event_staff')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('event_id', trip.sports_event_id);
+                        attendingCount += (rosterCount ?? 0) + (staffCount ?? 0);
+                    }
+                    return { ...trip, attendingCount };
+                })
+            );
+            return withCounts;
         },
         enabled: !!companyId && !!season,
     });
@@ -155,5 +184,35 @@ export const useManageTripRoster = () => {
             queryClient.invalidateQueries({ queryKey: ['trip_attendees'] });
             queryClient.invalidateQueries({ queryKey: ['trips'] });
         },
+    });
+};
+
+// Trip attachments (storage: trip-attachments bucket)
+export interface TripAttachment {
+    id: string;
+    trip_id: string;
+    company_id: string;
+    file_name: string;
+    file_url: string;
+    file_type?: string | null;
+    uploaded_by?: string | null;
+    created_at: string;
+}
+
+export const useTripAttachments = (tripId: string | null, companyId: string | null) => {
+    return useQuery({
+        queryKey: ['trip_attachments', tripId],
+        queryFn: async () => {
+            if (!tripId || !companyId) return [];
+            const { data, error } = await supabase
+                .from('trip_attachments')
+                .select('*')
+                .eq('trip_id', tripId)
+                .eq('company_id', companyId)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return (data ?? []) as TripAttachment[];
+        },
+        enabled: !!tripId && !!companyId,
     });
 };
