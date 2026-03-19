@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
 import { useStaff, useAddStaff, useEditStaff, useDeleteStaff } from '../api/staff';
+import { buildStaffInsertRow, formatIsoDateToUs, formatStaffTypeFromDb } from '../api/staffPayload';
 import { useRole } from '../hooks/useRole';
 
 const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
@@ -62,6 +63,7 @@ export const StaffScreen = ({ navigation }: any) => {
 
     // Edit Staff Form State
     const [editStaffData, setEditStaffData] = useState({
+        id: '' as string,
         name: '',
         role: '',
         department: '',
@@ -237,16 +239,19 @@ export const StaffScreen = ({ navigation }: any) => {
                                             onPress={() => {
                                                 setEditStaffData({
                                                     ...staff,
-                                                    department: (staff as any).department || '',
-                                                    email: (staff as any).email || '',
-                                                    phone: (staff as any).phone || '',
-                                                    hireDate: (staff as any).hireDate || '',
-                                                    dob: (staff as any).dob || '',
-                                                    season: (staff as any).season || '2026',
-                                                    staffType: (staff as any).staffType || '',
-                                                    allergies: (staff as any).allergies || '',
-                                                    reportsTo: (staff as any).reportsTo || '',
-                                                    rfid: (staff as any).rfid || ''
+                                                    id: staff.id!,
+                                                    name: staff.name || '',
+                                                    role: staff.role || '',
+                                                    department: staff.department || '',
+                                                    email: staff.email || '',
+                                                    phone: staff.phone || '',
+                                                    hireDate: formatIsoDateToUs((staff as any).hire_date),
+                                                    dob: formatIsoDateToUs((staff as any).date_of_birth),
+                                                    season: staff.season || season || '2026',
+                                                    staffType: formatStaffTypeFromDb((staff as any).staff_type),
+                                                    allergies: staff.allergies || '',
+                                                    reportsTo: '',
+                                                    rfid: staff.rfid || '',
                                                 });
                                                 toggleModal('editStaff', true);
                                             }}
@@ -266,11 +271,13 @@ export const StaffScreen = ({ navigation }: any) => {
                                 </View>
 
                                 <View style={styles.tagRow}>
-                                    <View style={styles.redTag}>
-                                        <Text style={styles.redTagText}>No Type Set</Text>
+                                    <View style={[styles.redTag, (staff as any).staff_type ? { backgroundColor: '#e0e7ff' } : null]}>
+                                        <Text style={[styles.redTagText, (staff as any).staff_type ? { color: '#3730a3' } : null]}>
+                                            {formatStaffTypeFromDb((staff as any).staff_type) || 'No Type Set'}
+                                        </Text>
                                     </View>
                                     <View style={styles.greenTag}>
-                                        <Text style={styles.greenTagText}>active</Text>
+                                        <Text style={styles.greenTagText}>{(staff.status || 'active').toLowerCase()}</Text>
                                     </View>
                                 </View>
 
@@ -517,28 +524,57 @@ export const StaffScreen = ({ navigation }: any) => {
                             </View>
 
                             <TouchableOpacity
-                                style={styles.primaryBtnBlock}
-                                onPress={() => {
-                                    addStaffMutation.mutate({
-                                        company_id: companyId as string,
-                                        season,
-                                        name: addStaffData.name,
-                                        department: addStaffData.department,
-                                        email: addStaffData.email,
-                                        phone: addStaffData.phone,
-                                        hire_date: addStaffData.hireDate, // Map to DB column names 
-                                        date_of_birth: addStaffData.dob,
-                                        staff_type: addStaffData.staffType,
-                                        allergies: addStaffData.allergies,
-                                        reports_to: addStaffData.reportsTo,
-                                        rfid: addStaffData.rfid,
-                                        role: addStaffData.role || 'Staff', // Requires a role
-                                        status: 'active'
-                                    });
-                                    toggleModal('addStaff', false);
+                                style={[styles.primaryBtnBlock, addStaffMutation.isPending && { opacity: 0.7 }]}
+                                disabled={addStaffMutation.isPending}
+                                onPress={async () => {
+                                    if (!companyId) {
+                                        Alert.alert('Error', 'No company selected. Sign in again or choose a camp.');
+                                        return;
+                                    }
+                                    if (!addStaffData.name?.trim()) {
+                                        Alert.alert('Required', 'Please enter a name.');
+                                        return;
+                                    }
+                                    try {
+                                        const row = buildStaffInsertRow(companyId, season, {
+                                            name: addStaffData.name,
+                                            role: addStaffData.role,
+                                            department: addStaffData.department,
+                                            email: addStaffData.email,
+                                            phone: addStaffData.phone,
+                                            hireDate: addStaffData.hireDate,
+                                            dob: addStaffData.dob,
+                                            staffType: addStaffData.staffType,
+                                            allergies: addStaffData.allergies,
+                                            rfid: addStaffData.rfid,
+                                        });
+                                        await addStaffMutation.mutateAsync(row);
+                                        setAddStaffData({
+                                            name: '',
+                                            role: '',
+                                            department: '',
+                                            email: '',
+                                            phone: '',
+                                            hireDate: '',
+                                            dob: '',
+                                            season: season || '2026',
+                                            staffType: '',
+                                            allergies: '',
+                                            reportsTo: '',
+                                            rfid: '',
+                                        });
+                                        toggleModal('addStaff', false);
+                                    } catch (e: any) {
+                                        Alert.alert(
+                                            'Could not add staff',
+                                            e?.message || 'Check staff type and dates, then try again.'
+                                        );
+                                    }
                                 }}
                             >
-                                <Text style={styles.primaryBtnText}>Save Staff Member</Text>
+                                <Text style={styles.primaryBtnText}>
+                                    {addStaffMutation.isPending ? 'Saving…' : 'Save Staff Member'}
+                                </Text>
                             </TouchableOpacity>
                         </ScrollView>
                     </View>

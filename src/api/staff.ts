@@ -43,23 +43,25 @@ export const useStaff = (companyId: string | null, season: string) => {
     });
 };
 
-// Hook to add a new staff member
+// Hook to add a new staff member (pass a row built with buildStaffInsertRow — only real DB columns)
 export const useAddStaff = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (newStaff: Omit<StaffMember, 'id' | 'created_at'>) => {
-            const { data, error } = await supabase
-                .from('staff')
-                .insert([newStaff])
-                .select()
-                .single();
+        mutationFn: async (row: Record<string, unknown>) => {
+            const { data, error } = await supabase.from('staff').insert([row]).select().single();
 
             if (error) throw error;
             return data;
         },
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: ['staff', variables.company_id, variables.season] });
+        onSuccess: (_, row) => {
+            const cid = row.company_id as string;
+            const s = row.season as string;
+            if (cid && s) {
+                queryClient.invalidateQueries({ queryKey: ['staff', cid, s] });
+            } else {
+                queryClient.invalidateQueries({ queryKey: ['staff'] });
+            }
         },
     });
 };

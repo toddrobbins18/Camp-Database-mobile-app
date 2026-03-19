@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import {
     View,
@@ -10,7 +10,10 @@ import {
     TextInput,
     Modal,
     Pressable,
+    Platform,
+    Alert,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -18,6 +21,25 @@ import { StyledCard } from '../components/StyledCard';
 import { useCampers } from '../api/campers';
 import { useStaff } from '../api/staff';
 import { useCompany } from '../contexts/CompanyContext';
+
+/** DB + web use lowercase; labels are for UI only (see migrations sports_calendar_home_away_check). */
+const HOME_AWAY_OPTIONS: { value: string; label: string }[] = [
+    { value: 'home', label: 'Home' },
+    { value: 'away', label: 'Away' },
+    { value: 'neutral', label: 'Neutral' },
+];
+
+function homeAwayLabel(value: string): string {
+    const row = HOME_AWAY_OPTIONS.find((o) => o.value === value);
+    return row?.label || value || '';
+}
+
+function normalizeHomeAway(raw: string | undefined | null): string {
+    if (!raw) return '';
+    const l = String(raw).trim().toLowerCase();
+    if (l === 'home' || l === 'away' || l === 'neutral') return l;
+    return '';
+}
 
 interface SportsEvent {
     id: string;
@@ -30,17 +52,21 @@ interface SportsEvent {
     eventType: string;
     // Extended fields for Edit Form
     customSport?: string;
+    /** Raw `sport_type` from DB (e.g. "Other") for forms */
+    dbSportType?: string;
     divisionIds?: string[];
+    team?: string;
+    opponent?: string;
     homeAway?: string;
     departTime?: string;
     startTimeField?: string;
-    team?: string;
-    opponent?: string;
     description?: string;
     mealOptions?: string[];
     mealNotes?: string;
     divisionProvidesCoach?: boolean;
     divisionProvidesRef?: boolean;
+    divisions?: Array<{ id: string; name: string; gender?: string }>;
+    rosterCount?: number;
 }
 
 export const SportsCalendarScreen = ({ navigation }: any) => {
@@ -51,8 +77,8 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     const campers = camperData.map((c: any) => ({ id: c.id, name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim(), grade: c.grade || '' }));
     const staffMembers = staffData.map((s: any) => ({ id: s.id, name: s.name, role: s.role || s.staff_type || 'Staff' }));
     const [activeView, setActiveView] = useState('Month');
-    const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1)); // January 2026
-    const [selectedDate, setSelectedDate] = useState(new Date(2026, 0, 25));
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState(new Date());
     const [showAddEventModal, setShowAddEventModal] = useState(false);
     const [showGuideModal, setShowGuideModal] = useState(false);
     const [showUploadCSVModal, setShowUploadCSVModal] = useState(false);
@@ -79,15 +105,50 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
 
 
-    // Add Event form states
-    const [newEventTitle, setNewEventTitle] = useState('');
-    const [newEventDate, setNewEventDate] = useState(new Date(2026, 0, 25));
-    const [newEventLocation, setNewEventLocation] = useState('');
-    const [newEventSport, setNewEventSport] = useState('');
-    const [newEventDivision, setNewEventDivision] = useState('');
-    const [newEventGender, setNewEventGender] = useState('');
-    const [newEventType, setNewEventType] = useState('');
+    type EventFormShape = {
+        title: string;
+        event_date: Date;
+        sport_type: string;
+        custom_sport_type: string;
+        event_type: string;
+        division_ids: string[];
+        home_away: string;
+        depart_time: string;
+        start_time_field: string;
+        location: string;
+        team: string;
+        opponent: string;
+        description: string;
+        meal_options: string[];
+        meal_notes: string;
+        division_provides_coach: boolean;
+        division_provides_ref: boolean;
+    };
+
+    const defaultAddForm = (): EventFormShape => ({
+        title: '',
+        event_date: new Date(),
+        sport_type: '',
+        custom_sport_type: '',
+        event_type: '',
+        division_ids: [],
+        home_away: '',
+        depart_time: '',
+        start_time_field: '',
+        location: '',
+        team: '',
+        opponent: '',
+        description: '',
+        meal_options: [],
+        meal_notes: '',
+        division_provides_coach: false,
+        division_provides_ref: false,
+    });
+
+    const [addFormData, setAddFormData] = useState<EventFormShape>(defaultAddForm);
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [datePickerContext, setDatePickerContext] = useState<'add' | 'edit' | null>(null);
+    const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
 
     // Edit Event Modal State
     const [showEditEventModal, setShowEditEventModal] = useState(false);
@@ -144,16 +205,13 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         setSelectedCampers(newSelection);
     };
 
-    // Helper Modals for Edit Form (to ensure down-to-up animation)
-    const [showEditSportTypeModal, setShowEditSportTypeModal] = useState(false);
-    const [showEditEventTypeModal, setShowEditEventTypeModal] = useState(false);
-    const [showEditHomeAwayModal, setShowEditHomeAwayModal] = useState(false);
-    const [showEditDivisionsModal, setShowEditDivisionsModal] = useState(false);
+    /** Shared pickers for Add + Edit sports event forms */
+    type FormPickerKind = 'sport' | 'event' | 'home' | 'divisions';
+    const [activeFormPicker, setActiveFormPicker] = useState<null | { kind: FormPickerKind; target: 'add' | 'edit' }>(null);
 
     // Options from Tyler-Hill Web Code
     const sportTypeOptions = ['Baseball', 'Basketball', 'Dance', 'Football', 'Golf', 'Gymnastics', 'Hockey', 'Lacrosse', 'Soccer', 'Softball', 'Tennis', 'Volleyball', 'Waterfront', 'Other'];
     const eventTypeOptions = ['WC One Day Tournament', 'WC Knock Out Tournament', 'Exhibition/Friendly', 'Invitational', 'Other'];
-    const homeAwayOptions = ['Home', 'Away', 'Neutral'];
     const mealOptions = ['Breakfast', 'Snack', 'Lunch', 'Dinner', 'Other'];
 
     // Fetch sports events from Supabase
@@ -161,13 +219,75 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         queryKey: ['sports_calendar', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
+            const [eventsRes, divisionLinksRes, rosterRes] = await Promise.all([
+                supabase
+                    .from('sports_calendar')
+                    .select(`
+                        *,
+                        division:divisions(id, name, gender),
+                        sports_calendar_divisions(division_id, division:divisions(id, name, gender))
+                    `)
+                    .eq('company_id', companyId)
+                    .eq('season', season)
+                    .order('event_date', { ascending: true }),
+                supabase
+                    .from('sports_calendar_divisions')
+                    .select('sports_event_id, division_id, division:divisions(id, name, gender)')
+                    .eq('company_id', companyId),
+                supabase
+                    .from('sports_event_roster')
+                    .select('event_id')
+                    .eq('company_id', companyId),
+            ]);
+            if (eventsRes.error) throw eventsRes.error;
+            if (divisionLinksRes.error) throw divisionLinksRes.error;
+            if (rosterRes.error) throw rosterRes.error;
+
+            const divisionMap = new Map<string, Array<{ id: string; name: string; gender?: string }>>();
+            (divisionLinksRes.data || []).forEach((row: any) => {
+                if (!divisionMap.has(row.sports_event_id)) divisionMap.set(row.sports_event_id, []);
+                if (row.division) {
+                    divisionMap.get(row.sports_event_id)!.push({
+                        id: row.division.id,
+                        name: row.division.name,
+                        gender: row.division.gender,
+                    });
+                }
+            });
+
+            const rosterCounts = new Map<string, number>();
+            (rosterRes.data || []).forEach((row: any) => {
+                rosterCounts.set(row.event_id, (rosterCounts.get(row.event_id) || 0) + 1);
+            });
+
+            return (eventsRes.data || []).map((event: any) => {
+                const joinedDivisions = divisionMap.get(event.id) || [];
+                const fallbackDivision = event.division
+                    ? [{ id: event.division.id, name: event.division.name, gender: event.division.gender }]
+                    : [];
+                return {
+                    ...event,
+                    _divisions: joinedDivisions.length > 0 ? joinedDivisions : fallbackDivision,
+                    _rosterCount: rosterCounts.get(event.id) || 0,
+                };
+            });
+        },
+        enabled: !!companyId,
+    });
+
+    /** All company divisions for add/edit pickers (same source as web Sports Calendar). */
+    const { data: companyDivisions = [] } = useQuery({
+        queryKey: ['divisions_picker', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
             const { data, error } = await supabase
-                .from('sports_calendar')
-                .select('*')
+                .from('divisions')
+                .select('id, name, gender, sort_order')
                 .eq('company_id', companyId)
-                .order('event_date', { ascending: true });
+                .eq('is_active', true);
             if (error) throw error;
-            return data || [];
+            const rows = data || [];
+            return [...rows].sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
         },
         enabled: !!companyId,
     });
@@ -177,25 +297,53 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         title: e.title || e.event_name || '',
         date: new Date(e.event_date + 'T00:00:00'),
         location: e.location || '',
-        sport: e.sport_type || e.custom_sport_type || '',
-        division: e.division_name || '',
-        gender: '',
+        dbSportType: e.sport_type || '',
+        sport:
+            e.sport_type === 'Other' && e.custom_sport_type
+                ? e.custom_sport_type
+                : e.sport_type || e.custom_sport_type || '',
+        customSport: e.custom_sport_type || '',
+        division: (e._divisions && e._divisions[0]?.name) || '',
+        gender: (e._divisions && e._divisions[0]?.gender) || '',
         eventType: e.event_type || '',
         homeAway: e.home_away || '',
         departTime: e.depart_time || '',
-        startTimeField: e.start_time || '',
+        startTimeField: e.start_time_field || '',
+        team: e.team || '',
+        opponent: e.opponent || '',
         description: e.description || '',
         mealOptions: e.meal_options || [],
         mealNotes: e.meal_notes || '',
         divisionProvidesCoach: e.division_provides_coach || false,
         divisionProvidesRef: e.division_provides_ref || false,
+        divisions: e._divisions || [],
+        divisionIds: (e._divisions || []).map((d: any) => d.id),
+        rosterCount: e._rosterCount || 0,
     }));
 
-    const divisions = ['All Divisions', 'Freshmen A', 'Freshmen B', 'Cadet', 'Sophomore', 'Junior', 'Senior', 'Super', 'Teen', 'CIT'];
+    useEffect(() => {
+        if (events.length === 0) return;
+        const firstEventDate = events[0].date;
+        setCurrentDate(new Date(firstEventDate));
+        setSelectedDate(new Date(firstEventDate));
+    }, [sportsCalendarData.length]);
+
+    const divisionOptions = useMemo(
+        () => Array.from(new Set(events.flatMap((event) => (event.divisions || []).map((d: any) => d.id)))),
+        [events]
+    );
+    const divisionNameById = useMemo(() => {
+        const map = new Map<string, string>();
+        events.forEach((event) => {
+            (event.divisions || []).forEach((d: any) => map.set(d.id, d.name));
+        });
+        return map;
+    }, [events]);
+    const divisions = divisionOptions;
     const genders = ['All Genders', 'Boys', 'Girls'];
-    const sports = ['All Sports', 'Basketball', 'Soccer', 'Tennis', 'Football', 'Hockey', 'Lacrosse', 'Baseball', 'Volleyball'];
-    const eventTypes = ['All Event Types', 'Tournament', 'Match', 'Championship', 'Practice', 'Friendly'];
-    const locations = ['All Locations', 'Home', 'Away', 'Neutral'];
+    const sports = ['All Sports', ...Array.from(new Set(events.map((e) => e.sport).filter(Boolean))).sort()];
+    const eventTypes = ['All Event Types', ...Array.from(new Set(events.map((e) => e.eventType).filter(Boolean))).sort()];
+    const locations = ['All Locations', ...Array.from(new Set(events.map((e) => e.location).filter(Boolean))).sort()];
     const sortOptions = ['Sort by Date', 'Sort by Name', 'Sort by Sport', 'Sort by Location'];
 
     const formatDate = (date: Date): string => {
@@ -266,37 +414,126 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
     const filteredEvents = events.filter(event => {
         if (eventSearch && !event.title.toLowerCase().includes(eventSearch.toLowerCase())) return false;
-        if (selectedDivisions.length > 0 && !selectedDivisions.includes(event.division)) return false;
-        if (selectedGender !== 'All Genders' && event.gender !== selectedGender) return false;
+        if (selectedDivisions.length > 0) {
+            const eventDivisionIds = (event.divisions || []).map((d: any) => d.id);
+            if (!eventDivisionIds.some((id) => selectedDivisions.includes(id))) return false;
+        }
+        if (selectedGender !== 'All Genders') {
+            const genders = (event.divisions || []).map((d: any) => (d.gender || '').toLowerCase());
+            if (genders.length > 0 && !genders.includes(selectedGender.toLowerCase())) return false;
+        }
         if (selectedSport !== 'All Sports' && event.sport !== selectedSport) return false;
         if (selectedEventType !== 'All Event Types' && event.eventType !== selectedEventType) return false;
         if (selectedLocation !== 'All Locations' && event.location !== selectedLocation) return false;
         return true;
     });
 
+    const groupedEventsByMonth = useMemo(() => {
+        return filteredEvents.reduce((acc: Record<string, SportsEvent[]>, event) => {
+            const key = event.date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(event);
+            return acc;
+        }, {});
+    }, [filteredEvents]);
+
     const handleAddEvent = async () => {
-        if (!newEventTitle.trim() || !newEventSport) return;
-        const dateStr = `${newEventDate.getFullYear()}-${String(newEventDate.getMonth() + 1).padStart(2, '0')}-${String(newEventDate.getDate()).padStart(2, '0')}`;
-        const { error } = await supabase.from('sports_calendar').insert([{
-            title: newEventTitle.trim(),
+        if (!addFormData.sport_type && !addFormData.custom_sport_type) {
+            Alert.alert('Required', 'Please select a sport type (or enter a custom sport if you chose Other).');
+            return;
+        }
+        if (addFormData.sport_type === 'Other' && !addFormData.custom_sport_type?.trim()) {
+            Alert.alert('Required', 'Please enter a custom sport name.');
+            return;
+        }
+        if (
+            addFormData.event_type === 'Other' &&
+            addFormData.sport_type !== 'Other' &&
+            !addFormData.custom_sport_type?.trim()
+        ) {
+            Alert.alert('Required', 'Please enter a description for “Other” event type.');
+            return;
+        }
+        if (!addFormData.title?.trim()) {
+            Alert.alert('Required', 'Please enter a title.');
+            return;
+        }
+        if (!companyId) {
+            Alert.alert('Error', 'No company is selected. Sign in again or pick a camp in settings.');
+            return;
+        }
+        if (isSubmittingAdd) return;
+        setIsSubmittingAdd(true);
+
+        const dateStr = `${addFormData.event_date.getFullYear()}-${String(addFormData.event_date.getMonth() + 1).padStart(2, '0')}-${String(addFormData.event_date.getDate()).padStart(2, '0')}`;
+
+        const submitData = {
             event_date: dateStr,
-            location: newEventLocation || 'Home',
-            sport_type: newEventSport,
-            event_type: newEventType || 'match',
-            company_id: companyId,
+            title: addFormData.title.trim(),
+            description: addFormData.description || null,
+            sport_type: addFormData.sport_type === 'Other' ? 'Other' : addFormData.sport_type,
+            custom_sport_type:
+                addFormData.sport_type === 'Other' || addFormData.event_type === 'Other'
+                    ? addFormData.custom_sport_type || null
+                    : null,
+            event_type: addFormData.event_type || null,
+            depart_time: addFormData.depart_time || null,
+            start_time_field: addFormData.start_time_field || null,
+            location: addFormData.location || null,
+            team: addFormData.team || null,
+            opponent: addFormData.opponent || null,
+            home_away: normalizeHomeAway(addFormData.home_away) || null,
+            division_id: addFormData.division_ids.length === 1 ? addFormData.division_ids[0] : null,
+            division_provides_coach: addFormData.division_provides_coach,
+            division_provides_ref: addFormData.division_provides_ref,
+            meal_options: addFormData.meal_options ?? [],
+            meal_notes: addFormData.meal_notes || null,
             season,
-        }]);
-        if (!error) {
+            company_id: companyId,
+        };
+
+        try {
+            const { data: newEvent, error } = await supabase.from('sports_calendar').insert(submitData).select().single();
+
+            if (error || !newEvent) {
+                console.error('Error adding event:', error);
+                Alert.alert('Error adding event', error?.message || 'Unknown error');
+                return;
+            }
+
+            if (addFormData.division_ids.length > 0) {
+                const junctionData = addFormData.division_ids.map((divId) => ({
+                    sports_event_id: newEvent.id,
+                    division_id: divId,
+                    company_id: companyId,
+                }));
+                const { error: junctionErr } = await supabase.from('sports_calendar_divisions').insert(junctionData);
+                if (junctionErr) console.warn('Sports divisions insert:', junctionErr);
+            }
+
+            const tripData = {
+                name: addFormData.title.trim(),
+                date: dateStr,
+                type: 'sporting_event',
+                event_type:
+                    addFormData.sport_type === 'Other' ? addFormData.custom_sport_type : addFormData.sport_type,
+                destination: addFormData.location || null,
+                departure_time: addFormData.depart_time || null,
+                status: 'pending',
+                sports_event_id: newEvent.id,
+                season,
+                company_id: companyId,
+            };
+            const { error: tripErr } = await supabase.from('trips').insert(tripData);
+            if (tripErr) console.warn('Trip insert (optional):', tripErr);
+
             queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
             queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
             setShowAddEventModal(false);
-            setNewEventTitle('');
-            setNewEventDate(new Date(2026, 0, 25));
-            setNewEventLocation('');
-            setNewEventSport('');
-            setNewEventDivision('');
-            setNewEventGender('');
-            setNewEventType('');
+            setAddFormData(defaultAddForm());
+            Alert.alert('Success', 'Sports event added.');
+        } finally {
+            setIsSubmittingAdd(false);
         }
     };
 
@@ -326,11 +563,11 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
             id: event.id,
             title: event.title,
             event_date: event.date,
-            sport_type: event.sport,
+            sport_type: event.dbSportType || event.sport,
             custom_sport_type: event.customSport || '',
             event_type: event.eventType,
-            division_ids: event.divisionIds || [],
-            home_away: event.homeAway || '',
+            division_ids: event.divisionIds?.length ? event.divisionIds : (event.divisions || []).map((d: any) => d.id),
+            home_away: normalizeHomeAway(event.homeAway),
             depart_time: event.departTime || '',
             start_time_field: event.startTimeField || '',
             location: event.location,
@@ -349,27 +586,48 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         const dateStr = editFormData.event_date instanceof Date
             ? `${editFormData.event_date.getFullYear()}-${String(editFormData.event_date.getMonth() + 1).padStart(2, '0')}-${String(editFormData.event_date.getDate()).padStart(2, '0')}`
             : editFormData.event_date;
-        const { error } = await supabase.from('sports_calendar').update({
+        const submitData = {
             title: editFormData.title,
             event_date: dateStr,
-            sport_type: editFormData.sport_type,
-            custom_sport_type: editFormData.custom_sport_type,
-            event_type: editFormData.event_type,
-            home_away: editFormData.home_away,
-            depart_time: editFormData.depart_time,
-            start_time: editFormData.start_time_field,
-            location: editFormData.location,
-            description: editFormData.description,
-            meal_options: editFormData.meal_options,
-            meal_notes: editFormData.meal_notes,
+            sport_type: editFormData.sport_type === 'Other' ? 'Other' : editFormData.sport_type,
+            custom_sport_type:
+                editFormData.sport_type === 'Other' || editFormData.event_type === 'Other'
+                    ? editFormData.custom_sport_type || null
+                    : null,
+            event_type: editFormData.event_type || null,
+            home_away: normalizeHomeAway(editFormData.home_away) || null,
+            depart_time: editFormData.depart_time || null,
+            start_time_field: editFormData.start_time_field || null,
+            location: editFormData.location || null,
+            team: editFormData.team || null,
+            opponent: editFormData.opponent || null,
+            description: editFormData.description || null,
+            meal_options: editFormData.meal_options ?? [],
+            meal_notes: editFormData.meal_notes || null,
             division_provides_coach: editFormData.division_provides_coach,
             division_provides_ref: editFormData.division_provides_ref,
-        }).eq('id', editFormData.id);
-        if (!error) {
-            queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
-            queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
-            setShowEditEventModal(false);
+            division_id: editFormData.division_ids.length === 1 ? editFormData.division_ids[0] : null,
+        };
+        const { error } = await supabase.from('sports_calendar').update(submitData).eq('id', editFormData.id);
+        if (error) {
+            Alert.alert('Error updating event', error.message);
+            return;
         }
+
+        await supabase.from('sports_calendar_divisions').delete().eq('sports_event_id', editFormData.id);
+        if (editFormData.division_ids.length > 0) {
+            const junctionData = editFormData.division_ids.map((divId) => ({
+                sports_event_id: editFormData.id,
+                division_id: divId,
+                company_id: companyId,
+            }));
+            const { error: jErr } = await supabase.from('sports_calendar_divisions').insert(junctionData);
+            if (jErr) console.warn('Junction update:', jErr);
+        }
+
+        queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
+        queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
+        setShowEditEventModal(false);
     };
 
     const handleDeleteEvent = async (id: string) => {
@@ -389,7 +647,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     };
 
     const goToToday = () => {
-        const today = new Date(2026, 0, 25);
+        const today = new Date();
         setCurrentDate(today);
         setSelectedDate(today);
     };
@@ -934,7 +1192,10 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.addBtn}
-                            onPress={() => setShowAddEventModal(true)}
+                            onPress={() => {
+                                setAddFormData(defaultAddForm());
+                                setShowAddEventModal(true);
+                            }}
                         >
                             <Ionicons name="add" size={18} color="white" />
                             <Text style={styles.addBtnText}>Add Event</Text>
@@ -1057,7 +1318,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             {getDaysInMonth(currentDate).map((day, index) => {
                                 const dayEvents = getEventsForDate(day.fullDate);
                                 const isSelected = isSameDate(day.fullDate, selectedDate);
-                                const isToday = isSameDate(day.fullDate, new Date(2026, 0, 25));
+                                const isToday = isSameDate(day.fullDate, new Date());
 
                                 return (
                                     <TouchableOpacity
@@ -1109,6 +1370,79 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             ))}
                         </View>
                     )}
+
+                    {/* Month List (web-like cards) */}
+                    {activeView === 'Month' && filteredEvents.length > 0 && (
+                        <View style={{ marginTop: theme.spacing.lg }}>
+                            {Object.entries(groupedEventsByMonth).map(([month, monthEvents]) => (
+                                <View key={month} style={{ marginBottom: theme.spacing.lg }}>
+                                    <Text style={{ ...theme.typography.h3, marginBottom: theme.spacing.sm }}>{month}</Text>
+                                    <View style={{ gap: theme.spacing.md }}>
+                                        {monthEvents.map((event) => (
+                                            <StyledCard key={`month-${event.id}`} style={styles.eventCard}>
+                                                <View style={styles.eventCardHeader}>
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={styles.eventTitle}>{event.title}</Text>
+                                                        <Text style={styles.eventDate}>
+                                                            {event.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                                        </Text>
+                                                    </View>
+                                                    <View style={styles.eventActions}>
+                                                        <TouchableOpacity style={styles.eventActionBtn} onPress={() => {
+                                                            setSelectedEventOptions(event);
+                                                            setShowEventOptionsModal(true);
+                                                        }}>
+                                                            <Ionicons name="people-outline" size={16} color={theme.colors.text} />
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity style={styles.eventActionBtn} onPress={() => {
+                                                            setSelectedRosterEvent(event);
+                                                            setShowManageRosterModal(true);
+                                                        }}>
+                                                            <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity style={styles.eventActionBtn} onPress={() => handleEdit(event)}>
+                                                            <Ionicons name="create-outline" size={16} color={theme.colors.text} />
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity style={styles.eventActionBtn} onPress={() => handleDeleteClick(event.id)}>
+                                                            <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                </View>
+
+                                                <View style={styles.eventTags}>
+                                                    <View style={[styles.tag, { backgroundColor: '#2563eb' }]}>
+                                                        <Text style={styles.tagText}>{event.sport}</Text>
+                                                    </View>
+                                                    {!!event.eventType && (
+                                                        <View style={[styles.tag, { backgroundColor: '#f3f4f6' }]}>
+                                                            <Text style={[styles.tagText, { color: theme.colors.text }]}>{event.eventType}</Text>
+                                                        </View>
+                                                    )}
+                                                    {(event.divisions || []).map((division: any) => (
+                                                        <View key={`${event.id}-${division.id}`} style={[styles.tag, { backgroundColor: '#14b8a6' }]}>
+                                                            <Text style={styles.tagText}>{division.name}</Text>
+                                                        </View>
+                                                    ))}
+                                                    <View style={[styles.tag, { backgroundColor: (event.rosterCount || 0) > 0 ? '#16a34a' : '#ef4444' }]}>
+                                                        <Text style={styles.tagText}>{event.rosterCount || 0} roster</Text>
+                                                    </View>
+                                                </View>
+                                                {!!event.location && (
+                                                    <View style={styles.eventFooter}>
+                                                        <Ionicons name="location" size={14} color={theme.colors.textSecondary} />
+                                                        <Text style={styles.eventLocation}>{event.location}</Text>
+                                                    </View>
+                                                )}
+                                                {!!event.description && (
+                                                    <Text style={styles.eventDescription} numberOfLines={2}>{event.description}</Text>
+                                                )}
+                                            </StyledCard>
+                                        ))}
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    )}
                 </StyledCard>
             </ScrollView>
 
@@ -1117,7 +1451,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 <Ionicons name="search" size={24} color="white" />
             </TouchableOpacity>
 
-            {/* Add Event Modal */}
+            {/* Add Sports Event Modal (parity with web) */}
             <Modal
                 visible={showAddEventModal}
                 transparent={true}
@@ -1125,74 +1459,235 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 onRequestClose={() => setShowAddEventModal(false)}
             >
                 <Pressable style={styles.centeredModalOverlay} onPress={() => setShowAddEventModal(false)}>
-                    <Pressable style={styles.addEventModal} onPress={(e) => e.stopPropagation()}>
-                        <ScrollView style={styles.addEventScroll}>
+                    <Pressable style={[styles.addEventModal, { maxHeight: '92%' }]} onPress={(e) => e.stopPropagation()}>
+                        <ScrollView style={styles.addEventScroll} keyboardShouldPersistTaps="handled">
                             <View style={styles.modalHeader}>
                                 <View>
-                                    <Text style={styles.modalTitle}>Add Event</Text>
-                                    <Text style={styles.modalSubtitle}>Add a new sports event</Text>
+                                    <Text style={styles.modalTitle}>Add Sports Event</Text>
+                                    <Text style={styles.modalSubtitle}>Same fields as web calendar</Text>
                                 </View>
                                 <TouchableOpacity onPress={() => setShowAddEventModal(false)}>
                                     <Ionicons name="close" size={24} color={theme.colors.text} />
                                 </TouchableOpacity>
                             </View>
 
-                            <View style={styles.formSection}>
-                                <Text style={styles.formLabel}>Event Title</Text>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Event Date</Text>
+                                <TouchableOpacity
+                                    style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                                    onPress={() => {
+                                        setDatePickerContext('add');
+                                        setShowDatePicker(true);
+                                    }}
+                                >
+                                    <Text>{formatDate(addFormData.event_date)}</Text>
+                                    <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Title</Text>
                                 <TextInput
-                                    style={styles.inputField}
-                                    placeholder="Enter event title"
-                                    value={newEventTitle}
-                                    onChangeText={setNewEventTitle}
+                                    style={styles.input}
+                                    value={addFormData.title}
+                                    onChangeText={(text) => setAddFormData({ ...addFormData, title: text })}
+                                    placeholder="Event title"
                                 />
                             </View>
 
-                            <View style={styles.formSection}>
-                                <Text style={styles.formLabel}>Date</Text>
-                                <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    onPress={() => setShowDatePicker(true)}
-                                >
-                                    <Text style={styles.inputField}>{formatDate(newEventDate)}</Text>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Sport Type *</Text>
+                                <TouchableOpacity style={styles.selectInput} onPress={() => setActiveFormPicker({ kind: 'sport', target: 'add' })}>
+                                    <Text>{addFormData.sport_type || 'Select sport type'}</Text>
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+                            {addFormData.sport_type === 'Other' && (
+                                <View style={styles.formGroup}>
+                                    <Text style={styles.label}>Custom Sport Type</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={addFormData.custom_sport_type}
+                                        onChangeText={(text) => setAddFormData({ ...addFormData, custom_sport_type: text })}
+                                        placeholder="Enter sport name"
+                                    />
+                                </View>
+                            )}
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Event Type</Text>
+                                <TouchableOpacity style={styles.selectInput} onPress={() => setActiveFormPicker({ kind: 'event', target: 'add' })}>
+                                    <Text>{addFormData.event_type || 'Select event type'}</Text>
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+                            {addFormData.event_type === 'Other' && addFormData.sport_type !== 'Other' && (
+                                <View style={styles.formGroup}>
+                                    <Text style={styles.label}>Custom (Other event type)</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={addFormData.custom_sport_type}
+                                        onChangeText={(text) => setAddFormData({ ...addFormData, custom_sport_type: text })}
+                                        placeholder="Describe event type"
+                                    />
+                                </View>
+                            )}
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Divisions (optional)</Text>
+                                <TouchableOpacity style={styles.selectInput} onPress={() => setActiveFormPicker({ kind: 'divisions', target: 'add' })}>
+                                    <Text numberOfLines={1}>
+                                        {addFormData.division_ids.length > 0
+                                            ? `${addFormData.division_ids.length} selected`
+                                            : 'Select divisions'}
+                                    </Text>
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
                             </View>
 
-                            <View style={styles.formSection}>
-                                <Text style={styles.formLabel}>Sport</Text>
-                                <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    onPress={() => setShowSportFilter(true)}
-                                >
-                                    <Text style={styles.inputField}>{newEventSport || 'Select sport'}</Text>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Home or Away</Text>
+                                <TouchableOpacity style={styles.selectInput} onPress={() => setActiveFormPicker({ kind: 'home', target: 'add' })}>
+                                    <Text>{addFormData.home_away ? homeAwayLabel(addFormData.home_away) : 'Select home/away'}</Text>
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
                             </View>
 
-                            <View style={styles.formSection}>
-                                <Text style={styles.formLabel}>Location</Text>
+                            {addFormData.home_away === 'away' && (
+                                <View style={styles.formGroup}>
+                                    <Text style={styles.label}>Depart from Camp</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={addFormData.depart_time}
+                                        onChangeText={(text) => setAddFormData({ ...addFormData, depart_time: text })}
+                                        placeholder="e.g. 10:00 AM"
+                                    />
+                                </View>
+                            )}
+                            {(addFormData.home_away === 'home' || addFormData.home_away === 'neutral') && (
+                                <View style={styles.formGroup}>
+                                    <Text style={styles.label}>
+                                        {addFormData.home_away === 'neutral' ? 'Start Time' : 'Start Time (on field)'}
+                                    </Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={addFormData.start_time_field}
+                                        onChangeText={(text) => setAddFormData({ ...addFormData, start_time_field: text })}
+                                        placeholder="e.g. 2:00 PM"
+                                    />
+                                </View>
+                            )}
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Location (optional)</Text>
                                 <TextInput
-                                    style={styles.inputField}
-                                    placeholder="Enter location"
-                                    value={newEventLocation}
-                                    onChangeText={setNewEventLocation}
+                                    style={styles.input}
+                                    value={addFormData.location}
+                                    onChangeText={(text) => setAddFormData({ ...addFormData, location: text })}
+                                    placeholder="Venue or address"
                                 />
                             </View>
 
-                            <View style={styles.formSection}>
-                                <Text style={styles.formLabel}>Division</Text>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Team (optional)</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={addFormData.team}
+                                    onChangeText={(text) => setAddFormData({ ...addFormData, team: text })}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Opponent (optional)</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={addFormData.opponent}
+                                    onChangeText={(text) => setAddFormData({ ...addFormData, opponent: text })}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Description (optional)</Text>
+                                <TextInput
+                                    style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+                                    value={addFormData.description}
+                                    onChangeText={(text) => setAddFormData({ ...addFormData, description: text })}
+                                    multiline
+                                    numberOfLines={3}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Meal Options</Text>
+                                <View style={{ gap: 8 }}>
+                                    {mealOptions.map((meal) => (
+                                        <TouchableOpacity
+                                            key={meal}
+                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                                            onPress={() => {
+                                                const current = addFormData.meal_options || [];
+                                                const updated = current.includes(meal)
+                                                    ? current.filter((m) => m !== meal)
+                                                    : [...current, meal];
+                                                setAddFormData({ ...addFormData, meal_options: updated });
+                                            }}
+                                        >
+                                            <Ionicons
+                                                name={addFormData.meal_options?.includes(meal) ? 'checkmark-circle' : 'ellipse-outline'}
+                                                size={24}
+                                                color={theme.colors.secondary}
+                                            />
+                                            <Text>{meal}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Staff Assignment</Text>
                                 <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    onPress={() => setShowDivisionFilter(true)}
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}
+                                    onPress={() =>
+                                        setAddFormData({ ...addFormData, division_provides_coach: !addFormData.division_provides_coach })
+                                    }
                                 >
-                                    <Text style={styles.inputField}>{newEventDivision || 'Select division'}</Text>
-                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                    <Ionicons
+                                        name={addFormData.division_provides_coach ? 'checkmark-circle' : 'ellipse-outline'}
+                                        size={24}
+                                        color={theme.colors.secondary}
+                                    />
+                                    <Text>Division will provide coach</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                                    onPress={() =>
+                                        setAddFormData({ ...addFormData, division_provides_ref: !addFormData.division_provides_ref })
+                                    }
+                                >
+                                    <Ionicons
+                                        name={addFormData.division_provides_ref ? 'checkmark-circle' : 'ellipse-outline'}
+                                        size={24}
+                                        color={theme.colors.secondary}
+                                    />
+                                    <Text>Division will provide ref</Text>
                                 </TouchableOpacity>
                             </View>
 
-                            <TouchableOpacity style={styles.addEventBtn} onPress={handleAddEvent}>
-                                <Text style={styles.addEventBtnText}>Add Event</Text>
-                            </TouchableOpacity>
+                            <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                                <TouchableOpacity
+                                    style={[styles.cancelButton, { flex: 1, alignItems: 'center' }]}
+                                    onPress={() => setShowAddEventModal(false)}
+                                >
+                                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.submitButton, { flex: 1, opacity: isSubmittingAdd ? 0.65 : 1 }]}
+                                    disabled={isSubmittingAdd}
+                                    onPress={handleAddEvent}
+                                >
+                                    <Text style={styles.submitButtonText}>{isSubmittingAdd ? 'Saving…' : 'Add Event'}</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <View style={{ height: 40 }} />
                         </ScrollView>
                     </Pressable>
                 </Pressable>
@@ -1298,7 +1793,9 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
             >
                 <SafeAreaView style={styles.listViewModal}>
                     <View style={styles.listModalHeader}>
-                        <Text style={styles.listModalTitle}>July 2026</Text>
+                        <Text style={styles.listModalTitle}>
+                            {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                        </Text>
                         <TouchableOpacity onPress={() => setShowListViewModal(false)}>
                             <Ionicons name="close" size={24} color={theme.colors.text} />
                         </TouchableOpacity>
@@ -1351,271 +1848,80 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     </View>
 
                     <ScrollView style={styles.listViewContent}>
-                        {/* Event Card - Kamen Cup */}
-                        <View style={styles.eventCard}>
-                            <View style={styles.eventCardHeader}>
-                                <Text style={styles.eventTitle}>Kamen Cup</Text>
-                                <View style={styles.eventActions}>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => {
-                                            setSelectedEventOptions({
-                                                id: 'kamen-cup',
-                                                title: 'Kamen Cup',
-                                                date: new Date(2026, 6, 5),
-                                                location: 'Bearmont',
-                                                sport: 'Soccer',
-                                                division: 'Teen Boys',
-                                                gender: 'Boys',
-                                                eventType: 'Invitational',
-                                                divisionIds: ['Teen Boys', 'CIT Boys', "D'visier"],
-                                                homeAway: 'Away',
-                                                opponent: 'Bearmont',
-                                                description: 'Soccer tournament at Bearmont'
-                                            });
-                                            setShowEventOptionsModal(true);
-                                        }}
-                                    >
-                                        <Ionicons name="people-outline" size={16} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => {
-                                            setSelectedRosterEvent({ title: 'Kamen Cup' });
-                                            setShowManageRosterModal(true);
-                                        }}
-                                    >
-                                        <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => handleEdit({
-                                            id: 'kamen-cup',
-                                            title: 'Kamen Cup',
-                                            date: new Date(2026, 6, 5),
-                                            location: 'Bearmont',
-                                            sport: 'Soccer',
-                                            division: 'Teen Boys',
-                                            gender: 'Boys',
-                                            eventType: 'Invitational',
-                                            divisionIds: ['Teen Boys', 'CIT Boys', "D'visier"],
-                                            homeAway: 'Away',
-                                            opponent: 'Bearmont',
-                                            description: 'Soccer tournament at Bearmont'
-                                        })}
-                                    >
-                                        <Ionicons name="create-outline" size={16} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => handleDeleteClick('kamen-cup')}
-                                    >
-                                        <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
-                                    </TouchableOpacity>
-                                </View>
+                        {filteredEvents.length === 0 ? (
+                            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                                <Text style={{ color: theme.colors.textSecondary }}>No sports events match your filters.</Text>
                             </View>
-                            <Text style={styles.eventDate}>Sun, Jul 5</Text>
+                        ) : (
+                            filteredEvents.map((event) => (
+                                <View key={`list-${event.id}`} style={styles.eventCard}>
+                                    <View style={styles.eventCardHeader}>
+                                        <Text style={styles.eventTitle}>{event.title}</Text>
+                                        <View style={styles.eventActions}>
+                                            <TouchableOpacity
+                                                style={styles.eventActionBtn}
+                                                onPress={() => {
+                                                    setSelectedEventOptions(event);
+                                                    setShowEventOptionsModal(true);
+                                                }}
+                                            >
+                                                <Ionicons name="people-outline" size={16} color={theme.colors.text} />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.eventActionBtn}
+                                                onPress={() => {
+                                                    setSelectedRosterEvent(event);
+                                                    setShowManageRosterModal(true);
+                                                }}
+                                            >
+                                                <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.eventActionBtn}
+                                                onPress={() => handleEdit(event)}
+                                            >
+                                                <Ionicons name="create-outline" size={16} color={theme.colors.text} />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.eventActionBtn}
+                                                onPress={() => handleDeleteClick(event.id)}
+                                            >
+                                                <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                    <Text style={styles.eventDate}>
+                                        {event.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                    </Text>
 
-                            <View style={styles.eventTags}>
-                                <View style={[styles.tag, { backgroundColor: '#3b82f6' }]}>
-                                    <Text style={styles.tagText}>Soccer</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#f59e0b' }]}>
-                                    <Text style={styles.tagText}>Invitational</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#14b8a6' }]}>
-                                    <Text style={styles.tagText}>Teen Boys</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#ef4444' }]}>
-                                    <Text style={styles.tagText}>CIT Boys</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#8b5cf6' }]}>
-                                    <Text style={styles.tagText}>D'visier</Text>
-                                </View>
-                            </View>
+                                    <View style={styles.eventTags}>
+                                        <View style={[styles.tag, { backgroundColor: '#3b82f6' }]}>
+                                            <Text style={styles.tagText}>{event.sport}</Text>
+                                        </View>
+                                        {!!event.eventType && (
+                                            <View style={[styles.tag, { backgroundColor: '#f59e0b' }]}>
+                                                <Text style={styles.tagText}>{event.eventType}</Text>
+                                            </View>
+                                        )}
+                                        {(event.divisions || []).map((division: any) => (
+                                            <View key={`${event.id}-${division.id}`} style={[styles.tag, { backgroundColor: '#14b8a6' }]}>
+                                                <Text style={styles.tagText}>{division.name}</Text>
+                                            </View>
+                                        ))}
+                                        <View style={[styles.tag, { backgroundColor: (event.rosterCount || 0) > 0 ? '#16a34a' : '#ef4444' }]}>
+                                            <Text style={styles.tagText}>{event.rosterCount || 0} roster</Text>
+                                        </View>
+                                    </View>
 
-                            <View style={styles.eventFooter}>
-                                <Ionicons name="location" size={14} color={theme.colors.textSecondary} />
-                                <Text style={styles.eventLocation}>Bearmont</Text>
-                            </View>
-                        </View>
-
-                        {/* Event Card - Soccer Cup */}
-                        <View style={styles.eventCard}>
-                            <View style={styles.eventCardHeader}>
-                                <Text style={styles.eventTitle}>Soccer Cup</Text>
-                                <View style={styles.eventActions}>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => {
-                                            setSelectedEventOptions({
-                                                id: 'soccer-cup',
-                                                title: 'Soccer Cup',
-                                                date: new Date(2026, 6, 6),
-                                                location: 'Blue Ridge',
-                                                sport: 'Soccer',
-                                                division: 'Teen Boys',
-                                                gender: 'Boys',
-                                                eventType: 'Invitational',
-                                                divisionIds: ['Soccer', 'Invitational', "D'visier"],
-                                                homeAway: 'Away',
-                                                description: 'Soccer Cup at Blue Ridge'
-                                            });
-                                            setShowEventOptionsModal(true);
-                                        }}
-                                    >
-                                        <Ionicons name="people-outline" size={16} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => {
-                                            setSelectedRosterEvent({ title: 'Soccer Cup' });
-                                            setShowManageRosterModal(true);
-                                        }}
-                                    >
-                                        <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => handleEdit({
-                                            id: 'soccer-cup',
-                                            title: 'Soccer Cup',
-                                            date: new Date(2026, 6, 6),
-                                            location: 'Blue Ridge',
-                                            sport: 'Soccer',
-                                            division: 'Teen Boys',
-                                            gender: 'Boys',
-                                            eventType: 'Invitational',
-                                            divisionIds: ['Soccer', 'Invitational', "D'visier"],
-                                            homeAway: 'Away',
-                                            description: 'Soccer Cup at Blue Ridge'
-                                        })}
-                                    >
-                                        <Ionicons name="create-outline" size={16} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => handleDeleteClick('soccer-cup')}
-                                    >
-                                        <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
-                                    </TouchableOpacity>
+                                    {!!event.location && (
+                                        <View style={styles.eventFooter}>
+                                            <Ionicons name="location" size={14} color={theme.colors.textSecondary} />
+                                            <Text style={styles.eventLocation}>{event.location}</Text>
+                                        </View>
+                                    )}
                                 </View>
-                            </View>
-                            <Text style={styles.eventDate}>Mon, Jul 6</Text>
-
-                            <View style={styles.eventTags}>
-                                <View style={[styles.tag, { backgroundColor: '#3b82f6' }]}>
-                                    <Text style={styles.tagText}>Soccer</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#f59e0b' }]}>
-                                    <Text style={styles.tagText}>Invitational</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#ef4444' }]}>
-                                    <Text style={styles.tagText}>D'visier</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.eventFooter}>
-                                <Ionicons name="location" size={14} color={theme.colors.textSecondary} />
-                                <Text style={styles.eventLocation}>Blue Ridge</Text>
-                            </View>
-                        </View>
-
-                        {/* Event Card - Equinunk Cup */}
-                        <View style={styles.eventCard}>
-                            <View style={styles.eventCardHeader}>
-                                <Text style={styles.eventTitle}>Equinunk Cup</Text>
-                                <View style={styles.eventActions}>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => {
-                                            setSelectedEventOptions({
-                                                id: 'equinunk-cup',
-                                                title: 'Equinunk Cup',
-                                                date: new Date(2026, 6, 8),
-                                                location: 'Equinunk',
-                                                sport: 'Hockey',
-                                                division: 'Senior Boys',
-                                                gender: 'Boys',
-                                                eventType: 'Invitational',
-                                                divisionIds: ['Hockey', 'Invitational', 'Senior Boys', 'Soccer Boys', 'Super Boys', 'Teen Boys', 'CIT Boys', "D'visier"],
-                                                homeAway: 'Away',
-                                                description: 'Equinunk Cup'
-                                            });
-                                            setShowEventOptionsModal(true);
-                                        }}
-                                    >
-                                        <Ionicons name="people-outline" size={16} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => {
-                                            setSelectedRosterEvent({ title: 'Equinunk Cup' });
-                                            setShowManageRosterModal(true);
-                                        }}
-                                    >
-                                        <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => handleEdit({
-                                            id: 'equinunk-cup',
-                                            title: 'Equinunk Cup',
-                                            date: new Date(2026, 6, 8),
-                                            location: 'Equinunk',
-                                            sport: 'Hockey',
-                                            division: 'Senior Boys',
-                                            gender: 'Boys',
-                                            eventType: 'Invitational',
-                                            divisionIds: ['Hockey', 'Invitational', 'Senior Boys', 'Soccer Boys', 'Super Boys', 'Teen Boys', 'CIT Boys', "D'visier"],
-                                            homeAway: 'Away',
-                                            description: 'Equinunk Cup'
-                                        })}
-                                    >
-                                        <Ionicons name="create-outline" size={16} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.eventActionBtn}
-                                        onPress={() => handleDeleteClick('equinunk-cup')}
-                                    >
-                                        <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                            <Text style={styles.eventDate}>Wed, Jul 8</Text>
-
-                            <View style={styles.eventTags}>
-                                <View style={[styles.tag, { backgroundColor: '#3b82f6' }]}>
-                                    <Text style={styles.tagText}>Hockey</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#f59e0b' }]}>
-                                    <Text style={styles.tagText}>Invitational</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#14b8a6' }]}>
-                                    <Text style={styles.tagText}>Senior Boys</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#8b5cf6' }]}>
-                                    <Text style={styles.tagText}>Soccer Boys</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#ef4444' }]}>
-                                    <Text style={styles.tagText}>Super Boys</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#14b8a6' }]}>
-                                    <Text style={styles.tagText}>Teen Boys</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#3b82f6' }]}>
-                                    <Text style={styles.tagText}>CIT Boys</Text>
-                                </View>
-                                <View style={[styles.tag, { backgroundColor: '#f59e0b' }]}>
-                                    <Text style={styles.tagText}>D'visier</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.eventFooter}>
-                                <Ionicons name="location" size={14} color={theme.colors.textSecondary} />
-                                <Text style={styles.eventLocation}>Equinunk</Text>
-                            </View>
-                        </View>
+                            ))
+                        )}
                     </ScrollView>
                 </SafeAreaView>
             </Modal>
@@ -1677,46 +1983,23 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                 <Text style={styles.filterOptionText}>All Divisions</Text>
                                 {selectedDivisions.length === 0 && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
                             </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.filterOption}
-                                onPress={() => {
-                                    setSelectedDivisions(['freshmen-a']);
-                                    setShowDivisionFilter(false);
-                                }}
-                            >
-                                <Text style={styles.filterOptionText}>Freshmen A</Text>
-                                {selectedDivisions.includes('freshmen-a') && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.filterOption}
-                                onPress={() => {
-                                    setSelectedDivisions(['freshmen-b']);
-                                    setShowDivisionFilter(false);
-                                }}
-                            >
-                                <Text style={styles.filterOptionText}>Freshmen B</Text>
-                                {selectedDivisions.includes('freshmen-b') && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.filterOption}
-                                onPress={() => {
-                                    setSelectedDivisions(['cadet']);
-                                    setShowDivisionFilter(false);
-                                }}
-                            >
-                                <Text style={styles.filterOptionText}>Cadet</Text>
-                                {selectedDivisions.includes('cadet') && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.filterOption}
-                                onPress={() => {
-                                    setSelectedDivisions(['sophomore']);
-                                    setShowDivisionFilter(false);
-                                }}
-                            >
-                                <Text style={styles.filterOptionText}>Sophomore</Text>
-                                {selectedDivisions.includes('sophomore') && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                            </TouchableOpacity>
+                            {divisions.map((divisionId) => (
+                                <TouchableOpacity
+                                    key={divisionId}
+                                    style={styles.filterOption}
+                                    onPress={() => {
+                                        setSelectedDivisions([divisionId]);
+                                        setShowDivisionFilter(false);
+                                    }}
+                                >
+                                    <Text style={styles.filterOptionText}>
+                                        {divisionNameById.get(divisionId) || 'Unknown Division'}
+                                    </Text>
+                                    {selectedDivisions.includes(divisionId) && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
                         </ScrollView>
                     </Pressable>
                 </Pressable>
@@ -1921,10 +2204,14 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                 <Text style={styles.label}>Event Date</Text>
                                 {/* Simple text input for date for now, ideally DatePicker */}
                                 <TouchableOpacity
-                                    style={styles.input}
-                                    onPress={() => setShowDatePicker(true)}
+                                    style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                                    onPress={() => {
+                                        setDatePickerContext('edit');
+                                        setShowDatePicker(true);
+                                    }}
                                 >
-                                    <Text>{editFormData.event_date.toDateString()}</Text>
+                                    <Text>{formatDate(editFormData.event_date)}</Text>
+                                    <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
                             </View>
 
@@ -1941,7 +2228,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             {/* Sport Type */}
                             <View style={styles.formGroup}>
                                 <Text style={styles.label}>Sport Type</Text>
-                                <TouchableOpacity style={styles.selectInput} onPress={() => setShowEditSportTypeModal(true)}>
+                                <TouchableOpacity style={styles.selectInput} onPress={() => setActiveFormPicker({ kind: 'sport', target: 'edit' })}>
                                     <Text>{editFormData.sport_type || 'Select Sport'}</Text>
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
@@ -1961,7 +2248,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             {/* Event Type */}
                             <View style={styles.formGroup}>
                                 <Text style={styles.label}>Event Type</Text>
-                                <TouchableOpacity style={styles.selectInput} onPress={() => setShowEditEventTypeModal(true)}>
+                                <TouchableOpacity style={styles.selectInput} onPress={() => setActiveFormPicker({ kind: 'event', target: 'edit' })}>
                                     <Text>{editFormData.event_type || 'Select Event Type'}</Text>
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
@@ -1970,7 +2257,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             {/* Divisions */}
                             <View style={styles.formGroup}>
                                 <Text style={styles.label}>Divisions (optional)</Text>
-                                <TouchableOpacity style={styles.selectInput} onPress={() => setShowEditDivisionsModal(true)}>
+                                <TouchableOpacity style={styles.selectInput} onPress={() => setActiveFormPicker({ kind: 'divisions', target: 'edit' })}>
                                     <Text numberOfLines={1}>
                                         {editFormData.division_ids && editFormData.division_ids.length > 0
                                             ? `${editFormData.division_ids.length} selected`
@@ -1983,13 +2270,13 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             {/* Home or Away */}
                             <View style={styles.formGroup}>
                                 <Text style={styles.label}>Home or Away</Text>
-                                <TouchableOpacity style={styles.selectInput} onPress={() => setShowEditHomeAwayModal(true)}>
-                                    <Text>{editFormData.home_away || 'Select Home/Away'}</Text>
+                                <TouchableOpacity style={styles.selectInput} onPress={() => setActiveFormPicker({ kind: 'home', target: 'edit' })}>
+                                    <Text>{editFormData.home_away ? homeAwayLabel(editFormData.home_away) : 'Select Home/Away'}</Text>
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
                             </View>
 
-                            {editFormData.home_away === 'Away' && (
+                            {editFormData.home_away === 'away' && (
                                 <View style={styles.formGroup}>
                                     <Text style={styles.label}>Depart from Camp</Text>
                                     <TextInput
@@ -2000,9 +2287,11 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     />
                                 </View>
                             )}
-                            {editFormData.home_away === 'Home' && (
+                            {(editFormData.home_away === 'home' || editFormData.home_away === 'neutral') && (
                                 <View style={styles.formGroup}>
-                                    <Text style={styles.label}>Start Time (on field)</Text>
+                                    <Text style={styles.label}>
+                                        {editFormData.home_away === 'neutral' ? 'Start Time' : 'Start Time (on field)'}
+                                    </Text>
                                     <TextInput
                                         style={styles.input}
                                         value={editFormData.start_time_field}
@@ -2117,121 +2406,147 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
-            {/* Helper Select Modals */}
-            {/* Sport Type Modal */}
+            {/* Helper Select Modals (shared: Add + Edit) */}
             <Modal
-                visible={showEditSportTypeModal}
+                visible={activeFormPicker?.kind === 'sport'}
                 transparent={true}
                 animationType="slide"
-                onRequestClose={() => setShowEditSportTypeModal(false)}
+                onRequestClose={() => setActiveFormPicker(null)}
             >
-                <Pressable style={styles.filterModalOverlay} onPress={() => setShowEditSportTypeModal(false)}>
+                <Pressable style={styles.filterModalOverlay} onPress={() => setActiveFormPicker(null)}>
                     <Pressable style={styles.filterModalContent} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.filterModalHeader}>
                             <Text style={styles.filterModalTitle}>Select Sport Type</Text>
-                            <TouchableOpacity onPress={() => setShowEditSportTypeModal(false)}>
+                            <TouchableOpacity onPress={() => setActiveFormPicker(null)}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.filterModalScroll}>
-                            {sportTypeOptions.map((sport) => (
-                                <TouchableOpacity
-                                    key={sport}
-                                    style={styles.filterOption}
-                                    onPress={() => {
-                                        setEditFormData({ ...editFormData, sport_type: sport });
-                                        setShowEditSportTypeModal(false);
-                                    }}
-                                >
-                                    <Text style={styles.filterOptionText}>{sport}</Text>
-                                    {editFormData.sport_type === sport && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                                </TouchableOpacity>
-                            ))}
+                            {sportTypeOptions.map((sport) => {
+                                const selected =
+                                    activeFormPicker?.target === 'add'
+                                        ? addFormData.sport_type === sport
+                                        : editFormData.sport_type === sport;
+                                return (
+                                    <TouchableOpacity
+                                        key={sport}
+                                        style={styles.filterOption}
+                                        onPress={() => {
+                                            if (activeFormPicker?.target === 'add') {
+                                                setAddFormData((p) => ({ ...p, sport_type: sport }));
+                                            } else {
+                                                setEditFormData((p) => ({ ...p, sport_type: sport }));
+                                            }
+                                            setActiveFormPicker(null);
+                                        }}
+                                    >
+                                        <Text style={styles.filterOptionText}>{sport}</Text>
+                                        {selected && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </ScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
 
-            {/* Event Type Modal */}
             <Modal
-                visible={showEditEventTypeModal}
+                visible={activeFormPicker?.kind === 'event'}
                 transparent={true}
                 animationType="slide"
-                onRequestClose={() => setShowEditEventTypeModal(false)}
+                onRequestClose={() => setActiveFormPicker(null)}
             >
-                <Pressable style={styles.filterModalOverlay} onPress={() => setShowEditEventTypeModal(false)}>
+                <Pressable style={styles.filterModalOverlay} onPress={() => setActiveFormPicker(null)}>
                     <Pressable style={styles.filterModalContent} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.filterModalHeader}>
                             <Text style={styles.filterModalTitle}>Select Event Type</Text>
-                            <TouchableOpacity onPress={() => setShowEditEventTypeModal(false)}>
+                            <TouchableOpacity onPress={() => setActiveFormPicker(null)}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.filterModalScroll}>
-                            {eventTypeOptions.map((type) => (
-                                <TouchableOpacity
-                                    key={type}
-                                    style={styles.filterOption}
-                                    onPress={() => {
-                                        setEditFormData({ ...editFormData, event_type: type });
-                                        setShowEditEventTypeModal(false);
-                                    }}
-                                >
-                                    <Text style={styles.filterOptionText}>{type}</Text>
-                                    {editFormData.event_type === type && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                                </TouchableOpacity>
-                            ))}
+                            {eventTypeOptions.map((type) => {
+                                const selected =
+                                    activeFormPicker?.target === 'add'
+                                        ? addFormData.event_type === type
+                                        : editFormData.event_type === type;
+                                return (
+                                    <TouchableOpacity
+                                        key={type}
+                                        style={styles.filterOption}
+                                        onPress={() => {
+                                            if (activeFormPicker?.target === 'add') {
+                                                setAddFormData((p) => ({ ...p, event_type: type }));
+                                            } else {
+                                                setEditFormData((p) => ({ ...p, event_type: type }));
+                                            }
+                                            setActiveFormPicker(null);
+                                        }}
+                                    >
+                                        <Text style={styles.filterOptionText}>{type}</Text>
+                                        {selected && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </ScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
 
-            {/* Home/Away Modal */}
             <Modal
-                visible={showEditHomeAwayModal}
+                visible={activeFormPicker?.kind === 'home'}
                 transparent={true}
                 animationType="slide"
-                onRequestClose={() => setShowEditHomeAwayModal(false)}
+                onRequestClose={() => setActiveFormPicker(null)}
             >
-                <Pressable style={styles.filterModalOverlay} onPress={() => setShowEditHomeAwayModal(false)}>
+                <Pressable style={styles.filterModalOverlay} onPress={() => setActiveFormPicker(null)}>
                     <Pressable style={styles.filterModalContent} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.filterModalHeader}>
                             <Text style={styles.filterModalTitle}>Select Home/Away</Text>
-                            <TouchableOpacity onPress={() => setShowEditHomeAwayModal(false)}>
+                            <TouchableOpacity onPress={() => setActiveFormPicker(null)}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.filterModalScroll}>
-                            {homeAwayOptions.map((option) => (
-                                <TouchableOpacity
-                                    key={option}
-                                    style={styles.filterOption}
-                                    onPress={() => {
-                                        setEditFormData({ ...editFormData, home_away: option });
-                                        setShowEditHomeAwayModal(false);
-                                    }}
-                                >
-                                    <Text style={styles.filterOptionText}>{option}</Text>
-                                    {editFormData.home_away === option && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                                </TouchableOpacity>
-                            ))}
+                            {HOME_AWAY_OPTIONS.map((option) => {
+                                const selected =
+                                    activeFormPicker?.target === 'add'
+                                        ? addFormData.home_away === option.value
+                                        : editFormData.home_away === option.value;
+                                return (
+                                    <TouchableOpacity
+                                        key={option.value}
+                                        style={styles.filterOption}
+                                        onPress={() => {
+                                            if (activeFormPicker?.target === 'add') {
+                                                setAddFormData((p) => ({ ...p, home_away: option.value }));
+                                            } else {
+                                                setEditFormData((p) => ({ ...p, home_away: option.value }));
+                                            }
+                                            setActiveFormPicker(null);
+                                        }}
+                                    >
+                                        <Text style={styles.filterOptionText}>{option.label}</Text>
+                                        {selected && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </ScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
 
-            {/* Divisions Modal */}
             <Modal
-                visible={showEditDivisionsModal}
+                visible={activeFormPicker?.kind === 'divisions'}
                 transparent={true}
                 animationType="slide"
-                onRequestClose={() => setShowEditDivisionsModal(false)}
+                onRequestClose={() => setActiveFormPicker(null)}
             >
-                <Pressable style={styles.filterModalOverlay} onPress={() => setShowEditDivisionsModal(false)}>
+                <Pressable style={styles.filterModalOverlay} onPress={() => setActiveFormPicker(null)}>
                     <Pressable style={styles.filterModalContent} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.filterModalHeader}>
                             <Text style={styles.filterModalTitle}>Select Divisions</Text>
-                            <TouchableOpacity onPress={() => setShowEditDivisionsModal(false)}>
+                            <TouchableOpacity onPress={() => setActiveFormPicker(null)}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
@@ -2239,34 +2554,65 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
                                 <TouchableOpacity
                                     style={{ padding: 8, borderWidth: 1, borderRadius: 4 }}
-                                    onPress={() => setEditFormData({ ...editFormData, division_ids: divisions.filter(d => d !== 'All Divisions') })}
+                                    onPress={() => {
+                                        const allIds = companyDivisions.map((d: any) => d.id);
+                                        if (activeFormPicker?.target === 'add') {
+                                            setAddFormData((p) => ({ ...p, division_ids: allIds }));
+                                        } else {
+                                            setEditFormData((p) => ({ ...p, division_ids: allIds }));
+                                        }
+                                    }}
                                 >
                                     <Text>Select All</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={{ padding: 8, borderWidth: 1, borderRadius: 4 }}
-                                    onPress={() => setEditFormData({ ...editFormData, division_ids: [] })}
+                                    onPress={() => {
+                                        if (activeFormPicker?.target === 'add') {
+                                            setAddFormData((p) => ({ ...p, division_ids: [] }));
+                                        } else {
+                                            setEditFormData((p) => ({ ...p, division_ids: [] }));
+                                        }
+                                    }}
                                 >
                                     <Text>Deselect All</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
                         <ScrollView style={styles.filterModalScroll}>
-                            {divisions.filter(d => d !== 'All Divisions').map((div) => {
-                                const isSelected = editFormData.division_ids?.includes(div);
+                            {companyDivisions.map((div: any) => {
+                                const ids =
+                                    activeFormPicker?.target === 'add'
+                                        ? addFormData.division_ids
+                                        : editFormData.division_ids;
+                                const isSelected = ids?.includes(div.id);
                                 return (
                                     <TouchableOpacity
-                                        key={div}
+                                        key={div.id}
                                         style={styles.filterOption}
                                         onPress={() => {
-                                            const current = editFormData.division_ids || [];
-                                            const updated = isSelected
-                                                ? current.filter(id => id !== div)
-                                                : [...current, div];
-                                            setEditFormData({ ...editFormData, division_ids: updated });
+                                            if (activeFormPicker?.target === 'add') {
+                                                setAddFormData((p) => {
+                                                    const current = p.division_ids || [];
+                                                    const on = current.includes(div.id);
+                                                    const updated = on
+                                                        ? current.filter((id) => id !== div.id)
+                                                        : [...current, div.id];
+                                                    return { ...p, division_ids: updated };
+                                                });
+                                            } else {
+                                                setEditFormData((p) => {
+                                                    const current = p.division_ids || [];
+                                                    const on = current.includes(div.id);
+                                                    const updated = on
+                                                        ? current.filter((id) => id !== div.id)
+                                                        : [...current, div.id];
+                                                    return { ...p, division_ids: updated };
+                                                });
+                                            }
                                         }}
                                     >
-                                        <Text style={styles.filterOptionText}>{div}</Text>
+                                        <Text style={styles.filterOptionText}>{div.name}</Text>
                                         {isSelected && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
                                     </TouchableOpacity>
                                 );
@@ -2416,7 +2762,84 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
-        </SafeAreaView >
+
+            {showDatePicker && Platform.OS === 'android' && datePickerContext && (
+                <DateTimePicker
+                    value={datePickerContext === 'add' ? addFormData.event_date : editFormData.event_date}
+                    mode="date"
+                    display="default"
+                    onChange={(event, selectedDate) => {
+                        setShowDatePicker(false);
+                        if (event.type === 'dismissed') {
+                            setDatePickerContext(null);
+                            return;
+                        }
+                        if (selectedDate) {
+                            if (datePickerContext === 'add') {
+                                setAddFormData((p) => ({ ...p, event_date: selectedDate }));
+                            } else {
+                                setEditFormData((p) => ({ ...p, event_date: selectedDate }));
+                            }
+                        }
+                        setDatePickerContext(null);
+                    }}
+                />
+            )}
+            {showDatePicker && Platform.OS === 'ios' && datePickerContext && (
+                <Modal
+                    transparent
+                    animationType="slide"
+                    visible={showDatePicker}
+                    onRequestClose={() => {
+                        setShowDatePicker(false);
+                        setDatePickerContext(null);
+                    }}
+                >
+                    <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' }}>
+                        <Pressable
+                            style={{ flex: 1 }}
+                            onPress={() => {
+                                setShowDatePicker(false);
+                                setDatePickerContext(null);
+                            }}
+                        />
+                        <View
+                            style={{
+                                backgroundColor: '#fff',
+                                borderTopLeftRadius: 14,
+                                borderTopRightRadius: 14,
+                                paddingBottom: 24,
+                            }}
+                        >
+                            <DateTimePicker
+                                value={datePickerContext === 'add' ? addFormData.event_date : editFormData.event_date}
+                                mode="date"
+                                display="spinner"
+                                themeVariant="light"
+                                onChange={(_, selectedDate) => {
+                                    if (selectedDate) {
+                                        if (datePickerContext === 'add') {
+                                            setAddFormData((p) => ({ ...p, event_date: selectedDate }));
+                                        } else {
+                                            setEditFormData((p) => ({ ...p, event_date: selectedDate }));
+                                        }
+                                    }
+                                }}
+                            />
+                            <TouchableOpacity
+                                style={{ paddingVertical: 14, alignItems: 'center' }}
+                                onPress={() => {
+                                    setShowDatePicker(false);
+                                    setDatePickerContext(null);
+                                }}
+                            >
+                                <Text style={{ fontWeight: '600', fontSize: 16, color: theme.colors.secondary }}>Done</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </Modal>
+            )}
+        </SafeAreaView>
     );
 };
 
@@ -3092,6 +3515,12 @@ const styles = StyleSheet.create({
         ...theme.typography.bodySmall,
         fontSize: 12,
         color: theme.colors.textSecondary,
+    },
+    eventDescription: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: theme.spacing.xs,
     },
     // Delete Confirmation Modal Styles
     deleteModalOverlay: {
