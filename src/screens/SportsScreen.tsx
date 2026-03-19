@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
-import { useSportsEnrollments, useAddSportsEnrollment, useDeleteSportsEnrollment } from '../api/sports';
+import { useSportsEnrollments, useAddSportsEnrollment, useDeleteSportsEnrollment, useUpdateSportsEnrollment } from '../api/sports';
 import { useCampers, useDivisions } from '../api/campers';
 
 interface SportsScreenProps {
@@ -94,6 +94,8 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     
     const addEnrollmentMutation = useAddSportsEnrollment();
     const deleteEnrollmentMutation = useDeleteSportsEnrollment();
+    const updateEnrollmentMutation = useUpdateSportsEnrollment();
+    const [editingEnrollment, setEditingEnrollment] = useState<any | null>(null);
 
     // Add Enrollment Modal States
     const [selectedChildId, setSelectedChildId] = useState('');
@@ -320,28 +322,60 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     };
 
     const handleAddEnrollment = () => {
-        if (!selectedChildId || !sportName) return;
+        if (!companyId || !season) {
+            Alert.alert('Context missing', 'Company or season is not loaded yet.');
+            return;
+        }
+        if (!selectedChildId || !sportName) {
+            Alert.alert('Validation', 'Please select camper and sport.');
+            return;
+        }
 
-        addEnrollmentMutation.mutate({
+        const payload = {
             child_id: selectedChildId,
             sport_name: sportName,
             instructor,
-            schedule_days: schedulePeriod ? [schedulePeriod] : [],
+            schedule_periods: schedulePeriod ? [schedulePeriod] : [],
             start_date: startDate || null,
             end_date: endDate || null,
             notes,
-        }, {
+            company_id: companyId,
+            season,
+        };
+
+        const onSuccess = () => {
+            // Reset form
+            setSelectedChildId('');
+            setSportName('');
+            setInstructor('');
+            setSchedulePeriod('');
+            setStartDate('');
+            setEndDate('');
+            setNotes('');
+            setEditingEnrollment(null);
+            setShowAddEnrollmentModal(false);
+        };
+
+        const onError = (error: any) => {
+            Alert.alert('Error', error?.message || (editingEnrollment ? 'Failed to update enrollment' : 'Failed to add enrollment'));
+        };
+
+        if (editingEnrollment?.id) {
+            updateEnrollmentMutation.mutate({
+                id: editingEnrollment.id,
+                updates: payload,
+            }, {
+                onSuccess,
+                onError,
+            });
+            return;
+        }
+
+        addEnrollmentMutation.mutate(payload, {
             onSuccess: () => {
-                // Reset form
-                setSelectedChildId('');
-                setSportName('');
-                setInstructor('');
-                setSchedulePeriod('');
-                setStartDate('');
-                setEndDate('');
-                setNotes('');
-                setShowAddEnrollmentModal(false);
-            }
+                onSuccess();
+            },
+            onError,
         });
     };
 
@@ -353,7 +387,32 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         setStartDate('');
         setEndDate('');
         setNotes('');
+        setEditingEnrollment(null);
         setShowAddEnrollmentModal(false);
+    };
+
+    const handleEditEnrollment = (enroll: any) => {
+        setEditingEnrollment(enroll);
+        setSelectedChildId(enroll.child_id || '');
+        setSportName(enroll.sport_name || '');
+        setInstructor(enroll.instructor || '');
+        const periods = Array.isArray(enroll.schedule_periods) ? enroll.schedule_periods : [];
+        setSchedulePeriod(periods[0] || '');
+        setStartDate(enroll.start_date || '');
+        setEndDate(enroll.end_date || '');
+        setNotes(enroll.notes || '');
+        setShowAddEnrollmentModal(true);
+    };
+
+    const handleDeleteEnrollment = (enrollmentId: string) => {
+        Alert.alert('Delete Enrollment', 'Are you sure you want to delete this enrollment?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: () => deleteEnrollmentMutation.mutate(enrollmentId),
+            },
+        ]);
     };
 
     const renderCalendarView = () => {
@@ -715,16 +774,21 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 <StyledCard key={enroll.id} style={{ padding: theme.spacing.md, marginBottom: theme.spacing.md }}>
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm }}>
                                         <Text style={{ ...theme.typography.h3 }}>{enroll.children?.name || 'Unknown Camper'}</Text>
-                                        <TouchableOpacity onPress={() => {
-                                            if (enroll.id) deleteEnrollmentMutation.mutate(enroll.id);
-                                        }}>
-                                            <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
-                                        </TouchableOpacity>
+                                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                                            <TouchableOpacity onPress={() => handleEditEnrollment(enroll)}>
+                                                <Ionicons name="pencil-outline" size={20} color={theme.colors.text} />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity onPress={() => {
+                                                if (enroll.id) handleDeleteEnrollment(enroll.id);
+                                            }}>
+                                                <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
                                     <View style={{ gap: 4 }}>
                                         <Text style={{ ...theme.typography.body }}>Sport: <Text style={{ fontWeight: '600' }}>{enroll.sport_name}</Text></Text>
                                         <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>Instructor: {enroll.instructor || 'N/A'}</Text>
-                                        <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>Period: {enroll.schedule_days?.join(', ') || 'N/A'}</Text>
+                                        <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>Period: {enroll.schedule_periods?.join(', ') || 'N/A'}</Text>
                                         <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>Dates: {enroll.start_date || 'N/A'} to {enroll.end_date || 'N/A'}</Text>
                                     </View>
                                 </StyledCard>
@@ -943,7 +1007,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                     <View style={styles.addEnrollmentModalContainer}>
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Add Enrollment</Text>
+                            <Text style={styles.modalTitle}>{editingEnrollment ? 'Edit Enrollment' : 'Add Enrollment'}</Text>
                             <TouchableOpacity
                                 onPress={handleCloseAddEnrollmentModal}
                                 style={styles.closeButton}
@@ -1261,7 +1325,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 onPress={handleAddEnrollment}
                                 disabled={!selectedChildId || !sportName}
                             >
-                                <Text style={styles.submitButtonText}>Add Enrollment</Text>
+                                <Text style={styles.submitButtonText}>{editingEnrollment ? 'Update Enrollment' : 'Add Enrollment'}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
