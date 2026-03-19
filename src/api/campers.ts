@@ -47,6 +47,7 @@ export const useCampers = (companyId: string | null, season: string) => {
                 .select('*, division:divisions(id, name, gender, sort_order)')
                 .eq('company_id', companyId)
                 .eq('season', season)
+                .eq('status', 'active')
                 .order('name', { ascending: true });
 
             if (error) throw error;

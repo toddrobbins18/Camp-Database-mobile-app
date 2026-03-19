@@ -92,18 +92,54 @@ export const useAddMedicationLog = () => {
     });
 };
 
+/**
+ * medication_logs.administered_by references staff(id), NOT auth.users(id).
+ * Passing auth uid causes FK violation → PostgREST 409 Conflict.
+ * Resolve staff row by logged-in user's email + company (same as web Nurse page).
+ */
 export const useAdministerMedication = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ id, administeredBy }: { id: string; administeredBy: string | undefined }) => {
+        mutationFn: async ({ id, companyId }: { id: string; companyId: string | null | undefined }) => {
+            const { data: { user } } = await supabase.auth.getUser();
+            let staffId: string | null = null;
+            if (user?.email && companyId) {
+                const { data: staffRow } = await supabase
+                    .from('staff')
+                    .select('id')
+                    .eq('email', user.email)
+                    .eq('company_id', companyId)
+                    .maybeSingle();
+                staffId = staffRow?.id ?? null;
+            }
+
             const { error } = await supabase
                 .from('medication_logs')
                 .update({
                     administered: true,
-                    administered_by: administeredBy || null,
+                    administered_by: staffId,
                     administered_at: new Date().toISOString()
                 })
+                .eq('id', id);
+
+            if (error) throw error;
+            return id;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['medication_logs'] });
+        },
+    });
+};
+
+export const useDeleteMedicationLog = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase
+                .from('medication_logs')
+                .delete()
                 .eq('id', id);
 
             if (error) throw error;

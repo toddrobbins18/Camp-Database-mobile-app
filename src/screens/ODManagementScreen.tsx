@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -12,25 +12,58 @@ import { useStaff } from '../api/staff';
 interface StaffMember {
     id: string;
     name: string;
-    bank: string;
+    bunk: string;
     isOut: boolean;
+    isIn: boolean;
     isSleepingOut: boolean;
+    staffId: string;
+    bunkId: string;
+    dayOffId?: string;
+}
+
+interface BunkRow {
+    id: string;
+    bunk_number: number;
+    bunk_name: string | null;
+    division_id: string | null;
+}
+
+interface BunkStaffRow {
+    id: string;
+    bunk_id: string;
+    staff_id: string;
+    staff?: {
+        id: string;
+        name: string;
+    } | null;
 }
 
 export const ODManagementScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
+    const { width } = useWindowDimensions();
+    const isCompactModal = width < 760;
 
     const [activeTab, setActiveTab] = useState<'OD' | 'OFF'>('OD');
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [searchQuery, setSearchQuery] = useState('');
-    const [showManageBanksModal, setShowManageBanksModal] = useState(false);
+    const [showManageBunksModal, setShowManageBunksModal] = useState(false);
     const [showNewModal, setShowNewModal] = useState(false);
     const [showModeModal, setShowModeModal] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const [newBankName, setNewBankName] = useState('');
+    const [newBunkNumber, setNewBunkNumber] = useState('1');
+    const [newBunkName, setNewBunkName] = useState('');
+    const [newBunkDivision, setNewBunkDivision] = useState<string | null>(null);
     const [newEntryStaffId, setNewEntryStaffId] = useState<string | null>(null);
     const [newEntrySleepingOut, setNewEntrySleepingOut] = useState(false);
+    const [selectedBunkForStaff, setSelectedBunkForStaff] = useState<string | null>(null);
+    const [selectedStaffToAdd, setSelectedStaffToAdd] = useState<string>('');
+    const [showDivisionPickerModal, setShowDivisionPickerModal] = useState(false);
+    const [showStaffPickerForBunk, setShowStaffPickerForBunk] = useState<string | null>(null);
+    const [showLateOverrideModal, setShowLateOverrideModal] = useState(false);
+    const [lateOverrideReason, setLateOverrideReason] = useState('');
+    const [lateOverrideStaffId, setLateOverrideStaffId] = useState<string | null>(null);
+
     const [scannerMode, setScannerMode] = useState(false);
     const [rfidInput, setRfidInput] = useState('');
     const [isScanning, setIsScanning] = useState(false);
@@ -40,46 +73,70 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const { data: staffList = [] } = useStaff(companyId, season);
 
     // Fetch staff_days_off for the selected date (same schema as web)
-    const { data: staffMembers = [], isLoading: isLoadingStaff } = useQuery({
+    const { data: staffDaysOff = [], isLoading: isLoadingStaff } = useQuery({
         queryKey: ['staff_days_off', companyId, season, dateString],
         queryFn: async () => {
             if (!companyId) return [];
             const { data, error } = await supabase
                 .from('staff_days_off')
-                .select('id, staff_id, date, is_day_off, is_night_off, is_sleeping_out, checked_out, checked_in, staff:staff_id(id, name)')
+                .select('id, staff_id, date, is_day_off, is_night_off, is_sleeping_out, checked_out, checked_out_at, checked_out_by, checked_in, checked_in_at, checked_in_by, late_override, late_override_reason, staff:staff_id(id, name)')
                 .eq('company_id', companyId)
                 .eq('season', season)
                 .eq('date', dateString);
             if (error) throw error;
-            return (data || []).map((record: any) => ({
-                id: record.id,
-                staffId: record.staff_id,
-                name: record.staff?.name ?? 'Unknown',
-                bank: '', // Bunk comes from bunk_staff; optional to add later
-                isOut: record.checked_out ?? false,
-                isSleepingOut: record.is_sleeping_out ?? false,
-            }));
+            return data || [];
         },
         enabled: !!companyId && !!season,
     });
 
     // Fetch bunks (web schema: bunk_number, bunk_name; no "name" column)
-    const { data: banksList = [] } = useQuery({
+    const { data: bunksList = [] } = useQuery({
         queryKey: ['bunks', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
             const { data, error } = await supabase
                 .from('bunks')
-                .select('id, bunk_number, bunk_name')
+                .select('id, bunk_number, bunk_name, division_id')
                 .eq('company_id', companyId)
                 .eq('season', season)
+                .eq('is_active', true)
                 .order('bunk_number', { ascending: true });
             if (error) throw error;
-            return (data || []).map((b: any) => ({ id: b.id, displayName: b.bunk_name || `Bunk ${b.bunk_number}` }));
+            return (data || []) as BunkRow[];
         },
         enabled: !!companyId && !!season,
     });
-    const banks = banksList.map((b: { id: string; displayName: string }) => b.displayName);
+
+    const { data: bunkStaffList = [] } = useQuery({
+        queryKey: ['bunk_staff', companyId, season],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('bunk_staff')
+                .select('id, bunk_id, staff_id, staff:staff_id(id, name)')
+                .eq('company_id', companyId)
+                .eq('season', season);
+            if (error) throw error;
+            return (data || []) as BunkStaffRow[];
+        },
+        enabled: !!companyId && !!season,
+    });
+
+    const { data: divisionsList = [] } = useQuery({
+        queryKey: ['divisions', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('divisions')
+                .select('id, name')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .order('sort_order', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId,
+    });
 
     // Add day-off record (staff_days_off table, same as web)
     const addDayOffMutation = useMutation({
@@ -106,36 +163,75 @@ export const ODManagementScreen = ({ navigation }: any) => {
     });
 
     // Add bunk (web schema: bunk_number, bunk_name; season required)
-    const addBankMutation = useMutation({
-        mutationFn: async (bankName: string) => {
-            const { data: existing } = await supabase.from('bunks').select('bunk_number').eq('company_id', companyId).eq('season', season).order('bunk_number', { ascending: false }).limit(1);
-            const nextNum = (existing?.[0]?.bunk_number ?? 0) + 1;
+    const addBunkMutation = useMutation({
+        mutationFn: async ({ bunkNumber, bunkName }: { bunkNumber: number; bunkName: string }) => {
             const { error } = await supabase
                 .from('bunks')
-                .insert([{ company_id: companyId, season, bunk_number: nextNum, bunk_name: bankName || null }]);
+                .insert([{ company_id: companyId, season, bunk_number: bunkNumber, bunk_name: bunkName || null, division_id: newBunkDivision }]);
             if (error) throw error;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bunks'] });
-            setNewBankName('');
+            setNewBunkName('');
+            setNewBunkDivision(null);
         },
         onError: (error: any) => {
+            if (error?.code === '23505') {
+                Alert.alert('Duplicate bunk number', 'That bunk number already exists for this season.');
+                return;
+            }
             Alert.alert('Error', error.message || 'Failed to add bunk');
         },
     });
 
     // Delete bunk by id (reliable; displayName can be "Bunk N" when bunk_name is null)
-    const deleteBankMutation = useMutation({
+    const deleteBunkMutation = useMutation({
         mutationFn: async (bunkId: string) => {
             const { error } = await supabase.from('bunks').delete().eq('id', bunkId);
             if (error) throw error;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bunks'] });
+            queryClient.invalidateQueries({ queryKey: ['bunk_staff'] });
             queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
         },
         onError: (error: any) => {
             Alert.alert('Error', error.message || 'Failed to delete bunk');
+        },
+    });
+
+    const assignStaffToBunkMutation = useMutation({
+        mutationFn: async ({ bunkId, staffId }: { bunkId: string; staffId: string }) => {
+            const { error } = await supabase
+                .from('bunk_staff')
+                .insert([{ company_id: companyId, season, bunk_id: bunkId, staff_id: staffId, is_primary: false }]);
+            if (error) throw error;
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: ['bunk_staff'] });
+            await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+            await queryClient.invalidateQueries({ queryKey: ['staff'] });
+            setSelectedStaffToAdd('');
+            setSelectedBunkForStaff(null);
+            setShowStaffPickerForBunk(null);
+            Alert.alert('Saved', 'Staff assigned to bunk');
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to assign staff');
+        },
+    });
+
+    const removeStaffFromBunkMutation = useMutation({
+        mutationFn: async (bunkStaffId: string) => {
+            const { error } = await supabase.from('bunk_staff').delete().eq('id', bunkStaffId);
+            if (error) throw error;
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: ['bunk_staff'] });
+            await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to remove staff');
         },
     });
 
@@ -156,31 +252,71 @@ export const ODManagementScreen = ({ navigation }: any) => {
         setSelectedDate(newDate);
     };
 
+    const staffById = new Map((staffList || []).map((s: any) => [s.id, s]));
+    const bunkById = new Map((bunksList || []).map((b: BunkRow) => [b.id, b]));
+    const dayOffByStaffId = new Map((staffDaysOff || []).map((row: any) => [row.staff_id, row]));
+
+    const staffMembers: StaffMember[] = (bunkStaffList || [])
+        .map((bs: BunkStaffRow) => {
+            const staff = bs.staff || staffById.get(bs.staff_id);
+            const bunk = bunkById.get(bs.bunk_id);
+            const dayOff = dayOffByStaffId.get(bs.staff_id);
+            if (!staff || !bunk) return null;
+            return {
+                id: bs.id,
+                staffId: bs.staff_id,
+                name: staff.name || 'Unknown',
+                bunk: bunk.bunk_name || `Bunk ${bunk.bunk_number}`,
+                bunkId: bunk.id,
+                dayOffId: dayOff?.id,
+                isOut: !!dayOff?.checked_out,
+                isIn: !!dayOff?.checked_in,
+                isSleepingOut: !!dayOff?.is_sleeping_out,
+            };
+        })
+        .filter(Boolean) as StaffMember[];
+
     const filteredStaff = staffMembers.filter(staff => {
         if (activeTab === 'OD' && (staff.isOut || staff.isSleepingOut)) return false;
-        if (activeTab === 'OFF' && !staff.isOut && !staff.isSleepingOut) return false;
+        if (activeTab === 'OFF' && !staff.isOut && !staff.isSleepingOut && !staff.isIn) return false;
         if (searchQuery && !staff.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-            !staff.bank.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+            !staff.bunk.toLowerCase().includes(searchQuery.toLowerCase())) return false;
         return true;
     });
 
-    const handleManageBanks = () => {
-        setShowManageBanksModal(true);
+    const handleManageBunks = () => {
+        setShowManageBunksModal(true);
     };
 
-    const handleAddBank = () => {
-        if (newBankName.trim() && !banks.includes(newBankName.trim())) {
-            addBankMutation.mutate(newBankName.trim());
+    const handleAddBunk = () => {
+        if (!companyId || !season) {
+            Alert.alert('Missing context', 'Company or season is not available yet.');
+            return;
         }
+        const bunkNumber = Number(newBunkNumber);
+        if (!Number.isFinite(bunkNumber) || bunkNumber <= 0) {
+            Alert.alert('Invalid bunk number', 'Please enter a valid bunk number.');
+            return;
+        }
+        addBunkMutation.mutate({ bunkNumber, bunkName: newBunkName.trim() });
     };
 
-    const handleDeleteBank = (bunkId: string, displayName: string) => {
+    useEffect(() => {
+        if (!showManageBunksModal) return;
+        const nextBunkNumber = (bunksList.length ? Math.max(...bunksList.map((b) => b.bunk_number)) + 1 : 1).toString();
+        setNewBunkNumber((prev) => {
+            if (!prev || prev === '1') return nextBunkNumber;
+            return prev;
+        });
+    }, [showManageBunksModal, bunksList]);
+
+    const handleDeleteBunk = (bunkId: string, displayName: string) => {
         Alert.alert(
             'Delete Bunk',
             `Are you sure you want to delete "${displayName}"?`,
             [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => deleteBankMutation.mutate(bunkId) },
+                { text: 'Delete', style: 'destructive', onPress: () => deleteBunkMutation.mutate(bunkId) },
             ]
         );
     };
@@ -204,12 +340,14 @@ export const ODManagementScreen = ({ navigation }: any) => {
             }
             const existing = staffMembers.find((m: any) => m.staffId === staffMember.id);
             if (!existing) {
-                Alert.alert('No day off', `${staffMember.name} is not scheduled off for this date. Add an entry first.`);
+                Alert.alert('No bunk assignment', `${staffMember.name} is not assigned to a bunk. Add assignment in Manage Bunks.`);
                 setRfidInput('');
                 return;
             }
             const { data: row } = await supabase.from('staff_days_off').select('id, checked_out, checked_in').eq('staff_id', staffMember.id).eq('company_id', companyId).eq('date', dateString).maybeSingle();
             if (!row) {
+                setLateOverrideStaffId(staffMember.id);
+                setShowLateOverrideModal(true);
                 setRfidInput('');
                 return;
             }
@@ -229,6 +367,61 @@ export const ODManagementScreen = ({ navigation }: any) => {
         } finally {
             setIsScanning(false);
         }
+    };
+
+    const handleOutPress = (staff: StaffMember) => {
+        const dayOff = dayOffByStaffId.get(staff.staffId);
+        if (dayOff?.is_day_off) {
+            supabase
+                .from('staff_days_off')
+                .update({ checked_out: true, checked_out_at: new Date().toISOString() })
+                .eq('id', dayOff.id)
+                .then(({ error }) => {
+                    if (error) {
+                        Alert.alert('Error', error.message || 'Failed to mark out');
+                        return;
+                    }
+                    queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+                });
+            return;
+        }
+        setLateOverrideStaffId(staff.staffId);
+        setLateOverrideReason('');
+        setShowLateOverrideModal(true);
+    };
+
+    const handleApproveLateOverride = async () => {
+        if (!lateOverrideStaffId || !companyId) return;
+        if (!lateOverrideReason.trim()) {
+            Alert.alert('Reason required', 'Please enter a reason for this late sign-out override.');
+            return;
+        }
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error } = await supabase
+            .from('staff_days_off')
+            .upsert({
+                company_id: companyId,
+                staff_id: lateOverrideStaffId,
+                date: dateString,
+                season,
+                is_day_off: true,
+                is_night_off: true,
+                checked_out: true,
+                checked_out_at: new Date().toISOString(),
+                checked_out_by: user?.id ?? null,
+                late_override: true,
+                late_override_reason: lateOverrideReason.trim(),
+                late_override_approved_by: user?.id ?? null,
+                late_override_approved_at: new Date().toISOString(),
+            }, { onConflict: 'company_id,staff_id,date,season' });
+        if (error) {
+            Alert.alert('Error', error.message || 'Failed to approve override');
+            return;
+        }
+        setShowLateOverrideModal(false);
+        setLateOverrideReason('');
+        setLateOverrideStaffId(null);
+        queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
     };
 
     return (
@@ -265,10 +458,10 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={styles.actionButton}
-                        onPress={handleManageBanks}
+                        onPress={handleManageBunks}
                     >
                         <Ionicons name="business-outline" size={18} color={theme.colors.text} />
-                        <Text style={styles.actionButtonText}>Manage Banks</Text>
+                        <Text style={styles.actionButtonText}>Manage Bunks</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -363,7 +556,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         <Ionicons name="search-outline" size={20} color={theme.colors.textSecondary} />
                         <TextInput
                             style={styles.searchInput}
-                            placeholder="Search by name or bank..."
+                            placeholder="Search by name or bunk..."
                             placeholderTextColor={theme.colors.textSecondary}
                             value={searchQuery}
                             onChangeText={setSearchQuery}
@@ -371,21 +564,21 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     </View>
 
                     {/* Table Headers */}
-                    {banks.length > 0 && (
+                    {bunksList.length > 0 && (
                         <View style={styles.tableHeaders}>
-                            <Text style={[styles.tableHeader, { flex: 1.5 }]}>Bank</Text>
+                            <Text style={[styles.tableHeader, { flex: 1.5 }]}>Bunk</Text>
                             <Text style={[styles.tableHeader, { flex: 2 }]}>Name</Text>
                             <Text style={[styles.tableHeader, { flex: 1 }]}>Out</Text>
-                            <Text style={[styles.tableHeader, { flex: 1.5 }]}>Sleeping Out</Text>
+                            <Text style={[styles.tableHeader, { flex: 1 }]}>In</Text>
                             <Text style={[styles.tableHeader, { flex: 1 }]}>Actions</Text>
                         </View>
                     )}
 
                     {/* Staff List or Empty State */}
-                    {banks.length === 0 ? (
+                    {bunksList.length === 0 ? (
                         <View style={styles.emptyState}>
                             <Text style={styles.emptyText}>
-                                No banks configured. Click Manage Banks to set up banks and assign staff.
+                                No bunks configured. Click Manage Bunks to set up bunks and assign staff.
                             </Text>
                         </View>
                     ) : filteredStaff.length === 0 ? (
@@ -398,7 +591,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         <View style={styles.staffList}>
                             {filteredStaff.map((staff) => (
                                 <View key={staff.id} style={styles.staffRow}>
-                                    <Text style={[styles.staffCell, { flex: 1.5 }]}>{staff.bank}</Text>
+                                    <Text style={[styles.staffCell, { flex: 1.5 }]}>{staff.bunk}</Text>
                                     <Text style={[styles.staffCell, { flex: 2 }]}>{staff.name}</Text>
                                     <View style={{ flex: 1, alignItems: 'center' }}>
                                         {staff.isOut ? (
@@ -407,16 +600,19 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                             <Ionicons name="close-circle-outline" size={20} color={theme.colors.textSecondary} />
                                         )}
                                     </View>
-                                    <View style={{ flex: 1.5, alignItems: 'center' }}>
-                                        {staff.isSleepingOut ? (
+                                    <View style={{ flex: 1, alignItems: 'center' }}>
+                                        {staff.isIn ? (
                                             <Ionicons name="checkmark-circle" size={20} color={theme.colors.success} />
                                         ) : (
                                             <Ionicons name="close-circle-outline" size={20} color={theme.colors.textSecondary} />
                                         )}
                                     </View>
                                     <View style={{ flex: 1, alignItems: 'center' }}>
-                                        <TouchableOpacity>
-                                            <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textSecondary} />
+                                        <TouchableOpacity
+                                            style={[styles.newButton, { paddingVertical: 6, paddingHorizontal: 10 }]}
+                                            onPress={() => handleOutPress(staff)}
+                                        >
+                                            <Text style={styles.newButtonText}>Mark Off</Text>
                                         </TouchableOpacity>
                                     </View>
                                 </View>
@@ -431,49 +627,289 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 <Ionicons name="chatbubble-ellipses" size={24} color="white" />
             </TouchableOpacity>
 
-            {/* Manage Banks Modal */}
+            {/* Manage Bunks Modal */}
             <Modal
-                visible={showManageBanksModal}
+                visible={showManageBunksModal}
                 transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowManageBanksModal(false)}
+                animationType="fade"
+                onRequestClose={() => setShowManageBunksModal(false)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowManageBanksModal(false)}>
-                    <Pressable style={styles.modal} onPress={(e) => e.stopPropagation()}>
+                <Pressable style={styles.modalOverlayCenter} onPress={() => setShowManageBunksModal(false)}>
+                    <Pressable style={styles.bunkModal} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Manage Banks</Text>
-                            <TouchableOpacity onPress={() => setShowManageBanksModal(false)}>
+                            <Text style={styles.modalTitle}>Bunk Management</Text>
+                            <TouchableOpacity onPress={() => setShowManageBunksModal(false)}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
-                        <ScrollView style={styles.modalContent}>
-                            <View style={styles.addBankSection}>
-                                <TextInput
-                                    style={styles.bankInput}
-                                    placeholder="Enter bank name"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    value={newBankName}
-                                    onChangeText={setNewBankName}
-                                    onSubmitEditing={handleAddBank}
-                                />
-                                <TouchableOpacity
-                                    style={styles.addBankButton}
-                                    onPress={handleAddBank}
-                                >
-                                    <Ionicons name="add" size={20} color="white" />
-                                </TouchableOpacity>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalSubtitle}>Configure bunks and assign staff members to each bunk</Text>
+                            <View style={[styles.bunkTabs, isCompactModal && styles.bunkTabsCompact]}>
+                                <View style={[styles.bunkTab, styles.bunkTabActive]}>
+                                    <Text style={[styles.bunkTabText, styles.bunkTabTextActive]}>Manage Bunks</Text>
+                                </View>
+                                <View style={styles.bunkTab}>
+                                    <Text style={styles.bunkTabText}>CSV Upload</Text>
+                                </View>
                             </View>
-                            <View style={styles.banksList}>
-                                {banksList.map((b) => (
-                                    <View key={b.id} style={styles.bankItem}>
-                                        <Text style={styles.bankName}>{b.displayName}</Text>
-                                        <TouchableOpacity onPress={() => handleDeleteBank(b.id, b.displayName)}>
-                                            <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
+
+                            <View style={styles.addBunkCard}>
+                                <Text style={styles.addBunkTitle}>Add New Bunk</Text>
+                                <View style={[styles.addBunkRow, isCompactModal && styles.addBunkRowCompact]}>
+                                    <View style={[styles.addBunkField, !isCompactModal && { maxWidth: 130 }]}>
+                                        <Text style={styles.formLabel}>Bunk Number</Text>
+                                        <TextInput
+                                            style={styles.bankInput}
+                                            keyboardType="number-pad"
+                                            value={newBunkNumber}
+                                            onChangeText={setNewBunkNumber}
+                                        />
+                                    </View>
+                                    <View style={styles.addBunkField}>
+                                        <Text style={styles.formLabel}>Bunk Name (optional)</Text>
+                                        <TextInput
+                                            style={styles.bankInput}
+                                            placeholder="e.g., Bunk A, Senior Boys 1"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={newBunkName}
+                                            onChangeText={setNewBunkName}
+                                            onSubmitEditing={handleAddBunk}
+                                        />
+                                    </View>
+                                    <View style={styles.addBunkField}>
+                                        <Text style={styles.formLabel}>Division (optional)</Text>
+                                        <TouchableOpacity style={[styles.bankInput, styles.selectInput]} onPress={() => setShowDivisionPickerModal(true)}>
+                                            <Text style={styles.selectInputText}>
+                                                {newBunkDivision ? ((divisionsList.find((d: any) => d.id === newBunkDivision)?.name) || 'None') : 'None'}
+                                            </Text>
+                                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                                         </TouchableOpacity>
                                     </View>
-                                ))}
+                                    <View style={[styles.addBunkAction, isCompactModal && styles.addBunkActionCompact]}>
+                                        <TouchableOpacity
+                                            style={[styles.addBankButtonWide, addBunkMutation.isPending && { opacity: 0.65 }]}
+                                            onPress={handleAddBunk}
+                                            disabled={addBunkMutation.isPending}
+                                        >
+                                            <Ionicons name="add" size={18} color="white" />
+                                            <Text style={styles.addBankButtonText}>{addBunkMutation.isPending ? 'Adding...' : 'Add Bunk'}</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
                             </View>
+
+                            <ScrollView
+                                style={[styles.bunksScrollList, isCompactModal && styles.bunksScrollListCompact]}
+                                contentContainerStyle={styles.bunksScrollContent}
+                                showsVerticalScrollIndicator
+                            >
+                                {bunksList.map((b) => {
+                                    const assigned = bunkStaffList.filter((bs) => bs.bunk_id === b.id);
+                                    const divisionName = b.division_id ? ((divisionsList.find((d: any) => d.id === b.division_id)?.name) || '-') : '-';
+                                    return (
+                                        <View key={b.id} style={[styles.bunkTableRow, isCompactModal && styles.bunkCard]}>
+                                            {isCompactModal ? (
+                                                <View style={styles.bunkCardTop}>
+                                                    <Text style={styles.bunkCardTitle}>Bunk #{b.bunk_number}</Text>
+                                                    <TouchableOpacity onPress={() => handleDeleteBunk(b.id, b.bunk_name || `Bunk ${b.bunk_number}`)}>
+                                                        <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                                                    </TouchableOpacity>
+                                                </View>
+                                            ) : (
+                                                <>
+                                                    <Text style={[styles.staffCell, { flex: 0.6 }]}>{b.bunk_number}</Text>
+                                                    <Text style={[styles.staffCell, { flex: 1.1 }]}>{b.bunk_name || '-'}</Text>
+                                                    <Text style={[styles.staffCell, { flex: 1 }]}>{divisionName}</Text>
+                                                </>
+                                            )}
+                                            <View style={isCompactModal ? { marginTop: 8 } : { flex: 1.9 }}>
+                                                {isCompactModal && (
+                                                    <View style={styles.bunkMetaBlock}>
+                                                        <View style={styles.bunkMetaLine}>
+                                                            <Text style={styles.bunkMetaLabel}>Name: </Text>
+                                                            <Text style={styles.bunkMetaValue}>{b.bunk_name || '-'}</Text>
+                                                        </View>
+                                                        <View style={styles.bunkMetaLine}>
+                                                            <Text style={styles.bunkMetaLabel}>Division: </Text>
+                                                            <Text style={styles.bunkMetaValue}>{divisionName}</Text>
+                                                        </View>
+                                                    </View>
+                                                )}
+                                                <View style={styles.assignedStaffRow}>
+                                                    {assigned.map((bs) => (
+                                                        <View key={bs.id} style={styles.staffChip}>
+                                                            <Text style={styles.staffChipText} numberOfLines={1}>{bs.staff?.name || 'Unknown'}</Text>
+                                                            <TouchableOpacity onPress={() => removeStaffFromBunkMutation.mutate(bs.id)}>
+                                                                <Ionicons name="close" size={14} color={theme.colors.textSecondary} />
+                                                            </TouchableOpacity>
+                                                        </View>
+                                                    ))}
+                                                    <TouchableOpacity
+                                                        style={styles.iconAddStaffBtn}
+                                                        onPress={() => {
+                                                            setSelectedBunkForStaff(b.id);
+                                                            setShowStaffPickerForBunk(b.id);
+                                                        }}
+                                                    >
+                                                        <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
+                                                    </TouchableOpacity>
+                                                </View>
+                                                {selectedBunkForStaff === b.id && (
+                                                    <View style={[styles.assignStaffRow, isCompactModal && styles.assignStaffRowCompact]}>
+                                                        <TouchableOpacity
+                                                            style={[styles.bankInput, styles.selectInput, { flex: 1 }]}
+                                                            onPress={() => setShowStaffPickerForBunk(b.id)}
+                                                        >
+                                                            <Text style={styles.selectInputText}>
+                                                                {selectedStaffToAdd
+                                                                    ? ((staffList || []).find((s: any) => s.id === selectedStaffToAdd)?.name || 'Select staff...')
+                                                                    : 'Select staff...'}
+                                                            </Text>
+                                                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity
+                                                            style={[styles.smallActionBtn, !selectedStaffToAdd && { opacity: 0.6 }]}
+                                                            disabled={!selectedStaffToAdd}
+                                                            onPress={() => assignStaffToBunkMutation.mutate({ bunkId: b.id, staffId: selectedStaffToAdd })}
+                                                        >
+                                                            <Text style={styles.smallActionBtnText}>Add</Text>
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity
+                                                            style={[styles.smallActionBtn, { backgroundColor: '#e5e7eb' }]}
+                                                            onPress={() => {
+                                                                setSelectedBunkForStaff(null);
+                                                                setSelectedStaffToAdd('');
+                                                                setShowStaffPickerForBunk(null);
+                                                            }}
+                                                        >
+                                                            <Text style={[styles.smallActionBtnText, { color: theme.colors.text }]}>X</Text>
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                )}
+                                            </View>
+                                            {!isCompactModal && (
+                                                <View style={{ flex: 0.6, alignItems: 'center' }}>
+                                                    <TouchableOpacity onPress={() => handleDeleteBunk(b.id, b.bunk_name || `Bunk ${b.bunk_number}`)}>
+                                                        <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                                                    </TouchableOpacity>
+                                                </View>
+                                            )}
+                                        </View>
+                                    );
+                                })}
+                            </ScrollView>
+
+                            <View style={styles.bunkFooter}>
+                                <TouchableOpacity style={styles.doneButton} onPress={() => setShowManageBunksModal(false)}>
+                                    <Text style={styles.doneButtonText}>Done</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Division Picker for new bunk */}
+            <Modal
+                visible={showDivisionPickerModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowDivisionPickerModal(false)}
+            >
+                <Pressable style={styles.modalOverlayCenter} onPress={() => setShowDivisionPickerModal(false)}>
+                    <Pressable style={styles.pickerSheet} onPress={(e) => e.stopPropagation()}>
+                        <ScrollView>
+                            <TouchableOpacity
+                                style={styles.pickerOption}
+                                onPress={() => {
+                                    setNewBunkDivision(null);
+                                    setShowDivisionPickerModal(false);
+                                }}
+                            >
+                                <Text style={styles.pickerOptionText}>None</Text>
+                            </TouchableOpacity>
+                            {divisionsList.map((d: any) => (
+                                <TouchableOpacity
+                                    key={d.id}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setNewBunkDivision(d.id);
+                                        setShowDivisionPickerModal(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{d.name}</Text>
+                                </TouchableOpacity>
+                            ))}
                         </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Staff picker for bunk assignment */}
+            <Modal
+                visible={!!showStaffPickerForBunk}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowStaffPickerForBunk(null)}
+            >
+                <Pressable style={styles.modalOverlayCenter} onPress={() => setShowStaffPickerForBunk(null)}>
+                    <Pressable style={styles.pickerSheet} onPress={(e) => e.stopPropagation()}>
+                        <ScrollView>
+                            {(staffList || [])
+                                .filter((s: any) => !bunkStaffList.some((bs) => bs.staff_id === s.id))
+                                .map((s: any) => (
+                                    <TouchableOpacity
+                                        key={s.id}
+                                        style={styles.pickerOption}
+                                        onPress={() => {
+                                            setSelectedStaffToAdd(s.id);
+                                            setShowStaffPickerForBunk(null);
+                                        }}
+                                    >
+                                        <Text style={styles.pickerOptionText}>{s.name}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Late Sign-Out Override Modal */}
+            <Modal
+                visible={showLateOverrideModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowLateOverrideModal(false)}
+            >
+                <Pressable style={styles.modalOverlayCenter} onPress={() => setShowLateOverrideModal(false)}>
+                    <Pressable style={styles.centerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Late Sign-Out Override</Text>
+                            <TouchableOpacity onPress={() => setShowLateOverrideModal(false)}>
+                                <Ionicons name="close" size={22} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalSubtitle}>This staff member is not scheduled off today. Provide a reason to approve their late sign-out.</Text>
+                            <Text style={[styles.formLabel, { marginTop: 12, marginBottom: 6 }]}>Override Reason *</Text>
+                            <TextInput
+                                style={[styles.bankInput, { height: 90, textAlignVertical: 'top', paddingTop: 10 }]}
+                                placeholder="Enter the reason for approving this late sign-out..."
+                                placeholderTextColor={theme.colors.textSecondary}
+                                value={lateOverrideReason}
+                                onChangeText={setLateOverrideReason}
+                                multiline
+                            />
+                            <Text style={[styles.modalSubtitle, { marginTop: 10 }]}>This override will be recorded with your user ID</Text>
+                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+                                <TouchableOpacity style={[styles.smallActionBtn, { backgroundColor: '#e5e7eb' }]} onPress={() => setShowLateOverrideModal(false)}>
+                                    <Text style={[styles.smallActionBtnText, { color: theme.colors.text }]}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={[styles.smallActionBtn, { backgroundColor: '#d4a64a' }]} onPress={handleApproveLateOverride}>
+                                    <Text style={styles.smallActionBtnText}>Approve Override</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -825,7 +1261,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     modalContent: {
-        padding: theme.spacing.md,
+        padding: 14,
     },
     modalSubtitle: {
         ...theme.typography.body,
@@ -850,7 +1286,7 @@ const styles = StyleSheet.create({
         borderColor: theme.colors.border,
         borderRadius: theme.borderRadius.md,
         paddingHorizontal: theme.spacing.sm,
-        height: 44,
+        height: 40,
         fontSize: 14,
         color: theme.colors.text,
     },
@@ -879,6 +1315,282 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
         fontWeight: '600',
+        color: theme.colors.text,
+    },
+    modalOverlayCenter: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: theme.spacing.md,
+    },
+    bunkModal: {
+        width: '100%',
+        maxWidth: 960,
+        maxHeight: '90%',
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    bunkTabs: {
+        flexDirection: 'row',
+        backgroundColor: '#eef2f7',
+        borderRadius: theme.borderRadius.md,
+        padding: 4,
+        marginTop: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    bunkTabsCompact: {
+        marginTop: 8,
+        marginBottom: 10,
+    },
+    bunkTab: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        borderRadius: theme.borderRadius.sm,
+    },
+    bunkTabActive: {
+        backgroundColor: '#ffffff',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    bunkTabText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+    },
+    bunkTabTextActive: {
+        color: theme.colors.text,
+    },
+    addBunkCard: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        padding: 12,
+        marginBottom: 12,
+        backgroundColor: '#fbfcfe',
+    },
+    addBunkTitle: {
+        ...theme.typography.body,
+        fontSize: 30,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: 12,
+    },
+    addBunkRow: {
+        flexDirection: 'row',
+        gap: theme.spacing.sm,
+        alignItems: 'flex-end',
+    },
+    addBunkRowCompact: {
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        gap: 8,
+    },
+    addBunkField: {
+        flex: 1,
+        marginBottom: 2,
+    },
+    addBunkAction: {
+        width: 140,
+    },
+    addBunkActionCompact: {
+        width: '100%',
+    },
+    selectInput: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    selectInputText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    addBankButtonWide: {
+        height: 40,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.secondary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'row',
+        gap: 6,
+    },
+    addBankButtonText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    bunkTableHeader: {
+        flexDirection: 'row',
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    bunksScrollList: {
+        maxHeight: 320,
+    },
+    bunksScrollListCompact: {
+        maxHeight: 300,
+    },
+    bunksScrollContent: {
+        paddingBottom: 16,
+    },
+    bunkTableRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        gap: 6,
+    },
+    bunkCard: {
+        flexDirection: 'column',
+        paddingVertical: 10,
+        paddingHorizontal: 10,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 10,
+        marginBottom: 10,
+        backgroundColor: '#fafbfd',
+    },
+    bunkCardTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    bunkCardTitle: {
+        ...theme.typography.body,
+        fontSize: 15,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    bunkMetaBlock: {
+        marginBottom: 8,
+        gap: 2,
+    },
+    bunkMetaLine: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+    },
+    bunkMetaLabel: {
+        ...theme.typography.body,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        fontWeight: '600',
+    },
+    bunkMetaValue: {
+        ...theme.typography.body,
+        fontSize: 12,
+        color: theme.colors.text,
+    },
+    assignedStaffRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 2,
+        marginBottom: 2,
+    },
+    staffChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: '#eef2f7',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 999,
+        paddingVertical: 4,
+        paddingHorizontal: 10,
+        maxWidth: '100%',
+    },
+    staffChipText: {
+        ...theme.typography.body,
+        fontSize: 12,
+        color: theme.colors.text,
+        maxWidth: 120,
+    },
+    iconAddStaffBtn: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: '#fff',
+    },
+    assignStaffRow: {
+        marginTop: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    assignStaffRowCompact: {
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        gap: 8,
+    },
+    smallActionBtn: {
+        minWidth: 46,
+        height: 34,
+        borderRadius: 10,
+        backgroundColor: theme.colors.secondary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 10,
+    },
+    smallActionBtnText: {
+        ...theme.typography.body,
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    bunkFooter: {
+        alignItems: 'flex-end',
+        paddingTop: 12,
+        paddingBottom: 4,
+    },
+    doneButton: {
+        minWidth: 84,
+        height: 42,
+        borderRadius: 12,
+        backgroundColor: theme.colors.secondary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 16,
+    },
+    doneButtonText: {
+        ...theme.typography.body,
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    pickerSheet: {
+        width: '100%',
+        maxWidth: 420,
+        maxHeight: '70%',
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        overflow: 'hidden',
+    },
+    pickerOption: {
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: '#edf0f4',
+    },
+    pickerOptionText: {
+        ...theme.typography.body,
+        fontSize: 14,
         color: theme.colors.text,
     },
 });

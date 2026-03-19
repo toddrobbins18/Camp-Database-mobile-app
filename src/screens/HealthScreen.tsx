@@ -6,7 +6,8 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useDivisions } from '../api/campers';
-import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
+import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useDeleteMedicationLog, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
+import { supabase } from '../lib/supabase';
 
 const getChildDisplayName = (child: any) =>
     (child?.name != null && child.name !== '')
@@ -14,8 +15,8 @@ const getChildDisplayName = (child: any) =>
         : [child?.first_name, child?.last_name].filter(Boolean).join(' ').trim() || 'Unknown';
 
 export const HealthScreen = ({ navigation }: any) => {
-    const { companyId } = useCompany();
-    const { data: campersData, isLoading: campersLoading, isError: campersError } = useCampers(companyId, '2026');
+    const { companyId, season } = useCompany();
+    const { data: campersData, isLoading: campersLoading, isError: campersError } = useCampers(companyId, season);
     const { data: divisionsData, isError: divisionsError } = useDivisions(companyId);
     const safeCampers = Array.isArray(campersData) ? campersData : [];
     const safeDivisions = Array.isArray(divisionsData) ? divisionsData : [];
@@ -42,22 +43,40 @@ export const HealthScreen = ({ navigation }: any) => {
     const [isRecurring, setIsRecurring] = useState(false);
     const [showChildPicker, setShowChildPicker] = useState(false);
     const [showUploadModal, setShowUploadModal] = useState(false);
+    const [expandedHistoryChildId, setExpandedHistoryChildId] = useState<string | null>(null);
 
-    
-
+    const todayDateString = useMemo(() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }, []);
     const dateString = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+    const medicationQueryDate = activeView === 'list' ? todayDateString : dateString;
 
-    // Medications
-    const { data: medicationsData } = useMedicationLogs(companyId, dateString);
+    // Medications (list view = today; calendar view = selected date)
+    const { data: medicationsData } = useMedicationLogs(companyId, medicationQueryDate);
     const addMedicationMutation = useAddMedicationLog();
     const administerMutation = useAdministerMedication();
+    const deleteMedicationMutation = useDeleteMedicationLog();
     const safeMedications = Array.isArray(medicationsData) ? medicationsData : [];
 
     // Admissions
-    const { data: admissionsData } = useHealthCenterAdmissions(companyId);
+    const admissionsQuery = useHealthCenterAdmissions(companyId);
+    const admissionsData = admissionsQuery.data;
     const safeAdmissions = Array.isArray(admissionsData) ? admissionsData : [];
     const addAdmissionMutation = useAddHealthCenterAdmission();
     const checkoutMutation = useCheckoutHealthCenterAdmission();
+
+    const currentlyAdmitted = useMemo(() => safeAdmissions.filter((a: any) => !a.checked_out_at), [safeAdmissions]);
+    const admissionHistory = useMemo(() => safeAdmissions.filter((a: any) => a.checked_out_at), [safeAdmissions]);
+    const groupedHistory = useMemo(() => {
+        const acc: Record<string, { child: any; admissions: any[] }> = {};
+        admissionHistory.forEach((a: any) => {
+            const key = a.child_id || a.id;
+            if (!acc[key]) acc[key] = { child: a.children, admissions: [] };
+            acc[key].admissions.push(a);
+        });
+        return acc;
+    }, [admissionHistory]);
 
     // Filter children based on search query
     const filteredChildren = useMemo(() => {
@@ -83,25 +102,67 @@ export const HealthScreen = ({ navigation }: any) => {
         }
 
         try {
+            // Prevent duplicate active health-center stays (matches web flow)
+            const { data: existing } = await supabase
+                .from('health_center_admissions')
+                .select('id')
+                .eq('child_id', childToAdmit.id)
+                .eq('company_id', companyId)
+                .is('checked_out_at', null)
+                .maybeSingle();
+
+            if (existing) {
+                Alert.alert('Child already admitted', `${childToAdmit.name} is already in the health center.`);
+                return;
+            }
+
+            const { data: { user } } = await supabase.auth.getUser();
             await addAdmissionMutation.mutateAsync({
                 company_id: companyId,
                 child_id: childToAdmit.id,
                 reason: admitReason.trim() || null,
-                season: '2026',
+                notes: null,
+                season,
+                admitted_by: user?.id ?? undefined,
             } as any);
 
-            Alert.alert('Child admitted', `${childToAdmit.name} has been admitted to the health center.`);
+            // Ensure the lists update immediately (Currently Admitted + History)
+            await admissionsQuery.refetch();
+
             setShowAdmitModal(false);
             setAdmitReason('');
             setChildToAdmit(null);
+            // Avoid modal teardown race in RN web by alerting after close.
+            setTimeout(() => {
+                Alert.alert('Child admitted', `${childToAdmit.name} has been admitted to the health center.`);
+            }, 0);
         } catch (error: any) {
             const message = error?.message || 'Could not admit child to health center.';
             Alert.alert('Admit failed', message);
         }
     };
 
-    const handleCheckoutChild = (admissionId: string) => {
-        checkoutMutation.mutate({ id: admissionId, checkedOutBy: undefined });
+    const getAdmissionDuration = (admittedAt: string, checkedOutAt?: string | null) => {
+        const start = new Date(admittedAt);
+        const end = checkedOutAt ? new Date(checkedOutAt) : new Date();
+        const diffMs = end.getTime() - start.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours > 0) return `${diffHours}h ${diffMins % 60}m`;
+        return `${diffMins}m`;
+    };
+
+    const handleCheckoutChild = async (admissionId: string) => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            await checkoutMutation.mutateAsync({ id: admissionId, checkedOutBy: user?.id });
+
+            // Ensure the admission moves from "Currently Admitted" to "Health Center Log"
+            await admissionsQuery.refetch();
+        } catch (error: any) {
+            const message = error?.message || 'Could not check out child from the health center.';
+            Alert.alert('Checkout failed', message);
+        }
     };
 
     const handleAddMedication = () => {
@@ -111,20 +172,22 @@ export const HealthScreen = ({ navigation }: any) => {
         if (!child) return;
 
         let time = '08:00';
+        if (mealTime === 'Before Breakfast') time = '08:00';
+        if (mealTime === 'After Breakfast') time = '09:00';
         if (mealTime === 'Before Lunch') time = '12:00';
+        if (mealTime === 'After Lunch') time = '13:00';
         if (mealTime === 'Before Dinner') time = '18:00';
+        if (mealTime === 'After Dinner') time = '19:00';
         if (mealTime === 'Bedtime') time = '21:00';
-
-        const dStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
 
         addMedicationMutation.mutate({
             company_id: companyId,
             child_id: child.id as string,
             medication_name: medicationName,
-            dosage: dosage,
+            dosage: dosage || null,
             scheduled_time: time,
-            date: dStr,
-            notes: notes,
+            date: todayDateString,
+            notes: notes || null,
             alert_sent: false
         }, {
             onSuccess: () => {
@@ -132,8 +195,20 @@ export const HealthScreen = ({ navigation }: any) => {
                 setDosage('');
                 setNotes('');
                 setMealTime('');
+                setSelectedMedicationChild('');
             }
         });
+    };
+
+    const handleMarkAdministered = (medId: string) => {
+        administerMutation.mutate({ id: medId, companyId });
+    };
+
+    const handleDeleteMedication = (medId: string) => {
+        Alert.alert('Delete medication', 'Remove this medication log?', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: () => deleteMedicationMutation.mutate(medId) }
+        ]);
     };
 
     // Calendar functions
@@ -495,7 +570,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </View>
                                 </StyledCard>
 
-                                {/* Empty State or List */}
+                                {/* Empty State or List - card per medication with Pending/Given, Mark as Administered, Edit, Delete */}
                                 {safeMedications.length === 0 ? (
                                     <View style={styles.emptyStateRow}>
                                         <Text style={styles.emptyText}>No medications scheduled for today</Text>
@@ -503,19 +578,44 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </View>
                                 ) : (
                                     safeMedications.map((med: any) => (
-                                        <View key={med.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-                                            <View>
-                                                <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>{med.medication_name} {med.dosage ? `(${med.dosage})` : ''}</Text>
-                                                <Text style={{ color: theme.colors.textSecondary, marginTop: 4 }}>{med.children?.name} - {med.children?.group_name}</Text>
-                                                <Text style={{ color: theme.colors.textSecondary, marginTop: 2 }}>Time: {med.scheduled_time}</Text>
+                                        <View key={med.id} style={styles.medicationCard}>
+                                            <View style={styles.medicationCardHeader}>
+                                                <Text style={styles.medicationCardName}>{med.children?.name}</Text>
+                                                <View style={styles.medicationCardBadges}>
+                                                    {med.administered ? (
+                                                        <View style={[styles.statusBadge, styles.statusBadgeGiven]}>
+                                                            <Ionicons name="checkmark-circle" size={14} color="#10b981" />
+                                                            <Text style={styles.statusBadgeGivenText}>Given</Text>
+                                                        </View>
+                                                    ) : (
+                                                        <View style={[styles.statusBadge, styles.statusBadgePending]}>
+                                                            <Ionicons name="warning" size={14} color={theme.colors.warning || '#f59e0b'} />
+                                                            <Text style={styles.statusBadgePendingText}>Pending</Text>
+                                                        </View>
+                                                    )}
+                                                    <TouchableOpacity onPress={() => handleDeleteMedication(med.id)} style={styles.medicationCardIconBtn}>
+                                                        <Ionicons name="trash-outline" size={18} color={theme.colors.danger || '#ef4444'} />
+                                                    </TouchableOpacity>
+                                                </View>
                                             </View>
-                                            <TouchableOpacity
-                                                style={[styles.scanButton, { backgroundColor: med.administered ? '#10b981' : theme.colors.secondary, alignSelf: 'center' }]}
-                                                onPress={() => med.id && administerMutation.mutate({ id: med.id, administeredBy: undefined })}
-                                                disabled={med.administered}
-                                            >
-                                                <Text style={styles.scanButtonText}>{med.administered ? 'Done' : 'Administer'}</Text>
-                                            </TouchableOpacity>
+                                            <Text style={styles.medicationCardDetail}>{med.medication_name}{med.dosage ? ` - ${med.dosage}` : ''}</Text>
+                                            <Text style={styles.medicationCardTime}>
+                                                {med.scheduled_time === '08:00' ? 'Before Breakfast' : med.scheduled_time === '12:00' ? 'Before Lunch' : med.scheduled_time === '18:00' ? 'Before Dinner' : med.scheduled_time === '21:00' ? 'Bedtime' : med.scheduled_time}
+                                            </Text>
+                                            {med.date ? (
+                                                <View style={styles.medicationCardDateRow}>
+                                                    <Ionicons name="calendar-outline" size={12} color={theme.colors.textSecondary} />
+                                                    <Text style={styles.medicationCardDate}>Started: {new Date(med.date + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' })}</Text>
+                                                </View>
+                                            ) : null}
+                                            {!med.administered && (
+                                                <TouchableOpacity
+                                                    style={styles.markAdministeredButton}
+                                                    onPress={() => med.id && handleMarkAdministered(med.id)}
+                                                >
+                                                    <Text style={styles.markAdministeredButtonText}>Mark as Administered</Text>
+                                                </TouchableOpacity>
+                                            )}
                                         </View>
                                     ))
                                 )}
@@ -532,6 +632,52 @@ export const HealthScreen = ({ navigation }: any) => {
                                         Track overnight admissions to the health center
                                     </Text>
                                 </View>
+
+                                {/* Currently Admitted Section */}
+                                {currentlyAdmitted.length > 0 && (
+                                    <View style={styles.currentlyAdmittedSection}>
+                                        <View style={styles.currentlyAdmittedHeader}>
+                                            <Ionicons name="warning" size={20} color={theme.colors.danger} />
+                                            <Text style={styles.currentlyAdmittedTitle}>Currently Admitted ({currentlyAdmitted.length})</Text>
+                                        </View>
+                                        {currentlyAdmitted.map((admission: any) => {
+                                            const name = admission.children?.name || 'Unknown';
+                                            const groupName = admission.children?.group_name || '';
+                                            return (
+                                                <View key={admission.id} style={styles.admittedCard}>
+                                                    <View style={styles.admittedCardContent}>
+                                                        <View style={styles.admittedCardRow}>
+                                                            <Text style={styles.admittedCardName}>{name}</Text>
+                                                            <View style={styles.camperBadge}><Text style={styles.camperBadgeText}>Camper</Text></View>
+                                                        </View>
+                                                        <View style={styles.admittedCardTimeRow}>
+                                                            <Ionicons name="time-outline" size={14} color={theme.colors.textSecondary} />
+                                                            <Text style={styles.admittedCardTime}>
+                                                                Admitted {admission.admitted_at ? new Date(admission.admitted_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
+                                                            </Text>
+                                                            <View style={styles.durationBadge}>
+                                                                <Text style={styles.durationBadgeText}>{getAdmissionDuration(admission.admitted_at)}</Text>
+                                                            </View>
+                                                        </View>
+                                                        {admission.reason ? (
+                                                            <Text style={styles.admittedReason}><Text style={styles.admittedReasonLabel}>Reason: </Text>{admission.reason}</Text>
+                                                        ) : (
+                                                            <Text style={styles.admittedReason}><Text style={styles.admittedReasonLabel}>Reason: </Text>unknown</Text>
+                                                        )}
+                                                        {admission.notes ? <Text style={styles.admittedNotes}>{admission.notes}</Text> : null}
+                                                    </View>
+                                                    <TouchableOpacity
+                                                        style={styles.checkOutButton}
+                                                        onPress={() => admission.id && handleCheckoutChild(admission.id)}
+                                                    >
+                                                        <Ionicons name="person-remove-outline" size={16} color="white" />
+                                                        <Text style={styles.checkOutButtonText}>Check Out</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                )}
 
                                 {/* RFID Quick Check-in / Check-Out Card */}
                                 <StyledCard style={styles.rfidCard}>
@@ -579,7 +725,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </View>
                                 </View>
 
-                                {/* Available Children Section */}
+                                {/* Available Children Section (exclude already admitted) */}
                                 <View style={styles.availableChildrenSection}>
                                     <View style={styles.availableChildrenHeader}>
                                         <Ionicons name="checkmark-circle" size={20} color="#10b981" />
@@ -590,7 +736,9 @@ export const HealthScreen = ({ navigation }: any) => {
                                         style={styles.childrenList}
                                         showsVerticalScrollIndicator={true}
                                     >
-                                        {filteredChildren.map((child) => {
+                                        {filteredChildren
+                                            .filter((child: any) => !currentlyAdmitted.some((a: any) => a.child_id === child.id))
+                                            .map((child) => {
                                             const isSelected = selectedChild === child.id;
                                             return (
                                                 <TouchableOpacity
@@ -655,30 +803,58 @@ export const HealthScreen = ({ navigation }: any) => {
                                 <Text style={styles.healthCenterLogSubtitle}>
                                     Past health center admissions this season
                                 </Text>
-                                {safeAdmissions.length === 0 ? (
+                                {Object.keys(groupedHistory).length === 0 ? (
                                     <View style={styles.emptyState}>
                                         <Text style={styles.emptyText}>No admission history found for this season</Text>
                                     </View>
                                 ) : (
-                                    <ScrollView style={{ marginTop: 16 }}>
-                                        {safeAdmissions.map((admission: any) => (
-                                            <View key={admission.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                                    <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>{admission.children?.name}</Text>
-                                                    <Text style={{ color: theme.colors.textSecondary }}>
-                                                        {admission.admitted_at ? new Date(admission.admitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                                    </Text>
-                                                </View>
-                                                <Text style={{ color: theme.colors.textSecondary, marginTop: 4 }}>{admission.reason || 'No reason provided'}</Text>
-                                                {admission.checked_out_at ? (
-                                                    <Text style={{ color: '#10b981', marginTop: 8, fontSize: 12 }}>Checked out: {new Date(admission.checked_out_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-                                                ) : (
-                                                    <TouchableOpacity onPress={() => admission.id && handleCheckoutChild(admission.id)} style={{ marginTop: 8 }}>
-                                                        <Text style={{ color: theme.colors.secondary, fontWeight: 'bold' }}>Check Out Now</Text>
+                                    <ScrollView style={{ marginTop: 16 }} nestedScrollEnabled>
+                                        {Object.entries(groupedHistory).map(([childId, group]: [string, any]) => {
+                                            const entity = group.child;
+                                            const entityAdmissions = group.admissions;
+                                            const isExpanded = expandedHistoryChildId === (entity?.id || childId);
+                                            return (
+                                                <View key={childId} style={styles.historyGroupCard}>
+                                                    <TouchableOpacity
+                                                        style={styles.historyGroupHeader}
+                                                        onPress={() => setExpandedHistoryChildId(isExpanded ? null : (entity?.id || childId))}
+                                                        activeOpacity={0.7}
+                                                    >
+                                                        <View style={styles.historyGroupHeaderLeft}>
+                                                            <Text style={styles.historyGroupName}>{entity?.name || 'Unknown'}</Text>
+                                                            <View style={styles.camperBadge}><Text style={styles.camperBadgeText}>Camper</Text></View>
+                                                        </View>
+                                                        <Text style={styles.historyGroupDivision}>{entity?.group_name || '—'}</Text>
+                                                        <View style={styles.historyGroupMeta}>
+                                                            <View style={styles.admissionCountBadge}>
+                                                                <Text style={styles.admissionCountText}>{entityAdmissions.length} {entityAdmissions.length === 1 ? 'admission' : 'admissions'}</Text>
+                                                            </View>
+                                                            <Text style={styles.historyLastDate}>
+                                                                Last: {entityAdmissions[0]?.admitted_at ? new Date(entityAdmissions[0].admitted_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
+                                                            </Text>
+                                                        </View>
+                                                        <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={theme.colors.textSecondary} />
                                                     </TouchableOpacity>
-                                                )}
-                                            </View>
-                                        ))}
+                                                    {isExpanded && (
+                                                        <View style={styles.historyGroupDetails}>
+                                                            {entityAdmissions.map((admission: any, index: number) => (
+                                                                <View key={admission.id} style={styles.historyDetailBlock}>
+                                                                    <Text style={styles.historyDetailTitle}>Admission #{entityAdmissions.length - index}</Text>
+                                                                    <Text style={styles.historyDetailTime}>
+                                                                        {admission.admitted_at ? new Date(admission.admitted_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : ''} • {admission.admitted_at ? new Date(admission.admitted_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''} - {admission.checked_out_at ? new Date(admission.checked_out_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}
+                                                                    </Text>
+                                                                    <View style={styles.durationBadge}>
+                                                                        <Text style={styles.durationBadgeText}>{getAdmissionDuration(admission.admitted_at, admission.checked_out_at)}</Text>
+                                                                    </View>
+                                                                    {admission.reason ? <Text style={styles.historyDetailReason}><Text style={styles.admittedReasonLabel}>Reason: </Text>{admission.reason}</Text> : null}
+                                                                    {admission.notes ? <Text style={styles.historyDetailNotes}><Text style={styles.admittedReasonLabel}>Notes: </Text>{admission.notes}</Text> : null}
+                                                                </View>
+                                                            ))}
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            );
+                                        })}
                                     </ScrollView>
                                 )}
                             </StyledCard>
@@ -871,9 +1047,55 @@ export const HealthScreen = ({ navigation }: any) => {
                             <StyledCard style={styles.medicationLogCard}>
                                 <Text style={styles.logTitle}>Daily Medication Log</Text>
                                 <Text style={styles.logDescription}>Mark off medications administered today.</Text>
-                                <View style={styles.emptyState}>
-                                    <Text style={styles.emptyText}>No medications scheduled for today.</Text>
-                                </View>
+                                {safeMedications.length === 0 ? (
+                                    <View style={styles.emptyState}>
+                                        <Text style={styles.emptyText}>No medications scheduled for today.</Text>
+                                    </View>
+                                ) : (
+                                    <View style={{ marginTop: 12 }}>
+                                        {(() => {
+                                            const byChild: Record<string, any[]> = {};
+                                            safeMedications.forEach((med: any) => {
+                                                const key = med.child_id;
+                                                if (!byChild[key]) byChild[key] = [];
+                                                byChild[key].push(med);
+                                            });
+                                            return Object.entries(byChild).map(([cid, meds]) => {
+                                                const name = meds[0]?.children?.name || 'Unknown';
+                                                const groupName = meds[0]?.children?.group_name || '';
+                                                return (
+                                                    <View key={cid} style={styles.dailyLogChildCard}>
+                                                        <View style={styles.dailyLogChildHeader}>
+                                                            <Text style={styles.dailyLogChildName}>{name}</Text>
+                                                            <View style={styles.divisionTagSmall}><Text style={styles.divisionTagSmallText}>{groupName}</Text></View>
+                                                        </View>
+                                                        {meds.map((med: any) => (
+                                                            <View key={med.id} style={styles.dailyLogMedRow}>
+                                                                <Text style={styles.dailyLogMedDetail}>{med.medication_name}{med.dosage ? ` - ${med.dosage}` : ''}</Text>
+                                                                <Text style={styles.dailyLogMedTime}>
+                                                                    {med.scheduled_time === '08:00' ? 'Before Breakfast' : med.scheduled_time === '12:00' ? 'Before Lunch' : med.scheduled_time === '18:00' ? 'Before Dinner' : med.scheduled_time === '21:00' ? 'Bedtime' : med.scheduled_time}
+                                                                </Text>
+                                                                {med.administered ? (
+                                                                    <View style={[styles.statusBadge, styles.statusBadgeGiven, { alignSelf: 'flex-start', marginTop: 4 }]}>
+                                                                        <Ionicons name="checkmark-circle" size={14} color="#10b981" />
+                                                                        <Text style={styles.statusBadgeGivenText}>Given</Text>
+                                                                    </View>
+                                                                ) : (
+                                                                    <TouchableOpacity
+                                                                        style={[styles.markAdministeredButton, { marginTop: 6 }]}
+                                                                        onPress={() => med.id && handleMarkAdministered(med.id)}
+                                                                    >
+                                                                        <Text style={styles.markAdministeredButtonText}>Mark as Administered</Text>
+                                                                    </TouchableOpacity>
+                                                                )}
+                                                            </View>
+                                                        ))}
+                                                    </View>
+                                                );
+                                            });
+                                        })()}
+                                    </View>
+                                )}
                             </StyledCard>
                         )}
                     </>
@@ -931,14 +1153,7 @@ export const HealthScreen = ({ navigation }: any) => {
                     setChildToAdmit(null);
                 }}
             >
-                <Pressable
-                    style={styles.modalOverlay}
-                    onPress={() => {
-                        setShowAdmitModal(false);
-                        setAdmitReason('');
-                        setChildToAdmit(null);
-                    }}
-                >
+                <View style={styles.modalOverlay}>
                     <Pressable
                         style={styles.admitModal}
                         onPress={(e) => e.stopPropagation()}
@@ -974,7 +1189,7 @@ export const HealthScreen = ({ navigation }: any) => {
                             <Text style={styles.cancelButtonText}>Cancel</Text>
                         </TouchableOpacity>
                     </Pressable>
-                </Pressable>
+                </View>
             </Modal>
 
             {/* Child Picker Modal for Add Medication */}
@@ -1831,6 +2046,321 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.textSecondary,
         marginBottom: theme.spacing.xl,
+    },
+    currentlyAdmittedSection: {
+        marginBottom: theme.spacing.lg,
+    },
+    currentlyAdmittedHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.md,
+    },
+    currentlyAdmittedTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    admittedCard: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        backgroundColor: 'rgba(239, 68, 68, 0.06)',
+        borderWidth: 1,
+        borderColor: 'rgba(239, 68, 68, 0.2)',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.sm,
+    },
+    admittedCardContent: { flex: 1 },
+    admittedCardRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.xs,
+    },
+    admittedCardName: {
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    camperBadge: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 12,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+    },
+    camperBadgeText: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    admittedCardTimeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        marginBottom: theme.spacing.xs,
+    },
+    admittedCardTime: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+    },
+    durationBadge: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 10,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+    },
+    durationBadgeText: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    admittedReason: {
+        fontSize: 13,
+        color: theme.colors.text,
+        marginTop: 4,
+    },
+    admittedReasonLabel: {
+        fontWeight: '600',
+    },
+    admittedNotes: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 4,
+    },
+    checkOutButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        backgroundColor: theme.colors.secondary,
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+    },
+    checkOutButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: 'white',
+    },
+    historyGroupCard: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        marginBottom: theme.spacing.md,
+        overflow: 'hidden',
+    },
+    historyGroupHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: theme.spacing.md,
+        backgroundColor: theme.colors.surface,
+    },
+    historyGroupHeaderLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        flex: 1,
+    },
+    historyGroupName: {
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    historyGroupDivision: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
+    historyGroupMeta: {
+        alignItems: 'flex-end',
+        marginRight: theme.spacing.sm,
+    },
+    admissionCountBadge: {
+        backgroundColor: theme.colors.secondary,
+        borderRadius: 12,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        marginBottom: 4,
+    },
+    admissionCountText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: 'white',
+    },
+    historyLastDate: {
+        fontSize: 11,
+        color: theme.colors.textSecondary,
+    },
+    historyGroupDetails: {
+        padding: theme.spacing.md,
+        paddingTop: 0,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    historyDetailBlock: {
+        borderLeftWidth: 2,
+        borderLeftColor: 'rgba(59, 130, 246, 0.5)',
+        paddingLeft: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        marginBottom: theme.spacing.sm,
+    },
+    historyDetailTitle: {
+        fontWeight: '600',
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    historyDetailTime: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 4,
+    },
+    historyDetailReason: {
+        fontSize: 13,
+        color: theme.colors.text,
+        marginTop: 4,
+    },
+    historyDetailNotes: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
+    medicationCard: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    medicationCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: theme.spacing.sm,
+    },
+    medicationCardName: {
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    medicationCardBadges: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+    },
+    statusBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    statusBadgeGiven: {
+        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    },
+    statusBadgeGivenText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#10b981',
+    },
+    statusBadgePending: {
+        backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    },
+    statusBadgePendingText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#f59e0b',
+    },
+    medicationCardIconBtn: {
+        padding: 4,
+    },
+    medicationCardDetail: {
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    medicationCardTime: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        marginTop: 4,
+    },
+    medicationCardDateRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginTop: 4,
+    },
+    medicationCardDate: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    markAdministeredButton: {
+        backgroundColor: theme.colors.secondary,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        alignItems: 'center',
+        marginTop: theme.spacing.md,
+    },
+    markAdministeredButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: 'white',
+    },
+    dailyLogChildCard: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    dailyLogChildHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.sm,
+    },
+    dailyLogChildName: {
+        ...theme.typography.h3,
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    divisionTagSmall: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 10,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+    },
+    divisionTagSmallText: {
+        fontSize: 11,
+        color: theme.colors.textSecondary,
+    },
+    dailyLogMedRow: {
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        paddingTop: theme.spacing.sm,
+        marginTop: theme.spacing.xs,
+    },
+    dailyLogMedDetail: {
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    dailyLogMedTime: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
     },
     // Add Medication Styles
     addMedicationCard: {
