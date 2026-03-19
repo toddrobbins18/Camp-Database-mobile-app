@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
+    Alert,
+    ActivityIndicator,
     View,
     Text,
     ScrollView,
@@ -17,6 +19,8 @@ import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useDivisions } from '../api/campers';
 import { useSpecialEvents, useAddSpecialEvent } from '../api/calendar_events';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '../lib/supabase';
 
 interface SpecialEventsScreenProps {
     navigation: any;
@@ -111,7 +115,9 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const HELP_TABS = [
         'Children', 'Staff', 'Medications', 'Trips', 'Menu', 'Awards', 'Daily Notes', 'Incidents', 'Calendar', 'Sports'
     ];
-    const [selectedDate, setSelectedDate] = useState('01/22/2026');
+    const today = new Date();
+    const initialDate = `${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}/${today.getFullYear()}`;
+    const [selectedDate, setSelectedDate] = useState(initialDate);
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
@@ -122,15 +128,34 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const [selectedTime, setSelectedTime] = useState({ hour: 12, minute: 0, ampm: 'PM' });
 
     // Add Event Modal States
-    const [eventDate, setEventDate] = useState('01/22/2026');
+    const [eventDate, setEventDate] = useState(initialDate);
     const [title, setTitle] = useState('');
     const [eventType, setEventType] = useState('');
     const [startTime, setStartTime] = useState('');
     const [endTime, setEndTime] = useState('');
     const [selectedDivisions, setSelectedDivisions] = useState<string[]>([]);
     const [location, setLocation] = useState('');
+    const [description, setDescription] = useState('');
+    const [staffSearchQuery, setStaffSearchQuery] = useState('');
+    const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
     const [showEventTypeDropdown, setShowEventTypeDropdown] = useState(false);
     const [showEventDatePicker, setShowEventDatePicker] = useState(false);
+
+    const { data: staffData = [] } = useQuery({
+        queryKey: ['special_events_staff', companyId, season],
+        queryFn: async () => {
+            if (!companyId || !season) return [];
+            const { data, error } = await supabase
+                .from('staff')
+                .select('id, name, role')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .order('name', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId && !!season,
+    });
 
     // Date picker state
     const [datePickerMonth, setDatePickerMonth] = useState(new Date().getMonth());
@@ -140,21 +165,41 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
 
     const filteredEvents = useMemo(() => {
         let filtered = specialEventsData || [];
+        if (selectedDate) {
+            const parts = selectedDate.split('/');
+            const selectedIso = parts.length === 3 ? `${parts[2]}-${parts[0]}-${parts[1]}` : selectedDate;
+            filtered = filtered.filter((event: any) => event.event_date === selectedIso);
+        }
         if (selectedDivision !== 'All Divisions') {
             filtered = filtered.filter((event: any) => {
-                // If divisions array exists and includes the ID
-                if (event.divisions && Array.isArray(event.divisions)) {
-                    return event.divisions.includes(selectedDivision);
-                }
-                // Fallback check if it stores by name anywhere or string CSV
-                if (typeof event.divisions === 'string') {
-                    return event.divisions.includes(selectedDivision);
-                }
-                return false;
+                const eventDivisionIds = Array.isArray(event.divisions)
+                    ? event.divisions.map((d: any) => d.id)
+                    : [];
+                return eventDivisionIds.includes(selectedDivision);
             });
         }
         return filtered;
-    }, [specialEventsData, selectedDivision]);
+    }, [specialEventsData, selectedDivision, selectedDate]);
+
+    const groupedEvents = useMemo(() => {
+        return filteredEvents.reduce((acc: Record<string, any[]>, event: any) => {
+            const date = event.event_date || '';
+            if (!acc[date]) acc[date] = [];
+            acc[date].push(event);
+            return acc;
+        }, {});
+    }, [filteredEvents]);
+
+    const filteredStaff = useMemo(() => {
+        if (!staffSearchQuery.trim()) return staffData;
+        const term = staffSearchQuery.toLowerCase();
+        return staffData.filter((s: any) => (s.name || '').toLowerCase().includes(term));
+    }, [staffData, staffSearchQuery]);
+
+    const selectedStaff = useMemo(
+        () => staffData.filter((s: any) => selectedStaffIds.includes(s.id)),
+        [staffData, selectedStaffIds]
+    );
 
     // Reuse date formatting function
     const formatDate = (date: Date) => {
@@ -338,42 +383,72 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     };
 
     const handleAddEvent = () => {
-        if (!title || !eventType) return;
+        if (!companyId || !season) {
+            Alert.alert('Context missing', 'Company or season is not loaded yet. Please try again.');
+            return;
+        }
+        if (!title.trim() || !eventType) {
+            Alert.alert('Validation', 'Please add title and event type.');
+            return;
+        }
         // Parse date from MM/DD/YYYY to YYYY-MM-DD
         const dateParts = eventDate.split('/');
         const isoDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[0]}-${dateParts[1]}` : eventDate;
+        const chaperone = selectedStaff.map((s: any) => s.name).join(', ');
+        const timeSlot = startTime && endTime
+            ? `${startTime} - ${endTime}`
+            : startTime || endTime || 'TBD';
         addSpecialEventMutation.mutate({
-            title,
+            title: title.trim(),
             event_date: isoDate,
             event_type: eventType.toLowerCase().replace(/ /g, '-'),
+            time_slot: timeSlot,
             start_time: startTime || undefined,
+            end_time: endTime || undefined,
             location: location || undefined,
-            company_id: companyId as string,
+            description: description || undefined,
+            chaperone: chaperone || undefined,
+            company_id: companyId,
             season,
-            divisions: selectedDivisions,
+            division_ids: selectedDivisions,
         }, {
             onSuccess: () => {
-                setEventDate('01/22/2026');
+                setEventDate(initialDate);
                 setTitle('');
                 setEventType('');
                 setStartTime('');
                 setEndTime('');
                 setSelectedDivisions([]);
                 setLocation('');
+                setDescription('');
+                setSelectedStaffIds([]);
+                setStaffSearchQuery('');
                 setShowAddEventModal(false);
+            },
+            onError: (error: any) => {
+                Alert.alert('Error', error?.message || 'Failed to add event');
             },
         });
     };
 
     const handleCloseAddEventModal = () => {
-        setEventDate('01/22/2026');
+        setEventDate(initialDate);
         setTitle('');
         setEventType('');
         setStartTime('');
         setEndTime('');
         setSelectedDivisions([]);
         setLocation('');
+        setDescription('');
+        setSelectedStaffIds([]);
+        setStaffSearchQuery('');
         setShowAddEventModal(false);
+    };
+
+    const toggleStaffSelection = (staffId: string) => {
+        setSelectedStaffIds((prev) =>
+            prev.includes(staffId) ? prev.filter((id) => id !== staffId) : [...prev, staffId]
+        );
     };
 
     const handleSelectFileOption = (option: string) => {
@@ -474,6 +549,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                 <View style={[styles.emptyStateContainer, showDivisionDropdown && styles.emptyStateContainerWithDropdown]}>
                     {isLoadingEvents ? (
                         <StyledCard style={styles.emptyStateCard}>
+                            <ActivityIndicator size="large" color={theme.colors.secondary} />
                             <Text style={styles.emptyStateText}>Loading events...</Text>
                         </StyledCard>
                     ) : filteredEvents.length === 0 ? (
@@ -483,24 +559,55 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                             </Text>
                         </StyledCard>
                     ) : (
-                        filteredEvents.map((event: any) => (
-                            <StyledCard key={event.id} style={{ marginBottom: 8, padding: 12 }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                    <Text style={{ fontWeight: '600', color: '#374151', fontSize: 14, flex: 1 }}>{event.title}</Text>
-                                    <Text style={{ fontSize: 12, color: '#6b7280' }}>{new Date(event.event_date).toLocaleDateString()}</Text>
-                                </View>
-                                {event.event_type && (
-                                    <View style={{ backgroundColor: '#f3e8ff', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 4 }}>
-                                        <Text style={{ fontSize: 11, color: '#6b21a8' }}>{event.event_type.replace(/-/g, ' ')}</Text>
-                                    </View>
-                                )}
-                                {event.start_time && (
-                                    <Text style={{ fontSize: 12, color: '#9ca3af' }}>{event.start_time}</Text>
-                                )}
-                                {event.location && (
-                                    <Text style={{ fontSize: 12, color: '#9ca3af' }}>{event.location}</Text>
-                                )}
-                            </StyledCard>
+                        Object.entries(groupedEvents).map(([date, events]) => (
+                            <View key={date} style={styles.dateGroup}>
+                                <Text style={styles.dateGroupTitle}>
+                                    {new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+                                        weekday: 'long',
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                    })}
+                                </Text>
+                                {(events as any[]).map((event: any) => (
+                                    <StyledCard key={event.id} style={styles.eventCard}>
+                                        <Text style={styles.eventTitle}>{event.title}</Text>
+                                        <Text style={styles.eventTime}>
+                                            {event.start_time && event.end_time
+                                                ? `${event.start_time} - ${event.end_time}`
+                                                : event.time_slot || event.start_time || 'TBD'}
+                                        </Text>
+
+                                        <View style={styles.eventBadgeRow}>
+                                            {!!event.event_type && (
+                                                <View style={styles.eventTypeBadge}>
+                                                    <Text style={styles.eventTypeBadgeText}>
+                                                        {event.event_type.replace(/-/g, ' ')}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                            {Array.isArray(event.divisions) &&
+                                                event.divisions.map((division: any) => (
+                                                    <View key={`${event.id}-${division.id}`} style={styles.divisionTag}>
+                                                        <Text style={styles.divisionTagText}>{division.name}</Text>
+                                                    </View>
+                                                ))}
+                                        </View>
+
+                                        {event.location ? (
+                                            <Text style={styles.eventDetailText}>📍 {event.location}</Text>
+                                        ) : null}
+                                        {event.chaperone ? (
+                                            <Text style={styles.eventDetailText}>👤 Staff: {event.chaperone}</Text>
+                                        ) : null}
+                                        {event.description ? (
+                                            <Text style={styles.eventDescription} numberOfLines={2}>
+                                                {event.description}
+                                            </Text>
+                                        ) : null}
+                                    </StyledCard>
+                                ))}
+                            </View>
                         ))
                     )}
                 </View>
@@ -514,7 +621,10 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                 onRequestClose={handleCloseAddEventModal}
             >
                 <Pressable style={styles.modalOverlay} onPress={handleCloseAddEventModal}>
-                    <View style={styles.addEventModalContainer}>
+                    <Pressable
+                        style={styles.addEventModalContainer}
+                        onPress={(e) => e.stopPropagation()}
+                    >
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Add Event</Text>
@@ -711,6 +821,86 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                     onChangeText={setLocation}
                                 />
                             </View>
+
+                            {/* Staff */}
+                            <View style={styles.formSection}>
+                                <Text style={styles.label}>Staff (optional)</Text>
+                                {selectedStaff.length > 0 && (
+                                    <View style={styles.selectedStaffChips}>
+                                        {selectedStaff.map((staff: any) => (
+                                            <TouchableOpacity
+                                                key={staff.id}
+                                                style={styles.staffChip}
+                                                onPress={() => toggleStaffSelection(staff.id)}
+                                            >
+                                                <Text style={styles.staffChipText}>{staff.name}</Text>
+                                                <Ionicons name="close" size={14} color={theme.colors.surface} />
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                )}
+                                <View style={styles.searchContainer}>
+                                    <Ionicons
+                                        name="search-outline"
+                                        size={20}
+                                        color={theme.colors.textSecondary}
+                                        style={styles.searchIcon}
+                                    />
+                                    <TextInput
+                                        style={styles.searchInput}
+                                        placeholder="Search staff to assign..."
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        value={staffSearchQuery}
+                                        onChangeText={setStaffSearchQuery}
+                                    />
+                                </View>
+                                <View style={styles.staffListContainer}>
+                                    <FlatList
+                                        data={filteredStaff}
+                                        keyExtractor={(item: any) => item.id}
+                                        renderItem={({ item }: any) => {
+                                            const isSelected = selectedStaffIds.includes(item.id);
+                                            return (
+                                                <TouchableOpacity
+                                                    style={[
+                                                        styles.staffRow,
+                                                        isSelected && styles.staffRowSelected,
+                                                    ]}
+                                                    onPress={() => toggleStaffSelection(item.id)}
+                                                >
+                                                    <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                                                        {isSelected ? (
+                                                            <Ionicons name="checkmark" size={14} color={theme.colors.surface} />
+                                                        ) : null}
+                                                    </View>
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={styles.staffName}>{item.name}</Text>
+                                                        {!!item.role && (
+                                                            <Text style={styles.staffRole}>{item.role}</Text>
+                                                        )}
+                                                    </View>
+                                                </TouchableOpacity>
+                                            );
+                                        }}
+                                        nestedScrollEnabled
+                                    />
+                                </View>
+                            </View>
+
+                            {/* Description */}
+                            <View style={styles.formSection}>
+                                <Text style={styles.label}>Description (optional)</Text>
+                                <TextInput
+                                    style={styles.textArea}
+                                    placeholder=""
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    value={description}
+                                    onChangeText={setDescription}
+                                    multiline
+                                    numberOfLines={4}
+                                    textAlignVertical="top"
+                                />
+                            </View>
                         </ScrollView>
 
                         {/* Modal Footer */}
@@ -732,7 +922,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 <Text style={styles.submitButtonText}>Add Event</Text>
                             </TouchableOpacity>
                         </View>
-                    </View>
+                    </Pressable>
                 </Pressable>
             </Modal>
 
@@ -1284,6 +1474,7 @@ const styles = StyleSheet.create({
         minHeight: 200,
         justifyContent: 'center',
         alignItems: 'center',
+        gap: theme.spacing.sm,
     },
     emptyStateText: {
         ...theme.typography.body,
@@ -1428,6 +1619,15 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         minHeight: 44,
     },
+    textArea: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        ...theme.typography.body,
+        minHeight: 100,
+    },
     placeholder: {
         color: theme.colors.textSecondary,
     },
@@ -1558,6 +1758,102 @@ const styles = StyleSheet.create({
     divisionCheckboxText: {
         ...theme.typography.body,
         flex: 1,
+    },
+    dateGroup: {
+        marginBottom: theme.spacing.lg,
+    },
+    dateGroupTitle: {
+        ...theme.typography.h3,
+        marginBottom: theme.spacing.sm,
+    },
+    eventCard: {
+        marginBottom: theme.spacing.sm,
+        padding: theme.spacing.md,
+    },
+    eventTitle: {
+        ...theme.typography.body,
+        fontWeight: '700',
+        marginBottom: 2,
+    },
+    eventTime: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.sm,
+    },
+    eventBadgeRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.xs,
+        marginBottom: theme.spacing.sm,
+    },
+    eventTypeBadge: {
+        backgroundColor: '#1d4ed8',
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 4,
+    },
+    eventTypeBadgeText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.surface,
+        fontWeight: '600',
+        textTransform: 'capitalize',
+    },
+    eventDetailText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        marginBottom: 2,
+    },
+    eventDescription: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
+    selectedStaffChips: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.xs,
+        marginBottom: theme.spacing.sm,
+    },
+    staffChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: '#22B8CF',
+        borderRadius: 16,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 5,
+    },
+    staffChipText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    staffListContainer: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        maxHeight: 220,
+        marginTop: theme.spacing.sm,
+    },
+    staffRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        gap: theme.spacing.sm,
+    },
+    staffRowSelected: {
+        backgroundColor: '#f5f7ff',
+    },
+    staffName: {
+        ...theme.typography.body,
+        fontWeight: '600',
+    },
+    staffRole: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
     },
     modalFooter: {
         flexDirection: 'row',

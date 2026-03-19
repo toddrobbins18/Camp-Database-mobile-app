@@ -153,11 +153,13 @@ export interface SpecialEvent {
     title: string;
     event_date: string;
     event_type: string;
+    time_slot?: string;
     start_time?: string;
     end_time?: string;
     location?: string;
     description?: string;
-    divisions?: string[];
+    chaperone?: string;
+    divisions?: Array<{ id: string; name: string }>;
     company_id?: string;
     season?: string;
 }
@@ -168,15 +170,42 @@ export const useSpecialEvents = (companyId: string | null, season: string) => {
         queryFn: async () => {
             if (!companyId) return [];
 
-            const { data, error } = await supabase
-                .from('sports_calendar')
-                .select('*')
-                .eq('company_id', companyId)
-                .in('event_type', ['special-event', 'evening-activity', 'campfire', 'movie-night', 'talent-show', 'game-night', 'other'])
-                .order('event_date', { ascending: true });
+            const [eventsRes, linksRes] = await Promise.all([
+                supabase
+                    .from('special_events_activities')
+                    .select('*')
+                    .eq('company_id', companyId)
+                    .order('event_date', { ascending: true })
+                    .order('time_slot', { ascending: true }),
+                supabase
+                    .from('special_events_divisions')
+                    .select('event_id, division_id, divisions(id, name)')
+                    .eq('company_id', companyId),
+            ]);
 
-            if (error) throw error;
-            return (data || []) as SpecialEvent[];
+            if (eventsRes.error) throw eventsRes.error;
+            if (linksRes.error) throw linksRes.error;
+
+            const seasonFilter = season || '2026';
+            const events = (eventsRes.data || []).filter(
+                (e: any) => e.season === seasonFilter || e.season == null
+            );
+
+            const divisionMap = new Map<string, Array<{ id: string; name: string }>>();
+            (linksRes.data || []).forEach((link: any) => {
+                if (!divisionMap.has(link.event_id)) divisionMap.set(link.event_id, []);
+                if (link.divisions) {
+                    divisionMap.get(link.event_id)!.push({
+                        id: link.divisions.id,
+                        name: link.divisions.name,
+                    });
+                }
+            });
+
+            return events.map((event: any) => ({
+                ...event,
+                divisions: divisionMap.get(event.id) || [],
+            })) as SpecialEvent[];
         },
         enabled: !!companyId,
     });
@@ -186,15 +215,21 @@ export const useAddSpecialEvent = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (eventData: Omit<SpecialEvent, 'id'>) => {
+        mutationFn: async (
+            eventData: Omit<SpecialEvent, 'id' | 'divisions'> & { division_ids?: string[] }
+        ) => {
             const { data, error } = await supabase
-                .from('sports_calendar')
+                .from('special_events_activities')
                 .insert([{
                     title: eventData.title,
                     event_date: eventData.event_date,
                     event_type: eventData.event_type || 'special-event',
-                    start_time: eventData.start_time,
-                    location: eventData.location,
+                    time_slot: eventData.time_slot || 'TBD',
+                    start_time: eventData.start_time || null,
+                    end_time: eventData.end_time || null,
+                    location: eventData.location || null,
+                    description: eventData.description || null,
+                    chaperone: eventData.chaperone || null,
                     company_id: eventData.company_id,
                     season: eventData.season,
                 }])
@@ -202,10 +237,23 @@ export const useAddSpecialEvent = () => {
                 .single();
 
             if (error) throw error;
+
+            if (eventData.division_ids && eventData.division_ids.length > 0) {
+                const rows = eventData.division_ids.map((divisionId) => ({
+                    event_id: data.id,
+                    division_id: divisionId,
+                    company_id: eventData.company_id,
+                }));
+                const { error: divError } = await supabase
+                    .from('special_events_divisions')
+                    .insert(rows);
+                if (divError) throw divError;
+            }
+
             return data;
         },
         onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: ['special_events', variables.company_id] });
+            queryClient.invalidateQueries({ queryKey: ['special_events', variables.company_id, variables.season] });
             queryClient.invalidateQueries({ queryKey: ['calendar_events', variables.company_id] });
         },
     });
