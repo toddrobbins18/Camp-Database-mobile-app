@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -26,7 +26,8 @@ interface RosterTemplatesScreenProps {
 interface Camper {
     id: string;
     name: string;
-    division: string;
+    divisionId: string | null;
+    divisionName: string;
 }
 
 
@@ -40,41 +41,45 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
     const [description, setDescription] = useState('');
     const [selectedCampers, setSelectedCampers] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedDivision, setSelectedDivision] = useState('All Divisions');
+    const [selectedDivision, setSelectedDivision] = useState('all');
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
 
     // Fetch campers from Supabase
     const { data: campers = [] } = useQuery({
-        queryKey: ['children_with_division', companyId],
+        queryKey: ['children_with_division', companyId, season],
         queryFn: async () => {
-            if (!companyId) return [];
+            if (!companyId || !season) return [];
             const { data, error } = await supabase
                 .from('children')
-                .select('id, first_name, last_name, division')
+                .select('id, name, division_id, division:divisions(name)')
                 .eq('company_id', companyId)
-                .order('last_name', { ascending: true });
+                .eq('season', season)
+                .eq('status', 'active')
+                .order('name', { ascending: true });
             if (error) throw error;
             return (data || []).map((c: any) => ({
                 id: c.id,
-                name: `${c.first_name} ${c.last_name}`.trim(),
-                division: c.division || 'Unassigned',
+                name: (c.name || '').trim() || 'Unnamed',
+                divisionId: c.division_id || null,
+                divisionName: c.division?.name || 'Unassigned',
             }));
         },
-        enabled: !!companyId,
+        enabled: !!companyId && !!season,
     });
 
     // Fetch divisions from Supabase
-    const { data: divisions = ['All Divisions'] } = useQuery({
+    const { data: divisions = [{ id: 'all', name: 'All Divisions' }] } = useQuery({
         queryKey: ['divisions', companyId],
         queryFn: async () => {
-            if (!companyId) return ['All Divisions'];
+            if (!companyId) return [{ id: 'all', name: 'All Divisions' }];
             const { data, error } = await supabase
                 .from('divisions')
-                .select('name')
+                .select('id, name')
                 .eq('company_id', companyId)
+                .eq('is_active', true)
                 .order('name', { ascending: true });
-            if (error) return ['All Divisions'];
-            return ['All Divisions', ...(data || []).map((d: any) => d.name)];
+            if (error) return [{ id: 'all', name: 'All Divisions' }];
+            return [{ id: 'all', name: 'All Divisions' }, ...(data || [])];
         },
         enabled: !!companyId,
     });
@@ -105,7 +110,6 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                     company_id: companyId,
                     name: templateData.name,
                     description: templateData.description || null,
-                    season: season,
                 }])
                 .select()
                 .single();
@@ -114,7 +118,8 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
             // 2. Add children to the template
             if (templateData.camperIds.length > 0) {
                 const childrenRecords = templateData.camperIds.map((childId: string) => ({
-                    roster_template_id: template.id,
+                    template_id: template.id,
+                    company_id: companyId,
                     child_id: childId,
                 }));
                 const { error: childrenError } = await supabase
@@ -128,6 +133,12 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['roster_templates'] });
             Alert.alert('Success', 'Roster template created successfully');
+            setTemplateName('');
+            setDescription('');
+            setSelectedCampers([]);
+            setSearchQuery('');
+            setSelectedDivision('all');
+            setShowCreateModal(false);
         },
         onError: (error: any) => {
             Alert.alert('Error', error.message || 'Failed to create template');
@@ -137,9 +148,15 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
     const filteredCampers = campers.filter((camper: any) => {
         const matchesSearch = camper.name.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesDivision =
-            selectedDivision === 'All Divisions' || camper.division === selectedDivision;
+            selectedDivision === 'all' || camper.divisionId === selectedDivision;
         return matchesSearch && matchesDivision;
     });
+
+    const camperNameById = useMemo(() => {
+        const map = new Map<string, string>();
+        campers.forEach((camper: Camper) => map.set(camper.id, camper.name));
+        return map;
+    }, [campers]);
 
     const handleSelectCamper = (camperId: string) => {
         setSelectedCampers((prev) =>
@@ -161,23 +178,20 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
         setSelectedCampers([]);
     };
 
-    const handleCreateTemplate = () => {
+    const handleCreateTemplate = async () => {
         if (!templateName.trim()) {
             Alert.alert('Validation', 'Please enter a template name');
             return;
         }
-        createTemplateMutation.mutate({
+        if (selectedCampers.length === 0) {
+            Alert.alert('Validation', 'Please select at least one camper');
+            return;
+        }
+        await createTemplateMutation.mutateAsync({
             name: templateName,
             description,
             camperIds: selectedCampers,
         });
-        // Reset form
-        setTemplateName('');
-        setDescription('');
-        setSelectedCampers([]);
-        setSearchQuery('');
-        setSelectedDivision('All Divisions');
-        setShowCreateModal(false);
     };
 
     const handleCloseModal = () => {
@@ -185,7 +199,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
         setDescription('');
         setSelectedCampers([]);
         setSearchQuery('');
-        setSelectedDivision('All Divisions');
+        setSelectedDivision('all');
         setShowCreateModal(false);
     };
 
@@ -219,26 +233,77 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                     </TouchableOpacity>
                 </View>
 
-                {/* Empty State Card */}
-                <StyledCard style={styles.emptyStateCard}>
-                    <View style={styles.emptyStateContent}>
-                        <View style={styles.emptyStateIconContainer}>
-                            <Ionicons name="people" size={64} color={theme.colors.textSecondary} />
-                            <View style={styles.greenDot} />
+                {isLoadingTemplates ? (
+                    <StyledCard style={styles.loadingCard}>
+                        <ActivityIndicator size="large" color={theme.colors.secondary} />
+                        <Text style={styles.loadingText}>Loading templates...</Text>
+                    </StyledCard>
+                ) : existingTemplates.length === 0 ? (
+                    <StyledCard style={styles.emptyStateCard}>
+                        <View style={styles.emptyStateContent}>
+                            <View style={styles.emptyStateIconContainer}>
+                                <Ionicons name="people" size={64} color={theme.colors.textSecondary} />
+                                <View style={styles.greenDot} />
+                            </View>
+                            <Text style={styles.emptyStateTitle}>No Roster Templates Yet</Text>
+                            <Text style={styles.emptyStateDescription}>
+                                Create roster templates to quickly assign campers to sporting events.
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.createFirstButton}
+                                onPress={() => setShowCreateModal(true)}
+                            >
+                                <Ionicons name="add" size={20} color={theme.colors.surface} />
+                                <Text style={styles.createFirstButtonText}>Create Your First Template</Text>
+                            </TouchableOpacity>
                         </View>
-                        <Text style={styles.emptyStateTitle}>No Roster Templates Yet</Text>
-                        <Text style={styles.emptyStateDescription}>
-                            Create roster templates to quickly assign campers to sporting events.
-                        </Text>
-                        <TouchableOpacity
-                            style={styles.createFirstButton}
-                            onPress={() => setShowCreateModal(true)}
-                        >
-                            <Ionicons name="add" size={20} color={theme.colors.surface} />
-                            <Text style={styles.createFirstButtonText}>Create Your First Template</Text>
-                        </TouchableOpacity>
+                    </StyledCard>
+                ) : (
+                    <View style={styles.templatesGrid}>
+                        {existingTemplates.map((template: any) => {
+                            const children = Array.isArray(template.roster_template_children)
+                                ? template.roster_template_children
+                                : [];
+                            return (
+                                <StyledCard key={template.id} style={styles.templateCard}>
+                                    <View style={styles.templateCardHeader}>
+                                        <View style={styles.templateHeaderText}>
+                                            <Text style={styles.templateName}>{template.name}</Text>
+                                            <Text style={styles.templateDescription}>
+                                                {template.description || 'none'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <View style={styles.templateMetaRow}>
+                                        <Ionicons name="people-outline" size={16} color={theme.colors.textSecondary} />
+                                        <Text style={styles.templateMetaText}>
+                                            {children.length} camper{children.length === 1 ? '' : 's'}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.templateBadgesRow}>
+                                        {children.slice(0, 4).map((child: any, index: number) => (
+                                            <View key={`${template.id}-${index}`} style={styles.templateBadge}>
+                                                <Text style={styles.templateBadgeText}>
+                                                    {camperNameById.get(child.child_id) || 'Unknown'}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                        {children.length > 4 && (
+                                            <View style={styles.templateBadgeOutline}>
+                                                <Text style={styles.templateBadgeOutlineText}>
+                                                    +{children.length - 4} more
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                    <Text style={styles.templateCreatedText}>
+                                        Created {new Date(template.created_at).toLocaleDateString()}
+                                    </Text>
+                                </StyledCard>
+                            );
+                        })}
                     </View>
-                </StyledCard>
+                )}
             </ScrollView>
 
             {/* Create Roster Template Modal */}
@@ -336,7 +401,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                         onPress={() => setShowDivisionDropdown(true)}
                                     >
                                         <Text style={styles.divisionDropdownText}>
-                                            {selectedDivision}
+                                            {divisions.find((d: any) => d.id === selectedDivision)?.name || 'All Divisions'}
                                         </Text>
                                         <Ionicons
                                             name="chevron-down"
@@ -372,25 +437,25 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                                 </View>
                                                 <FlatList
                                                     data={divisions}
-                                                    keyExtractor={(item) => item}
+                                                    keyExtractor={(item: any) => item.id}
                                                     renderItem={({ item }) => (
                                                         <TouchableOpacity
                                                             style={styles.bottomSheetItem}
                                                             onPress={() => {
-                                                                setSelectedDivision(item);
+                                                                setSelectedDivision(item.id);
                                                                 setShowDivisionDropdown(false);
                                                             }}
                                                         >
                                                             <Text
                                                                 style={[
                                                                     styles.bottomSheetItemText,
-                                                                    selectedDivision === item &&
+                                                                    selectedDivision === item.id &&
                                                                     styles.bottomSheetItemTextSelected,
                                                                 ]}
                                                             >
-                                                                {item}
+                                                                {item.name}
                                                             </Text>
-                                                            {selectedDivision === item && (
+                                                            {selectedDivision === item.id && (
                                                                 <Ionicons
                                                                     name="checkmark"
                                                                     size={20}
@@ -435,12 +500,12 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                                     <View
                                                         style={[
                                                             styles.divisionTag,
-                                                            item.division === 'CIT Girls' &&
+                                                            item.divisionName === 'CIT Girls' &&
                                                             styles.divisionTagHighlighted,
                                                         ]}
                                                     >
                                                         <Text style={styles.divisionTagText}>
-                                                            {item.division}
+                                                            {item.divisionName}
                                                         </Text>
                                                     </View>
                                                 </TouchableOpacity>
@@ -527,6 +592,83 @@ const styles = StyleSheet.create({
         minHeight: 400,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    loadingCard: {
+        minHeight: 220,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: theme.spacing.md,
+    },
+    loadingText: {
+        ...theme.typography.body,
+        color: theme.colors.textSecondary,
+    },
+    templatesGrid: {
+        gap: theme.spacing.md,
+    },
+    templateCard: {
+        padding: theme.spacing.md,
+        gap: theme.spacing.sm,
+    },
+    templateCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+    },
+    templateHeaderText: {
+        flex: 1,
+    },
+    templateName: {
+        ...theme.typography.h3,
+        marginBottom: theme.spacing.xs,
+    },
+    templateDescription: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+    },
+    templateMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+    },
+    templateMetaText: {
+        ...theme.typography.body,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    templateBadgesRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.xs,
+    },
+    templateBadge: {
+        backgroundColor: '#22B8CF',
+        borderRadius: 14,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 4,
+    },
+    templateBadgeText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    templateBadgeOutline: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 14,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 4,
+        backgroundColor: theme.colors.surface,
+    },
+    templateBadgeOutlineText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        fontWeight: '600',
+    },
+    templateCreatedText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        marginTop: theme.spacing.xs,
     },
     emptyStateContent: {
         alignItems: 'center',
