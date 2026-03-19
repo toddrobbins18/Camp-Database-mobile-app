@@ -20,6 +20,7 @@ export interface TransportTrip {
     event_length?: string | null;
     transportation_type?: string | null;
     driver?: string | null;
+    meal?: string | null;
     sports_event_id?: string | null;
     created_at?: string;
     trip_attendees?: { id: string }[];

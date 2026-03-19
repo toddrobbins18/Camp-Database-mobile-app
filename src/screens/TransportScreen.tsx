@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -13,6 +13,8 @@ import {
     Switch,
     Platform,
     Linking,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCompany } from '../contexts/CompanyContext';
@@ -97,6 +99,92 @@ interface Division {
 
 
 
+/** Resolve division id from camper row (children + embedded division). */
+function camperDivisionId(camper: any): string | undefined {
+    if (camper?.division_id) return String(camper.division_id);
+    if (camper?.division && typeof camper.division === 'object' && camper.division.id) return String(camper.division.id);
+    if (typeof camper?.division === 'string') return camper.division;
+    return undefined;
+}
+
+function normalizeTripTypeForDb(type: string): string {
+    const t = (type || '').trim();
+    const map: Record<string, string> = {
+        'Field Trip': 'field_trip',
+        'field trip': 'field_trip',
+        field_trip: 'field_trip',
+        'Sporting Event': 'sporting_event',
+        sporting_event: 'sporting_event',
+        Other: 'other',
+        other: 'other',
+    };
+    return map[t] || t || 'field_trip';
+}
+
+function tripTypeLabel(type: string): string {
+    if (type === 'sporting_event') return 'Sporting Event';
+    if (type === 'field_trip') return 'Field Trip';
+    if (type === 'other') return 'Other';
+    return type || 'Field Trip';
+}
+
+function transportDbToDisplay(s: string | undefined | null): string {
+    if (!s) return 'None';
+    const lower = String(s).toLowerCase();
+    if (lower === 'bus') return 'Bus';
+    if (lower === 'van') return 'Van';
+    return s;
+}
+
+function transportDisplayToDb(s: string): string | null {
+    const l = (s || '').trim().toLowerCase();
+    if (!l || l === 'none') return null;
+    return l;
+}
+
+/** DB times like 05:30 or 14:20 → picker strings e.g. 5:30 AM */
+function db24hToPickerTime(s: string | undefined | null): string {
+    if (!s?.trim()) return '';
+    const parts = String(s).trim().split(':');
+    let h = parseInt(parts[0], 10);
+    const rawM = parts[1] || '00';
+    const m = rawM.replace(/\D/g, '').slice(0, 2) || '00';
+    if (Number.isNaN(h)) return '';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${m.padStart(2, '0')} ${ampm}`;
+}
+
+/** Picker "7:00 AM" or DB "07:00" → HH:mm for Supabase */
+function pickerTimeToDb24h(s: string): string | null {
+    if (!s?.trim()) return null;
+    const t = s.trim();
+    const upper = t.toUpperCase();
+    const match = upper.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+    if (match) {
+        let h = parseInt(match[1], 10);
+        const m = match[2];
+        const ap = match[3];
+        if (ap === 'PM' && h !== 12) h += 12;
+        if (ap === 'AM' && h === 12) h = 0;
+        return `${String(h).padStart(2, '0')}:${m}`;
+    }
+    if (/^\d{1,2}:\d{2}$/.test(t)) {
+        const [h, m] = t.split(':');
+        return `${String(parseInt(h, 10)).padStart(2, '0')}:${m.padStart(2, '0')}`;
+    }
+    return t;
+}
+
+function multiDayLabel(dateStr: string, endStr?: string): string | null {
+    if (!endStr || !dateStr) return null;
+    const start = new Date(dateStr + 'T12:00:00');
+    const end = new Date(endStr + 'T12:00:00');
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+    const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+    return `${days}-Day Trip`;
+}
+
 const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDelete: () => void, onEdit: () => void, onManageRoster: () => void }) => {
     const formatDate = (dateString: string, endDateString?: string) => {
         const start = new Date(dateString);
@@ -111,7 +199,9 @@ const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDe
 
     const formatTime = (timeString: string) => {
         if (!timeString || !timeString.trim()) return 'N/A';
-        const parts = timeString.trim().split(':');
+        const raw = timeString.trim();
+        if (/\b(AM|PM)\b/i.test(raw)) return raw;
+        const parts = raw.split(':');
         const h = parseInt(parts[0], 10);
         const m = parts[1] ? parts[1].replace(/\D/g, '').slice(0, 2) : '00';
         if (isNaN(h)) return 'N/A';
@@ -120,7 +210,8 @@ const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDe
         return `${h12}:${m.padStart(2, '0')} ${ampm}`;
     };
 
-    const typeLabel = trip.type === 'sporting_event' ? 'Sporting Event' : (trip.type === 'field_trip' ? 'Field Trip' : trip.type);
+    const typeLabel = tripTypeLabel(trip.type);
+    const multiDayBadge = trip.is_multi_day ? multiDayLabel(trip.date, trip.end_date) : null;
 
     return (
         <View style={[
@@ -158,11 +249,11 @@ const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDe
 
                 {/* Secondary Info */}
                 <View style={{ marginTop: 4 }}>
-                    {trip.is_multi_day && (
+                    {multiDayBadge ? (
                         <View style={[styles.durationBadge, { marginBottom: 8, marginTop: 4 }]}>
-                            <Text style={styles.durationBadgeText}>3-Day Trip</Text>
+                            <Text style={styles.durationBadgeText}>{multiDayBadge}</Text>
                         </View>
-                    )}
+                    ) : null}
                     <Text style={styles.destinationText}>Destination: {trip.destination || 'N/A'}</Text>
                     <Text style={styles.chaperoneText}>Chaperone: {trip.chaperone || 'N/A'}</Text>
                 </View>
@@ -238,13 +329,28 @@ const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDe
                     {trip.event_length ? <Text style={[styles.footerText, styles.footerTextRight]}>Duration: {trip.event_length}</Text> : null}
                 </View>
                 {trip.transportation_type ? <Text style={styles.footerText}>Transport: {trip.transportation_type}</Text> : null}
+                {trip.driver ? <Text style={styles.footerText}>Driver: {trip.driver}</Text> : null}
             </View>
         </View>
     );
 };
 
 const CalendarWidget = ({ selectedDate, onSelectDate }: { selectedDate: string, onSelectDate: (date: string) => void }) => {
-    const [currentMonth, setCurrentMonth] = useState(new Date(2026, 0, 1)); // Start Jan 2026 as per screenshot
+    const [currentMonth, setCurrentMonth] = useState(() => {
+        if (selectedDate && /^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
+            const d = new Date(selectedDate + 'T12:00:00');
+            return new Date(d.getFullYear(), d.getMonth(), 1);
+        }
+        const n = new Date();
+        return new Date(n.getFullYear(), n.getMonth(), 1);
+    });
+
+    useEffect(() => {
+        if (selectedDate && /^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
+            const d = new Date(selectedDate + 'T12:00:00');
+            setCurrentMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+        }
+    }, [selectedDate]);
 
     const daysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
     const firstDayOfMonth = (month: number, year: number) => new Date(year, month, 1).getDay();
@@ -333,8 +439,7 @@ export const TransportScreen = ({ navigation }: any) => {
     const isLargeScreen = width >= 768; // Tablet/Desktop breakpoint
 
 
-    const { companyId } = useCompany();
-    const season = '2026';
+    const { companyId, season } = useCompany();
 
     const { data: rawTrips = [], isLoading } = useTrips(companyId, season);
     const { data: rawCampers = [] } = useCampers(companyId, season);
@@ -345,6 +450,13 @@ export const TransportScreen = ({ navigation }: any) => {
     const updateTripMutation = useUpdateTrip();
     const deleteTripMutation = useDeleteTrip();
     const manageRosterMutation = useManageTripRoster();
+
+    /** Must be declared before any hook that reads it (was below → ReferenceError → blank screen). */
+    const [modalState, setModalState] = useState<{
+        visible: boolean;
+        mode: 'add' | 'edit';
+        tripId?: string;
+    }>({ visible: false, mode: 'add' });
 
     const tripAttachmentTripId = modalState.visible && modalState.mode === 'edit' && modalState.tripId ? modalState.tripId : null;
     const { data: tripAttachments = [] } = useTripAttachments(tripAttachmentTripId, companyId);
@@ -403,6 +515,8 @@ export const TransportScreen = ({ navigation }: any) => {
         transportation_type: t.transportation_type || '',
         event_length: t.event_length,
         sports_event_id: t.sports_event_id,
+        driver: t.driver || '',
+        meal: t.meal || 'None',
     })), [rawTrips]);
 
     // Derived unique values for filters
@@ -415,7 +529,7 @@ export const TransportScreen = ({ navigation }: any) => {
 
     // View State
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
-    const [selectedDate, setSelectedDate] = useState('2026-01-27');
+    const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
     // Filter State
     const [filterType, setFilterType] = useState('all');
@@ -434,6 +548,28 @@ export const TransportScreen = ({ navigation }: any) => {
     const [rosterFilterDivision, setRosterFilterDivision] = useState<string>('all');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [selectedCamperIds, setSelectedCamperIds] = useState<Set<string>>(new Set());
+
+    const rosterTripIdForAttendees = rosterModalVisible && rosterTrip?.id ? rosterTrip.id : null;
+    const { data: existingAttendeeChildIds = [] } = useTripAttendees(rosterTripIdForAttendees);
+    const lastRosterSyncKey = useRef('');
+
+    useEffect(() => {
+        if (!rosterModalVisible || !rosterTrip?.id) {
+            lastRosterSyncKey.current = '';
+            return;
+        }
+        const key = `${rosterTrip.id}:${(existingAttendeeChildIds || []).join(',')}`;
+        if (lastRosterSyncKey.current === key) return;
+        lastRosterSyncKey.current = key;
+        setSelectedCamperIds(new Set(existingAttendeeChildIds));
+    }, [rosterModalVisible, rosterTrip?.id, existingAttendeeChildIds]);
+
+    const divisionsWithCounts = useMemo(() => {
+        return (rawDivisions as any[]).map((d) => ({
+            ...d,
+            totalCount: rawCampers.filter((c) => camperDivisionId(c) === d.id).length,
+        }));
+    }, [rawDivisions, rawCampers]);
 
     const handleManageRoster = (trip: Trip) => {
         setRosterTrip(trip);
@@ -474,7 +610,7 @@ export const TransportScreen = ({ navigation }: any) => {
             // Default Date
             return new Date(b.date).getTime() - new Date(a.date).getTime();
         });
-    }, [searchQuery, filterType, filterEventType, filterTransportType, filterStatus, sortBy]);
+    }, [trips, searchQuery, filterType, filterEventType, filterTransportType, filterStatus, sortBy]);
 
     // Trips for the selected date in Calendar View
     const selectedDateTrips = useMemo(() => {
@@ -535,9 +671,9 @@ export const TransportScreen = ({ navigation }: any) => {
 
         switch (activeModal) {
             case 'type':
-                // Match screenshot specific options
-                options = ['All Types', 'field_trip', 'sporting_event'];
-                currentVal = filterType === 'all' ? 'All Types' : filterType;
+                // Match screenshot specific options (values stay snake_case for filter)
+                options = ['All Types', 'field_trip', 'sporting_event', 'other'];
+                currentVal = filterType === 'all' ? 'All Types' : tripTypeLabel(filterType);
                 setVal = (val) => setFilterType(val === 'All Types' ? 'all' : val);
                 title = 'Select Type';
                 break;
@@ -585,21 +721,28 @@ export const TransportScreen = ({ navigation }: any) => {
                                     </TouchableOpacity>
                                 </View>
                                 <ScrollView style={{ maxHeight: 300 }}>
-                                    {options.map((opt) => (
-                                        <TouchableOpacity
-                                            key={opt}
-                                            style={styles.pickerOption}
-                                            onPress={() => {
-                                                setVal(opt);
-                                                setActiveModal(null);
-                                            }}
-                                        >
-                                            <Text style={styles.pickerOptionText}>
-                                                {opt === 'all' ? `All ${title.replace('Select ', '')}s` : opt}
-                                            </Text>
-                                            {currentVal === opt && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
-                                        </TouchableOpacity>
-                                    ))}
+                                    {options.map((opt) => {
+                                        const isTypeFilter = activeModal === 'type';
+                                        const selected = isTypeFilter
+                                            ? (opt === 'All Types' ? filterType === 'all' : filterType === opt)
+                                            : currentVal === opt;
+                                        const displayLabel = isTypeFilter && opt !== 'All Types'
+                                            ? tripTypeLabel(opt)
+                                            : (opt === 'all' ? `All ${title.replace('Select ', '')}s` : opt);
+                                        return (
+                                            <TouchableOpacity
+                                                key={opt}
+                                                style={styles.pickerOption}
+                                                onPress={() => {
+                                                    setVal(opt);
+                                                    setActiveModal(null);
+                                                }}
+                                            >
+                                                <Text style={styles.pickerOptionText}>{displayLabel}</Text>
+                                                {selected && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
+                                            </TouchableOpacity>
+                                        );
+                                    })}
                                 </ScrollView>
                             </View>
                         </TouchableWithoutFeedback>
@@ -659,7 +802,12 @@ export const TransportScreen = ({ navigation }: any) => {
                 </TouchableOpacity>
 
                 {/* Upload CSV */}
-                <TouchableOpacity style={styles.actionButtonSecondary}>
+                <TouchableOpacity
+                    style={styles.actionButtonSecondary}
+                    onPress={() =>
+                        Alert.alert('Upload CSV', 'Trip CSV upload from mobile is coming soon. Use the web app Transportation page to bulk upload.')
+                    }
+                >
                     <Ionicons name="cloud-upload-outline" size={16} color={theme.colors.text} />
                     <Text style={styles.actionButtonTextSecondary}>Upload CSV</Text>
                 </TouchableOpacity>
@@ -686,7 +834,7 @@ export const TransportScreen = ({ navigation }: any) => {
             {/* Horizontal Filter Scroll */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterContent}>
                 <FilterChip
-                    label={filterType === 'all' ? 'All Types' : filterType}
+                    label={filterType === 'all' ? 'All Types' : tripTypeLabel(filterType)}
                     active={filterType !== 'all'}
                     onPress={() => setActiveModal('type')}
                 />
@@ -863,15 +1011,6 @@ export const TransportScreen = ({ navigation }: any) => {
         </Modal>
     );
 
-
-
-    // Modal State
-    const [modalState, setModalState] = useState<{
-        visible: boolean;
-        mode: 'add' | 'edit';
-        tripId?: string;
-    }>({ visible: false, mode: 'add' });
-
     const initialTripData: Trip = {
         id: '',
         name: '',
@@ -884,50 +1023,83 @@ export const TransportScreen = ({ navigation }: any) => {
         attendingCount: 0,
         chaperone: '',
         status: 'pending',
-        type: 'Field Trip',
-        event_type: 'field-trip',
+        type: 'field_trip',
+        event_type: '',
         transportation_type: 'None',
         driver: '',
         meal: 'None',
         event_length: '',
         capacity: '',
-        location_type: 'AWAY'
+        location_type: 'AWAY',
+        sports_event_id: null,
     };
 
     const [tripFormData, setTripFormData] = useState<Trip>(initialTripData);
 
     const handleEditTrip = (trip: Trip) => {
-        setTripFormData({ ...trip });
+        setTripFormData({
+            ...trip,
+            departure_time: db24hToPickerTime(trip.departure_time) || trip.departure_time || '',
+            return_time: db24hToPickerTime(trip.return_time) || trip.return_time || '',
+            transportation_type: transportDbToDisplay(trip.transportation_type),
+        });
         setModalState({ visible: true, mode: 'edit', tripId: trip.id });
     };
 
     const handleAddTrip = () => {
-        setTripFormData({ ...initialTripData, id: Math.random().toString() }); // Simple ID for now
+        setTripFormData({ ...initialTripData, date: new Date().toISOString().split('T')[0] });
         setModalState({ visible: true, mode: 'add' });
     };
 
     const handleSaveTrip = () => {
-        const payload: any = {
+        if (!companyId) {
+            Alert.alert('Error', 'No company selected.');
+            return;
+        }
+        if (!tripFormData.name?.trim()) {
+            Alert.alert('Validation', 'Please enter a trip title.');
+            return;
+        }
+
+        const dep = pickerTimeToDb24h(tripFormData.departure_time);
+        const ret = pickerTimeToDb24h(tripFormData.return_time);
+
+        const payload: Record<string, unknown> = {
             company_id: companyId,
             season,
-            name: tripFormData.name,
-            type: tripFormData.type,
-            destination: tripFormData.destination,
+            name: tripFormData.name.trim(),
+            type: normalizeTripTypeForDb(tripFormData.type),
+            destination: tripFormData.destination?.trim() || null,
             date: tripFormData.date,
-            departure_time: tripFormData.departure_time,
-            return_time: tripFormData.return_time,
-            chaperone: tripFormData.chaperone || null,
-            capacity: parseInt(tripFormData.capacity || "0") || null,
+            end_date: tripFormData.is_multi_day && tripFormData.end_date ? tripFormData.end_date : null,
+            is_multi_day: tripFormData.is_multi_day,
+            departure_time: dep,
+            return_time: ret,
+            chaperone: tripFormData.chaperone?.trim() || null,
+            capacity: parseInt(tripFormData.capacity || '0', 10) || null,
             status: tripFormData.status || 'pending',
+            event_type: tripFormData.event_type?.trim() || null,
+            event_length: tripFormData.event_length?.trim() || null,
+            transportation_type: transportDisplayToDb(tripFormData.transportation_type || ''),
+            driver: tripFormData.driver?.trim() || null,
+            meal: tripFormData.meal && tripFormData.meal !== 'None' ? tripFormData.meal : null,
         };
 
+        if (modalState.mode === 'edit' && modalState.tripId) {
+            payload.sports_event_id = tripFormData.sports_event_id ?? null;
+        }
+
+        const onErr = (e: any) => Alert.alert('Could not save trip', e?.message || 'Unknown error');
+
         if (modalState.mode === 'add') {
-            addTripMutation.mutate(payload, {
-                onSuccess: () => setModalState({ ...modalState, visible: false })
+            addTripMutation.mutate(payload as any, {
+                onSuccess: () => setModalState((s) => ({ ...s, visible: false })),
+                onError: onErr,
             });
         } else if (modalState.mode === 'edit' && modalState.tripId) {
-            updateTripMutation.mutate({ ...payload, id: modalState.tripId }, {
-                onSuccess: () => setModalState({ ...modalState, visible: false })
+            updateTripMutation.mutate({ ...(payload as any), id: modalState.tripId }, {
+                onSuccess: () => setModalState((s) => ({ ...s, visible: false })),
+                onError: onErr,
             });
         }
     };
@@ -1152,11 +1324,13 @@ export const TransportScreen = ({ navigation }: any) => {
                             </View>
                         </View>
 
-                        {tripFormData.is_multi_day && (
+                        {tripFormData.is_multi_day ? (
                             <View style={styles.selectedBadge}>
-                                <Text style={styles.selectedBadgeText}>2-Day Event</Text>
+                                <Text style={styles.selectedBadgeText}>
+                                    {multiDayLabel(tripFormData.date, tripFormData.end_date || tripFormData.date) || 'Multi-day trip'}
+                                </Text>
                             </View>
-                        )}
+                        ) : null}
 
                         {/* Title */}
                         <View style={[styles.formGroup, { marginTop: 16 }]}>
@@ -1170,11 +1344,121 @@ export const TransportScreen = ({ navigation }: any) => {
                             />
                         </View>
 
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Destination</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="City or venue"
+                                value={tripFormData.destination}
+                                onChangeText={(text) => setTripFormData({ ...tripFormData, destination: text })}
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Chaperone</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Name or N/A"
+                                value={tripFormData.chaperone}
+                                onChangeText={(text) => setTripFormData({ ...tripFormData, chaperone: text })}
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                        </View>
+
                         {/* Activity Type */}
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Activity Type</Text>
                             <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('type')}>
-                                <Text style={styles.typeSelectorText}>{tripFormData.type}</Text>
+                                <Text style={styles.typeSelectorText}>{tripTypeLabel(tripFormData.type)}</Text>
+                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Event type (e.g. Football, field-trip)</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Football"
+                                value={tripFormData.event_type}
+                                onChangeText={(text) => setTripFormData({ ...tripFormData, event_type: text })}
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Duration (e.g. tournament)</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="tournament"
+                                value={tripFormData.event_length || ''}
+                                onChangeText={(text) => setTripFormData({ ...tripFormData, event_length: text })}
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Transportation</Text>
+                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('transportation_type')}>
+                                <Text style={styles.typeSelectorText}>{tripFormData.transportation_type || 'None'}</Text>
+                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Driver / vehicle notes</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Rented, staff driver, etc."
+                                value={tripFormData.driver || ''}
+                                onChangeText={(text) => setTripFormData({ ...tripFormData, driver: text })}
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Capacity</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Optional max seats"
+                                keyboardType="number-pad"
+                                value={tripFormData.capacity || ''}
+                                onChangeText={(text) => setTripFormData({ ...tripFormData, capacity: text })}
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                        </View>
+
+                        <View style={styles.row}>
+                            <View style={[styles.formGroup, { flex: 1 }]}>
+                                <Text style={styles.label}>Departure</Text>
+                                <TouchableOpacity style={styles.dateInputContainer} onPress={() => setActivePicker('departureTime')}>
+                                    <Text style={styles.dateInputText}>{tripFormData.departure_time || 'Select time'}</Text>
+                                    <Ionicons name="time-outline" size={20} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                            <View style={[styles.formGroup, { flex: 1 }]}>
+                                <Text style={styles.label}>Return</Text>
+                                <TouchableOpacity style={styles.dateInputContainer} onPress={() => setActivePicker('returnTime')}>
+                                    <Text style={styles.dateInputText}>{tripFormData.return_time || 'Select time'}</Text>
+                                    <Ionicons name="time-outline" size={20} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Status</Text>
+                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('status')}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <StatusBadge status={tripFormData.status} />
+                                </View>
+                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Meal</Text>
+                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('meal')}>
+                                <Text style={styles.typeSelectorText}>{tripFormData.meal || 'None'}</Text>
                                 <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
@@ -1193,10 +1477,20 @@ export const TransportScreen = ({ navigation }: any) => {
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                 <Text style={[styles.label, { marginBottom: 0 }]}>Divisions (select multiple)</Text>
                                 <View style={{ flexDirection: 'row', gap: 8 }}>
-                                    <TouchableOpacity style={styles.actionButtonSecondary}>
+                                    <TouchableOpacity
+                                        style={styles.actionButtonSecondary}
+                                        onPress={() =>
+                                            Alert.alert('Divisions', 'Division assignment for trips is managed on the web app. Trip roster below still works for attendee lists.')
+                                        }
+                                    >
                                         <Text style={styles.actionButtonTextSecondary}>Select All</Text>
                                     </TouchableOpacity>
-                                    <TouchableOpacity style={styles.actionButtonSecondary}>
+                                    <TouchableOpacity
+                                        style={styles.actionButtonSecondary}
+                                        onPress={() =>
+                                            Alert.alert('Divisions', 'Division assignment for trips is managed on the web app.')
+                                        }
+                                    >
                                         <Text style={styles.actionButtonTextSecondary}>Deselect All</Text>
                                     </TouchableOpacity>
                                 </View>
@@ -1299,8 +1593,8 @@ export const TransportScreen = ({ navigation }: any) => {
 
                         <ScrollView style={styles.helpModalBody} showsVerticalScrollIndicator={false}>
                             {activeRosterTab === 'division' ? (
-                                rawDivisions.map(division => {
-                                    const divisionCampers = rawCampers.filter(c => c.division === division.id);
+                                divisionsWithCounts.map(division => {
+                                    const divisionCampers = rawCampers.filter((c) => camperDivisionId(c) === division.id);
                                     const divisionSelectedCount = divisionCampers.filter(c => selectedCamperIds.has(c.id)).length;
 
                                     return (
@@ -1351,9 +1645,10 @@ export const TransportScreen = ({ navigation }: any) => {
 
                                     <View style={styles.camperList}>
                                         {rawCampers
-                                            .filter(c => rosterFilterDivision === 'all' || c.division === rosterFilterDivision)
+                                            .filter((c) => rosterFilterDivision === 'all' || camperDivisionId(c) === rosterFilterDivision)
                                             .map(camper => {
-                                                const divisionName = rawDivisions.find(d => d.id === camper.division)?.name;
+                                                const divId = camperDivisionId(camper);
+                                                const divisionName = rawDivisions.find(d => d.id === divId)?.name;
                                                 return (
                                                     <TouchableOpacity
                                                         key={camper.id}
@@ -1387,12 +1682,28 @@ export const TransportScreen = ({ navigation }: any) => {
                                     <Text style={styles.cancelButtonText}>Cancel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
-                                    style={styles.submitButton}
-                                    onPress={() => {
-                                        setRosterModalVisible(false);
+                                    style={[styles.submitButton, manageRosterMutation.isPending && { opacity: 0.7 }]}
+                                    disabled={manageRosterMutation.isPending}
+                                    onPress={async () => {
+                                        if (!rosterTrip?.id || !companyId) {
+                                            Alert.alert('Roster', 'Missing trip or company.');
+                                            return;
+                                        }
+                                        try {
+                                            await manageRosterMutation.mutateAsync({
+                                                tripId: rosterTrip.id,
+                                                childIds: Array.from(selectedCamperIds),
+                                                companyId,
+                                            });
+                                            setRosterModalVisible(false);
+                                        } catch (e: any) {
+                                            Alert.alert('Roster', e?.message || 'Failed to save roster');
+                                        }
                                     }}
                                 >
-                                    <Text style={styles.submitButtonText}>Save Roster</Text>
+                                    <Text style={styles.submitButtonText}>
+                                        {manageRosterMutation.isPending ? 'Saving…' : 'Save Roster'}
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -1460,7 +1771,12 @@ export const TransportScreen = ({ navigation }: any) => {
             {renderPickerModal()}
             {renderDivisionFilterModal()}
             {renderHeader()}
-            {viewMode === 'list' ? (
+            {isLoading && companyId ? (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 48 }}>
+                    <ActivityIndicator size="large" color={theme.colors.secondary} />
+                    <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>Loading trips…</Text>
+                </View>
+            ) : viewMode === 'list' ? (
                 <FlatList
                     data={filteredTrips}
                     keyExtractor={(item) => item.id}
@@ -1477,7 +1793,9 @@ export const TransportScreen = ({ navigation }: any) => {
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={
                         <View style={styles.emptyState}>
-                            <Text style={styles.emptyText}>No trips found matching your filters.</Text>
+                            <Text style={styles.emptyText}>
+                                {!companyId ? 'Select a company to load trips.' : 'No trips found matching your filters.'}
+                            </Text>
                         </View>
                     }
                 />
