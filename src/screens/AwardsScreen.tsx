@@ -201,11 +201,18 @@ export const AwardsScreen = ({ navigation }: any) => {
     // Delete award mutation
     const deleteAwardMutation = useMutation({
         mutationFn: async (id: string) => {
-            const { error } = await supabase.from('awards').delete().eq('id', id);
+            const { data, error } = await supabase
+                .from('awards')
+                .delete()
+                .eq('id', id)
+                .select('id')
+                .maybeSingle();
             if (error) throw error;
+            return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['awards'] });
+            Alert.alert('Success', 'Award deleted');
         },
         onError: (error: any) => {
             Alert.alert('Delete failed', error?.message || 'Could not delete award. You may not have permission.');

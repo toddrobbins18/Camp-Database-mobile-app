@@ -17,8 +17,8 @@ export interface IncidentReport {
     company_id?: string;
     season?: string;
     created_at?: string;
-    // Joined data
-    children?: Array<{ id: string; first_name: string; last_name: string }>;
+    // Joined data (children table uses `name`, not first_name/last_name)
+    children?: Array<{ id: string; name?: string }>;
 }
 
 export const useIncidentReports = (companyId: string | null, season: string) => {
@@ -27,17 +27,21 @@ export const useIncidentReports = (companyId: string | null, season: string) => 
         queryFn: async () => {
             if (!companyId) return [];
 
-            const { data, error } = await supabase
+            let query = supabase
                 .from('incident_reports')
                 .select(`
                     *,
                     incident_children (
                         child_id,
-                        children:child_id ( id, first_name, last_name )
+                        children ( id, name )
                     )
                 `)
                 .eq('company_id', companyId)
                 .order('date', { ascending: false });
+            if (season) {
+                query = query.or(`season.eq.${season},season.is.null`);
+            }
+            const { data, error } = await query;
 
             if (error) throw error;
 
@@ -81,6 +85,40 @@ export const useAddIncidentReport = () => {
             }
 
             return report;
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['incident_reports', variables.company_id] });
+        },
+    });
+};
+
+export const useUpdateIncidentReport = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({
+            id,
+            company_id,
+            ...updates
+        }: {
+            id: string;
+            company_id: string;
+            date?: string;
+            type?: string;
+            description?: string;
+            severity?: string;
+            reported_by?: string;
+            status?: string;
+            tags?: string[];
+        }) => {
+            const { data, error } = await supabase
+                .from('incident_reports')
+                .update(updates)
+                .eq('id', id)
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ['incident_reports', variables.company_id] });

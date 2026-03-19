@@ -7,6 +7,7 @@ import { StyledCard } from '../components/StyledCard';
 import { supabase } from '../lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
+import { useTodayBirthdays, useDailyNewsSchedule } from '../api/dashboard';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadDailyWolfDocument, pathFromFileUrl, getSignedUrl } from '../api/storage';
 import { Linking } from 'react-native';
@@ -36,57 +37,26 @@ export const DailyNewsScreen = ({ navigation }: any) => {
     const todayMonth = currentDate.getMonth() + 1;
     const todayDay = currentDate.getDate();
 
-    // Fetch today's birthdays from children table
-    const { data: birthdays = [] } = useQuery({
-        queryKey: ['birthdays', companyId, todayMonth, todayDay],
-        queryFn: async () => {
-            if (!companyId) return [];
-            // Get all children and filter by birthday month/day
-            const { data, error } = await supabase
-                .from('children')
-                .select('id, first_name, last_name, date_of_birth')
-                .eq('company_id', companyId);
-            if (error) throw error;
-            // Filter those whose birthday matches today
-            return (data || []).filter((child: any) => {
-                if (!child.date_of_birth) return false;
-                const dob = new Date(child.date_of_birth);
-                return dob.getMonth() + 1 === todayMonth && dob.getDate() === todayDay;
-            }).map((child: any) => `${child.first_name} ${child.last_name}`.trim());
-        },
-        enabled: !!companyId,
-    });
+    // Birthdays: same as Dashboard (children + staff, name + type/age) – aligned with main app Daily Notes
+    const { data: birthdays = [] } = useTodayBirthdays(companyId, todayMonth, todayDay);
 
-    // Fetch today's schedule/events
-    const { data: todayEvents = [] } = useQuery({
-        queryKey: ['daily_events', companyId, todayString],
-        queryFn: async () => {
-            if (!companyId) return [];
-            const { data, error } = await supabase
-                .from('activities_field_trips')
-                .select('id, title, description, date, time, location')
-                .eq('company_id', companyId)
-                .eq('date', todayString)
-                .order('time', { ascending: true });
-            if (error) throw error;
-            return data || [];
-        },
-        enabled: !!companyId,
-    });
+    // Today's schedule: same as main app Daily Notes – sports_calendar + activities_field_trips + special_events_activities by event_date & season
+    const { data: scheduleEvents = [] } = useDailyNewsSchedule(companyId, todayString, season ?? null);
 
-    // Fetch today's menu from menu_items (same schema as web)
+    // Today's menu from menu_items (same schema as web, with season filter like main app)
     const { data: meals = null } = useQuery({
-        queryKey: ['daily_meals', companyId, todayString],
+        queryKey: ['daily_meals', companyId, todayString, season],
         queryFn: async () => {
             if (!companyId) return null;
             try {
-                const { data, error } = await supabase
+                const q = supabase
                     .from('menu_items')
                     .select('*')
                     .eq('company_id', companyId)
                     .eq('date', todayString);
+                const withSeason = season ? q.eq('season', season) : q;
+                const { data, error } = await withSeason;
                 if (error) return null;
-                // Build { breakfast, lunch, dinner, snack } from menu_items by meal_type
                 const out: Record<string, string> = { breakfast: '', lunch: '', dinner: '', snack: '' };
                 (data || []).forEach((item: any) => {
                     const type = (item.meal_type || '').toLowerCase();
@@ -172,9 +142,9 @@ export const DailyNewsScreen = ({ navigation }: any) => {
             const lines = [
                 `Daily News – ${formattedDate}`,
                 '',
-                'Birthdays: ' + (birthdays.length ? birthdays.join(', ') : 'None today'),
+                'Birthdays: ' + (birthdays.length ? birthdays.map((p: any) => (p.type === 'child' ? `${p.name} (Turning ${p.age} today!)` : `${p.name} (Staff)`)).join(', ') : 'None today'),
                 '',
-                'Today’s events: ' + (todayEvents.length ? todayEvents.map((e: any) => e.title || e.description).join('; ') : 'None'),
+                'Today’s events: ' + (scheduleEvents.length ? scheduleEvents.map((e: any) => e.title || e.description).join('; ') : 'None'),
                 '',
                 'Meals – Breakfast: ' + (meals?.breakfast || 'TBD'),
                 'Lunch: ' + (meals?.lunch || 'TBD'),
@@ -222,27 +192,36 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                         <Text style={styles.newsDate}>{formattedDate}</Text>
                     </View>
 
-                    {/* Birthday Wishes */}
+                    {/* Birthday Wishes – same data as Dashboard (children + staff) */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
                             <Ionicons name="gift-outline" size={20} color={theme.colors.text} style={styles.sectionIcon} />
                             <Text style={styles.sectionTitle}>Birthday Wishes</Text>
                         </View>
-                        <Text style={styles.birthdayNames}>
-                            {birthdays.length > 0 ? birthdays.join(', ') : 'No birthdays today'}
-                        </Text>
+                        {birthdays.length === 0 ? (
+                            <Text style={styles.birthdayNames}>No birthdays today</Text>
+                        ) : (
+                            <Text style={styles.birthdayNames}>
+                                🎉 {birthdays.map((p: any) => p.name).join(', ')}
+                            </Text>
+                        )}
                     </View>
 
-                    {/* Today's Schedule */}
+                    {/* Today's Schedule – sports + activities + special events (same as main app Daily Notes) */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Today's Schedule</Text>
-                        {todayEvents.length === 0 ? (
+                        {scheduleEvents.length === 0 ? (
                             <Text style={styles.emptyMessage}>No events scheduled for today</Text>
                         ) : (
-                            todayEvents.map((event: any) => (
-                                <View key={event.id} style={styles.menuItem}>
+                            scheduleEvents.map((event: any) => (
+                                <View key={event.id} style={styles.scheduleItem}>
                                     <Text style={styles.menuLabel}>{event.time || '—'}</Text>
-                                    <Text style={styles.menuValue}>{event.title}</Text>
+                                    <View style={styles.scheduleEventContent}>
+                                        <Text style={styles.menuValue}>{event.title}</Text>
+                                        {event.location ? <Text style={styles.eventType}>@ {event.location}</Text> : null}
+                                        {event.description ? <Text style={styles.eventType}>{event.description}</Text> : null}
+                                    </View>
+                                    <Text style={styles.eventType}>[{event.type}]</Text>
                                 </View>
                             ))
                         )}
@@ -454,6 +433,24 @@ const styles = StyleSheet.create({
         fontSize: isSmallScreen ? 14 : 16,
         color: theme.colors.text,
         lineHeight: isSmallScreen ? 20 : 24,
+    },
+    scheduleItem: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingVertical: theme.spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        gap: theme.spacing.sm,
+    },
+    scheduleEventContent: {
+        flex: 1,
+    },
+    eventType: {
+        ...theme.typography.body,
+        fontSize: isSmallScreen ? 12 : 13,
+        color: theme.colors.textSecondary,
+        fontStyle: 'italic',
+        marginTop: 2,
     },
     emptyMessage: {
         ...theme.typography.body,

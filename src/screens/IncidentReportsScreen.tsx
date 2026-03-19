@@ -1,22 +1,35 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers } from '../api/campers';
-import { useIncidentReports, useAddIncidentReport } from '../api/incidents_approvals';
+import { useIncidentReports, useAddIncidentReport, useDeleteIncidentReport, useUpdateIncidentReport } from '../api/incidents_approvals';
 
 export const IncidentReportsScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
     const { data: incidentReports = [], isLoading: isLoadingReports } = useIncidentReports(companyId, season);
     const { data: campersList = [] } = useCampers(companyId, season);
     const addIncidentMutation = useAddIncidentReport();
+    const deleteIncidentMutation = useDeleteIncidentReport();
+    const updateIncidentMutation = useUpdateIncidentReport();
     const childrenNames = campersList.map((c: any) => ({ id: c.id, name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim() }));
     const [showBottomSheet, setShowBottomSheet] = useState(false);
     const [showAddIncidentModal, setShowAddIncidentModal] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [editingIncident, setEditingIncident] = useState<any>(null);
+    const [editForm, setEditForm] = useState({
+        date: '',
+        type: '',
+        description: '',
+        severity: '',
+        reportedBy: '',
+        status: 'Open',
+        tags: [] as string[],
+    });
     const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState('');
     const [tags, setTags] = useState<string[]>([]);
@@ -121,6 +134,46 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
         setTagInput('');
     };
 
+    // Display helpers: normalize type/status so they never concatenate (e.g. "Behavioral", "Open")
+    const formatLabel = (s: string | null | undefined) =>
+        (s && s.trim()) ? s.trim().charAt(0).toUpperCase() + s.trim().slice(1).toLowerCase() : '';
+
+    useEffect(() => {
+        if (editingIncident) {
+            setEditForm({
+                date: editingIncident.date || new Date().toISOString().split('T')[0],
+                type: editingIncident.type || '',
+                description: editingIncident.description || '',
+                severity: editingIncident.severity || '',
+                reportedBy: editingIncident.reported_by || '',
+                status: (editingIncident.status && formatLabel(editingIncident.status)) || 'Open',
+                tags: Array.isArray(editingIncident.tags) ? [...editingIncident.tags] : [],
+            });
+        }
+    }, [editingIncident]);
+
+    const handleDeletePress = (report: any) => {
+        Alert.alert(
+            'Delete Incident Report',
+            'Are you sure you want to delete this incident report? This action cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel', onPress: () => setDeletingId(null) },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => {
+                        if (companyId && report.id) {
+                            deleteIncidentMutation.mutate(
+                                { id: report.id, company_id: companyId },
+                                { onSettled: () => setDeletingId(null) }
+                            );
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -171,19 +224,58 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             <Text style={styles.emptyText}>No incident reports found</Text>
                         </View>
                     ) : (
-                        <View>
+                        <View style={styles.incidentCardGrid}>
                             {incidentReports.map((report: any) => (
-                                <View key={report.id} style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                        <Text style={{ fontWeight: '600', color: '#374151', fontSize: 14 }}>{report.type}</Text>
-                                        <Text style={{ fontSize: 12, color: report.status === 'open' ? '#ef4444' : report.status === 'resolved' ? '#10b981' : '#f59e0b' }}>{report.status}</Text>
+                                <StyledCard key={report.id} style={styles.incidentCard}>
+                                    <View style={styles.incidentCardHeader}>
+                                        <View style={styles.incidentCardHeaderLeft}>
+                                            <Text style={styles.incidentCardTitle} numberOfLines={2}>
+                                                {(report.children || []).map((c: any) => c?.name).filter(Boolean).join(', ') || 'No children assigned'}
+                                            </Text>
+                                            <Text style={styles.incidentCardDate}>
+                                                {new Date(report.date + 'T00:00:00').toLocaleDateString()}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.incidentCardActions}>
+                                            <TouchableOpacity
+                                                style={styles.incidentCardActionBtn}
+                                                onPress={() => setEditingIncident(report)}
+                                            >
+                                                <Ionicons name="pencil-outline" size={20} color={theme.colors.text} />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.incidentCardActionBtn}
+                                                onPress={() => handleDeletePress(report)}
+                                            >
+                                                <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
-                                    <Text style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }} numberOfLines={2}>{report.description}</Text>
-                                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                                        <Text style={{ fontSize: 11, color: '#9ca3af' }}>{new Date(report.date).toLocaleDateString()}</Text>
-                                        {report.severity && <Text style={{ fontSize: 11, color: report.severity === 'Critical' ? '#ef4444' : report.severity === 'High' ? '#f59e0b' : '#6b7280' }}>• {report.severity}</Text>}
+                                    <View style={styles.incidentCardBadges}>
+                                        <View style={[styles.incidentBadge, styles.incidentBadgeSeverity]}>
+                                            <Text style={styles.incidentBadgeText}>{formatLabel(report.severity) || 'Not Set'}</Text>
+                                        </View>
+                                        <View style={[styles.incidentBadge, styles.incidentBadgeOutline]}>
+                                            <Text style={styles.incidentBadgeText}>{formatLabel(report.type)}</Text>
+                                        </View>
+                                        {(report.tags || []).map((tag: string) => (
+                                            <View key={tag} style={[styles.incidentBadge, styles.incidentBadgeSecondary]}>
+                                                <Text style={styles.incidentBadgeText}>{tag}</Text>
+                                            </View>
+                                        ))}
                                     </View>
-                                </View>
+                                    <Text style={styles.incidentCardDescription} numberOfLines={3}>
+                                        {report.description || 'none'}
+                                    </Text>
+                                    {(report.reported_by || report.staff?.name) && (
+                                        <Text style={styles.incidentCardReportedBy}>
+                                            Reported by: {report.staff?.name || report.reported_by}
+                                        </Text>
+                                    )}
+                                    <View style={[styles.incidentBadge, styles.incidentBadgeStatus]}>
+                                        <Text style={styles.incidentBadgeStatusText}>{formatLabel(report.status) || 'Open'}</Text>
+                                    </View>
+                                </StyledCard>
                             ))}
                         </View>
                     )}
@@ -570,6 +662,116 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
+            {/* Edit Incident Modal */}
+            <Modal
+                visible={!!editingIncident}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setEditingIncident(null)}
+            >
+                <Pressable style={styles.centerModalOverlay} onPress={() => setEditingIncident(null)}>
+                    <Pressable style={styles.addIncidentModal} onPress={(e) => e.stopPropagation()}>
+                        <ScrollView style={styles.addIncidentScroll} showsVerticalScrollIndicator={false}>
+                            <View style={styles.addIncidentHeader}>
+                                <Text style={styles.addIncidentTitle}>Edit Incident Report</Text>
+                                <TouchableOpacity onPress={() => setEditingIncident(null)}>
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                            <View style={styles.formSection}>
+                                <Text style={styles.formLabel}>Date</Text>
+                                <TextInput
+                                    style={styles.inputField}
+                                    value={editForm.date}
+                                    onChangeText={(t) => setEditForm((f) => ({ ...f, date: t }))}
+                                    placeholder="YYYY-MM-DD"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                />
+                            </View>
+                            <View style={styles.formSection}>
+                                <Text style={styles.formLabel}>Type</Text>
+                                <TextInput
+                                    style={styles.inputField}
+                                    value={editForm.type}
+                                    onChangeText={(t) => setEditForm((f) => ({ ...f, type: t }))}
+                                    placeholder="e.g. Behavioral, Medical"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                />
+                            </View>
+                            <View style={styles.formSection}>
+                                <Text style={styles.formLabel}>Description</Text>
+                                <TextInput
+                                    style={[styles.inputField, styles.textArea]}
+                                    value={editForm.description}
+                                    onChangeText={(t) => setEditForm((f) => ({ ...f, description: t }))}
+                                    placeholder="Incident description"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    multiline
+                                    numberOfLines={3}
+                                />
+                            </View>
+                            <View style={styles.formSection}>
+                                <Text style={styles.formLabel}>Severity</Text>
+                                <TextInput
+                                    style={styles.inputField}
+                                    value={editForm.severity}
+                                    onChangeText={(t) => setEditForm((f) => ({ ...f, severity: t }))}
+                                    placeholder="e.g. Low, Medium, High, Critical"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                />
+                            </View>
+                            <View style={styles.formSection}>
+                                <Text style={styles.formLabel}>Reported By</Text>
+                                <TextInput
+                                    style={styles.inputField}
+                                    value={editForm.reportedBy}
+                                    onChangeText={(t) => setEditForm((f) => ({ ...f, reportedBy: t }))}
+                                    placeholder="Reporter name"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                />
+                            </View>
+                            <View style={styles.formSection}>
+                                <Text style={styles.formLabel}>Status</Text>
+                                <TextInput
+                                    style={styles.inputField}
+                                    value={editForm.status}
+                                    onChangeText={(t) => setEditForm((f) => ({ ...f, status: t }))}
+                                    placeholder="e.g. Open, Investigating, Resolved"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                />
+                            </View>
+                            <View style={styles.formActions}>
+                                <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingIncident(null)}>
+                                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.submitBtn}
+                                    onPress={() => {
+                                        if (!editingIncident?.id || !companyId || !editForm.type) return;
+                                        updateIncidentMutation.mutate(
+                                            {
+                                                id: editingIncident.id,
+                                                company_id: companyId,
+                                                date: editForm.date,
+                                                type: editForm.type,
+                                                description: editForm.description,
+                                                severity: editForm.severity || undefined,
+                                                reported_by: editForm.reportedBy || undefined,
+                                                status: editForm.status,
+                                                tags: editForm.tags.length > 0 ? editForm.tags : undefined,
+                                            },
+                                            { onSuccess: () => setEditingIncident(null) }
+                                        );
+                                    }}
+                                >
+                                    <Text style={styles.submitBtnText}>{updateIncidentMutation.isPending ? 'Updating...' : 'Update'}</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
             {/* Date Picker Modal */}
             <Modal
                 visible={showDatePicker}
@@ -880,9 +1082,7 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
         padding: theme.spacing.xl,
-        minHeight: 400,
-        alignItems: 'center',
-        justifyContent: 'center',
+        minHeight: 200,
         marginHorizontal: theme.spacing.md,
     },
     emptyState: {
@@ -893,6 +1093,93 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 16,
         color: theme.colors.textSecondary,
+    },
+    incidentCardGrid: {
+        gap: theme.spacing.md,
+    },
+    incidentCard: {
+        padding: theme.spacing.lg,
+        marginBottom: theme.spacing.sm,
+    },
+    incidentCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: theme.spacing.sm,
+    },
+    incidentCardHeaderLeft: {
+        flex: 1,
+    },
+    incidentCardTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: 4,
+    },
+    incidentCardDate: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    incidentCardActions: {
+        flexDirection: 'row',
+        gap: 4,
+    },
+    incidentCardActionBtn: {
+        padding: theme.spacing.xs,
+    },
+    incidentCardBadges: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: theme.spacing.sm,
+    },
+    incidentBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 9999,
+    },
+    incidentBadgeSeverity: {
+        backgroundColor: theme.colors.secondary + '20',
+    },
+    incidentBadgeOutline: {
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    incidentBadgeSecondary: {
+        backgroundColor: theme.colors.textSecondary + '15',
+    },
+    incidentBadgeStatus: {
+        backgroundColor: theme.colors.secondary,
+        alignSelf: 'flex-start',
+    },
+    incidentBadgeText: {
+        ...theme.typography.body,
+        fontSize: 12,
+        color: theme.colors.text,
+    },
+    incidentBadgeStatusText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: 'white',
+    },
+    incidentCardDescription: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.xs,
+    },
+    incidentCardReportedBy: {
+        ...theme.typography.body,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.sm,
+    },
+    textArea: {
+        minHeight: 80,
+        textAlignVertical: 'top',
     },
     // Bottom Sheet Styles
     modalOverlay: {
