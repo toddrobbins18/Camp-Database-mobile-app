@@ -258,3 +258,83 @@ export const useAddSpecialEvent = () => {
         },
     });
 };
+
+export const useUpdateSpecialEvent = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (
+            payload: {
+                id: string;
+                company_id: string;
+                season?: string;
+            } & Omit<SpecialEvent, 'id' | 'divisions'> & { division_ids?: string[] }
+        ) => {
+            const { id, division_ids, ...eventData } = payload;
+
+            const { error } = await supabase
+                .from('special_events_activities')
+                .update({
+                    title: eventData.title,
+                    event_date: eventData.event_date,
+                    event_type: eventData.event_type || 'special-event',
+                    time_slot: eventData.time_slot || 'TBD',
+                    start_time: eventData.start_time || null,
+                    end_time: eventData.end_time || null,
+                    location: eventData.location || null,
+                    description: eventData.description || null,
+                    chaperone: eventData.chaperone || null,
+                    season: eventData.season,
+                })
+                .eq('id', id)
+                .eq('company_id', eventData.company_id);
+
+            if (error) throw error;
+
+            const { error: deleteLinksError } = await supabase
+                .from('special_events_divisions')
+                .delete()
+                .eq('event_id', id)
+                .eq('company_id', eventData.company_id);
+            if (deleteLinksError) throw deleteLinksError;
+
+            if (division_ids && division_ids.length > 0) {
+                const rows = division_ids.map((divisionId) => ({
+                    event_id: id,
+                    division_id: divisionId,
+                    company_id: eventData.company_id,
+                }));
+                const { error: insertLinksError } = await supabase
+                    .from('special_events_divisions')
+                    .insert(rows);
+                if (insertLinksError) throw insertLinksError;
+            }
+
+            return { id };
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['special_events', variables.company_id, variables.season] });
+            queryClient.invalidateQueries({ queryKey: ['calendar_events', variables.company_id] });
+        },
+    });
+};
+
+export const useDeleteSpecialEvent = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (payload: { id: string; company_id: string; season?: string }) => {
+            const { error } = await supabase
+                .from('special_events_activities')
+                .delete()
+                .eq('id', payload.id)
+                .eq('company_id', payload.company_id);
+            if (error) throw error;
+            return payload;
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['special_events', variables.company_id, variables.season] });
+            queryClient.invalidateQueries({ queryKey: ['calendar_events', variables.company_id] });
+        },
+    });
+};

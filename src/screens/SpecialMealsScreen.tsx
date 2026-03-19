@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -45,6 +45,7 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
     const [allergens, setAllergens] = useState('');
     const [showMealDatePicker, setShowMealDatePicker] = useState(false);
     const [showMealTypeDropdown, setShowMealTypeDropdown] = useState(false);
+    const [calendarDate, setCalendarDate] = useState(new Date());
 
     // Date picker state
     const [mealDatePickerMonth, setMealDatePickerMonth] = useState(new Date().getMonth());
@@ -59,10 +60,14 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                 .from('special_meals')
                 .select('*')
                 .eq('company_id', companyId)
-                .eq('season', season)
+                .or(`season.eq.${season},season.is.null`)
                 .order('date', { ascending: true });
             if (error) throw error;
-            return data || [];
+            return (data || []).map((meal: any) => ({
+                ...meal,
+                // Backward-compatible mapping in case legacy data had menu_items.
+                items: meal.items ?? meal.menu_items ?? '',
+            }));
         },
         enabled: !!companyId,
     });
@@ -80,7 +85,7 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                     season: season,
                     date: isoDate,
                     meal_type: mealData.mealType,
-                    menu_items: mealData.menuItems,
+                    items: mealData.menuItems,
                     allergens: mealData.allergens || null,
                 }])
                 .select()
@@ -244,8 +249,12 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
     };
 
     const handleAddMeal = () => {
-        if (!mealDate || !mealType) {
-            Alert.alert('Validation', 'Please fill in Date and Meal Type');
+        if (!companyId || !season) {
+            Alert.alert('Context missing', 'Company or season is not loaded yet.');
+            return;
+        }
+        if (!mealDate || !mealType || !menuItems.trim()) {
+            Alert.alert('Validation', 'Please fill Date, Meal Type, and Menu Items');
             return;
         }
         addMealMutation.mutate({
@@ -253,13 +262,15 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
             mealType,
             menuItems,
             allergens,
+        }, {
+            onSuccess: () => {
+                setMealDate('');
+                setMealType('');
+                setMenuItems('');
+                setAllergens('');
+                setShowAddMealModal(false);
+            },
         });
-        // Reset form
-        setMealDate('');
-        setMealType('');
-        setMenuItems('');
-        setAllergens('');
-        setShowAddMealModal(false);
     };
 
     const handleCloseAddMealModal = () => {
@@ -268,6 +279,47 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
         setMenuItems('');
         setAllergens('');
         setShowAddMealModal(false);
+    };
+
+    const groupedMeals = useMemo(() => {
+        return (specialMeals || []).reduce((acc: Record<string, any[]>, meal: any) => {
+            if (!acc[meal.date]) acc[meal.date] = [];
+            acc[meal.date].push(meal);
+            return acc;
+        }, {});
+    }, [specialMeals]);
+
+    const monthLabel = useMemo(
+        () => calendarDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        [calendarDate]
+    );
+
+    const monthCells = useMemo(() => {
+        const year = calendarDate.getFullYear();
+        const month = calendarDate.getMonth();
+        const first = new Date(year, month, 1);
+        const startWeekday = first.getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const cells: Array<{ date: Date; inMonth: boolean }> = [];
+
+        for (let i = startWeekday - 1; i >= 0; i--) {
+            cells.push({ date: new Date(year, month, -i), inMonth: false });
+        }
+        for (let d = 1; d <= daysInMonth; d++) {
+            cells.push({ date: new Date(year, month, d), inMonth: true });
+        }
+        while (cells.length < 42) {
+            const nextDay = cells.length - (startWeekday + daysInMonth) + 1;
+            cells.push({ date: new Date(year, month + 1, nextDay), inMonth: false });
+        }
+        return cells;
+    }, [calendarDate]);
+
+    const formatIso = (date: Date) => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
     };
 
     return (
@@ -355,33 +407,84 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                         </StyledCard>
                     </View>
                 ) : (
-                    <View style={styles.emptyStateContainer}>
-                        {specialMeals.map((meal: any) => (
-                            <StyledCard key={meal.id} style={{ marginBottom: theme.spacing.sm, padding: theme.spacing.md }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={{ ...theme.typography.body, fontWeight: '600', color: theme.colors.text }}>
-                                            {meal.meal_type}
-                                        </Text>
-                                        <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary, marginTop: 4 }}>
-                                            {meal.date}
-                                        </Text>
-                                        {meal.menu_items ? (
-                                            <Text style={{ ...theme.typography.bodySmall, color: theme.colors.text, marginTop: 4 }}>
-                                                {meal.menu_items}
-                                            </Text>
-                                        ) : null}
-                                        {meal.allergens ? (
-                                            <Text style={{ ...theme.typography.bodySmall, color: theme.colors.warning, marginTop: 4 }}>
-                                                Allergens: {meal.allergens}
-                                            </Text>
-                                        ) : null}
-                                    </View>
-                                    <Ionicons name="restaurant-outline" size={24} color={theme.colors.textSecondary} />
+                    viewMode === 'calendar' ? (
+                        <StyledCard style={styles.calendarCard}>
+                            <View style={styles.calendarToolbar}>
+                                <View style={styles.navButtons}>
+                                    <TouchableOpacity style={styles.navButton} onPress={() => setCalendarDate(new Date())}>
+                                        <Text style={styles.navButtonText}>Today</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.navButton} onPress={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}>
+                                        <Text style={styles.navButtonText}>Back</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.navButton} onPress={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}>
+                                        <Text style={styles.navButtonText}>Next</Text>
+                                    </TouchableOpacity>
                                 </View>
-                            </StyledCard>
-                        ))}
-                    </View>
+                                <Text style={styles.calendarMonthLabel}>{monthLabel}</Text>
+                            </View>
+
+                            <View style={styles.weekHeader}>
+                                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                                    <Text key={d} style={styles.weekHeaderText}>{d}</Text>
+                                ))}
+                            </View>
+
+                            <View style={styles.monthGrid}>
+                                {monthCells.map((cell, idx) => {
+                                    const iso = formatIso(cell.date);
+                                    const dayMeals = groupedMeals[iso] || [];
+                                    return (
+                                        <TouchableOpacity
+                                            key={`${iso}-${idx}`}
+                                            style={[styles.monthCell, !cell.inMonth && styles.monthCellMuted]}
+                                            onPress={() => {
+                                                setMealDate(formatDate(cell.date));
+                                                setShowAddMealModal(true);
+                                            }}
+                                        >
+                                            <Text style={[styles.monthCellDay, !cell.inMonth && styles.monthCellDayMuted]}>
+                                                {cell.date.getDate()}
+                                            </Text>
+                                            {dayMeals.length > 0 && (
+                                                <View style={styles.cellEventChip}>
+                                                    <Text style={styles.cellEventText} numberOfLines={1}>
+                                                        {`${dayMeals[0].meal_type}: ${dayMeals[0].items}`}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </StyledCard>
+                    ) : (
+                        <View style={styles.emptyStateContainer}>
+                            {Object.entries(groupedMeals).map(([date, meals]) => (
+                                <StyledCard key={date} style={styles.dayGroupCard}>
+                                    <Text style={styles.dayGroupTitle}>
+                                        {new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+                                            weekday: 'long',
+                                            year: 'numeric',
+                                            month: 'long',
+                                            day: 'numeric',
+                                        })}
+                                    </Text>
+                                    {(meals as any[]).map((meal: any) => (
+                                        <View key={meal.id} style={styles.mealRow}>
+                                            <View style={styles.mealBadge}>
+                                                <Text style={styles.mealBadgeText}>{meal.meal_type}</Text>
+                                            </View>
+                                            <Text style={styles.mealItemsText}>{meal.items}</Text>
+                                            {meal.allergens ? (
+                                                <Text style={styles.mealAllergenText}>Contains: {meal.allergens}</Text>
+                                            ) : null}
+                                        </View>
+                                    ))}
+                                </StyledCard>
+                            ))}
+                        </View>
+                    )
                 )}
             </ScrollView>
 
@@ -681,6 +784,120 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         color: theme.colors.textSecondary,
         textAlign: 'center',
+    },
+    calendarCard: {
+        padding: theme.spacing.md,
+    },
+    calendarToolbar: {
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.sm,
+    },
+    navButtons: {
+        flexDirection: 'row',
+        gap: theme.spacing.xs,
+    },
+    navButton: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.sm,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 6,
+        backgroundColor: theme.colors.surface,
+    },
+    navButtonText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.text,
+        fontWeight: '600',
+    },
+    calendarMonthLabel: {
+        ...theme.typography.h3,
+        textAlign: 'center',
+    },
+    weekHeader: {
+        flexDirection: 'row',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderBottomWidth: 0,
+    },
+    weekHeaderText: {
+        flex: 1,
+        textAlign: 'center',
+        paddingVertical: theme.spacing.xs,
+        ...theme.typography.bodySmall,
+        fontWeight: '700',
+        color: theme.colors.textSecondary,
+    },
+    monthGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    monthCell: {
+        width: '14.28%',
+        minHeight: 72,
+        borderRightWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: theme.colors.border,
+        padding: 4,
+    },
+    monthCellMuted: {
+        backgroundColor: '#f8fafc',
+    },
+    monthCellDay: {
+        ...theme.typography.bodySmall,
+        textAlign: 'right',
+        color: theme.colors.text,
+    },
+    monthCellDayMuted: {
+        color: theme.colors.textSecondary,
+    },
+    cellEventChip: {
+        marginTop: 4,
+        backgroundColor: '#1e3a8a',
+        borderRadius: 6,
+        paddingHorizontal: 4,
+        paddingVertical: 2,
+    },
+    cellEventText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.surface,
+        fontSize: 10,
+    },
+    dayGroupCard: {
+        marginBottom: theme.spacing.md,
+        padding: theme.spacing.md,
+    },
+    dayGroupTitle: {
+        ...theme.typography.h3,
+        marginBottom: theme.spacing.sm,
+    },
+    mealRow: {
+        paddingVertical: theme.spacing.xs,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    mealBadge: {
+        backgroundColor: '#eff6ff',
+        borderRadius: theme.borderRadius.sm,
+        alignSelf: 'flex-start',
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 2,
+        marginBottom: 4,
+    },
+    mealBadgeText: {
+        ...theme.typography.bodySmall,
+        color: '#1d4ed8',
+        fontWeight: '600',
+    },
+    mealItemsText: {
+        ...theme.typography.body,
+        color: theme.colors.text,
+    },
+    mealAllergenText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.warning,
+        marginTop: 2,
     },
     modalOverlay: {
         ...StyleSheet.absoluteFillObject,

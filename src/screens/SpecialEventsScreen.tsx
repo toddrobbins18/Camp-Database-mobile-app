@@ -18,7 +18,7 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useDivisions } from '../api/campers';
-import { useSpecialEvents, useAddSpecialEvent } from '../api/calendar_events';
+import { useSpecialEvents, useAddSpecialEvent, useUpdateSpecialEvent, useDeleteSpecialEvent } from '../api/calendar_events';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
@@ -108,6 +108,8 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const { data: divisionsData = [] } = useDivisions(companyId);
     const { data: specialEventsData = [], isLoading: isLoadingEvents } = useSpecialEvents(companyId, season);
     const addSpecialEventMutation = useAddSpecialEvent();
+    const updateSpecialEventMutation = useUpdateSpecialEvent();
+    const deleteSpecialEventMutation = useDeleteSpecialEvent();
 
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [selectedHelpTab, setSelectedHelpTab] = useState('Staff');
@@ -123,6 +125,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
     const [showAddEventModal, setShowAddEventModal] = useState(false);
     const [showUploadCSVModal, setShowUploadCSVModal] = useState(false);
+    const [editingEventId, setEditingEventId] = useState<string | null>(null);
     const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
     const [timePickerField, setTimePickerField] = useState<'startTime' | 'endTime' | null>(null);
     const [selectedTime, setSelectedTime] = useState({ hour: 12, minute: 0, ampm: 'PM' });
@@ -382,7 +385,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         setSelectedDivisions([]);
     };
 
-    const handleAddEvent = () => {
+    const handleSubmitEvent = () => {
         if (!companyId || !season) {
             Alert.alert('Context missing', 'Company or season is not loaded yet. Please try again.');
             return;
@@ -398,7 +401,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         const timeSlot = startTime && endTime
             ? `${startTime} - ${endTime}`
             : startTime || endTime || 'TBD';
-        addSpecialEventMutation.mutate({
+        const payload = {
             title: title.trim(),
             event_date: isoDate,
             event_type: eventType.toLowerCase().replace(/ /g, '-'),
@@ -411,19 +414,26 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
             company_id: companyId,
             season,
             division_ids: selectedDivisions,
-        }, {
+        };
+
+        if (editingEventId) {
+            updateSpecialEventMutation.mutate(
+                { id: editingEventId, ...payload },
+                {
+                    onSuccess: () => {
+                        handleCloseAddEventModal();
+                    },
+                    onError: (error: any) => {
+                        Alert.alert('Error', error?.message || 'Failed to update event');
+                    },
+                }
+            );
+            return;
+        }
+
+        addSpecialEventMutation.mutate(payload, {
             onSuccess: () => {
-                setEventDate(initialDate);
-                setTitle('');
-                setEventType('');
-                setStartTime('');
-                setEndTime('');
-                setSelectedDivisions([]);
-                setLocation('');
-                setDescription('');
-                setSelectedStaffIds([]);
-                setStaffSearchQuery('');
-                setShowAddEventModal(false);
+                handleCloseAddEventModal();
             },
             onError: (error: any) => {
                 Alert.alert('Error', error?.message || 'Failed to add event');
@@ -442,7 +452,57 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         setDescription('');
         setSelectedStaffIds([]);
         setStaffSearchQuery('');
+        setEditingEventId(null);
         setShowAddEventModal(false);
+    };
+
+    const handleEditEvent = (event: any) => {
+        const eventDateObj = new Date(`${event.event_date}T00:00:00`);
+        setEventDate(formatDate(eventDateObj));
+        setTitle(event.title || '');
+        setEventType((event.event_type || '').replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()));
+        setStartTime(event.start_time || '');
+        setEndTime(event.end_time || '');
+        setSelectedDivisions(Array.isArray(event.divisions) ? event.divisions.map((d: any) => d.id) : []);
+        setLocation(event.location || '');
+        setDescription(event.description || '');
+        setStaffSearchQuery('');
+        setEditingEventId(event.id);
+
+        const chaperoneNames = (event.chaperone || '')
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+        const matchedIds = staffData
+            .filter((staff: any) => chaperoneNames.includes(staff.name))
+            .map((staff: any) => staff.id);
+        setSelectedStaffIds(matchedIds);
+        setShowAddEventModal(true);
+    };
+
+    const handleDeleteEvent = (eventId: string) => {
+        if (!companyId) return;
+        Alert.alert(
+            'Delete Event',
+            'Are you sure you want to delete this event? This action cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => {
+                        deleteSpecialEventMutation.mutate(
+                            { id: eventId, company_id: companyId, season },
+                            {
+                                onError: (error: any) => {
+                                    Alert.alert('Error', error?.message || 'Failed to delete event');
+                                },
+                            }
+                        );
+                    },
+                },
+            ]
+        );
     };
 
     const toggleStaffSelection = (staffId: string) => {
@@ -502,7 +562,10 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={styles.addEventButton}
-                        onPress={() => setShowAddEventModal(true)}
+                        onPress={() => {
+                            setEditingEventId(null);
+                            setShowAddEventModal(true);
+                        }}
                     >
                         <Ionicons name="add" size={20} color={theme.colors.surface} />
                         <Text style={styles.addEventButtonText}>Add Event</Text>
@@ -571,7 +634,23 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 </Text>
                                 {(events as any[]).map((event: any) => (
                                     <StyledCard key={event.id} style={styles.eventCard}>
-                                        <Text style={styles.eventTitle}>{event.title}</Text>
+                                        <View style={styles.eventCardHeader}>
+                                            <Text style={styles.eventTitle}>{event.title}</Text>
+                                            <View style={styles.eventActions}>
+                                                <TouchableOpacity
+                                                    style={styles.eventActionButton}
+                                                    onPress={() => handleEditEvent(event)}
+                                                >
+                                                    <Ionicons name="pencil-outline" size={16} color={theme.colors.text} />
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.eventActionButton}
+                                                    onPress={() => handleDeleteEvent(event.id)}
+                                                >
+                                                    <Ionicons name="trash-outline" size={16} color={theme.colors.text} />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
                                         <Text style={styles.eventTime}>
                                             {event.start_time && event.end_time
                                                 ? `${event.start_time} - ${event.end_time}`
@@ -627,7 +706,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                     >
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Add Event</Text>
+                            <Text style={styles.modalTitle}>{editingEventId ? 'Edit Event' : 'Add Event'}</Text>
                             <TouchableOpacity onPress={handleCloseAddEventModal} style={styles.closeButton}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
@@ -916,10 +995,10 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                     styles.submitButton,
                                     (!title || !eventType) && styles.submitButtonDisabled,
                                 ]}
-                                onPress={handleAddEvent}
+                                onPress={handleSubmitEvent}
                                 disabled={!title || !eventType}
                             >
-                                <Text style={styles.submitButtonText}>Add Event</Text>
+                                <Text style={styles.submitButtonText}>{editingEventId ? 'Update Event' : 'Add Event'}</Text>
                             </TouchableOpacity>
                         </View>
                     </Pressable>
@@ -1770,10 +1849,31 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.sm,
         padding: theme.spacing.md,
     },
+    eventCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        gap: theme.spacing.sm,
+    },
     eventTitle: {
         ...theme.typography.body,
         fontWeight: '700',
         marginBottom: 2,
+        flex: 1,
+    },
+    eventActions: {
+        flexDirection: 'row',
+        gap: theme.spacing.xs,
+    },
+    eventActionButton: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.surface,
     },
     eventTime: {
         ...theme.typography.bodySmall,
