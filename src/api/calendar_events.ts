@@ -3,81 +3,144 @@ import { supabase } from '../lib/supabase';
 
 // ===================== CALENDAR / MASTER EVENTS =====================
 
+export type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities';
+
 export interface CalendarEvent {
     id: string;
     title: string;
-    date: string;       // ISO date string
+    date: string;
     location?: string;
+    description?: string;
     tags?: string[];
-    type: 'sports' | 'field-trip' | 'special-event';
+    type: string;
     time?: string;
-    source: 'sports_calendar' | 'activities_field_trips';
+    source: EventSource;
+    divisionId?: string;
+    divisionName?: string;
+    home_away?: string;
+    originalData?: any;
+}
+
+export interface Division {
+    id: string;
+    name: string;
+    gender?: string;
+    sort_order?: number;
 }
 
 /**
- * Fetches all events from both sports_calendar and activities_field_trips
- * and merges them into a unified CalendarEvent[] for the Master Calendar.
+ * Fetches divisions for the company (for Master Calendar filter).
+ */
+export const useDivisions = (companyId: string | null) => {
+    return useQuery({
+        queryKey: ['divisions', companyId],
+        queryFn: async (): Promise<Division[]> => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('divisions')
+                .select('id, name, gender, sort_order')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .order('sort_order', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId,
+    });
+};
+
+/**
+ * Fetches all events from sports_calendar, activities_field_trips, and special_events_activities
+ * and merges into a unified CalendarEvent[] for the Master Calendar (aligned with web).
  */
 export const useCalendarEvents = (companyId: string | null, season: string) => {
     return useQuery({
         queryKey: ['calendar_events', companyId, season],
-        queryFn: async () => {
+        queryFn: async (): Promise<CalendarEvent[]> => {
             if (!companyId) return [];
 
-            // Fetch sports calendar events
-            const { data: sportsData, error: sportsError } = await supabase
-                .from('sports_calendar')
-                .select('*')
-                .eq('company_id', companyId)
-                .order('event_date', { ascending: true });
+            const seasonFilter = season || '2026';
 
-            if (sportsError) throw sportsError;
+            const [sportsRes, activitiesRes, specialRes] = await Promise.all([
+                supabase
+                    .from('sports_calendar')
+                    .select('*, division:divisions(id, name, gender)')
+                    .eq('company_id', companyId)
+                    .order('event_date', { ascending: true }),
+                supabase
+                    .from('activities_field_trips')
+                    .select('*, division:divisions(id, name, gender)')
+                    .eq('company_id', companyId)
+                    .order('event_date', { ascending: true }),
+                supabase
+                    .from('special_events_activities')
+                    .select('*, division:divisions(id, name, gender)')
+                    .eq('company_id', companyId)
+                    .order('event_date', { ascending: true }),
+            ]);
 
-            // Fetch activities/field trips
-            const { data: activitiesData, error: activitiesError } = await supabase
-                .from('activities_field_trips')
-                .select('*')
-                .eq('company_id', companyId)
-                .order('event_date', { ascending: true });
+            const sportsData = (sportsRes.data || []).filter((e: any) => e.season === seasonFilter || e.season == null);
+            const activitiesData = (activitiesRes.data || []).filter((e: any) => e.season === seasonFilter || e.season == null);
+            const specialData = (specialRes.data || []).filter((e: any) => e.season === seasonFilter || e.season == null);
 
-            if (activitiesError) throw activitiesError;
+            const events: CalendarEvent[] = [];
 
-            // Map sports events
-            const sportsEvents: CalendarEvent[] = (sportsData || []).map((event: any) => ({
-                id: event.id,
-                title: event.title || event.event_name || '',
-                date: event.event_date,
-                location: event.location || '',
-                tags: [
-                    event.event_type === 'special-event' ? 'Special Event' : 'Sports',
-                    event.sport_type || event.custom_sport_type || '',
-                    ...(event.division_name ? [event.division_name] : []),
-                ].filter(Boolean),
-                type: event.event_type === 'special-event' ? 'special-event' as const
-                    : event.event_type === 'evening-activity' ? 'special-event' as const
-                        : 'sports' as const,
-                time: event.start_time || event.depart_time || '',
-                source: 'sports_calendar' as const,
-            }));
+            sportsData.forEach((event: any) => {
+                const div = event.division;
+                events.push({
+                    id: `sports_${event.id}`,
+                    title: event.title || '',
+                    date: event.event_date,
+                    location: event.location,
+                    description: event.description,
+                    type: event.sport_type || event.custom_sport_type || 'Sports',
+                    time: event.time || event.start_time_field || event.depart_time,
+                    source: 'sports_calendar',
+                    divisionId: div?.id,
+                    divisionName: div?.name,
+                    home_away: event.home_away,
+                    tags: ['Sports', event.sport_type || event.custom_sport_type, div?.name].filter(Boolean),
+                    originalData: event,
+                });
+            });
 
-            // Map field trip events
-            const activityEvents: CalendarEvent[] = (activitiesData || []).map((event: any) => ({
-                id: event.id,
-                title: event.title || '',
-                date: event.event_date,
-                location: event.location || '',
-                tags: [
-                    event.activity_type === 'field-trip' ? 'Field Trip' : 'Sports',
-                    event.activity_type || '',
-                ].filter(Boolean),
-                type: event.activity_type === 'field-trip' ? 'field-trip' as const : 'sports' as const,
-                time: event.depart_from_camp || '',
-                source: 'activities_field_trips' as const,
-            }));
+            activitiesData.forEach((event: any) => {
+                const div = event.division;
+                events.push({
+                    id: `fieldtrip_${event.id}`,
+                    title: event.title || '',
+                    date: event.event_date,
+                    location: event.location,
+                    description: event.description,
+                    type: event.activity_type || 'Field Trip',
+                    time: event.time,
+                    source: 'activities_field_trips',
+                    divisionId: div?.id,
+                    divisionName: div?.name,
+                    tags: ['Field Trip', event.activity_type, div?.name].filter(Boolean),
+                    originalData: event,
+                });
+            });
 
-            return [...sportsEvents, ...activityEvents].sort((a, b) =>
-                new Date(a.date).getTime() - new Date(b.date).getTime()
-            );
+            specialData.forEach((event: any) => {
+                const div = event.division;
+                events.push({
+                    id: `special_${event.id}`,
+                    title: event.title || '',
+                    date: event.event_date,
+                    location: event.location,
+                    description: event.description,
+                    type: event.event_type || 'Special Event',
+                    time: event.time_slot || event.start_time,
+                    source: 'special_events_activities',
+                    divisionId: div?.id,
+                    divisionName: div?.name,
+                    tags: ['Special Event', event.event_type, div?.name].filter(Boolean),
+                    originalData: event,
+                });
+            });
+
+            return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         },
         enabled: !!companyId,
     });

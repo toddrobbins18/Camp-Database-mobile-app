@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
-import { useCalendarEvents } from '../api/calendar_events';
+import { useCalendarEvents, useDivisions, type CalendarEvent, type EventSource } from '../api/calendar_events';
 
 interface Event {
     id: string;
@@ -13,25 +13,66 @@ interface Event {
     date: Date;
     location: string;
     tags: string[];
-    type: 'sports' | 'field-trip' | 'special-event';
+    type: string;
     time?: string;
+    source?: EventSource;
+    divisionName?: string;
+    description?: string;
+    home_away?: string;
+    originalData?: any;
+}
+
+// Time-of-day from time string (for filter): morning 6-12, afternoon 12-17, evening 17-21, else night
+function getTimeOfDayFromTime(timeStr?: string): string {
+    if (!timeStr || typeof timeStr !== 'string') return 'unknown';
+    const trimmed = timeStr.trim();
+    const match = trimmed.match(/(\d{1,2})(?::\d{2})?\s*(am|pm)?/i);
+    if (!match) return 'unknown';
+    let hour = parseInt(match[1], 10);
+    const ampm = (match[2] || '').toLowerCase();
+    if (ampm === 'pm' && hour < 12) hour += 12;
+    if (ampm === 'am' && hour === 12) hour = 0;
+    if (!ampm && hour <= 23 && hour >= 0) { /* 24h */ }
+    if (hour >= 6 && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 17) return 'afternoon';
+    if (hour >= 17 && hour < 21) return 'evening';
+    return 'night';
+}
+
+// Format time for display (e.g. "9:00 AM")
+function formatTime12Hour(timeStr?: string): string {
+    if (!timeStr || typeof timeStr !== 'string') return '';
+    const t = timeStr.trim();
+    const m = t.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
+    if (!m) return t;
+    let h = parseInt(m[1], 10);
+    const min = m[2] ? parseInt(m[2], 10) : 0;
+    const ampm = (m[3] || '').toLowerCase();
+    if (ampm === 'pm' && h < 12) h += 12;
+    if (ampm === 'am' && h === 12) h = 0;
+    if (!ampm && h >= 0 && h <= 23) { /* 24h */ } else if (!ampm) { if (h >= 12) { h -= 12; } }
+    const period = h >= 12 ? 'PM' : 'AM';
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${String(min).padStart(2, '0')} ${period}`;
 }
 
 export const CalendarScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
-    const { data: liveEvents = [], isLoading: isLoadingEvents } = useCalendarEvents(companyId, season);
+    const { data: liveEvents = [], isLoading: isLoadingEvents } = useCalendarEvents(companyId, season || '2026');
+    const { data: divisionsList = [] } = useDivisions(companyId);
     const [activeView, setActiveView] = useState('Month');
-    const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1)); // July 2026
+    const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1));
     const [selectedDate, setSelectedDate] = useState(new Date(2026, 6, 1));
     const [showEventList, setShowEventList] = useState(false);
+    const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
-    // Search and filter states
+    // Search and filter states (values match web: all, division id, morning/afternoon/evening/night, home/away/neutral)
     const [eventNameSearch, setEventNameSearch] = useState('');
     const [locationSearch, setLocationSearch] = useState('');
-    const [selectedDivision, setSelectedDivision] = useState('All Divisions');
-    const [selectedTime, setSelectedTime] = useState('All Times');
-    const [selectedLocationType, setSelectedLocationType] = useState('Home & Away');
-    const [sortBy, setSortBy] = useState('Sort by Date');
+    const [selectedDivision, setSelectedDivision] = useState<string>('all');
+    const [selectedTime, setSelectedTime] = useState<string>('all');
+    const [selectedLocationType, setSelectedLocationType] = useState<string>('all');
+    const [sortBy, setSortBy] = useState<string>('date');
 
     // Picker modals
     const [showDivisionPicker, setShowDivisionPicker] = useState(false);
@@ -39,24 +80,68 @@ export const CalendarScreen = ({ navigation }: any) => {
     const [showLocationTypePicker, setShowLocationTypePicker] = useState(false);
     const [showSortPicker, setShowSortPicker] = useState(false);
 
-    // Events from Supabase
-    const events: Event[] = liveEvents.length > 0
-        ? liveEvents.map((e: any) => ({
-            id: e.id,
-            title: e.title,
-            date: new Date(e.date + 'T00:00:00'),
-            location: e.location || '',
-            tags: e.tags || [],
-            type: e.type,
-            time: e.time || undefined,
-        }))
-        : [];
+    // Options for dropdowns (labels and values)
+    const timeOptions: { label: string; value: string }[] = [
+        { label: 'All Times', value: 'all' },
+        { label: 'Morning', value: 'morning' },
+        { label: 'Afternoon', value: 'afternoon' },
+        { label: 'Evening', value: 'evening' },
+        { label: 'Night', value: 'night' },
+    ];
+    const locationTypes: { label: string; value: string }[] = [
+        { label: 'Home & Away', value: 'all' },
+        { label: 'Home', value: 'home' },
+        { label: 'Away', value: 'away' },
+        { label: 'Neutral', value: 'neutral' },
+    ];
+    const sortOptions: { label: string; value: string }[] = [
+        { label: 'Sort by Date', value: 'date' },
+        { label: 'Sort by Division', value: 'division' },
+        { label: 'Sort by Source', value: 'source' },
+    ];
 
-    // Options
-    const divisions = ['All Divisions', 'Sports Academy', 'Field Trips', 'Special Events', 'Activities'];
-    const timeOptions = ['All Times', 'Morning', 'Afternoon', 'Evening'];
-    const locationTypes = ['Home & Away', 'Home', 'Away'];
-    const sortOptions = ['Sort by Date', 'Sort by Name', 'Sort by Time', 'Sort by Location'];
+    // Map CalendarEvent[] to Event[] and apply filters/sort (aligned with web)
+    const filteredAndSorted: CalendarEvent[] = liveEvents
+        .filter((event: CalendarEvent) => {
+            if (selectedDivision !== 'all' && event.divisionId !== selectedDivision) return false;
+            if (eventNameSearch && !event.title.toLowerCase().includes(eventNameSearch.toLowerCase())) return false;
+            if (locationSearch && (!event.location || !event.location.toLowerCase().includes(locationSearch.toLowerCase()))) return false;
+            if (selectedTime !== 'all') {
+                const eventTimeOfDay = getTimeOfDayFromTime(event.time);
+                if (eventTimeOfDay !== selectedTime) return false;
+            }
+            if (selectedLocationType !== 'all' && event.source === 'sports_calendar') {
+                if ((event.home_away || '') !== selectedLocationType) return false;
+            }
+            return true;
+        })
+        .sort((a, b) => {
+            if (sortBy === 'division') {
+                const na = a.divisionName || '';
+                const nb = b.divisionName || '';
+                return na.localeCompare(nb);
+            }
+            if (sortBy === 'source') return a.source.localeCompare(b.source);
+            const da = new Date(a.date + 'T00:00:00').getTime();
+            const db = new Date(b.date + 'T00:00:00').getTime();
+            if (da !== db) return da - db;
+            return (a.time || '').localeCompare(b.time || '');
+        });
+
+    const events: Event[] = filteredAndSorted.map((e: CalendarEvent) => ({
+        id: e.id,
+        title: e.title,
+        date: new Date(e.date + 'T00:00:00'),
+        location: e.location || '',
+        tags: e.tags || [],
+        type: e.type,
+        time: e.time,
+        source: e.source,
+        divisionName: e.divisionName,
+        description: e.description,
+        home_away: e.home_away,
+        originalData: e.originalData,
+    }));
 
     // Calendar functions
     const getDaysInMonth = (date: Date) => {
@@ -140,18 +225,28 @@ export const CalendarScreen = ({ navigation }: any) => {
         return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
     };
 
-    // Get event icon based on type
-    const getEventIcon = (type: string) => {
-        switch (type) {
-            case 'sports':
-                return 'trophy-outline';
-            case 'field-trip':
-                return 'people-outline';
-            case 'special-event':
-                return 'star-outline';
-            default:
-                return 'calendar-outline';
+    // Get event icon and label by source (match web)
+    const getSourceIcon = (source: EventSource) => {
+        switch (source) {
+            case 'sports_calendar': return 'trophy-outline';
+            case 'activities_field_trips': return 'people-outline';
+            case 'special_events_activities': return 'star-outline';
+            default: return 'calendar-outline';
         }
+    };
+    const getSourceLabel = (source: EventSource) => {
+        switch (source) {
+            case 'sports_calendar': return 'Sports';
+            case 'activities_field_trips': return 'Field Trip';
+            case 'special_events_activities': return 'Special Event';
+            default: return 'Event';
+        }
+    };
+    const getEventIcon = (type: string) => {
+        if (type === 'sports' || type === 'field-trip' || type === 'special-event') {
+            return type === 'sports' ? 'trophy-outline' : type === 'field-trip' ? 'people-outline' : 'star-outline';
+        }
+        return 'calendar-outline';
     };
 
     // Get tag color
@@ -169,24 +264,8 @@ export const CalendarScreen = ({ navigation }: any) => {
         }
     };
 
-    // Filter events
-    const filteredEvents = events.filter(event => {
-        const matchesName = event.title.toLowerCase().includes(eventNameSearch.toLowerCase());
-        const matchesLocation = event.location.toLowerCase().includes(locationSearch.toLowerCase());
-        return matchesName && matchesLocation;
-    }).sort((a, b) => {
-        if (sortBy === 'Sort by Date') {
-            return a.date.getTime() - b.date.getTime();
-        } else if (sortBy === 'Sort by Name') {
-            return a.title.localeCompare(b.title);
-        } else if (sortBy === 'Sort by Location') {
-            return a.location.localeCompare(b.location);
-        }
-        return 0;
-    });
-
-    // Group events by month
-    const groupedEvents = filteredEvents.reduce((acc, event) => {
+    // Group events by month (events already filtered and sorted above)
+    const groupedEvents = events.reduce((acc, event) => {
         const monthKey = `${event.date.getFullYear()}-${event.date.getMonth()}`;
         if (!acc[monthKey]) {
             acc[monthKey] = [];
@@ -219,7 +298,7 @@ export const CalendarScreen = ({ navigation }: any) => {
 
     // Get events for a specific date
     const getEventsForDate = (date: Date) => {
-        return filteredEvents.filter(event => isSameDate(event.date, date));
+        return events.filter(event => isSameDate(event.date, date));
     };
 
     // Get events for week
@@ -240,7 +319,7 @@ export const CalendarScreen = ({ navigation }: any) => {
 
     // Get agenda events (sorted by date and time)
     const getAgendaEvents = () => {
-        return filteredEvents.sort((a, b) => {
+        return [...events].sort((a, b) => {
             const dateCompare = a.date.getTime() - b.date.getTime();
             if (dateCompare !== 0) return dateCompare;
             return (a.time || '').localeCompare(b.time || '');
@@ -311,7 +390,9 @@ export const CalendarScreen = ({ navigation }: any) => {
                             style={styles.dropdownContainer}
                             onPress={() => setShowDivisionPicker(true)}
                         >
-                            <Text style={styles.dropdownText}>{selectedDivision}</Text>
+                            <Text style={styles.dropdownText} numberOfLines={1}>
+                                {selectedDivision === 'all' ? 'All Divisions' : (divisionsList.find(d => d.id === selectedDivision)?.name || 'All Divisions')}
+                            </Text>
                             <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
 
@@ -319,7 +400,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                             style={styles.dropdownContainer}
                             onPress={() => setShowTimePicker(true)}
                         >
-                            <Text style={styles.dropdownText}>{selectedTime}</Text>
+                            <Text style={styles.dropdownText}>{timeOptions.find(o => o.value === selectedTime)?.label || 'All Times'}</Text>
                             <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
@@ -329,7 +410,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                             style={styles.dropdownContainer}
                             onPress={() => setShowLocationTypePicker(true)}
                         >
-                            <Text style={styles.dropdownText}>{selectedLocationType}</Text>
+                            <Text style={styles.dropdownText}>{locationTypes.find(o => o.value === selectedLocationType)?.label || 'Home & Away'}</Text>
                             <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
 
@@ -337,62 +418,78 @@ export const CalendarScreen = ({ navigation }: any) => {
                             style={styles.dropdownContainer}
                             onPress={() => setShowSortPicker(true)}
                         >
-                            <Text style={styles.dropdownText}>{sortBy}</Text>
+                            <Text style={styles.dropdownText}>{sortOptions.find(o => o.value === sortBy)?.label || 'Sort by Date'}</Text>
                             <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
                 </StyledCard>
 
-                {/* Event List View */}
+                {/* Event List View (match web: icon, title, date, source/type/division badges, time, location, description) */}
                 {showEventList ? (
                     <View style={styles.eventListView}>
-                        {Object.entries(groupedEvents).map(([monthKey, monthEvents]) => {
+                        {events.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyText}>No events match your filters</Text>
+                            </View>
+                        ) : Object.entries(groupedEvents).map(([monthKey, monthEvents]) => {
                             const [year, month] = monthKey.split('-').map(Number);
                             return (
                                 <View key={monthKey}>
                                     <Text style={styles.monthHeader}>{formatMonthHeader(year, month)}</Text>
-                                    {monthEvents.map((event) => (
-                                        <StyledCard key={event.id} style={styles.eventCard}>
-                                            <View style={styles.eventIconContainer}>
-                                                <Ionicons
-                                                    name={getEventIcon(event.type)}
-                                                    size={24}
-                                                    color={theme.colors.textSecondary}
-                                                />
-                                            </View>
-                                            <View style={styles.eventContent}>
-                                                <Text style={styles.eventTitle}>{event.title}</Text>
-                                                <Text style={styles.eventDate}>{formatEventDate(event.date)}</Text>
-                                                {event.time && (
-                                                    <View style={styles.eventTimeContainer}>
-                                                        <Ionicons name="time-outline" size={14} color={theme.colors.textSecondary} />
-                                                        <Text style={styles.eventTime}>{event.time}</Text>
+                                    {monthEvents.map((event) => {
+                                        const calEvent = filteredAndSorted.find(e => e.id === event.id);
+                                        return (
+                                            <TouchableOpacity
+                                                key={event.id}
+                                                activeOpacity={0.8}
+                                                onPress={() => calEvent && setSelectedEvent(calEvent)}
+                                            >
+                                                <StyledCard style={styles.eventCard}>
+                                                    <View style={styles.eventCardHeader}>
+                                                        <View style={styles.eventIconContainer}>
+                                                            <Ionicons
+                                                                name={getSourceIcon(event.source!)}
+                                                                size={22}
+                                                                color={theme.colors.text}
+                                                            />
+                                                        </View>
+                                                        <View style={styles.eventContent}>
+                                                            <Text style={styles.eventTitle}>{event.title}</Text>
+                                                            <Text style={styles.eventDate}>{formatEventDate(event.date)}</Text>
+                                                        </View>
                                                     </View>
-                                                )}
-                                                <View style={styles.eventTags}>
-                                                    {event.tags.map((tag, index) => {
-                                                        const tagStyle = getTagStyle(tag);
-                                                        return (
-                                                            <View
-                                                                key={index}
-                                                                style={[styles.eventTag, tagStyle]}
-                                                            >
-                                                                <Text style={[styles.eventTagText, { color: tagStyle.color }]}>
-                                                                    {tag}
-                                                                </Text>
+                                                    <View style={styles.eventCardBadges}>
+                                                        <View style={[styles.eventTag, styles.eventTagSource]}>
+                                                            <Text style={styles.eventTagSourceText}>{getSourceLabel(event.source!)}</Text>
+                                                        </View>
+                                                        <View style={[styles.eventTag, styles.eventTagOutline]}>
+                                                            <Text style={styles.eventTagText}>{event.type}</Text>
+                                                        </View>
+                                                        {event.divisionName ? (
+                                                            <View style={[styles.eventTag, styles.eventTagDivision]}>
+                                                                <Text style={styles.eventTagDivisionText}>{event.divisionName}</Text>
                                                             </View>
-                                                        );
-                                                    })}
-                                                </View>
-                                                {event.location && (
-                                                    <View style={styles.eventLocation}>
-                                                        <Ionicons name="location" size={14} color="#ef4444" />
-                                                        <Text style={styles.eventLocationText}>{event.location}</Text>
+                                                        ) : null}
                                                     </View>
-                                                )}
-                                            </View>
-                                        </StyledCard>
-                                    ))}
+                                                    {event.time ? (
+                                                        <View style={styles.eventMetaRow}>
+                                                            <Ionicons name="time-outline" size={14} color="#92400e" />
+                                                            <Text style={styles.eventMetaText}>{formatTime12Hour(event.time)}</Text>
+                                                        </View>
+                                                    ) : null}
+                                                    {event.location ? (
+                                                        <View style={styles.eventMetaRow}>
+                                                            <Ionicons name="location-outline" size={14} color="#ef4444" />
+                                                            <Text style={styles.eventMetaText}>{event.location}</Text>
+                                                        </View>
+                                                    ) : null}
+                                                    {event.description ? (
+                                                        <Text style={styles.eventDescription} numberOfLines={2}>{event.description}</Text>
+                                                    ) : null}
+                                                </StyledCard>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
                                 </View>
                             );
                         })}
@@ -672,19 +769,21 @@ export const CalendarScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
                         <View style={styles.pickerContent}>
-                            {divisions.map((division) => (
+                            <TouchableOpacity
+                                style={[styles.pickerOption, selectedDivision === 'all' && styles.pickerOptionActive]}
+                                onPress={() => { setSelectedDivision('all'); setShowDivisionPicker(false); }}
+                            >
+                                <Text style={[styles.pickerOptionText, selectedDivision === 'all' && styles.pickerOptionTextActive]}>All Divisions</Text>
+                                {selectedDivision === 'all' && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
+                            </TouchableOpacity>
+                            {divisionsList.map((div) => (
                                 <TouchableOpacity
-                                    key={division}
-                                    style={styles.pickerOption}
-                                    onPress={() => {
-                                        setSelectedDivision(division);
-                                        setShowDivisionPicker(false);
-                                    }}
+                                    key={div.id}
+                                    style={[styles.pickerOption, selectedDivision === div.id && styles.pickerOptionActive]}
+                                    onPress={() => { setSelectedDivision(div.id); setShowDivisionPicker(false); }}
                                 >
-                                    <Text style={styles.pickerOptionText}>{division}</Text>
-                                    {selectedDivision === division && (
-                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                    )}
+                                    <Text style={[styles.pickerOptionText, selectedDivision === div.id && styles.pickerOptionTextActive]}>{div.name}</Text>
+                                    {selectedDivision === div.id && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -708,19 +807,14 @@ export const CalendarScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
                         <View style={styles.pickerContent}>
-                            {timeOptions.map((time) => (
+                            {timeOptions.map((o) => (
                                 <TouchableOpacity
-                                    key={time}
-                                    style={styles.pickerOption}
-                                    onPress={() => {
-                                        setSelectedTime(time);
-                                        setShowTimePicker(false);
-                                    }}
+                                    key={o.value}
+                                    style={[styles.pickerOption, selectedTime === o.value && styles.pickerOptionActive]}
+                                    onPress={() => { setSelectedTime(o.value); setShowTimePicker(false); }}
                                 >
-                                    <Text style={styles.pickerOptionText}>{time}</Text>
-                                    {selectedTime === time && (
-                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                    )}
+                                    <Text style={[styles.pickerOptionText, selectedTime === o.value && styles.pickerOptionTextActive]}>{o.label}</Text>
+                                    {selectedTime === o.value && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -744,19 +838,14 @@ export const CalendarScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
                         <View style={styles.pickerContent}>
-                            {locationTypes.map((location) => (
+                            {locationTypes.map((o) => (
                                 <TouchableOpacity
-                                    key={location}
-                                    style={styles.pickerOption}
-                                    onPress={() => {
-                                        setSelectedLocationType(location);
-                                        setShowLocationTypePicker(false);
-                                    }}
+                                    key={o.value}
+                                    style={[styles.pickerOption, selectedLocationType === o.value && styles.pickerOptionActive]}
+                                    onPress={() => { setSelectedLocationType(o.value); setShowLocationTypePicker(false); }}
                                 >
-                                    <Text style={styles.pickerOptionText}>{location}</Text>
-                                    {selectedLocationType === location && (
-                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                    )}
+                                    <Text style={[styles.pickerOptionText, selectedLocationType === o.value && styles.pickerOptionTextActive]}>{o.label}</Text>
+                                    {selectedLocationType === o.value && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -780,22 +869,93 @@ export const CalendarScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
                         <View style={styles.pickerContent}>
-                            {sortOptions.map((sort) => (
+                            {sortOptions.map((o) => (
                                 <TouchableOpacity
-                                    key={sort}
-                                    style={styles.pickerOption}
-                                    onPress={() => {
-                                        setSortBy(sort);
-                                        setShowSortPicker(false);
-                                    }}
+                                    key={o.value}
+                                    style={[styles.pickerOption, sortBy === o.value && styles.pickerOptionActive]}
+                                    onPress={() => { setSortBy(o.value); setShowSortPicker(false); }}
                                 >
-                                    <Text style={styles.pickerOptionText}>{sort}</Text>
-                                    {sortBy === sort && (
-                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                    )}
+                                    <Text style={[styles.pickerOptionText, sortBy === o.value && styles.pickerOptionTextActive]}>{o.label}</Text>
+                                    {sortBy === o.value && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
                                 </TouchableOpacity>
                             ))}
                         </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Event Detail Modal (match web: title, badges, division, date, time, location, home/away, description) */}
+            <Modal
+                visible={!!selectedEvent}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setSelectedEvent(null)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setSelectedEvent(null)}>
+                    <Pressable style={styles.eventDetailModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.eventDetailHeader}>
+                            <View style={styles.eventDetailTitleRow}>
+                                <Ionicons name={getSourceIcon(selectedEvent?.source!)} size={24} color={theme.colors.text} />
+                                <Text style={styles.eventDetailTitle}>{selectedEvent?.title}</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setSelectedEvent(null)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.eventDetailScroll} showsVerticalScrollIndicator={false}>
+                            <View style={styles.eventDetailBadges}>
+                                <View style={[styles.eventTag, styles.eventTagSource]}>
+                                    <Text style={styles.eventTagSourceText}>{selectedEvent && getSourceLabel(selectedEvent.source)}</Text>
+                                </View>
+                                <View style={[styles.eventTag, styles.eventTagOutline]}>
+                                    <Text style={styles.eventTagText}>{selectedEvent?.type}</Text>
+                                </View>
+                            </View>
+                            {(selectedEvent?.divisionName || (selectedEvent?.originalData?.divisions?.length > 0)) && (
+                                <View style={styles.eventDetailRow}>
+                                    <Ionicons name="people-outline" size={18} color={theme.colors.textSecondary} />
+                                    <Text style={styles.eventDetailRowText}>
+                                        {selectedEvent?.originalData?.divisions?.length > 0
+                                            ? selectedEvent.originalData.divisions.map((d: any) => d.name).join(', ')
+                                            : selectedEvent?.divisionName}
+                                    </Text>
+                                </View>
+                            )}
+                            <View style={styles.eventDetailRow}>
+                                <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
+                                <Text style={styles.eventDetailRowText}>
+                                    {selectedEvent?.date && new Date(selectedEvent.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                                </Text>
+                            </View>
+                            {selectedEvent?.time && (
+                                <View style={styles.eventDetailRow}>
+                                    <Ionicons name="time-outline" size={18} color={theme.colors.textSecondary} />
+                                    <Text style={styles.eventDetailRowText}>{formatTime12Hour(selectedEvent.time)}</Text>
+                                </View>
+                            )}
+                            {selectedEvent?.location && (
+                                <View style={styles.eventDetailRow}>
+                                    <Ionicons name="location-outline" size={18} color={theme.colors.textSecondary} />
+                                    <Text style={styles.eventDetailRowText}>{selectedEvent.location}</Text>
+                                </View>
+                            )}
+                            {selectedEvent?.source === 'sports_calendar' && selectedEvent?.originalData?.home_away && (
+                                <View style={styles.eventDetailRow}>
+                                    <Ionicons name={selectedEvent.originalData.home_away === 'home' ? 'home-outline' : 'airplane-outline'} size={18} color={theme.colors.textSecondary} />
+                                    <Text style={styles.eventDetailRowText}>{String(selectedEvent.originalData.home_away).charAt(0).toUpperCase() + String(selectedEvent.originalData.home_away).slice(1)}</Text>
+                                </View>
+                            )}
+                            {selectedEvent?.source === 'sports_calendar' && selectedEvent?.originalData?.team && selectedEvent?.originalData?.opponent && (
+                                <View style={styles.eventDetailVs}>
+                                    <Text style={styles.eventDetailVsText}>{selectedEvent.originalData.team} vs {selectedEvent.originalData.opponent}</Text>
+                                </View>
+                            )}
+                            {selectedEvent?.description && (
+                                <View style={styles.eventDetailDescription}>
+                                    <Text style={styles.eventDetailDescriptionText}>{selectedEvent.description}</Text>
+                                </View>
+                            )}
+                        </ScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -1092,22 +1252,69 @@ const styles = StyleSheet.create({
         paddingHorizontal: theme.spacing.sm,
     },
     eventCard: {
-        flexDirection: 'row',
         padding: theme.spacing.md,
         marginBottom: theme.spacing.sm,
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
-        ...theme.shadows.card,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    eventCardHeader: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: theme.spacing.sm,
     },
     eventIconContainer: {
-        width: 40,
-        height: 40,
+        width: 36,
+        height: 36,
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: theme.spacing.md,
+        marginRight: theme.spacing.sm,
     },
     eventContent: {
         flex: 1,
+    },
+    eventCardBadges: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: theme.spacing.sm,
+    },
+    eventTagSource: {
+        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    },
+    eventTagSourceText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#1e40af',
+    },
+    eventTagOutline: {
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    eventTagDivision: {
+        backgroundColor: '#14b8a6',
+    },
+    eventTagDivisionText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: 'white',
+    },
+    eventMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 4,
+    },
+    eventMetaText: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    eventDescription: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        marginTop: theme.spacing.xs,
     },
     eventTitle: {
         ...theme.typography.h3,
@@ -1158,6 +1365,77 @@ const styles = StyleSheet.create({
         ...theme.typography.bodySmall,
         fontSize: 14,
         color: theme.colors.text,
+    },
+    eventDetailModal: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        marginHorizontal: theme.spacing.lg,
+        maxHeight: '85%',
+    },
+    eventDetailHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: theme.spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    eventDetailTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        flex: 1,
+    },
+    eventDetailTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+        flex: 1,
+    },
+    eventDetailScroll: {
+        padding: theme.spacing.lg,
+        maxHeight: 400,
+    },
+    eventDetailBadges: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: theme.spacing.md,
+    },
+    eventDetailRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginBottom: theme.spacing.sm,
+    },
+    eventDetailRowText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+        flex: 1,
+    },
+    eventDetailVs: {
+        backgroundColor: theme.colors.background,
+        padding: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        marginBottom: theme.spacing.sm,
+    },
+    eventDetailVsText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    eventDetailDescription: {
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        paddingTop: theme.spacing.md,
+        marginTop: theme.spacing.sm,
+    },
+    eventDetailDescriptionText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
     },
     // Week View Styles
     weekViewContainer: {

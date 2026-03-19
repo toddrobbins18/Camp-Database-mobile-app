@@ -80,7 +80,9 @@ export const MenuScreen = ({ navigation }: any) => {
     };
 
     const handleDeleteMenuItem = (id: string | undefined) => {
-        if (id) deleteMenuItemMutation.mutate(id);
+        if (id && companyId) {
+            deleteMenuItemMutation.mutate({ id, company_id: companyId });
+        }
     };
 
     const getMealTypeColor = (type?: string) => {

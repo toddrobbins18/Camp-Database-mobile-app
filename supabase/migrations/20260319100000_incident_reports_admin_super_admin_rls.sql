@@ -12,7 +12,7 @@ WITH CHECK (
     public.has_role(auth.uid(), 'admin'::app_role)
     OR public.is_super_admin(auth.uid())
   )
-);
+)
 
 -- incident_reports: UPDATE (admin + super_admin only)
 DROP POLICY IF EXISTS "Admins and super admins can update incidents" ON public.incident_reports;

@@ -44,8 +44,9 @@ export const useAddMenuItem = () => {
             if (error) throw error;
             return data;
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['menu_items'] });
+        onSuccess: (_, variables) => {
+            // Refresh menu for this company (and any dependent dashboards)
+            queryClient.invalidateQueries({ queryKey: ['menu_items', variables.company_id] });
             queryClient.invalidateQueries({ queryKey: ['dashboard_meals'] });
         },
     });
@@ -55,17 +56,17 @@ export const useDeleteMenuItem = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (id: string) => {
+        mutationFn: async (params: { id: string; company_id: string }) => {
             const { error } = await supabase
                 .from('menu_items')
                 .delete()
-                .eq('id', id);
+                .eq('id', params.id);
 
             if (error) throw error;
-            return id;
+            return params;
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['menu_items'] });
+        onSuccess: (params) => {
+            queryClient.invalidateQueries({ queryKey: ['menu_items', params.company_id] });
             queryClient.invalidateQueries({ queryKey: ['dashboard_meals'] });
         },
     });
