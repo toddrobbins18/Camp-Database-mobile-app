@@ -82,41 +82,88 @@ export const useRainyDayDocuments = (companyId: string | null, season: string) =
 
 // ===================== TUTORING & THERAPY =====================
 
+export interface TutoringTherapyChild {
+    id?: string;
+    name?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+    division_id?: string | null;
+    gender?: string | null;
+}
+
 export interface TutoringTherapyEntry {
     id: string;
     child_id: string;
+    company_id?: string;
     service_type: string;
-    instructor?: string;
-    schedule_periods: string[];
-    start_date?: string;
-    end_date?: string;
-    notes?: string;
+    instructor?: string | null;
+    schedule_periods: string[] | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    notes?: string | null;
     season: string;
     created_at: string;
+    children?: TutoringTherapyChild | null;
 }
 
-export const useTutoringTherapy = (season: string) => {
+export const useTutoringTherapy = (companyId: string | null, season: string) => {
     return useQuery({
-        queryKey: ['tutoring_therapy', season],
+        queryKey: ['tutoring_therapy', companyId, season],
         queryFn: async () => {
+            if (!companyId) return [];
             const { data, error } = await supabase
                 .from('tutoring_therapy')
-                .select('*')
+                .select(
+                    `
+                    *,
+                    children (
+                        id,
+                        name,
+                        division_id,
+                        gender
+                    )
+                `
+                )
+                .eq('company_id', companyId)
                 .eq('season', season)
                 .order('created_at', { ascending: false });
             if (error) throw error;
             return (data || []) as TutoringTherapyEntry[];
         },
+        enabled: !!companyId && !!season,
     });
+};
+
+export type TutoringTherapyInsert = Omit<TutoringTherapyEntry, 'id' | 'created_at' | 'children'> & {
+    company_id: string;
 };
 
 export const useAddTutoringEntry = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (entry: Omit<TutoringTherapyEntry, 'id' | 'created_at'>) => {
+        mutationFn: async (entry: TutoringTherapyInsert) => {
             const { data, error } = await supabase
                 .from('tutoring_therapy')
                 .insert([entry])
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['tutoring_therapy'] });
+        },
+    });
+};
+
+export const useUpdateTutoringEntry = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ id, ...updates }: Partial<TutoringTherapyInsert> & { id: string }) => {
+            const { data, error } = await supabase
+                .from('tutoring_therapy')
+                .update(updates)
+                .eq('id', id)
                 .select()
                 .single();
             if (error) throw error;

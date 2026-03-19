@@ -15,11 +15,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { useTutoringTherapy, useAddTutoringEntry, useDeleteTutoringEntry } from '../api/rainy_day_tutoring';
-import { useDivisions } from '../api/campers';
+import {
+    useTutoringTherapy,
+    useAddTutoringEntry,
+    useUpdateTutoringEntry,
+    useDeleteTutoringEntry,
+    type TutoringTherapyEntry,
+} from '../api/rainy_day_tutoring';
+import { useDivisions, useCampers } from '../api/campers';
 import { useCompany } from '../contexts/CompanyContext';
-import { supabase } from '../lib/supabase';
-import { useQuery } from '@tanstack/react-query';
 
 interface TutoringTherapyScreenProps {
     navigation: any;
@@ -46,65 +50,60 @@ const SERVICES = [
 // Fetch campers from Supabase instead of hardcoding
 const SCHEDULE_PERIODS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
 
+function mmddyyyyToIso(s: string): string | null {
+    if (!s?.trim()) return null;
+    const m = s.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!m) return null;
+    return `${m[3]}-${m[1]}-${m[2]}`;
+}
+
+function isoToMmddyyyy(iso: string | null | undefined): string {
+    if (!iso) return '';
+    const d = iso.split('T')[0];
+    const [y, mo, da] = d.split('-');
+    if (!y || !mo || !da) return '';
+    return `${mo}/${da}/${y}`;
+}
+
+function enrollmentDisplayName(entry: TutoringTherapyEntry): string {
+    const c = entry.children;
+    if (!c) return 'Unknown Camper';
+    if (c.name) return c.name;
+    const fn = c.first_name || '';
+    const ln = c.last_name || '';
+    const n = `${fn} ${ln}`.trim();
+    return n || 'Unknown Camper';
+}
+
+function matchesGenderFilter(childGender: string | null | undefined, selectedGender: string): boolean {
+    if (selectedGender === 'All Genders') return true;
+    const g = (childGender || '').toLowerCase();
+    if (selectedGender === 'Boys') {
+        return g === 'boy' || g === 'male' || g === 'm' || g.startsWith('boy');
+    }
+    if (selectedGender === 'Girls') {
+        return g === 'girl' || g === 'female' || g === 'f' || g.startsWith('girl');
+    }
+    return true;
+}
+
+type SheetOption = { value: string; label: string };
+
 export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps) => {
     const { companyId, season } = useCompany();
-    const { data: enrollments = [], isLoading: enrollmentsLoading } = useTutoringTherapy(season || '2026');
-    const { data: divisionsData = [] } = useDivisions(companyId);
-    const addEntryMutation = useAddTutoringEntry();
-
-    const filteredEnrollments = useMemo(() => {
-        let filtered = enrollments;
-
-        if (selectedDivision !== 'All Divisions') {
-            filtered = filtered.filter(e => e.children?.division_id === selectedDivision);
-        }
-        if (selectedGender !== 'All Genders') {
-            const genderValue = selectedGender === 'Boys' ? 'boy' : 'girl';
-            filtered = filtered.filter(e => e.children?.gender === genderValue);
-        }
-        if (selectedService !== 'All Services') {
-            filtered = filtered.filter(e => e.service_type === selectedService);
-        }
-        if (searchQuery) {
-            const lowerQuery = searchQuery.toLowerCase();
-            filtered = filtered.filter(e => {
-                const childName = `${e.children?.first_name || ''} ${e.children?.last_name || ''}`.toLowerCase();
-                return childName.includes(lowerQuery) || 
-                       (e.service_type && e.service_type.toLowerCase().includes(lowerQuery)) ||
-                       (e.instructor && e.instructor.toLowerCase().includes(lowerQuery));
-            });
-        }
-        return filtered;
-    }, [enrollments, selectedDivision, selectedGender, selectedService, searchQuery]);
-    
-    const deleteEntryMutation = useDeleteTutoringEntry();
-
-    // Fetch campers from Supabase
-    const { data: CAMPERS = [] } = useQuery({
-        queryKey: ['campers_for_tutoring'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('children')
-                .select('id, first_name, last_name')
-                .order('last_name', { ascending: true });
-            if (error) throw error;
-            return (data || []).map((c: any) => `${c.first_name} ${c.last_name}`);
-        },
-    });
 
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [selectedGender, setSelectedGender] = useState('All Genders');
     const [selectedService, setSelectedService] = useState('All Services');
 
-    // Dropdown states
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
     const [showGenderDropdown, setShowGenderDropdown] = useState(false);
     const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
-    // Add Enrollment Modal states
     const [showAddEnrollmentModal, setShowAddEnrollmentModal] = useState(false);
-    const [selectedCamper, setSelectedCamper] = useState('');
+    const [editingEnrollment, setEditingEnrollment] = useState<TutoringTherapyEntry | null>(null);
+    const [selectedCamperId, setSelectedCamperId] = useState('');
     const [selectedServiceType, setSelectedServiceType] = useState('');
     const [instructorName, setInstructorName] = useState('');
     const [selectedPeriods, setSelectedPeriods] = useState<string[]>([]);
@@ -112,17 +111,75 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
     const [endDate, setEndDate] = useState('');
     const [notes, setNotes] = useState('');
 
-    // Modal dropdown states
     const [showCamperDropdown, setShowCamperDropdown] = useState(false);
     const [showServiceTypeDropdown, setShowServiceTypeDropdown] = useState(false);
     const [showStartDatePicker, setShowStartDatePicker] = useState(false);
     const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
-    // Date picker states
     const [startDatePickerMonth, setStartDatePickerMonth] = useState(new Date().getMonth());
     const [startDatePickerYear, setStartDatePickerYear] = useState(new Date().getFullYear());
     const [endDatePickerMonth, setEndDatePickerMonth] = useState(new Date().getMonth());
     const [endDatePickerYear, setEndDatePickerYear] = useState(new Date().getFullYear());
+
+    const { data: enrollments = [], isLoading: enrollmentsLoading } = useTutoringTherapy(companyId, season);
+    const { data: divisionsData = [] } = useDivisions(companyId);
+    const { data: campers = [] } = useCampers(companyId, season);
+
+    const addEntryMutation = useAddTutoringEntry();
+    const updateEntryMutation = useUpdateTutoringEntry();
+    const deleteEntryMutation = useDeleteTutoringEntry();
+
+    const divisionOptions: SheetOption[] = useMemo(
+        () => [
+            { value: 'All Divisions', label: 'All Divisions' },
+            ...(divisionsData as any[]).map((d) => ({ value: d.id, label: d.name })),
+        ],
+        [divisionsData]
+    );
+
+    const genderOptions: SheetOption[] = useMemo(
+        () => GENDERS.map((g) => ({ value: g, label: g })),
+        []
+    );
+
+    const serviceFilterOptions: SheetOption[] = useMemo(
+        () => SERVICES.map((s) => ({ value: s, label: s })),
+        []
+    );
+
+    const camperOptions: SheetOption[] = useMemo(
+        () =>
+            campers
+                .filter((c) => c.id)
+                .map((c) => ({ value: c.id as string, label: c.name || 'Unnamed' })),
+        [campers]
+    );
+
+    const filteredEnrollments = useMemo(() => {
+        let filtered = enrollments;
+
+        if (selectedDivision !== 'All Divisions') {
+            filtered = filtered.filter((e) => e.children?.division_id === selectedDivision);
+        }
+        if (selectedGender !== 'All Genders') {
+            filtered = filtered.filter((e) => matchesGenderFilter(e.children?.gender ?? null, selectedGender));
+        }
+        if (selectedService !== 'All Services') {
+            filtered = filtered.filter((e) => e.service_type === selectedService);
+        }
+        if (searchQuery) {
+            const lowerQuery = searchQuery.toLowerCase();
+            filtered = filtered.filter((e) => {
+                const childName = enrollmentDisplayName(e).toLowerCase();
+                return (
+                    childName.includes(lowerQuery) ||
+                    (e.service_type && e.service_type.toLowerCase().includes(lowerQuery)) ||
+                    !!(e.instructor && e.instructor.toLowerCase().includes(lowerQuery))
+                );
+            });
+        }
+        return filtered;
+    }, [enrollments, selectedDivision, selectedGender, selectedService, searchQuery]);
 
     const monthNames = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -147,9 +204,9 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
     const renderBottomSheetDropdown = (
         visible: boolean,
         onClose: () => void,
-        data: string[],
-        selected: string,
-        onSelect: (item: string) => void,
+        options: SheetOption[],
+        selectedValue: string,
+        onSelect: (value: string) => void,
         title?: string
     ) => {
         return (
@@ -172,20 +229,20 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                             </TouchableOpacity>
                         </View>
                         <FlatList
-                            data={data}
-                            keyExtractor={(item) => item}
+                            data={options}
+                            keyExtractor={(item) => item.value}
                             renderItem={({ item }) => (
                                 <TouchableOpacity
                                     style={[
                                         styles.bottomSheetItem,
-                                        selected === item && styles.bottomSheetItemSelected,
+                                        selectedValue === item.value && styles.bottomSheetItemSelected,
                                     ]}
                                     onPress={() => {
-                                        onSelect(item);
+                                        onSelect(item.value);
                                         onClose();
                                     }}
                                 >
-                                    {selected === item && (
+                                    {selectedValue === item.value && (
                                         <Ionicons
                                             name="checkmark"
                                             size={20}
@@ -196,10 +253,10 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                     <Text
                                         style={[
                                             styles.bottomSheetItemText,
-                                            selected === item && styles.bottomSheetItemTextSelected,
+                                            selectedValue === item.value && styles.bottomSheetItemTextSelected,
                                         ]}
                                     >
-                                        {formatter ? formatter(item) : item}
+                                        {item.label}
                                     </Text>
                                 </TouchableOpacity>
                             )}
@@ -358,7 +415,17 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                 {/* Add Enrollment Button */}
                 <TouchableOpacity
                     style={styles.addButton}
-                    onPress={() => setShowAddEnrollmentModal(true)}
+                    onPress={() => {
+                        setEditingEnrollment(null);
+                        setSelectedCamperId('');
+                        setSelectedServiceType('');
+                        setInstructorName('');
+                        setSelectedPeriods([]);
+                        setStartDate('');
+                        setEndDate('');
+                        setNotes('');
+                        setShowAddEnrollmentModal(true);
+                    }}
                 >
                     <Ionicons name="add" size={20} color={theme.colors.surface} />
                     <Text style={styles.addButtonText}>Add Enrollment</Text>
@@ -443,24 +510,68 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
 
                 {/* Content Area - Show live enrollments or empty state */}
                 <View style={styles.contentArea}>
-                    {enrollmentsLoading ? (
+                    {!companyId ? (
+                        <Text style={styles.emptyStateText}>Select a company to load enrollments.</Text>
+                    ) : enrollmentsLoading ? (
                         <ActivityIndicator size="large" color={theme.colors.secondary} />
                     ) : filteredEnrollments.length === 0 ? (
                         <Text style={styles.emptyStateText}>No enrollments found</Text>
                     ) : (
-                        filteredEnrollments.map((entry: any) => (
+                        filteredEnrollments.map((entry) => (
                             <StyledCard key={entry.id} style={{ marginBottom: 8, padding: 12 }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={{ fontWeight: '600', color: theme.colors.text }}>{entry.children ? `${entry.children.first_name} ${entry.children.last_name}` : 'Unknown Camper'} - {entry.service_type}</Text>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <View style={{ flex: 1, paddingRight: 8 }}>
+                                        <Text style={{ fontWeight: '600', color: theme.colors.text }}>
+                                            {enrollmentDisplayName(entry)} — {entry.service_type}
+                                        </Text>
                                         <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 2 }}>
                                             Instructor: {entry.instructor || 'N/A'} • Periods: {(entry.schedule_periods || []).join(', ') || 'N/A'}
                                         </Text>
-                                        {entry.notes && <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }}>{entry.notes}</Text>}
+                                        {(entry.start_date || entry.end_date) && (
+                                            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }}>
+                                                {entry.start_date ? isoToMmddyyyy(entry.start_date) : '?'} —{' '}
+                                                {entry.end_date ? isoToMmddyyyy(entry.end_date) : 'Ongoing'}
+                                            </Text>
+                                        )}
+                                        {entry.notes ? (
+                                            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }}>{entry.notes}</Text>
+                                        ) : null}
                                     </View>
-                                    <TouchableOpacity onPress={() => deleteEntryMutation.mutate(entry.id)}>
-                                        <Ionicons name="trash-outline" size={20} color={theme.colors.textSecondary} />
-                                    </TouchableOpacity>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                setEditingEnrollment(entry);
+                                                setSelectedCamperId(entry.child_id);
+                                                setSelectedServiceType(entry.service_type);
+                                                setInstructorName(entry.instructor || '');
+                                                setSelectedPeriods([...(entry.schedule_periods || [])]);
+                                                setStartDate(isoToMmddyyyy(entry.start_date));
+                                                setEndDate(isoToMmddyyyy(entry.end_date));
+                                                setNotes(entry.notes || '');
+                                                setShowAddEnrollmentModal(true);
+                                            }}
+                                        >
+                                            <Ionicons name="pencil" size={20} color={theme.colors.textSecondary} />
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                Alert.alert('Delete enrollment', 'Remove this tutoring/therapy enrollment?', [
+                                                    { text: 'Cancel', style: 'cancel' },
+                                                    {
+                                                        text: 'Delete',
+                                                        style: 'destructive',
+                                                        onPress: () =>
+                                                            deleteEntryMutation.mutate(entry.id, {
+                                                                onError: (e: any) =>
+                                                                    Alert.alert('Error', e?.message || 'Could not delete'),
+                                                            }),
+                                                    },
+                                                ]);
+                                            }}
+                                        >
+                                            <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
                             </StyledCard>
                         ))
@@ -472,16 +583,15 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
             {renderBottomSheetDropdown(
                 showDivisionDropdown,
                 () => setShowDivisionDropdown(false),
-                ['All Divisions', ...divisionsData.map((d: any) => d.id)],
+                divisionOptions,
                 selectedDivision,
                 setSelectedDivision,
-                'Select Division',
-                (item) => item === 'All Divisions' ? 'All Divisions' : divisionsData.find((d:any) => d.id === item)?.name
+                'Select Division'
             )}
             {renderBottomSheetDropdown(
                 showGenderDropdown,
                 () => setShowGenderDropdown(false),
-                GENDERS,
+                genderOptions,
                 selectedGender,
                 setSelectedGender,
                 'Select Gender'
@@ -489,7 +599,7 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
             {renderBottomSheetDropdown(
                 showServiceDropdown,
                 () => setShowServiceDropdown(false),
-                SERVICES,
+                serviceFilterOptions,
                 selectedService,
                 setSelectedService,
                 'Select Service'
@@ -500,13 +610,21 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                 visible={showAddEnrollmentModal}
                 transparent
                 animationType="slide"
-                onRequestClose={() => setShowAddEnrollmentModal(false)}
+                onRequestClose={() => {
+                    setShowAddEnrollmentModal(false);
+                    setEditingEnrollment(null);
+                }}
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContainer}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Add New Enrollment</Text>
-                            <TouchableOpacity onPress={() => setShowAddEnrollmentModal(false)}>
+                            <Text style={styles.modalTitle}>{editingEnrollment ? 'Edit Enrollment' : 'Add New Enrollment'}</Text>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setShowAddEnrollmentModal(false);
+                                    setEditingEnrollment(null);
+                                }}
+                            >
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
@@ -524,8 +642,8 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                         setShowServiceTypeDropdown(false);
                                     }}
                                 >
-                                    <Text style={[styles.modalDropdownText, !selectedCamper && styles.placeholder]}>
-                                        {selectedCamper || 'Select camper'}
+                                    <Text style={[styles.modalDropdownText, !selectedCamperId && styles.placeholder]}>
+                                        {camperOptions.find((o) => o.value === selectedCamperId)?.label || 'Select camper'}
                                     </Text>
                                     <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
@@ -642,29 +760,55 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                         <View style={styles.modalFooter}>
                             <TouchableOpacity
                                 style={styles.cancelButton}
-                                onPress={() => setShowAddEnrollmentModal(false)}
+                                onPress={() => {
+                                    setShowAddEnrollmentModal(false);
+                                    setEditingEnrollment(null);
+                                }}
                             >
                                 <Text style={styles.cancelButtonText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.createButton, (!selectedCamper || !selectedServiceType) && styles.createButtonDisabled]}
+                                style={[
+                                    styles.createButton,
+                                    (!selectedCamperId || !selectedServiceType || !companyId) && styles.createButtonDisabled,
+                                ]}
+                                disabled={!selectedCamperId || !selectedServiceType || !companyId}
                                 onPress={() => {
-                                    if (selectedCamper && selectedServiceType) {
-                                        // Save to Supabase
-                                        addEntryMutation.mutate({
-                                            child_id: selectedCamper, // Note: in real use, this should be the camper's UUID
-                                            service_type: selectedServiceType,
-                                            instructor: instructorName || undefined,
-                                            schedule_periods: selectedPeriods,
-                                            start_date: startDate || undefined,
-                                            end_date: endDate || undefined,
-                                            notes: notes || undefined,
-                                            season: '2026',
-                                        }, {
+                                    if (!companyId || !selectedCamperId || !selectedServiceType) return;
+
+                                    const startIso = mmddyyyyToIso(startDate);
+                                    const endIso = mmddyyyyToIso(endDate);
+                                    const basePayload = {
+                                        child_id: selectedCamperId,
+                                        company_id: companyId,
+                                        season,
+                                        service_type: selectedServiceType,
+                                        instructor: instructorName.trim() || null,
+                                        schedule_periods: selectedPeriods.length ? selectedPeriods : [],
+                                        start_date: startIso,
+                                        end_date: endIso,
+                                        notes: notes.trim() || null,
+                                    };
+
+                                    if (editingEnrollment?.id) {
+                                        updateEntryMutation.mutate(
+                                            { id: editingEnrollment.id, ...basePayload },
+                                            {
+                                                onSuccess: () => {
+                                                    Alert.alert('Success', 'Enrollment updated.');
+                                                    setShowAddEnrollmentModal(false);
+                                                    setEditingEnrollment(null);
+                                                },
+                                                onError: (e: any) =>
+                                                    Alert.alert('Error', e?.message || 'Failed to update enrollment.'),
+                                            }
+                                        );
+                                    } else {
+                                        addEntryMutation.mutate(basePayload, {
                                             onSuccess: () => {
                                                 Alert.alert('Success', 'Enrollment created!');
                                                 setShowAddEnrollmentModal(false);
-                                                setSelectedCamper('');
+                                                setSelectedCamperId('');
                                                 setSelectedServiceType('');
                                                 setInstructorName('');
                                                 setSelectedPeriods([]);
@@ -672,14 +816,15 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                                 setEndDate('');
                                                 setNotes('');
                                             },
-                                            onError: () => {
-                                                Alert.alert('Error', 'Failed to create enrollment.');
-                                            },
+                                            onError: (e: any) =>
+                                                Alert.alert('Error', e?.message || 'Failed to create enrollment.'),
                                         });
                                     }
                                 }}
                             >
-                                <Text style={styles.createButtonText}>Create Enrollment</Text>
+                                <Text style={styles.createButtonText}>
+                                    {editingEnrollment ? 'Save Changes' : 'Create Enrollment'}
+                                </Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -690,15 +835,15 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
             {renderBottomSheetDropdown(
                 showCamperDropdown,
                 () => setShowCamperDropdown(false),
-                CAMPERS,
-                selectedCamper,
-                setSelectedCamper,
+                camperOptions,
+                selectedCamperId,
+                setSelectedCamperId,
                 'Select Camper'
             )}
             {renderBottomSheetDropdown(
                 showServiceTypeDropdown,
                 () => setShowServiceTypeDropdown(false),
-                SERVICES.filter(s => s !== 'All Services'),
+                SERVICES.filter((s) => s !== 'All Services').map((s) => ({ value: s, label: s })),
                 selectedServiceType,
                 setSelectedServiceType,
                 'Select Service Type'
