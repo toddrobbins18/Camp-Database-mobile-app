@@ -23,6 +23,15 @@ const YEAR_END_AWARDS = [
     "Color War Captain"
 ];
 
+const WEEKLY_CAMPER_AWARDS = [
+    "Most Improved",
+    "Best Sportsmanship",
+    "Camper of the Week",
+    "Kindness Award",
+    "Leadership Award",
+    "Team Player"
+];
+
 const STARFISH_VALUES = [
     "Sportsmanship",
     "Appreciation",
@@ -51,14 +60,14 @@ export const AwardsScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
 
-    // Fetch awards from Supabase
+    // Fetch awards from Supabase (children table has "name", not first_name/last_name)
     const { data: awards = [], isLoading: isLoadingAwards } = useQuery({
         queryKey: ['awards', companyId, season],
         queryFn: async () => {
-            if (!companyId) return [];
+            if (!companyId || !season) return [];
             const { data, error } = await supabase
                 .from('awards')
-                .select('*, children(first_name, last_name)')
+                .select('*, children(id, name)')
                 .eq('company_id', companyId)
                 .eq('season', season)
                 .order('date', { ascending: false });
@@ -66,46 +75,65 @@ export const AwardsScreen = ({ navigation }: any) => {
             return (data || []).map((award: any) => ({
                 ...award,
                 childId: award.child_id,
-                childName: award.children
-                    ? `${award.children.first_name} ${award.children.last_name}`.trim()
-                    : 'Unknown',
+                childName: award.children?.name?.trim() || 'Unknown',
             }));
         },
-        enabled: !!companyId,
+        enabled: !!companyId && !!season,
     });
 
-    // Fetch children from Supabase
+    // Fetch children for Add Award dropdown (children table has "name", filter by season)
     const { data: children = [] } = useQuery({
-        queryKey: ['children', companyId],
+        queryKey: ['children', companyId, season],
         queryFn: async () => {
-            if (!companyId) return [];
+            if (!companyId || !season) return [];
             const { data, error } = await supabase
                 .from('children')
-                .select('id, first_name, last_name')
+                .select('id, name')
                 .eq('company_id', companyId)
-                .order('last_name', { ascending: true });
+                .eq('season', season)
+                .order('name', { ascending: true });
             if (error) throw error;
             return (data || []).map((c: any) => ({
                 id: c.id,
-                name: `${c.first_name} ${c.last_name}`.trim(),
+                name: (c.name || '').trim() || 'Unnamed',
             }));
         },
-        enabled: !!companyId,
+        enabled: !!companyId && !!season,
     });
+
+    // Convert MM/DD/YYYY to YYYY-MM-DD for DB
+    const toDateString = (mmddyyyy: string) => {
+        const parts = mmddyyyy.trim().split(/[/-]/);
+        if (parts.length !== 3) return mmddyyyy;
+        const [m, d, y] = parts;
+        const month = m!.length === 1 ? `0${m}` : m;
+        const day = d!.length === 1 ? `0${d}` : d;
+        return `${y}-${month}-${day}`;
+    };
 
     // Add award mutation
     const addAwardMutation = useMutation({
         mutationFn: async (newAward: any) => {
+            const dateForDb = toDateString(newAward.date);
+            const titleParts = [
+                newAward.yearEndAward,
+                newAward.weeklyCamperAward,
+                newAward.weeklyStarfishValues?.length ? newAward.weeklyStarfishValues.join(', ') : null,
+                newAward.yearEndStarfishValues?.length ? newAward.yearEndStarfishValues.join(', ') : null,
+            ].filter(Boolean);
+            const title = titleParts.length > 0 ? titleParts.join(' – ') : 'Award';
             const { data, error } = await supabase
                 .from('awards')
                 .insert([{
                     company_id: companyId,
                     season: season,
                     child_id: newAward.childId,
-                    title: newAward.yearEndAward || null,
-                    category: newAward.weeklyStarfishValues?.join(', ') || null,
+                    title,
+                    category: newAward.yearEndStarfishValues?.length
+                        ? newAward.yearEndStarfishValues.join(', ')
+                        : (newAward.weeklyStarfishValues?.join(', ') || null),
                     description: newAward.notes || null,
-                    date: newAward.date,
+                    date: dateForDb,
                 }])
                 .select()
                 .single();
@@ -121,6 +149,69 @@ export const AwardsScreen = ({ navigation }: any) => {
             Alert.alert('Error', error.message || 'Failed to add award');
         },
     });
+
+    // Update award mutation (edit flow) - same payload shape as add (title/category built from form)
+    const updateAwardMutation = useMutation({
+        mutationFn: async (payload: {
+            id: string;
+            childId: string;
+            yearEndAward: string;
+            weeklyCamperAward: string | null;
+            weeklyStarfishValues: string[];
+            yearEndStarfishValues: string[];
+            notes: string;
+            date: string;
+        }) => {
+            const dateForDb = toDateString(payload.date);
+            const titleParts = [
+                payload.yearEndAward,
+                payload.weeklyCamperAward,
+                payload.weeklyStarfishValues?.length ? payload.weeklyStarfishValues.join(', ') : null,
+                payload.yearEndStarfishValues?.length ? payload.yearEndStarfishValues.join(', ') : null,
+            ].filter(Boolean);
+            const title = titleParts.length > 0 ? titleParts.join(' – ') : 'Award';
+            const category = payload.yearEndStarfishValues?.length
+                ? payload.yearEndStarfishValues.join(', ')
+                : (payload.weeklyStarfishValues?.join(', ') || null);
+            const { data, error } = await supabase
+                .from('awards')
+                .update({
+                    child_id: payload.childId,
+                    title,
+                    category,
+                    description: payload.notes?.trim() || null,
+                    date: dateForDb,
+                })
+                .eq('id', payload.id)
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['awards'] });
+            Alert.alert('Success', 'Award updated');
+            handleCloseAddAward();
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to update award');
+        },
+    });
+
+    // Delete award mutation
+    const deleteAwardMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase.from('awards').delete().eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['awards'] });
+        },
+        onError: (error: any) => {
+            Alert.alert('Delete failed', error?.message || 'Could not delete award. You may not have permission.');
+        },
+    });
+
     const [isCSVGuideOpen, setIsCSVGuideOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('awards');
     const [isAddAwardModalOpen, setIsAddAwardModalOpen] = useState(false);
@@ -132,11 +223,15 @@ export const AwardsScreen = ({ navigation }: any) => {
     const [showChildDropdown, setShowChildDropdown] = useState(false);
     const [weeklyStarfishValues, setWeeklyStarfishValues] = useState<string[]>([]);
     const [yearEndAward, setYearEndAward] = useState('');
+    const [yearEndStarfishValues, setYearEndStarfishValues] = useState<string[]>([]);
     const [showYearEndDropdown, setShowYearEndDropdown] = useState(false);
+    const [weeklyCamperAward, setWeeklyCamperAward] = useState('');
+    const [showWeeklyCamperDropdown, setShowWeeklyCamperDropdown] = useState(false);
     const [date, setDate] = useState(new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }));
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [notes, setNotes] = useState('');
+    const [editingAwardId, setEditingAwardId] = useState<string | null>(null);
 
     // Calculate statistics - all will be 0 with empty data
     const totalAchievements = awards.length;
@@ -153,18 +248,84 @@ export const AwardsScreen = ({ navigation }: any) => {
 
     const handleCloseAddAward = () => {
         setIsAddAwardModalOpen(false);
-        // Reset form
+        setEditingAwardId(null);
         setSelectedChild('');
         setChildSearchText('');
         setShowChildDropdown(false);
         setWeeklyStarfishValues([]);
         setYearEndAward('');
+        setYearEndStarfishValues([]);
         setShowYearEndDropdown(false);
+        setWeeklyCamperAward('');
+        setShowWeeklyCamperDropdown(false);
         const today = new Date();
         setDate(today.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }));
         setSelectedDate(today);
         setShowDatePicker(false);
         setNotes('');
+    };
+
+    const handleEditAward = (award: any) => {
+        setEditingAwardId(award.id);
+        setSelectedChild(award.child_id || award.childId);
+        const d = award.date ? new Date(award.date) : new Date();
+        setSelectedDate(d);
+        setDate(d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }));
+        setNotes(award.description?.trim() || '');
+        const title = (award.title || '').trim();
+        const category = (award.category || '').trim();
+        const yearEnd = YEAR_END_AWARDS.find((y) => title.includes(y)) || '';
+        setYearEndAward(yearEnd);
+        setWeeklyCamperAward(WEEKLY_CAMPER_AWARDS.find((w) => title.includes(w)) || '');
+        const categoryValues = category ? category.split(',').map((s: string) => s.trim()).filter((s: string) => STARFISH_VALUES.includes(s)) : [];
+        if (yearEnd === 'Starfish') {
+            setYearEndStarfishValues(categoryValues);
+            setWeeklyStarfishValues([]);
+        } else {
+            setYearEndStarfishValues([]);
+            setWeeklyStarfishValues(categoryValues);
+        }
+        setShowYearEndDropdown(false);
+        setShowWeeklyCamperDropdown(false);
+        setIsAddAwardModalOpen(true);
+    };
+
+    const handleDeleteAward = (award: any) => {
+        const awardId = award.id;
+        if (!awardId) {
+            Alert.alert('Error', 'Cannot delete: missing award id');
+            return;
+        }
+        Alert.alert(
+            'Delete Award',
+            `Remove this award for ${award.childName || 'this child'}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => deleteAwardMutation.mutate(awardId) },
+            ]
+        );
+    };
+
+    const handleSubmitEditAward = () => {
+        if (!editingAwardId) return;
+        if (!selectedChild) {
+            Alert.alert('Validation', 'Please select a child');
+            return;
+        }
+        if (!yearEndAward && weeklyStarfishValues.length === 0 && !weeklyCamperAward) {
+            Alert.alert('Validation', 'Please select at least one award (Year End Award, Weekly Camper Award, or Weekly Starfish)');
+            return;
+        }
+        updateAwardMutation.mutate({
+            id: editingAwardId,
+            childId: selectedChild,
+            yearEndAward,
+            weeklyCamperAward: weeklyCamperAward || null,
+            weeklyStarfishValues,
+            yearEndStarfishValues: yearEndAward === 'Starfish' ? yearEndStarfishValues : [],
+            notes,
+            date,
+        });
     };
 
     const handleDateSelect = (day: number) => {
@@ -195,14 +356,28 @@ export const AwardsScreen = ({ navigation }: any) => {
         );
     };
 
+    const toggleYearEndStarfish = (value: string) => {
+        setYearEndStarfishValues(prev =>
+            prev.includes(value)
+                ? prev.filter(v => v !== value)
+                : [...prev, value]
+        );
+    };
+
     const handleSubmitAward = () => {
         if (!selectedChild) {
             Alert.alert('Validation', 'Please select a child');
             return;
         }
+        if (!yearEndAward && weeklyStarfishValues.length === 0 && !weeklyCamperAward) {
+            Alert.alert('Validation', 'Please select at least one award (Year End Award, Weekly Camper Award, or Weekly Starfish)');
+            return;
+        }
         addAwardMutation.mutate({
             childId: selectedChild,
             yearEndAward,
+            yearEndStarfishValues: yearEndAward === 'Starfish' ? yearEndStarfishValues : [],
+            weeklyCamperAward: weeklyCamperAward || null,
             weeklyStarfishValues,
             notes,
             date,
@@ -214,6 +389,21 @@ export const AwardsScreen = ({ navigation }: any) => {
             child.name.toLowerCase().includes(childSearchText.toLowerCase())
         )
         : children;
+
+    // Group awards by child for engaging list UI (like reference)
+    const awardsByChild = React.useMemo(() => {
+        const map: Record<string, { childName: string; awards: any[] }> = {};
+        awards.forEach((a: any) => {
+            const key = a.childId || 'unknown';
+            if (!map[key]) map[key] = { childName: a.childName, awards: [] };
+            map[key].awards.push(a);
+        });
+        return Object.entries(map).map(([childId, { childName, awards: list }]) => ({
+            childId,
+            childName,
+            awards: list.sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime()),
+        }));
+    }, [awards]);
 
     const handleUploadCSV = () => {
         setIsUploadCSVModalOpen(true);
@@ -284,10 +474,74 @@ export const AwardsScreen = ({ navigation }: any) => {
                     </StyledCard>
                 </View>
 
-                {/* Empty State */}
-                <View style={styles.emptyStateContainer}>
-                    <Text style={styles.emptyStateText}>No awards found. Add your first achievement!</Text>
-                </View>
+                {/* Awards list grouped by child - engaging UI, no raw JSON */}
+                {awards.length === 0 ? (
+                    <View style={styles.emptyStateContainer}>
+                        <Text style={styles.emptyStateText}>No awards found. Add your first achievement!</Text>
+                    </View>
+                ) : (
+                    <View style={styles.awardsListSection}>
+                        <Text style={styles.awardsListSectionTitle}>
+                            {awards.length} {awards.length === 1 ? 'achievement' : 'achievements'} found
+                        </Text>
+                        {awardsByChild.map(({ childId, childName, awards: childAwards }) => (
+                            <StyledCard key={childId} style={styles.childAwardCard}>
+                                <View style={styles.childAwardHeader}>
+                                    <View style={styles.childAwardHeaderIcon}>
+                                        <Ionicons name="person" size={20} color={theme.colors.secondary} />
+                                    </View>
+                                    <View style={styles.childAwardHeaderText}>
+                                        <Text style={styles.childAwardName}>{childName}</Text>
+                                        <Text style={styles.childAwardCount}>
+                                            {childAwards.length} {childAwards.length === 1 ? 'achievement' : 'achievements'}
+                                        </Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.viewProfileButton}
+                                        onPress={() => navigation.navigate('Camper', { screen: 'CamperDetail', params: { camper: { id: childId, name: childName } } })}
+                                    >
+                                        <Text style={styles.viewProfileButtonText}>View Profile</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                {childAwards.map((award) => (
+                                    <View key={award.id} style={styles.awardRow}>
+                                        <View style={styles.awardRowIcon}>
+                                            <Ionicons name="ribbon" size={18} color={theme.colors.secondary} />
+                                        </View>
+                                        <View style={styles.awardRowContent}>
+                                            <Text style={styles.awardRowTitle}>{award.title || 'Award'}</Text>
+                                            <Text style={styles.awardRowDescription}>
+                                                {award.description?.trim() || 'None'}
+                                            </Text>
+                                            <View style={styles.awardRowDate}>
+                                                <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
+                                                <Text style={styles.awardRowDateText}>
+                                                    {new Date(award.date).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <View style={styles.awardRowActions}>
+                                            <TouchableOpacity
+                                                style={styles.awardRowActionBtn}
+                                                onPress={() => handleEditAward({ ...award, child_id: award.child_id || award.childId })}
+                                                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                            >
+                                                <Ionicons name="pencil" size={20} color={theme.colors.textSecondary} />
+                                            </TouchableOpacity>
+                                            <Pressable
+                                                style={({ pressed }) => [styles.awardRowActionBtn, pressed && { opacity: 0.7 }]}
+                                                onPress={() => handleDeleteAward(award)}
+                                                hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+                                            >
+                                                <Ionicons name="trash-outline" size={20} color={theme.colors.error || '#dc3545'} />
+                                            </Pressable>
+                                        </View>
+                                    </View>
+                                ))}
+                            </StyledCard>
+                        ))}
+                    </View>
+                )}
             </ScrollView>
 
             {/* Upload CSV Bottom Sheet Modal */}
@@ -357,7 +611,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                     >
                         {/* Modal Header */}
                         <View style={styles.addAwardModalHeader}>
-                            <Text style={styles.addAwardModalTitle}>Add New Award</Text>
+                            <Text style={styles.addAwardModalTitle}>{editingAwardId ? 'Edit Award' : 'Add New Award'}</Text>
                             <TouchableOpacity
                                 style={styles.addAwardModalCloseButton}
                                 onPress={handleCloseAddAward}
@@ -383,7 +637,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                                         styles.selectInputText,
                                         !selectedChild && styles.selectInputPlaceholder
                                     ]}>
-                                        {selectedChild ? children.find((c: any) => c.id === selectedChild)?.name : 'Select a child...'}
+                                        {selectedChild ? children.find((c: any) => c.id === selectedChild)?.name : 'Type to search for a child...'}
                                     </Text>
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
@@ -413,6 +667,23 @@ export const AwardsScreen = ({ navigation }: any) => {
                                 </View>
                             </View>
 
+                            {/* Weekly Camper Award */}
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Weekly Camper Award</Text>
+                                <TouchableOpacity
+                                    style={styles.selectInput}
+                                    onPress={() => setShowWeeklyCamperDropdown(true)}
+                                >
+                                    <Text style={[
+                                        styles.selectInputText,
+                                        !weeklyCamperAward && styles.selectInputPlaceholder
+                                    ]}>
+                                        {weeklyCamperAward || 'Select weekly award...'}
+                                    </Text>
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
                             {/* Year End Award */}
                             <View style={styles.formField}>
                                 <Text style={styles.formLabel}>Year End Award</Text>
@@ -429,6 +700,34 @@ export const AwardsScreen = ({ navigation }: any) => {
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
                             </View>
+
+                            {/* Starfish Values (multi-select) - only when Year End Award is Starfish */}
+                            {yearEndAward === 'Starfish' && (
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Starfish Values (multi-select)</Text>
+                                    <View style={styles.starfishValuesBox}>
+                                        <View style={styles.starfishGrid}>
+                                            {STARFISH_VALUES.map((value) => (
+                                                <TouchableOpacity
+                                                    key={value}
+                                                    style={styles.starfishItem}
+                                                    onPress={() => toggleYearEndStarfish(value)}
+                                                >
+                                                    <View style={[
+                                                        styles.radioButton,
+                                                        yearEndStarfishValues.includes(value) && styles.radioButtonSelected
+                                                    ]}>
+                                                        {yearEndStarfishValues.includes(value) && (
+                                                            <View style={styles.radioButtonInner} />
+                                                        )}
+                                                    </View>
+                                                    <Text style={styles.starfishLabel}>{value}</Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                    </View>
+                                </View>
+                            )}
 
                             {/* Date */}
                             <View style={styles.formField}>
@@ -479,9 +778,9 @@ export const AwardsScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={styles.addAwardButton}
-                                    onPress={handleSubmitAward}
+                                    onPress={editingAwardId ? handleSubmitEditAward : handleSubmitAward}
                                 >
-                                    <Text style={styles.addAwardButtonText}>Add Award</Text>
+                                    <Text style={styles.addAwardButtonText}>{editingAwardId ? 'Save Changes' : 'Add Award'}</Text>
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
@@ -510,11 +809,11 @@ export const AwardsScreen = ({ navigation }: any) => {
                         </View>
 
                         {/* Search Input */}
-                        <View style={styles.dateInputContainer}>
-                            <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={{ marginRight: 8 }} />
+                        <View style={styles.dropdownSearchContainer}>
+                            <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.dropdownSearchIcon} />
                             <TextInput
-                                style={styles.dateInput}
-                                placeholder="Search children..."
+                                style={styles.dropdownSearchInput}
+                                placeholder="Type to search for a child..."
                                 placeholderTextColor={theme.colors.textSecondary}
                                 value={childSearchText}
                                 onChangeText={setChildSearchText}
@@ -553,6 +852,60 @@ export const AwardsScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
+            {/* Weekly Camper Award Bottom Sheet */}
+            <Modal
+                visible={showWeeklyCamperDropdown}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowWeeklyCamperDropdown(false)}
+            >
+                <Pressable
+                    style={styles.bottomSheetOverlay}
+                    onPress={() => setShowWeeklyCamperDropdown(false)}
+                >
+                    <Pressable
+                        style={[styles.bottomSheet, styles.awardDropdownBottomSheet]}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select weekly award</Text>
+                        </View>
+                        <ScrollView
+                            style={styles.awardDropdownScroll}
+                            contentContainerStyle={styles.awardDropdownScrollContent}
+                            showsVerticalScrollIndicator={true}
+                            nestedScrollEnabled={true}
+                        >
+                            {WEEKLY_CAMPER_AWARDS.map((award) => (
+                                <TouchableOpacity
+                                    key={award}
+                                    style={[
+                                        styles.bottomSheetOption,
+                                        weeklyCamperAward === award && styles.bottomSheetOptionSelected
+                                    ]}
+                                    onPress={() => {
+                                        setWeeklyCamperAward(award);
+                                        setShowWeeklyCamperDropdown(false);
+                                    }}
+                                >
+                                    <Ionicons
+                                        name={weeklyCamperAward === award ? "radio-button-on" : "radio-button-off"}
+                                        size={24}
+                                        color={weeklyCamperAward === award ? theme.colors.secondary : theme.colors.textSecondary}
+                                    />
+                                    <Text style={[
+                                        styles.bottomSheetOptionText,
+                                        weeklyCamperAward === award && styles.bottomSheetOptionTextSelected
+                                    ]}>
+                                        {award}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
             {/* Year End Award Bottom Sheet */}
             <Modal
                 visible={showYearEndDropdown}
@@ -565,36 +918,38 @@ export const AwardsScreen = ({ navigation }: any) => {
                     onPress={() => setShowYearEndDropdown(false)}
                 >
                     <Pressable
-                        style={styles.bottomSheet}
+                        style={[styles.bottomSheet, styles.awardDropdownBottomSheet]}
                         onPress={(e) => e.stopPropagation()}
                     >
-                        {/* Header */}
                         <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select Award</Text>
+                            <Text style={styles.bottomSheetTitle}>Select award type</Text>
                         </View>
 
-                        {/* List */}
-                        <View style={styles.bottomSheetContent}>
-                            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
-                                {YEAR_END_AWARDS.map((award) => (
-                                    <TouchableOpacity
-                                        key={award}
-                                        style={styles.bottomSheetOption}
-                                        onPress={() => {
-                                            setYearEndAward(award);
-                                            setShowYearEndDropdown(false);
-                                        }}
-                                    >
-                                        <Ionicons
-                                            name={yearEndAward === award ? "radio-button-on" : "radio-button-off"}
-                                            size={24}
-                                            color={yearEndAward === award ? theme.colors.secondary : theme.colors.textSecondary}
-                                        />
-                                        <Text style={styles.bottomSheetOptionText}>{award}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        </View>
+                        <ScrollView
+                            style={styles.awardDropdownScroll}
+                            contentContainerStyle={styles.awardDropdownScrollContent}
+                            showsVerticalScrollIndicator={true}
+                            nestedScrollEnabled={true}
+                        >
+                            {YEAR_END_AWARDS.map((award) => (
+                                <TouchableOpacity
+                                    key={award}
+                                    style={styles.bottomSheetOption}
+                                    onPress={() => {
+                                        setYearEndAward(award);
+                                        if (award !== 'Starfish') setYearEndStarfishValues([]);
+                                        setShowYearEndDropdown(false);
+                                    }}
+                                >
+                                    <Ionicons
+                                        name={yearEndAward === award ? "radio-button-on" : "radio-button-off"}
+                                        size={24}
+                                        color={yearEndAward === award ? theme.colors.secondary : theme.colors.textSecondary}
+                                    />
+                                    <Text style={styles.bottomSheetOptionText}>{award}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -1013,6 +1368,130 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 24,
     },
+    awardsListSection: {
+        marginTop: theme.spacing.sm,
+        paddingBottom: theme.spacing.xl,
+    },
+    awardsListSectionTitle: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.md,
+        paddingHorizontal: theme.spacing.xs,
+    },
+    childAwardCard: {
+        marginBottom: theme.spacing.md,
+    },
+    childAwardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: theme.spacing.md,
+        paddingBottom: theme.spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    childAwardHeaderIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: theme.colors.secondary + '20',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: theme.spacing.sm,
+    },
+    childAwardHeaderText: {
+        flex: 1,
+    },
+    childAwardName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    childAwardCount: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
+    viewProfileButton: {
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+    },
+    viewProfileButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    awardRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginTop: theme.spacing.sm,
+        paddingVertical: theme.spacing.xs,
+    },
+    awardRowIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: theme.colors.secondary + '18',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: theme.spacing.sm,
+    },
+    awardRowContent: {
+        flex: 1,
+        minWidth: 0,
+    },
+    awardRowActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        marginLeft: theme.spacing.sm,
+    },
+    awardRowActionBtn: {
+        padding: theme.spacing.xs,
+    },
+    awardRowTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    awardRowDescription: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
+    awardRowDate: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+        gap: 4,
+    },
+    awardRowDateText: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+    },
+    dropdownSearchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        marginHorizontal: theme.spacing.md,
+        marginBottom: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+    },
+    dropdownSearchIcon: {
+        marginRight: theme.spacing.xs,
+    },
+    dropdownSearchInput: {
+        flex: 1,
+        paddingVertical: theme.spacing.sm,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
     // Modal Styles
     modalOverlay: {
         flex: 1,
@@ -1056,6 +1535,7 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.lg,
         width: '100%',
         maxWidth: 600,
+        height: '90%',
         maxHeight: '90%',
         ...theme.shadows.card,
         elevation: 5,
@@ -1226,7 +1706,7 @@ const styles = StyleSheet.create({
     },
     addAwardModalContent: {
         padding: theme.spacing.lg,
-        maxHeight: 600,
+        paddingBottom: theme.spacing.xl * 2,
     },
     formField: {
         marginBottom: theme.spacing.lg,
@@ -1295,6 +1775,13 @@ const styles = StyleSheet.create({
     },
     childDropdownTextSelected: {
         color: theme.colors.surface, // White text on orange background
+    },
+    starfishValuesBox: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.background,
+        padding: theme.spacing.md,
     },
     starfishGrid: {
         flexDirection: 'row',
@@ -1534,6 +2021,15 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
         zIndex: 1000,
     },
+    awardDropdownBottomSheet: {
+        maxHeight: '50%',
+    },
+    awardDropdownScroll: {
+        maxHeight: 320,
+    },
+    awardDropdownScrollContent: {
+        paddingBottom: theme.spacing.xl,
+    },
     bottomSheet: {
         backgroundColor: theme.colors.surface,
         borderTopLeftRadius: theme.borderRadius.xl,
@@ -1566,6 +2062,13 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: theme.colors.text,
     },
+    bottomSheetOptionSelected: {
+        backgroundColor: theme.colors.surfaceHover || 'rgba(0,0,0,0.05)',
+    },
+    bottomSheetOptionTextSelected: {
+        color: theme.colors.secondary,
+        fontWeight: '600',
+    },
     // Add Award Bottom Sheet
     addAwardBottomSheet: {
         backgroundColor: theme.colors.surface,
@@ -1575,7 +2078,7 @@ const styles = StyleSheet.create({
         paddingBottom: theme.spacing.xl,
     },
     addAwardBottomSheetScroll: {
-        // removed flex: 1 to prevent collapse on mobile
+        flex: 1,
     },
 });
 

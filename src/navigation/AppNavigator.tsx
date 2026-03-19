@@ -182,7 +182,7 @@ const CustomDrawerContent = (props: any) => {
                 <DrawerItem
                     label="Camper"
                     icon={({ color }) => <Ionicons name="people-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Camper')}
+                    onPress={() => props.navigation.navigate('Camper', { screen: 'CamperList' })}
                     {...drawerItemProps}
                 />
                 <DrawerItem

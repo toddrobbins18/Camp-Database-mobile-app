@@ -91,42 +91,44 @@ export const AppointmentsScreen = ({ navigation }: any) => {
         enabled: !!companyId,
     });
 
-    // Fetch campers (children) from Supabase
+    // Fetch campers (children) for dropdown - children table has "name", filter by season
     const { data: campers = [] } = useQuery({
-        queryKey: ['children', companyId],
+        queryKey: ['children', companyId, season],
         queryFn: async () => {
-            if (!companyId) return [];
+            if (!companyId || !season) return [];
             const { data, error } = await supabase
                 .from('children')
-                .select('id, first_name, last_name')
+                .select('id, name')
                 .eq('company_id', companyId)
-                .order('last_name', { ascending: true });
+                .eq('season', season)
+                .order('name', { ascending: true });
             if (error) throw error;
             return (data || []).map((c: any) => ({
                 id: c.id,
-                name: `${c.first_name} ${c.last_name}`.trim(),
+                name: (c.name || '').trim() || 'Unnamed',
             }));
         },
-        enabled: !!companyId,
+        enabled: !!companyId && !!season,
     });
 
-    // Fetch staff from Supabase
+    // Fetch staff for dropdown - appointments.staff_id references staff(id)
     const { data: staffMembers = [] } = useQuery({
-        queryKey: ['staff', companyId],
+        queryKey: ['staff', companyId, season],
         queryFn: async () => {
-            if (!companyId) return [];
+            if (!companyId || !season) return [];
             const { data, error } = await supabase
-                .from('profiles')
-                .select('id, full_name')
+                .from('staff')
+                .select('id, name')
                 .eq('company_id', companyId)
-                .order('full_name', { ascending: true });
+                .eq('season', season)
+                .order('name', { ascending: true });
             if (error) throw error;
             return (data || []).map((s: any) => ({
                 id: s.id,
-                name: s.full_name || 'Unknown',
+                name: (s.name || '').trim() || 'Unnamed',
             }));
         },
-        enabled: !!companyId,
+        enabled: !!companyId && !!season,
     });
 
     // Add appointment mutation
@@ -196,7 +198,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
         },
     });
 
-    // Delete appointment mutation
+    // Delete appointment mutation - removes row from database
     const deleteAppointmentMutation = useMutation({
         mutationFn: async (id: string) => {
             const { error } = await supabase
@@ -210,7 +212,8 @@ export const AppointmentsScreen = ({ navigation }: any) => {
             Alert.alert('Success', 'Appointment deleted successfully');
         },
         onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to delete appointment');
+            const msg = error?.message || error?.error_description || 'Failed to delete appointment';
+            Alert.alert('Delete failed', msg);
         },
     });
     const [activeTab, setActiveTab] = useState<AppointmentTab>('Upcoming');
@@ -586,34 +589,62 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                         <View style={styles.appointmentsList}>
                             {filteredAppointments.map((appointment, index) => (
                                 <StyledCard key={appointment.id || index} style={styles.appointmentCard}>
-                                    <TouchableOpacity
-                                        onPress={() => handleEditAppointment(appointment)}
-                                        activeOpacity={0.7}
-                                    >
-                                        {/* Card Header */}
-                                        <View style={styles.appointmentCardHeader}>
-                                            <View style={styles.appointmentCardTitleContainer}>
-                                                <Text style={styles.appointmentCardTitle}>
-                                                    {appointment.person || 'Unnamed Person'}
-                                                </Text>
-                                                <Text style={styles.appointmentCardDate}>
-                                                    {formatDateTime(appointment.date, appointment.time)}
-                                                </Text>
-                                            </View>
-                                            <View style={styles.appointmentCardActions}>
-                                                <Pressable
-                                                    style={({ pressed }) => [
-                                                        styles.actionIconButton,
-                                                        pressed && styles.actionIconButtonPressed
-                                                    ]}
-                                                    onPress={() => handleEditAppointment(appointment)}
-                                                >
-                                                    <Ionicons name="pencil" size={20} color={theme.colors.textSecondary} />
-                                                </Pressable>
-                                            </View>
+                                    {/* Card Header: title tappable for edit; actions separate so delete gets the press */}
+                                    <View style={styles.appointmentCardHeader}>
+                                        <TouchableOpacity
+                                            onPress={() => handleEditAppointment(appointment)}
+                                            activeOpacity={0.7}
+                                            style={styles.appointmentCardTitleContainer}
+                                        >
+                                            <Text style={styles.appointmentCardTitle}>
+                                                {appointment.person || 'Unnamed Person'}
+                                            </Text>
+                                            <Text style={styles.appointmentCardDate}>
+                                                {formatDateTime(appointment.date, appointment.time)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                        <View style={styles.appointmentCardActions}>
+                                            <Pressable
+                                                style={({ pressed }) => [
+                                                    styles.actionIconButton,
+                                                    pressed && styles.actionIconButtonPressed
+                                                ]}
+                                                onPress={() => handleEditAppointment(appointment)}
+                                            >
+                                                <Ionicons name="pencil" size={20} color={theme.colors.textSecondary} />
+                                            </Pressable>
+                                            <Pressable
+                                                style={({ pressed }) => [
+                                                    styles.actionIconButton,
+                                                    pressed && styles.actionIconButtonPressed
+                                                ]}
+                                                onPress={() => {
+                                                    const id = appointment.id;
+                                                    if (!id) {
+                                                        Alert.alert('Error', 'Cannot delete: missing appointment id');
+                                                        return;
+                                                    }
+                                                    Alert.alert(
+                                                        'Delete appointment',
+                                                        `Remove the appointment for ${appointment.person || 'this person'}? This will remove it from the database.`,
+                                                        [
+                                                            { text: 'Cancel', style: 'cancel' },
+                                                            {
+                                                                text: 'Delete',
+                                                                style: 'destructive',
+                                                                onPress: () => deleteAppointmentMutation.mutate(String(id)),
+                                                            },
+                                                        ]
+                                                    );
+                                                }}
+                                            >
+                                                <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
+                                            </Pressable>
                                         </View>
+                                    </View>
 
-                                        {/* Card Content */}
+                                    {/* Card Content - tappable to edit */}
+                                    <TouchableOpacity onPress={() => handleEditAppointment(appointment)} activeOpacity={0.7}>
                                         <View style={styles.appointmentCardContent}>
                                             <View style={styles.appointmentInfoRow}>
                                                 <Ionicons name="medical-outline" size={18} color={theme.colors.textSecondary} style={styles.infoIcon} />

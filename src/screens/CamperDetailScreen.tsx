@@ -19,11 +19,28 @@ type BirthdaySubTabType = 'info' | 'party';
 
 
 export const CamperDetailScreen = ({ route, navigation }: any) => {
-    const { camper } = route.params || {};
+    const { camper: camperParam } = route.params || {};
     const { companyId, season } = useCompany();
     const { data: divisionsData = [] } = useDivisions(companyId);
     const { data: staffLeaders = [] } = useStaff(companyId, season);
     const leaders = staffLeaders.map((s: any) => ({ name: s.name, role: s.role || s.staff_type || 'Staff' }));
+
+    // When navigating from Awards "View Profile" we only get { id, name }. Fetch full child so profile shows all details.
+    const { data: fullChild, isLoading: fullChildLoading } = useQuery({
+        queryKey: ['child', camperParam?.id],
+        queryFn: async () => {
+            if (!camperParam?.id) return null;
+            const { data, error } = await supabase
+                .from('children')
+                .select('*, division:divisions(id, name, gender, sort_order)')
+                .eq('id', camperParam.id)
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!camperParam?.id,
+    });
+    const camper = fullChild ?? camperParam;
 
     // Fetch achievements/awards from Supabase for this camper
     const { data: achievements = [], isLoading: achievementsLoading } = useQuery({
@@ -130,7 +147,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
         { key: 'appointments', label: 'Appointments' },
     ];
 
-    if (!camper) {
+    if (!camperParam) {
         return (
             <SafeAreaView style={styles.container}>
                 <View style={styles.header}>
@@ -143,6 +160,9 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
         );
     }
 
+    const isMinimalCamper = camperParam.id && !camperParam.grade && !camperParam.division_id;
+    const showProfileLoading = fullChildLoading && isMinimalCamper;
+
     return (
         <SafeAreaView style={styles.container}>
             {/* Header */}
@@ -150,10 +170,16 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                 <TouchableOpacity onPress={() => navigation.goBack()}>
                     <Ionicons name="chevron-back" size={24} color="#374151" />
                 </TouchableOpacity>
+                {showProfileLoading ? (
+                    <View style={styles.headerContent}>
+                        <Text style={styles.headerTitle}>{camperParam.name}</Text>
+                        <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginLeft: 8 }} />
+                    </View>
+                ) : (
                 <View style={styles.headerContent}>
                     <View style={styles.headerTitleContainer}>
                         <Text style={styles.headerTitle}>{camper.name}</Text>
-                        <Text style={styles.headerSubtitle}>{camper.grade}.</Text>
+                        <Text style={styles.headerSubtitle}>{camper.grade || ''}{camper.grade ? '.' : ''}</Text>
                     </View>
                     <View style={styles.headerActions}>
                         <TouchableOpacity
@@ -168,6 +194,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                         </View>
                     </View>
                 </View>
+                )}
             </View>
 
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
