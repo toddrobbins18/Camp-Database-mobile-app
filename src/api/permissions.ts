@@ -5,19 +5,23 @@ import { supabase } from '../lib/supabase';
 
 export interface RolePermission {
     id: string;
+    company_id: string;
     role: string;
     menu_item: string;
     can_access: boolean;
     created_at: string;
 }
 
-export const useRolePermissions = () => {
+export const useRolePermissions = (companyId: string | null) => {
     return useQuery({
-        queryKey: ['role_permissions'],
+        queryKey: ['role_permissions', companyId],
+        enabled: !!companyId,
         queryFn: async () => {
+            if (!companyId) return [] as RolePermission[];
             const { data, error } = await supabase
                 .from('role_permissions')
                 .select('*')
+                .eq('company_id', companyId)
                 .order('role', { ascending: true });
             if (error) throw error;
             return (data || []) as RolePermission[];
@@ -28,17 +32,30 @@ export const useRolePermissions = () => {
 export const useUpdateRolePermission = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ role, menu_item, can_access }: { role: string; menu_item: string; can_access: boolean }) => {
+        mutationFn: async ({
+            companyId,
+            role,
+            menu_item,
+            can_access,
+        }: {
+            companyId: string;
+            role: string;
+            menu_item: string;
+            can_access: boolean;
+        }) => {
             const { data, error } = await supabase
                 .from('role_permissions')
-                .upsert({ role, menu_item, can_access }, { onConflict: 'role,menu_item' })
+                .upsert(
+                    { company_id: companyId, role, menu_item, can_access },
+                    { onConflict: 'company_id,role,menu_item' }
+                )
                 .select()
                 .single();
             if (error) throw error;
             return data;
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['role_permissions'] });
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['role_permissions', variables.companyId] });
         },
     });
 };

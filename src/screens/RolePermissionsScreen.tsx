@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useCompany } from '../contexts/CompanyContext';
 import { useRolePermissions, useUpdateRolePermission } from '../api/permissions';
 
 interface Permission {
@@ -19,7 +20,132 @@ interface RolePermissions {
     };
 }
 
+const getCompanyMenuItems = (companySlug?: string | null): Permission[] => {
+    // NOTE: These IDs MUST match the `menu_item` values stored in `public.role_permissions`
+    // and used by the web app role-permissions page.
+    const baseItems: Permission[] = [
+        {
+            id: 'sports-calendar',
+            name: companySlug === 'timber-lake-west' ? 'Athletics' : 'Sports Calendar',
+            icon: 'trophy-outline',
+            iconColor: '#f59e0b',
+        },
+        { id: 'roster', name: 'Camper', icon: 'people-outline', iconColor: '#3b82f6' },
+        { id: 'dashboard', name: 'Dashboard', icon: 'bar-chart-outline', iconColor: '#3b82f6' },
+        { id: 'calendar', name: 'Master Calendar', icon: 'calendar-outline', iconColor: '#ef4444' },
+        { id: 'menu', name: 'Menu', icon: 'restaurant-outline', iconColor: '#64748b' },
+        { id: 'rainy-day', name: 'Rainy Day Schedule', icon: 'rainy-outline', iconColor: '#94a3b8' },
+        {
+            id: 'special-events',
+            name: 'Special Events & Evening Activities',
+            icon: 'sparkles-outline',
+            iconColor: '#f97316',
+        },
+        { id: 'staff', name: 'Staff', icon: 'person-outline', iconColor: '#3b82f6' },
+        { id: 'tutoring-therapy', name: 'Tutoring & Therapy', icon: 'book-outline', iconColor: '#64748b' },
+        { id: 'activities', name: 'Activities & Field Trips', icon: 'leaf-outline', iconColor: '#10b981' },
+        { id: 'messages', name: 'Messages', icon: 'chatbubble-outline', iconColor: '#3b82f6' },
+        { id: 'transportation', name: 'Transportation', icon: 'car-outline', iconColor: '#64748b' },
+        { id: 'od-management', name: 'OD Management', icon: 'clipboard-outline', iconColor: '#64748b' },
+        { id: 'appointments', name: 'Appointments', icon: 'medical-outline', iconColor: '#ef4444' },
+        { id: 'reports', name: 'Reports', icon: 'bar-chart-outline', iconColor: '#64748b' },
+        { id: 'nurse', name: 'Nurse', icon: 'medical-outline', iconColor: '#ef4444' },
+        { id: 'awards', name: 'Awards', icon: 'trophy-outline', iconColor: '#f59e0b' },
+        { id: 'incidents', name: 'Incident Reports', icon: 'warning-outline', iconColor: '#f59e0b' },
+        { id: 'sports-academy', name: 'Sports Academy', icon: 'football-outline', iconColor: '#1f2937' },
+        { id: 'roster-templates', name: 'Roster Templates', icon: 'list-outline', iconColor: '#64748b' },
+    ];
+
+    // Daily Notes/News - all camps EXCEPT timber-lake-camp (matches web)
+    if (companySlug !== 'timber-lake-camp') {
+        baseItems.push({
+            id: 'notes',
+            name: companySlug === 'tyler-hill-camp' ? 'Daily News' : 'Daily Notes',
+            icon: 'document-text-outline',
+            iconColor: '#f97316',
+        });
+    }
+
+    // Daily Wolf - ONLY for timber-lake-west (matches web)
+    if (companySlug === 'timber-lake-west') {
+        baseItems.push(
+            {
+                id: 'daily-wolf-printable',
+                name: 'Daily Wolf Printable',
+                icon: 'document-text-outline',
+                iconColor: '#f97316',
+            },
+            {
+                id: 'daily-wolf-management',
+                name: 'Daily Wolf Management',
+                icon: 'clipboard-outline',
+                iconColor: '#f97316',
+            }
+        );
+    }
+
+    // Daily Schedule - ONLY for timber-lake-camp (matches web)
+    if (companySlug === 'timber-lake-camp') {
+        baseItems.push({
+            id: 'daily-schedule',
+            name: 'Daily Schedule',
+            icon: 'calendar-outline',
+            iconColor: '#ef4444',
+        });
+    }
+
+    // Special Meals - ONLY for tyler-hill-camp (matches web)
+    if (companySlug === 'tyler-hill-camp') {
+        baseItems.push({
+            id: 'special-meals',
+            name: 'Special Meals',
+            icon: 'restaurant-outline',
+            iconColor: '#64748b',
+        });
+    }
+
+    // Admin items (all companies)
+    baseItems.push(
+        { id: 'admin', name: 'Admin Panel', icon: 'shield-outline', iconColor: '#3b82f6' },
+        { id: 'evaluation-questions', name: 'Evaluation Questions', icon: 'clipboard-outline', iconColor: '#8b4513' },
+        { id: 'role-permissions', name: 'Role Permissions', icon: 'settings-outline', iconColor: '#f59e0b' },
+        { id: 'division-permissions', name: 'Division Permissions', icon: 'lock-closed-outline', iconColor: '#f59e0b' },
+        {
+            id: 'specialist-sport-assignments',
+            name: 'Specialist Sport Assignments',
+            icon: 'trophy-outline',
+            iconColor: '#f59e0b',
+        },
+        { id: 'user-approvals', name: 'User Approvals', icon: 'checkmark-circle-outline', iconColor: '#10b981' }
+    );
+
+    return baseItems.sort((a, b) => a.name.localeCompare(b.name));
+};
+
 export const RolePermissionsScreen = ({ navigation }: any) => {
+    const { companyId, companySlug, isSuperAdmin } = useCompany();
+
+    type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'health_center' | 'viewer';
+    const roleDefs: Array<{
+        id: AppRole;
+        name: string;
+        icon: string;
+        iconColor: string;
+        subtitle: string;
+    }> = useMemo(
+        () => [
+            { id: 'admin', name: 'Administrator', icon: 'shield-outline', iconColor: '#3b82f6', subtitle: 'Full system access' },
+            { id: 'staff', name: 'Staff', icon: 'people-outline', iconColor: '#3b82f6', subtitle: 'Standard staff access' },
+            { id: 'division_leader', name: 'Division Leader', icon: 'people-outline', iconColor: '#3b82f6', subtitle: 'Full access to assigned division(s)' },
+            { id: 'specialist', name: 'Specialist', icon: 'trophy-outline', iconColor: '#f59e0b', subtitle: 'Cross-division access to specialized features (e.g. sports)' },
+            { id: 'health_center', name: 'Health Center', icon: 'heart-outline', iconColor: '#3b82f6', subtitle: 'Access to health, medical, and incident reports' },
+            { id: 'viewer', name: 'Viewer', icon: 'eye-outline', iconColor: '#3b82f6', subtitle: 'Read-only access' },
+        ],
+        []
+    );
+
+    const menuItems = useMemo(() => getCompanyMenuItems(companySlug), [companySlug]);
+
     const permissions: Permission[] = [
         { id: 'activities', name: 'Activities & Field Trips', icon: 'leaf-outline', iconColor: '#10b981' },
         { id: 'adminPanel', name: 'Admin Panel', icon: 'settings-outline', iconColor: '#64748b' },
@@ -241,45 +367,95 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
         },
     ];
 
-    // Fetch role permissions from Supabase
-    const { data: dbPermissions = [], isLoading: permLoading } = useRolePermissions();
+    // Fetch role permissions from Supabase (company-scoped, like web)
+    const { data: dbPermissions = [], isLoading: permLoading } = useRolePermissions(companyId);
     const updatePermMutation = useUpdateRolePermission();
 
-    const [rolePermissions, setRolePermissions] = useState<RolePermissions>(
-        roles.reduce((acc, role) => {
-            acc[role.id] = role.permissions;
+    const [rolePermissions, setRolePermissions] = useState<RolePermissions>(() => {
+        return roleDefs.reduce((acc, role) => {
+            acc[role.id] = {};
             return acc;
-        }, {} as RolePermissions)
-    );
+        }, {} as RolePermissions);
+    });
 
-    // Hydrate local state from Supabase data
+    // Hydrate local state from Supabase data (company + role + menu_item)
     useEffect(() => {
-        if (dbPermissions.length > 0) {
-            const newPerms = { ...rolePermissions };
-            const roleMap: Record<string, string> = { admin: 'administrator', staff: 'staff', viewer: 'viewer' };
-            dbPermissions.forEach((p: any) => {
-                const uiRole = roleMap[p.role] || p.role;
-                if (newPerms[uiRole]) {
-                    newPerms[uiRole][p.menu_item] = p.can_access;
-                }
-            });
-            setRolePermissions(newPerms);
-        }
-    }, [dbPermissions]);
+        const next = roleDefs.reduce((acc, role) => {
+            acc[role.id] = {};
+            return acc;
+        }, {} as RolePermissions);
 
-    const handleTogglePermission = (roleId: string, permissionId: string) => {
-        const newValue = !rolePermissions[roleId][permissionId];
+        dbPermissions.forEach((p: any) => {
+            const roleKey = p.role as AppRole;
+            if (next[roleKey]) {
+                next[roleKey][p.menu_item] = p.can_access;
+            }
+        });
+
+        setRolePermissions(next);
+    }, [dbPermissions, companyId, roleDefs]);
+
+    const handleTogglePermission = async (roleId: AppRole, menuItemId: string) => {
+        if (!companyId) return;
+
+        const currentValue = rolePermissions[roleId]?.[menuItemId] ?? false;
+        const newValue = !currentValue;
+
         setRolePermissions(prev => ({
             ...prev,
             [roleId]: {
                 ...prev[roleId],
-                [permissionId]: newValue,
+                [menuItemId]: newValue,
             }
         }));
-        // Map UI role ID back to DB role enum
-        const dbRoleMap: Record<string, string> = { administrator: 'admin', staff: 'staff', viewer: 'viewer', divisionLeader: 'division_leader', healthCenter: 'health_center', specialist: 'specialist' };
-        const dbRole = dbRoleMap[roleId] || roleId;
-        updatePermMutation.mutate({ role: dbRole, menu_item: permissionId, can_access: newValue });
+
+        try {
+            await updatePermMutation.mutateAsync({
+                companyId,
+                role: roleId,
+                menu_item: menuItemId,
+                can_access: newValue,
+            });
+        } catch (e) {
+            // Revert optimistic update on failure
+            setRolePermissions(prev => ({
+                ...prev,
+                [roleId]: {
+                    ...prev[roleId],
+                    [menuItemId]: currentValue,
+                }
+            }));
+        }
+    };
+
+    const handleSetAllPermissions = async (roleId: AppRole, desiredValue: boolean) => {
+        if (!companyId) return;
+
+        const updates = menuItems.map((item) => {
+            const currentValue = rolePermissions[roleId]?.[item.id] ?? false;
+            if (currentValue === desiredValue) return Promise.resolve();
+            return updatePermMutation.mutateAsync({
+                companyId,
+                role: roleId,
+                menu_item: item.id,
+                can_access: desiredValue,
+            });
+        });
+
+        // Optimistic update to match web UX
+        setRolePermissions(prev => ({
+            ...prev,
+            [roleId]: menuItems.reduce((acc, item) => {
+                acc[item.id] = desiredValue;
+                return acc;
+            }, { ...(prev[roleId] || {}) }),
+        }));
+
+        try {
+            await Promise.all(updates);
+        } catch (e) {
+            // If bulk update fails, re-hydrate from DB on next query invalidation
+        }
     };
 
     return (
@@ -306,7 +482,12 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
                 </View>
 
                 {/* Roles List */}
-                {roles.map((role) => (
+                {permLoading || !companyId ? (
+                    <View style={{ paddingVertical: theme.spacing.lg }}>
+                        <ActivityIndicator size="large" color={theme.colors.textSecondary} />
+                    </View>
+                ) : (
+                    roleDefs.map((role) => (
                     <StyledCard key={role.id} style={styles.roleCard}>
                         <View style={styles.roleHeader}>
                             <View style={styles.roleTitleContainer}>
@@ -314,6 +495,22 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
                                 <View style={styles.roleTitleText}>
                                     <Text style={styles.roleName}>{role.name}</Text>
                                     <Text style={styles.roleSubtitle}>{role.subtitle}</Text>
+                                </View>
+                                <View style={styles.roleHeaderActions}>
+                                    <TouchableOpacity
+                                        style={[styles.roleHeaderActionBtn, styles.roleHeaderActionBtnPrimary]}
+                                        disabled={updatePermMutation.isPending}
+                                        onPress={() => handleSetAllPermissions(role.id, true)}
+                                    >
+                                        <Text style={[styles.roleHeaderActionText, styles.roleHeaderActionTextPrimary]}>Select All</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.roleHeaderActionBtn, styles.roleHeaderActionBtnMuted]}
+                                        disabled={updatePermMutation.isPending}
+                                        onPress={() => handleSetAllPermissions(role.id, false)}
+                                    >
+                                        <Text style={[styles.roleHeaderActionText, styles.roleHeaderActionTextMuted]}>Deselect All</Text>
+                                    </TouchableOpacity>
                                 </View>
                             </View>
                         </View>
@@ -325,8 +522,8 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
                             showsVerticalScrollIndicator={false}
                         >
                             <View style={styles.permissionsList}>
-                                {permissions.map((permission) => {
-                                    const isEnabled = rolePermissions[role.id]?.[permission.id] || false;
+                                {menuItems.map((permission) => {
+                                    const isEnabled = rolePermissions[role.id]?.[permission.id] ?? false;
                                     return (
                                         <View key={permission.id} style={styles.permissionItem}>
                                             <View style={styles.permissionLeft}>
@@ -346,6 +543,7 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
                                                 // @ts-ignore
                                                 activeThumbColor="#ffffff"
                                                 ios_backgroundColor="#e2e8f0"
+                                                disabled={updatePermMutation.isPending}
                                             />
                                         </View>
                                     );
@@ -353,7 +551,8 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
                             </View>
                         </ScrollView>
                     </StyledCard>
-                ))}
+                    ))
+                )}
             </ScrollView>
 
             {/* Floating Action Button */}
@@ -417,6 +616,35 @@ const styles = StyleSheet.create({
     },
     roleTitleText: {
         flex: 1,
+    },
+    roleHeaderActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+    },
+    roleHeaderActionBtn: {
+        paddingVertical: theme.spacing.xs,
+        paddingHorizontal: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+    },
+    roleHeaderActionText: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    roleHeaderActionBtnPrimary: {
+        backgroundColor: theme.colors.secondary,
+    },
+    roleHeaderActionTextPrimary: {
+        color: '#ffffff',
+    },
+    roleHeaderActionBtnMuted: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    roleHeaderActionTextMuted: {
+        color: theme.colors.textSecondary,
     },
     roleName: {
         ...theme.typography.h2,
