@@ -5,33 +5,51 @@ import { supabase } from '../lib/supabase';
 
 export interface EvaluationQuestion {
     id: string;
+    company_id?: string;
     question_text: string;
     question_type: 'multiple_choice' | 'text' | 'rating';
     options?: string[];
     category?: string;
+    staff_type?: 'specialist' | 'general_counselor' | 'both';
+    evaluated_by?: string;
+    guidance_text?: string;
+    display_order?: number;
     is_active: boolean;
     created_at: string;
 }
 
-export const useEvaluationQuestions = () => {
+export const useEvaluationQuestions = (companyId: string | null) => {
     return useQuery({
-        queryKey: ['evaluation_questions'],
+        queryKey: ['evaluation_questions', companyId],
         queryFn: async () => {
+            if (!companyId) return [];
             const { data, error } = await supabase
                 .from('evaluation_questions')
                 .select('*')
                 .eq('is_active', true)
-                .order('created_at', { ascending: true });
+                .eq('company_id', companyId)
+                .order('staff_type, category, display_order, created_at');
             if (error) throw error;
             return (data || []) as EvaluationQuestion[];
         },
+        enabled: !!companyId,
     });
 };
 
 export const useAddEvaluationQuestion = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (q: Omit<EvaluationQuestion, 'id' | 'created_at' | 'is_active'>) => {
+        mutationFn: async (q: {
+            company_id: string;
+            question_text: string;
+            question_type: 'multiple_choice' | 'text' | 'rating';
+            category?: string | null;
+            options?: string[] | null;
+            staff_type: 'specialist' | 'general_counselor' | 'both';
+            evaluated_by?: string | null;
+            guidance_text?: string | null;
+            display_order: number;
+        }) => {
             const { data, error } = await supabase
                 .from('evaluation_questions')
                 .insert([{ ...q, is_active: true }])

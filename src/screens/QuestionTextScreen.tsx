@@ -1,41 +1,138 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { useAddEvaluationQuestion } from '../api/evaluations';
+import { useAddEvaluationQuestion, useUpdateEvaluationQuestion } from '../api/evaluations';
+import { useCompany } from '../contexts/CompanyContext';
 
 export const QuestionTextScreen = ({ navigation, route }: any) => {
-    const [questionText, setQuestionText] = useState('');
-    const [staffType, setStaffType] = useState('Both');
-    const [evaluatedBy, setEvaluatedBy] = useState('');
-    const [guidanceText, setGuidanceText] = useState('');
-    const [displayOrder, setDisplayOrder] = useState('0');
-    const [options, setOptions] = useState('');
+    const initial = route?.params ?? {};
+    const [questionText, setQuestionText] = useState(initial.questionText ?? '');
+    const [questionType, setQuestionType] = useState(initial.questionType ?? 'Multiple Choice');
+    const [category, setCategory] = useState(initial.category ?? '');
+    const [staffType, setStaffType] = useState(initial.staffType ?? 'Both');
+    const [evaluatedBy, setEvaluatedBy] = useState(initial.evaluatedBy ?? '');
+    const [guidanceText, setGuidanceText] = useState(initial.guidanceText ?? '');
+    const [displayOrder, setDisplayOrder] = useState(String(initial.displayOrder ?? '0'));
+    const [options, setOptions] = useState(initial.options ?? '');
     const [showStaffTypePicker, setShowStaffTypePicker] = useState(false);
+    const [showQuestionTypePicker, setShowQuestionTypePicker] = useState(false);
 
     const staffTypes = ['Both', 'General Counselor', 'Specialist'];
+    const questionTypes = ['Multiple Choice', 'Text Response', 'Rating Scale'];
     const addQuestionMutation = useAddEvaluationQuestion();
+    const updateQuestionMutation = useUpdateEvaluationQuestion();
+    const { companyId } = useCompany();
+
+    const editingId = (initial.id ?? initial.questionId ?? null) as string | null;
+    const isEditing = !!editingId;
+    const isSubmitting = addQuestionMutation.isPending || updateQuestionMutation.isPending;
 
     const handleSave = () => {
+        if (isSubmitting) return;
+        if (!companyId) {
+            Alert.alert('Missing company', 'Please select a company before adding questions.');
+            return;
+        }
         if (!questionText.trim()) {
             Alert.alert('Error', 'Question text is required.');
             return;
         }
-        const typeMap: Record<string, string> = { 'Both': 'text', 'General Counselor': 'rating', 'Specialist': 'rating' };
-        addQuestionMutation.mutate({
+
+        const questionTypeDb =
+            questionType === 'Multiple Choice'
+                ? 'multiple_choice'
+                : questionType === 'Rating Scale'
+                    ? 'rating'
+                    : 'text';
+
+        const staffTypeDb =
+            staffType === 'Specialist'
+                ? 'specialist'
+                : staffType === 'General Counselor'
+                    ? 'general_counselor'
+                    : 'both';
+
+        let optionsArray: string[] | null = null;
+        if (questionTypeDb === 'multiple_choice') {
+            const opts = options
+                .split(',')
+                .map((o: string) => o.trim())
+                .filter(Boolean);
+            if (opts.length === 0) {
+                Alert.alert('Validation error', 'Options are required for Multiple Choice questions.');
+                return;
+            }
+            optionsArray = opts;
+        } else if (questionTypeDb === 'rating') {
+            const opts = options
+                .split(',')
+                .map((o: string) => o.trim())
+                .filter(Boolean);
+            optionsArray = opts.length > 0 ? opts : ['1', '2', '3', '4', '5'];
+        } else {
+            optionsArray = null;
+        }
+
+        const payload = {
+            ...(isEditing ? {} : { company_id: companyId }),
             question_text: questionText.trim(),
-            question_type: 'rating' as 'multiple_choice' | 'text' | 'rating',
-            options: options.trim() ? options.split(',').map(o => o.trim()) : undefined,
-            category: undefined,
-        }, {
+            question_type: questionTypeDb,
+            category: category.trim() ? category.trim() : null,
+            options: optionsArray,
+            staff_type: staffTypeDb,
+            evaluated_by: evaluatedBy.trim() ? evaluatedBy.trim() : null,
+            guidance_text: guidanceText.trim() ? guidanceText.trim() : null,
+            display_order: parseInt(displayOrder) || 0,
+        } as any;
+
+        if (isEditing && editingId) {
+            updateQuestionMutation.mutate(
+                { id: editingId, ...payload },
+                {
+                    onSuccess: () => {
+                        Alert.alert('Success', 'Question updated successfully.');
+                        navigation.goBack();
+                    },
+                    onError: (err: any) => {
+                        const msg =
+                            err instanceof Error
+                                ? err.message
+                                : String(err?.message || err || 'Failed to update question.');
+                        const lc = msg.toLowerCase();
+                        if (lc.includes('rls') || lc.includes('permission') || lc.includes('forbidden') || lc.includes('403')) {
+                            Alert.alert(
+                                'Permission denied',
+                                'You need admin access (and a valid company_id) to update evaluation questions.'
+                            );
+                            return;
+                        }
+                        Alert.alert('Error updating question', msg);
+                    },
+                }
+            );
+            return;
+        }
+
+        addQuestionMutation.mutate(payload, {
             onSuccess: () => {
                 Alert.alert('Success', 'Question added successfully.');
                 navigation.goBack();
             },
-            onError: () => {
-                Alert.alert('Error', 'Failed to add question.');
+            onError: (err: any) => {
+                const msg =
+                    err instanceof Error ? err.message : String(err?.message || err || 'Failed to add question.');
+                const lc = msg.toLowerCase();
+                if (lc.includes('rls') || lc.includes('permission') || lc.includes('forbidden') || lc.includes('403')) {
+                    Alert.alert(
+                        'Permission denied',
+                        'You need admin access (and a valid company_id) to add evaluation questions.'
+                    );
+                    return;
+                }
+                Alert.alert('Error adding question', msg);
             },
         });
     };
@@ -47,7 +144,7 @@ export const QuestionTextScreen = ({ navigation, route }: any) => {
                 <TouchableOpacity onPress={() => navigation.goBack()}>
                     <Ionicons name="arrow-back" size={28} color={theme.colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Add Question</Text>
+                <Text style={styles.headerTitle}>{isEditing ? 'Edit Question' : 'Add Question'}</Text>
                 <View style={styles.headerRight} />
             </View>
 
@@ -68,6 +165,68 @@ export const QuestionTextScreen = ({ navigation, route }: any) => {
                             numberOfLines={3}
                             outlineWidth={0}
                             outlineColor="transparent"
+                        />
+                    </View>
+
+                    <View style={styles.formField}>
+                        <Text style={styles.fieldLabel}>Question Type</Text>
+                        <TouchableOpacity
+                            style={styles.dropdownButton}
+                            onPress={() => setShowQuestionTypePicker(!showQuestionTypePicker)}
+                        >
+                            <Text style={styles.dropdownText}>{questionType}</Text>
+                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                        </TouchableOpacity>
+                        <Modal
+                            visible={showQuestionTypePicker}
+                            transparent={true}
+                            animationType="slide"
+                            onRequestClose={() => setShowQuestionTypePicker(false)}
+                        >
+                            <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowQuestionTypePicker(false)}>
+                                <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                                    <View style={styles.bottomSheetHeader}>
+                                        <Text style={styles.bottomSheetTitle}>Select Question Type</Text>
+                                    </View>
+                                    <ScrollView style={styles.bottomSheetScroll}>
+                                        {questionTypes.map((type) => (
+                                            <TouchableOpacity
+                                                key={type}
+                                                style={[
+                                                    styles.bottomSheetOption,
+                                                    questionType === type && styles.bottomSheetOptionSelected
+                                                ]}
+                                                onPress={() => {
+                                                    setQuestionType(type);
+                                                    setShowQuestionTypePicker(false);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.bottomSheetOptionText,
+                                                    questionType === type && styles.bottomSheetOptionTextSelected
+                                                ]}>
+                                                    {type}
+                                                </Text>
+                                                {questionType === type && (
+                                                    <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                                )}
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </Pressable>
+                            </Pressable>
+                        </Modal>
+                    </View>
+
+                    <View style={styles.formField}>
+                        <Text style={styles.fieldLabel}>Category</Text>
+                        <TextInput
+                            style={styles.textInput}
+                            placeholder="e.g., Communication, Teamwork"
+                            placeholderTextColor={theme.colors.textSecondary}
+                            value={category}
+                            onChangeText={setCategory}
+                            autoCapitalize="words"
                         />
                     </View>
 
@@ -166,19 +325,31 @@ export const QuestionTextScreen = ({ navigation, route }: any) => {
 
                     <View style={styles.formField}>
                         <Text style={styles.fieldLabel}>Options (comma-separated)</Text>
-                        <TextInput
-                            style={styles.textInput}
-                            placeholder="e.g., Excellent, Good, Fair, Poor"
-                            placeholderTextColor={theme.colors.textSecondary}
-                            value={options}
-                            onChangeText={setOptions}
-                            outlineWidth={0}
-                            outlineColor="transparent"
-                        />
+                        {questionType === 'Multiple Choice' ? (
+                            <TextInput
+                                style={styles.textInput}
+                                placeholder="e.g., Excellent, Good, Fair, Poor"
+                                placeholderTextColor={theme.colors.textSecondary}
+                                value={options}
+                                onChangeText={setOptions}
+                                outlineWidth={0}
+                                outlineColor="transparent"
+                            />
+                        ) : (
+                            <Text style={styles.helpText}>Options are not needed for this question type.</Text>
+                        )}
                     </View>
 
-                    <TouchableOpacity style={styles.addButton} onPress={handleSave}>
-                        <Text style={styles.addButtonText}>Add Question</Text>
+                    <TouchableOpacity
+                        style={[styles.addButton, isSubmitting && { opacity: 0.7 }]}
+                        disabled={isSubmitting}
+                        onPress={handleSave}
+                    >
+                        {isSubmitting ? (
+                            <ActivityIndicator color="white" />
+                        ) : (
+                            <Text style={styles.addButtonText}>{isEditing ? 'Update Question' : 'Add Question'}</Text>
+                        )}
                     </TouchableOpacity>
                 </StyledCard>
             </ScrollView>

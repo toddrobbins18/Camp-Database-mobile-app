@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useEvaluationQuestions, useAddEvaluationQuestion, useDeleteEvaluationQuestion } from '../api/evaluations';
+import { useCompany } from '../contexts/CompanyContext';
 
 interface EvaluationQuestion {
     id: string;
@@ -32,11 +33,13 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
     const [showStaffTypePicker, setShowStaffTypePicker] = useState(false);
     const [expandedGuidance, setExpandedGuidance] = useState<Set<string>>(new Set());
 
-    const questionTypes = ['Multiple Choice', 'Rating Scale', 'Text', 'Yes/No'];
+    const questionTypes = ['Multiple Choice', 'Text Response', 'Rating Scale'];
     const staffTypes = ['Both', 'General Counselor', 'Specialist'];
 
+    const { companyId } = useCompany();
+
     // Fetch evaluation questions from Supabase
-    const { data: dbQuestions = [], isLoading: questionsLoading } = useEvaluationQuestions();
+    const { data: dbQuestions = [], isLoading: questionsLoading } = useEvaluationQuestions(companyId);
     const addQuestionMutation = useAddEvaluationQuestion();
     const deleteQuestionMutation = useDeleteEvaluationQuestion();
 
@@ -52,52 +55,131 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
     const [questions, setQuestions] = useState<EvaluationQuestion[]>(defaultQuestions);
 
     useEffect(() => {
-        if (dbQuestions.length > 0) {
-            setQuestions(dbQuestions.map((q: any) => ({
-                id: q.id,
-                questionText: q.question_text,
-                questionType: q.question_type === 'rating' ? 'Rating Scale' : q.question_type === 'text' ? 'Text' : 'Multiple Choice',
-                category: q.category || 'GENERAL',
-                staffType: 'Both',
-                evaluatedBy: '',
-                ratingOptions: 5,
-                displayOrder: 0,
-                options: q.options?.join(', '),
-            })));
-        }
+        const mapQuestionType = (qt: string) => {
+            const t = String(qt || '').toLowerCase();
+            if (t === 'rating') return 'Rating Scale';
+            if (t === 'text') return 'Text Response';
+            return 'Multiple Choice';
+        };
+        const mapStaffType = (st: string) => {
+            const s = String(st || '').toLowerCase();
+            if (s === 'specialist') return 'Specialist';
+            if (s === 'general_counselor') return 'General Counselor';
+            return 'Both';
+        };
+
+        setQuestions(
+            dbQuestions.map((q: any) => {
+                const optionsArray: string[] | null = Array.isArray(q.options) ? q.options : null;
+                const optionsCount =
+                    q.question_type === 'multiple_choice'
+                        ? optionsArray?.length ?? 0
+                        : q.question_type === 'rating'
+                            ? optionsArray?.length ?? 5
+                            : 0;
+
+                return {
+                    id: q.id,
+                    questionText: q.question_text,
+                    questionType: mapQuestionType(q.question_type),
+                    category: q.category || 'GENERAL',
+                    staffType: mapStaffType(q.staff_type),
+                    evaluatedBy: q.evaluated_by || '',
+                    guidanceText: q.guidance_text || undefined,
+                    displayOrder: typeof q.display_order === 'number' ? q.display_order : 0,
+                    options: optionsArray ? optionsArray.join(', ') : undefined,
+                    ratingOptions: optionsCount,
+                } as EvaluationQuestion;
+            })
+        );
     }, [dbQuestions]);
 
     const handleAddQuestion = () => {
-        if (questionText.trim()) {
-            // Save to Supabase
-            const typeMap: Record<string, string> = { 'Multiple Choice': 'multiple_choice', 'Rating Scale': 'rating', 'Text': 'text', 'Yes/No': 'multiple_choice' };
-            addQuestionMutation.mutate({
-                question_text: questionText.trim(),
-                question_type: (typeMap[questionType] || 'text') as 'multiple_choice' | 'text' | 'rating',
-                options: options.trim() ? options.split(',').map(o => o.trim()) : undefined,
-                category: category.trim() || undefined,
-            });
-            // Also add to local state for immediate feedback
-            const newQuestion: EvaluationQuestion = {
-                id: Date.now().toString(),
-                questionText: questionText.trim(),
-                questionType,
-                category: category.trim(),
-                staffType,
-                evaluatedBy: evaluatedBy.trim(),
-                guidanceText: guidanceText.trim() || undefined,
-                displayOrder: parseInt(displayOrder) || 0,
-                options: options.trim() || undefined,
-                ratingOptions: 5,
-            };
-            setQuestions([...questions, newQuestion]);
-            setQuestionText('');
-            setCategory('');
-            setEvaluatedBy('');
-            setGuidanceText('');
-            setDisplayOrder('0');
-            setOptions('');
+        if (addQuestionMutation.isPending) return;
+        if (!companyId) {
+            Alert.alert('Missing company', 'Please select a company before adding questions.');
+            return;
         }
+        const qText = questionText.trim();
+        if (!qText) {
+            Alert.alert('Validation error', 'Question text is required.');
+            return;
+        }
+
+        const questionTypeDb =
+            questionType === 'Multiple Choice'
+                ? 'multiple_choice'
+                : questionType === 'Rating Scale'
+                    ? 'rating'
+                    : 'text';
+
+        const staffTypeDb =
+            staffType === 'Specialist'
+                ? 'specialist'
+                : staffType === 'General Counselor'
+                    ? 'general_counselor'
+                    : 'both';
+
+        let optionsArray: string[] | null = null;
+        if (questionTypeDb === 'multiple_choice') {
+            const opts = options
+                .split(',')
+                .map((o) => o.trim())
+                .filter(Boolean);
+            if (opts.length === 0) {
+                Alert.alert('Validation error', 'Options are required for Multiple Choice questions.');
+                return;
+            }
+            optionsArray = opts;
+        } else if (questionTypeDb === 'rating') {
+            const opts = options
+                .split(',')
+                .map((o) => o.trim())
+                .filter(Boolean);
+            optionsArray = opts.length > 0 ? opts : ['1', '2', '3', '4', '5'];
+        } else {
+            optionsArray = null;
+        }
+
+        const payload = {
+            company_id: companyId,
+            question_text: qText,
+            question_type: questionTypeDb,
+            category: category.trim() ? category.trim() : null,
+            options: optionsArray,
+            staff_type: staffTypeDb,
+            evaluated_by: evaluatedBy.trim() ? evaluatedBy.trim() : null,
+            guidance_text: guidanceText.trim() ? guidanceText.trim() : null,
+            display_order: parseInt(displayOrder) || 0,
+        };
+
+        addQuestionMutation.mutate(payload as any, {
+            onSuccess: () => {
+                Alert.alert('Success', 'Question added successfully.');
+                setQuestionText('');
+                setQuestionType('Multiple Choice');
+                setCategory('');
+                setStaffType('Both');
+                setEvaluatedBy('');
+                setGuidanceText('');
+                setDisplayOrder('0');
+                setOptions('');
+                // Let the query refetch and update the library
+            },
+            onError: (err: any) => {
+                const msg =
+                    err instanceof Error ? err.message : String(err?.message || err || 'Failed to add question.');
+                const lc = msg.toLowerCase();
+                if (lc.includes('rls') || lc.includes('permission') || lc.includes('forbidden') || lc.includes('403')) {
+                    Alert.alert(
+                        'Permission denied',
+                        'You need admin access (and a valid company_id) to add evaluation questions.'
+                    );
+                    return;
+                }
+                Alert.alert('Error adding question', msg);
+            },
+        });
     };
 
     const handleDeleteQuestion = (id: string) => {
@@ -123,6 +205,16 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
         acc[key].push(question);
         return acc;
     }, {} as Record<string, EvaluationQuestion[]>);
+
+    if (questionsLoading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={{ paddingVertical: theme.spacing.xl, alignItems: 'center' }}>
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>
@@ -333,22 +425,29 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
                         />
                     </View>
 
-                    <View style={styles.formField}>
-                        <Text style={styles.fieldLabel}>Options (comma-separated)</Text>
-                        <TextInput
-                            style={styles.textInput}
-                            placeholder="e.g., Excellent, Good, Fair, Poor"
-                            placeholderTextColor={theme.colors.textSecondary}
-                            value={options}
-                            onChangeText={setOptions}
-                        />
-                    </View>
+                    {questionType === 'Multiple Choice' && (
+                        <View style={styles.formField}>
+                            <Text style={styles.fieldLabel}>Options (comma-separated)</Text>
+                            <TextInput
+                                style={styles.textInput}
+                                placeholder="e.g., Excellent, Good, Fair, Poor"
+                                placeholderTextColor={theme.colors.textSecondary}
+                                value={options}
+                                onChangeText={setOptions}
+                            />
+                        </View>
+                    )}
 
                     <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={() => navigation.navigate('QuestionText')}
+                        style={[styles.addButton, addQuestionMutation.isPending && { opacity: 0.7 }]}
+                        disabled={addQuestionMutation.isPending}
+                        onPress={handleAddQuestion}
                     >
-                        <Text style={styles.addButtonText}>Add Question</Text>
+                        {addQuestionMutation.isPending ? (
+                            <ActivityIndicator color="white" />
+                        ) : (
+                            <Text style={styles.addButtonText}>Add Question</Text>
+                        )}
                     </TouchableOpacity>
                 </StyledCard>
 
@@ -398,19 +497,33 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
                                                 <Text style={styles.guidanceText}>{question.guidanceText}</Text>
                                             </View>
                                         )}
-                                        {question.category === 'OVERALL' && (
-                                            <View style={styles.questionActions}>
-                                                <TouchableOpacity style={styles.actionButton}>
-                                                    <Ionicons name="pencil" size={16} color="#f97316" />
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={styles.actionButton}
-                                                    onPress={() => handleDeleteQuestion(question.id)}
-                                                >
-                                                    <Ionicons name="trash" size={16} color={theme.colors.textSecondary} />
-                                                </TouchableOpacity>
-                                            </View>
-                                        )}
+                                        <View style={styles.questionActions}>
+                                            <TouchableOpacity
+                                                style={styles.actionButton}
+                                                onPress={() => {
+                                                    navigation.navigate('QuestionText', {
+                                                        id: question.id,
+                                                        questionText: question.questionText,
+                                                        questionType: question.questionType,
+                                                        category: question.category,
+                                                        staffType: question.staffType,
+                                                        evaluatedBy: question.evaluatedBy,
+                                                        guidanceText: question.guidanceText,
+                                                        displayOrder: question.displayOrder,
+                                                        options: question.options,
+                                                    });
+                                                }}
+                                            >
+                                                <Ionicons name="pencil" size={16} color="#f97316" />
+                                            </TouchableOpacity>
+
+                                            <TouchableOpacity
+                                                style={styles.actionButton}
+                                                onPress={() => handleDeleteQuestion(question.id)}
+                                            >
+                                                <Ionicons name="trash" size={16} color={theme.colors.textSecondary} />
+                                            </TouchableOpacity>
+                                        </View>
                                     </StyledCard>
                                 ))}
                             </View>
