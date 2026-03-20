@@ -357,8 +357,8 @@ const CustomDrawerContent = (props: any) => {
                     </>
                 )}
 
-                {/* ── Super Admin only ── */}
-                {canSeeSuperAdminOnly && (
+                {/* ── Admin+ (Admin + Super Admin) ── */}
+                {canSeeAdminScreens && (
                     <>
                         <DrawerItem
                             label="Role Permissions"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,7 +25,7 @@ interface UserDivisionPermissions {
 export const DivisionPermissionsScreen = ({ navigation }: any) => {
     const { companyId } = useCompany();
     const { data: dbDivisions = [], isLoading: divLoading } = useDivisionsLookup(companyId);
-    const divisions = dbDivisions.map((d: any) => ({ id: d.id, name: d.name }));
+    const divisions = useMemo(() => dbDivisions.map((d: any) => ({ id: d.id, name: d.name })), [dbDivisions]);
 
     // Fetch approved users in current company (match Lovable), then their roles from user_roles
     const { data: users = [], isLoading: usersLoading } = useQuery({
@@ -69,41 +69,98 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
     });
 
     // Fetch existing division permissions from Supabase
-    const { data: dbPerms = [] } = useDivisionPermissions();
+    const { data: dbPerms = [], isLoading: permsLoading } = useDivisionPermissions(companyId);
     const updateDivPermMutation = useUpdateDivisionPermission();
 
     const [userDivisionPermissions, setUserDivisionPermissions] = useState<UserDivisionPermissions>({});
 
     // Hydrate local state from Supabase division permissions
     useEffect(() => {
-        if (dbPerms.length > 0 && users.length > 0) {
-            const perms: UserDivisionPermissions = {};
-            users.forEach((u: any) => {
-                perms[u.id] = {};
-                divisions.forEach((d: any) => {
-                    perms[u.id][d.id] = false;
-                });
-            });
-            dbPerms.forEach((p: any) => {
-                if (perms[p.user_id]) {
-                    perms[p.user_id][p.division_id] = p.can_access;
-                }
-            });
-            setUserDivisionPermissions(perms);
-        }
-    }, [dbPerms, users, divisions]);
+        if (!companyId) return;
 
-    const handleToggleDivision = (userId: string, divisionId: string) => {
-        const newValue = !userDivisionPermissions[userId]?.[divisionId];
+        const perms: UserDivisionPermissions = {};
+        users.forEach((u: any) => {
+            perms[u.id] = {};
+            divisions.forEach((d: any) => {
+                perms[u.id][d.id] = false;
+            });
+        });
+
+        dbPerms.forEach((p: any) => {
+            if (perms[p.user_id] && p.division_id) {
+                perms[p.user_id][p.division_id] = !!p.can_access;
+            }
+        });
+
+        setUserDivisionPermissions(perms);
+    }, [companyId, dbPerms, users, divisions]);
+
+    const handleToggleDivision = async (userId: string, divisionId: string) => {
+        if (!companyId) return;
+
+        const previousValue = userDivisionPermissions[userId]?.[divisionId] ?? false;
+        const newValue = !previousValue;
+
         setUserDivisionPermissions(prev => ({
             ...prev,
             [userId]: {
-                ...prev[userId],
+                ...(prev[userId] || {}),
                 [divisionId]: newValue,
             }
         }));
-        // Persist to Supabase
-        updateDivPermMutation.mutate({ user_id: userId, division_id: divisionId, company_id: companyId ?? undefined, can_access: newValue });
+
+        try {
+            await updateDivPermMutation.mutateAsync({
+                user_id: userId,
+                division_id: divisionId,
+                company_id: companyId,
+                can_access: newValue,
+            });
+        } catch (e) {
+            // Revert on failure
+            setUserDivisionPermissions(prev => ({
+                ...prev,
+                [userId]: {
+                    ...(prev[userId] || {}),
+                    [divisionId]: previousValue,
+                }
+            }));
+        }
+    };
+
+    const handleSetAllDivisionsForUser = async (userId: string, desiredValue: boolean) => {
+        if (!companyId) return;
+        const snapshot = { ...(userDivisionPermissions[userId] || {}) };
+
+        const tasks = divisions
+            .filter((d) => (snapshot[d.id] ?? false) !== desiredValue)
+            .map((d) => updateDivPermMutation.mutateAsync({
+                user_id: userId,
+                division_id: d.id,
+                company_id: companyId,
+                can_access: desiredValue,
+            }));
+
+        // Optimistic update
+        const nextForUser = divisions.reduce<Record<string, boolean>>((acc, d) => {
+            acc[d.id] = desiredValue;
+            return acc;
+        }, {});
+
+        setUserDivisionPermissions(prev => ({
+            ...prev,
+            [userId]: nextForUser,
+        }));
+
+        try {
+            if (tasks.length) await Promise.all(tasks);
+        } catch (e) {
+            // Revert on failure
+            setUserDivisionPermissions(prev => ({
+                ...prev,
+                [userId]: snapshot,
+            }));
+        }
     };
 
     const getRoleColor = (role: string) => {
@@ -160,6 +217,11 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
                 </View>
 
                 {/* Users List */}
+                {divLoading || usersLoading || permsLoading ? (
+                    <View style={{ paddingVertical: theme.spacing.lg }}>
+                        <ActivityIndicator size="large" color={theme.colors.textSecondary} />
+                    </View>
+                ) : null}
                 {users.map((user) => (
                     <StyledCard key={user.id} style={styles.userCard}>
                         {/* User Info Header */}
@@ -174,8 +236,26 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
                                     )}
                                 </View>
                             </View>
-                            <View style={[styles.roleBadge, { backgroundColor: getRoleColor(user.role) }]}>
-                                <Text style={styles.roleBadgeText}>{formatRole(user.role)}</Text>
+                            <View style={styles.userHeaderRight}>
+                                <View style={styles.userHeaderActions}>
+                                    <TouchableOpacity
+                                        style={[styles.userHeaderActionBtn, styles.userHeaderActionBtnPrimary]}
+                                        disabled={updateDivPermMutation.isPending}
+                                        onPress={() => handleSetAllDivisionsForUser(user.id, true)}
+                                    >
+                                        <Text style={[styles.userHeaderActionText, styles.userHeaderActionTextPrimary]}>Select All</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.userHeaderActionBtn, styles.userHeaderActionBtnMuted]}
+                                        disabled={updateDivPermMutation.isPending}
+                                        onPress={() => handleSetAllDivisionsForUser(user.id, false)}
+                                    >
+                                        <Text style={[styles.userHeaderActionText, styles.userHeaderActionTextMuted]}>Deselect All</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <View style={[styles.roleBadge, { backgroundColor: getRoleColor(user.role) }]}>
+                                    <Text style={styles.roleBadgeText}>{formatRole(user.role)}</Text>
+                                </View>
                             </View>
                         </View>
 
@@ -206,6 +286,7 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
                                             // @ts-ignore
                                             activeThumbColor="#ffffff"
                                             ios_backgroundColor="#e2e8f0"
+                                            disabled={updateDivPermMutation.isPending}
                                         />
                                     </View>
                                 );
@@ -283,6 +364,40 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: theme.spacing.sm,
         flex: 1,
+    },
+    userHeaderRight: {
+        alignItems: 'flex-end',
+        gap: theme.spacing.sm,
+        marginLeft: theme.spacing.md,
+    },
+    userHeaderActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+    },
+    userHeaderActionBtn: {
+        paddingVertical: theme.spacing.xs,
+        paddingHorizontal: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+    },
+    userHeaderActionText: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    userHeaderActionBtnPrimary: {
+        backgroundColor: theme.colors.secondary,
+    },
+    userHeaderActionTextPrimary: {
+        color: '#ffffff',
+    },
+    userHeaderActionBtnMuted: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    userHeaderActionTextMuted: {
+        color: theme.colors.textSecondary,
     },
     userDetails: {
         flex: 1,

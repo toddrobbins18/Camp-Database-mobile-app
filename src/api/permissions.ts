@@ -66,14 +66,17 @@ export interface DivisionPermission {
     id: string;
     user_id: string;
     division_id: string;
+    company_id: string;
     can_access: boolean;
     created_at: string;
 }
 
-export const useDivisionPermissions = () => {
+export const useDivisionPermissions = (companyId: string | null) => {
     return useQuery({
-        queryKey: ['division_permissions'],
+        queryKey: ['division_permissions', companyId],
+        enabled: !!companyId,
         queryFn: async () => {
+            if (!companyId) return [] as DivisionPermission[];
             const { data, error } = await supabase
                 .from('division_permissions')
                 .select('*, division:divisions(name, gender)')
@@ -116,8 +119,9 @@ export const useUpdateDivisionPermission = () => {
             if (error) throw error;
             return data;
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['division_permissions'] });
+        onSuccess: (_data, variables) => {
+            // Keep invalidation aligned with useDivisionPermissions(companyId)
+            queryClient.invalidateQueries({ queryKey: ['division_permissions', variables.company_id ?? null] });
         },
     });
 };
