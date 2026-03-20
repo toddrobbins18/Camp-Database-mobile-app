@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
 
 // --------- User Management --------- //
 export interface AdminUser {
@@ -12,30 +12,129 @@ export interface AdminUser {
     tags?: string[];
 }
 
-// Only approved users (they belong in Admin Panel after approval, not in User Approvals).
-export const useAdminUsers = () => {
-    return useQuery({
-        queryKey: ['adminUsers'],
-        queryFn: async () => {
-            let { data: users, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('approved', true);
+function roleLabelFromAppRole(appRole: string): string {
+    const r = String(appRole || '').toLowerCase();
+    switch (r) {
+        case 'super_admin':
+            return 'Super Admin';
+        case 'admin':
+            return 'Admin';
+        case 'division_leader':
+            return 'Division Leader';
+        case 'specialist':
+            return 'Specialist';
+        case 'health_center':
+            return 'Health Center';
+        case 'viewer':
+            return 'Viewer';
+        case 'staff':
+        default:
+            return 'Staff';
+    }
+}
 
-            if (error) {
-                const { data: staff, error: staffError } = await supabase.from('staff').select('*');
-                if (staffError) throw staffError;
-                users = staff;
+function appRoleFromRoleLabel(roleLabel: string): string {
+    const r = String(roleLabel || '').trim().toLowerCase();
+    // Accept both labels ("Admin") and app roles ("admin").
+    if (r === 'super admin') return 'super_admin';
+    if (r === 'division leader') return 'division_leader';
+    if (r === 'health center') return 'health_center';
+    if (r === 'super_admin') return 'super_admin';
+    if (r === 'division_leader') return 'division_leader';
+    if (r === 'health_center') return 'health_center';
+    if (['admin', 'staff', 'viewer', 'specialist', 'super_admin', 'division_leader', 'health_center'].includes(r)) return r;
+    return 'staff';
+}
+
+// Only approved users (they belong in Admin Panel after approval, not in User Approvals).
+// Mirrors the web workflow: list approved profiles for the selected company, compute highest role from user_roles.
+export const useAdminUsers = (companyId: string | null) => {
+    return useQuery({
+        queryKey: ['adminUsers', companyId],
+        enabled: true,
+        queryFn: async () => {
+            const { data: authData } = await supabase.auth.getUser();
+            const currentUserId = authData?.user?.id;
+            if (!currentUserId) return [] as AdminUser[];
+
+            // Determine whether current user is super admin (so they can see all companies).
+            const { data: currentRolesData, error: currentRolesErr } = await supabase
+                .from('user_roles')
+                .select('role')
+                .eq('user_id', currentUserId);
+
+            if (currentRolesErr) throw currentRolesErr;
+            const currentRoles = (currentRolesData || []).map((r: any) => String(r?.role ?? '').toLowerCase());
+            const isSuperAdminUser = currentRoles.includes('super_admin');
+
+            // If we don't have companyId from the app context yet, fall back to the user's profile company_id.
+            let effectiveCompanyId = companyId;
+            if (!effectiveCompanyId && !isSuperAdminUser) {
+                const { data: myProfile } = await supabase
+                    .from('profiles')
+                    .select('company_id')
+                    .eq('id', currentUserId)
+                    .maybeSingle();
+                effectiveCompanyId = myProfile?.company_id ?? null;
             }
 
-            return (users || []).map((u: any) => ({
-                id: u.id || u.person_id || Math.random().toString(),
-                name: u.full_name || u.name || u.email?.split('@')[0] || 'Unknown',
-                email: u.email || '',
-                role: u.role || 'Staff',
-                roleColor: '#2563eb',
-                tags: u.tags || []
-            })) as AdminUser[];
+            if (!isSuperAdminUser && !effectiveCompanyId) return [] as AdminUser[];
+
+            // Mirror web admin: it lists profiles by company_id (no `approved` filter).
+            let profilesQuery = supabase
+                .from('profiles')
+                // `profiles` does not have a `tags` column. Tags are handled separately in the web app.
+                .select('id, email, full_name, company_id');
+
+            if (!isSuperAdminUser) {
+                profilesQuery = profilesQuery.eq('company_id', effectiveCompanyId);
+            }
+
+            const { data: profiles, error: profilesErr } = await profilesQuery;
+            if (profilesErr) throw profilesErr;
+
+            const profileList = profiles || [];
+            const profileIds = profileList.map((p: any) => p.id);
+            if (profileIds.length === 0) return [] as AdminUser[];
+
+            // Fetch all roles for these users in one call, like the web workflow.
+            const { data: rolesRows, error: rolesErr } = await supabase
+                .from('user_roles')
+                .select('user_id, role')
+                .in('user_id', profileIds);
+
+            if (rolesErr) throw rolesErr;
+
+            const rolesByUserId = new Map<string, string[]>();
+            for (const row of (rolesRows || []) as any[]) {
+                const uid = String(row.user_id);
+                const role = String(row.role ?? '').toLowerCase();
+                if (!rolesByUserId.has(uid)) rolesByUserId.set(uid, []);
+                rolesByUserId.get(uid)!.push(role);
+            }
+
+            // Same priority as web app: super_admin > admin > division_leader > staff > specialist > health_center
+            const usersWithRoles: AdminUser[] = profileList.map((p: any) => {
+                const roles = rolesByUserId.get(String(p.id)) || [];
+                let appRole = 'viewer';
+                if (roles.includes('super_admin')) appRole = 'super_admin';
+                else if (roles.includes('admin')) appRole = 'admin';
+                else if (roles.includes('division_leader')) appRole = 'division_leader';
+                else if (roles.includes('staff')) appRole = 'staff';
+                else if (roles.includes('specialist')) appRole = 'specialist';
+                else if (roles.includes('health_center')) appRole = 'health_center';
+
+                return {
+                    id: p.id,
+                    name: p.full_name || p.email?.split('@')[0] || 'Unknown',
+                    email: p.email || '',
+                    role: roleLabelFromAppRole(appRole),
+                    roleColor: '#2563eb',
+                    tags: [],
+                };
+            });
+
+            return usersWithRoles;
         }
     });
 };
@@ -43,14 +142,26 @@ export const useAdminUsers = () => {
 export const useUpdateUserRole = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ userId, role }: { userId: string, role: string }) => {
-            // Updating role in staff table as fallback
-            const { error } = await supabase.from('staff').update({ role }).eq('id', userId);
-            if (error) {
-                // If profiles role update needed
-                const { error: pError } = await supabase.from('user_roles').update({ role }).eq('user_id', userId);
-                if (pError) throw pError;
-            }
+        mutationFn: async ({ userId, role, companyId }: { userId: string; role: string; companyId: string }) => {
+            if (!companyId) throw new Error('Missing companyId.');
+
+            const appRole = appRoleFromRoleLabel(role);
+
+            // Mirror the web workflow: delete existing roles for this user, then insert the selected role.
+            const { error: delErr } = await supabase
+                .from('user_roles')
+                .delete()
+                .eq('user_id', userId);
+            if (delErr) throw delErr;
+
+            const { error: insErr } = await supabase
+                .from('user_roles')
+                .insert({
+                    user_id: userId,
+                    role: appRole,
+                    company_id: companyId,
+                });
+            if (insErr) throw insErr;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
@@ -143,25 +254,48 @@ export const useCreateUser = () => {
     return useMutation({
         mutationFn: async (params: { email: string; password: string; fullName: string; role: string; companyId: string | null }) => {
             try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!session?.access_token) throw new Error('You must be signed in to create users.');
-                const { data, error } = await supabase.functions.invoke('create-user', {
-                    body: {
+                // create-user verifies the caller via Authorization token.
+                const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession();
+                let accessToken = refreshed.session?.access_token;
+                if (!accessToken) {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    accessToken = session?.access_token ?? undefined;
+                }
+                if (!accessToken) {
+                    throw new Error(refreshErr?.message || 'Session expired or missing. Sign out and sign in again, then retry.');
+                }
+
+                const url = `${supabaseUrl}/functions/v1/create-user`;
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${accessToken}`,
+                        apikey: supabaseAnonKey,
+                    },
+                    body: JSON.stringify({
                         email: params.email.trim(),
                         password: params.password,
                         fullName: params.fullName.trim(),
                         role: params.role,
                         companyId: params.companyId || undefined,
-                    },
-                    headers: { Authorization: `Bearer ${session.access_token}` },
+                    }),
                 });
-                const result = (data ?? null) as { error?: string } | null;
-                if (result?.error && typeof result.error === 'string') throw new Error(result.error);
-                if (error) {
-                    const msg = await getCreateUserErrorMessage(error);
-                    throw new Error(msg || 'Create user failed. Deploy the create-user edge function and try again.');
+
+                const text = await res.text();
+                let parsed: any = null;
+                try {
+                    parsed = JSON.parse(text);
+                } catch (_) {
+                    parsed = null;
                 }
-                return data;
+
+                if (!res.ok) {
+                    const msg = parsed?.error || text || `Request failed (${res.status})`;
+                    throw new Error(msg);
+                }
+                if (parsed?.error) throw new Error(parsed.error);
+                return parsed;
             } catch (err) {
                 if (err instanceof Error) throw err;
                 throw new Error(err != null ? String(err) : 'Create user failed.');
@@ -221,6 +355,32 @@ export const useApproveUser = () => {
 
             // Ignore duplicate key errors if role somehow exists
             if (roleError && roleError.code !== '23505') throw roleError;
+
+            // Ensure Auth email is confirmed so the user can sign in with password.
+            // (Admin approval updates profiles only; if Supabase requires email confirmation, sign-in fails.)
+            const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession();
+            const accessToken = refreshed.session?.access_token;
+            if (!accessToken) {
+                // Do not fail the whole approve flow; just warn.
+                console.warn(refreshErr?.message || 'No access token available to confirm user email.');
+                return;
+            }
+
+            const confirmRes = await fetch(`${supabaseUrl}/functions/v1/confirm-user-email`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${accessToken}`,
+                    apikey: supabaseAnonKey,
+                },
+                body: JSON.stringify({ userId }),
+            });
+
+            if (!confirmRes.ok) {
+                // Approval already succeeded; don't block.
+                const txt = await confirmRes.text().catch(() => '');
+                console.warn('confirm-user-email failed:', txt || confirmRes.status);
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['pendingUsers'] });

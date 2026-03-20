@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Alert, ActivityIndicator, Switch, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useAdminUsers, useUpdateUserRole, useDeleteUser, useSendPasswordReset, useCreateUser, useEmailConfigs, useUpdateEmailConfig, useEditHistory } from '../api/admin';
 import { useCompany } from '../contexts/CompanyContext';
+import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
+import { getSignedUrl } from '../api/storage';
 
 export const AdminPanelScreen = ({ navigation }: any) => {
 
 
-    const { companyId } = useCompany();
-    const { data: adminUsers = [] } = useAdminUsers();
+    const { companyId, season, isSuperAdmin } = useCompany();
+    const { data: adminUsers = [] } = useAdminUsers(companyId);
     const { data: fetchedEmailConfigs = [] } = useEmailConfigs();
     const { data: fetchedHistory = [] } = useEditHistory();
 
@@ -26,7 +28,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     const editHistoryEntries = fetchedHistory as any[];
 
 
-    const [currentTab, setCurrentTab] = useState<'userManagement' | 'userTags' | 'emailAutomation' | 'dataImport' | 'editHistory'>('userManagement');
+    const [currentTab, setCurrentTab] = useState<'userManagement' | 'userTags' | 'emailAutomation' | 'emailConfig' | 'companies' | 'dataManagement' | 'dataImport' | 'dataExport' | 'editHistory'>('userManagement');
     const [showRolePicker, setShowRolePicker] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [userToDelete, setUserToDelete] = useState<User | null>(null);
@@ -176,7 +178,11 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
     const handleRoleSelect = (newRole: string) => {
         if (selectedUser) {
-            updateUserRoleMutation.mutate({ userId: selectedUser.id, role: newRole });
+            if (!companyId) {
+                Alert.alert('Role update', 'Select a company before changing roles.');
+                return;
+            }
+            updateUserRoleMutation.mutate({ userId: selectedUser.id, role: newRole, companyId });
             setShowRolePicker(false);
             setSelectedUser(null);
         }
@@ -557,97 +563,1176 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         </View>
     );
 
-    const renderEditHistory = () => (
-        <View style={styles.editHistoryContainer}>
-            <View style={styles.editHistoryHeader}>
-                <View style={styles.editHistoryTitleRow}>
-                    <Ionicons name="document-text-outline" size={20} color={theme.colors.text} />
-                    <View style={styles.editHistoryTitleContainer}>
-                        <Text style={styles.cardTitle}>Edit History</Text>
-                        <Text style={styles.cardSubtitle}>View all changes made to the system</Text>
+    const renderEditHistory = () => {
+        const search = editHistorySearch.trim().toLowerCase();
+        const visibleEntries = editHistoryEntries.filter((entry: any) => {
+            const tableOk = selectedTableFilter === 'All Tables' || entry.table === selectedTableFilter;
+            if (!tableOk) return false;
+            if (!search) return true;
+
+            const dateTime = String(entry.dateTime ?? '').toLowerCase();
+            const user = String(entry.user ?? '').toLowerCase();
+            const table = String(entry.table ?? '').toLowerCase();
+            const action = String(entry.action ?? '').toLowerCase();
+            const recordId = String(entry.recordId ?? '').toLowerCase();
+            return [dateTime, user, table, action, recordId].some((v) => v.includes(search));
+        });
+
+        return (
+            <View style={styles.editHistoryContainer}>
+                <View style={styles.editHistoryHeader}>
+                    <View style={styles.editHistoryTitleRow}>
+                        <Ionicons name="document-text-outline" size={20} color={theme.colors.text} />
+                        <View style={styles.editHistoryTitleContainer}>
+                            <Text style={styles.cardTitle}>Edit History</Text>
+                            <Text style={styles.cardSubtitle}>View all changes made to the system</Text>
+                        </View>
                     </View>
+                    <TouchableOpacity
+                        style={styles.exportCsvButton}
+                        onPress={() => setShowDownloadModal(true)}
+                    >
+                        <Ionicons name="download-outline" size={16} color="white" />
+                        <Text style={styles.exportCsvButtonText}>Export CSV</Text>
+                    </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                    style={styles.exportCsvButton}
-                    onPress={() => setShowDownloadModal(true)}
-                >
-                    <Ionicons name="download-outline" size={16} color="white" />
-                    <Text style={styles.exportCsvButtonText}>Export CSV</Text>
-                </TouchableOpacity>
+
+                {/* Search and Filter */}
+                <View style={styles.searchFilterRow}>
+                    <View style={styles.searchBar}>
+                        <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search by table, user, or record..."
+                            placeholderTextColor={theme.colors.textSecondary}
+                            value={editHistorySearch}
+                            onChangeText={setEditHistorySearch}
+                        />
+                    </View>
+                    <TouchableOpacity
+                        style={styles.filterDropdown}
+                        onPress={() => setShowTableFilterPicker(true)}
+                    >
+                        <Text style={styles.filterDropdownText}>{selectedTableFilter}</Text>
+                        <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Clean History List */}
+                <StyledCard style={styles.historyListCard}>
+                    {visibleEntries.length === 0 ? (
+                        <View style={styles.historyEmpty}>
+                            <Text style={styles.historyEmptyText}>No matching edit history.</Text>
+                        </View>
+                    ) : (
+                        <View style={styles.historyList}>
+                            {visibleEntries.map((entry: any) => {
+                                const recordId = String(entry.recordId ?? '');
+                                const recordShort = recordId.length > 12 ? `${recordId.substring(0, 8)}...` : recordId;
+                                return (
+                                    <View key={entry.id} style={styles.historyItemCard}>
+                                        <Text style={styles.historyItemDateText}>{entry.dateTime}</Text>
+
+                                        <View style={styles.historyChipsRow}>
+                                            <View style={styles.historyChip}>
+                                                <Text style={styles.historyChipText}>{entry.table}</Text>
+                                            </View>
+                                            <View style={[styles.historyChip, styles.historyActionChip]}>
+                                                <Text style={[styles.historyChipText, styles.historyActionChipText]}>{entry.action}</Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.historyMetaRow}>
+                                            <Text style={styles.historyMetaLabel}>User</Text>
+                                            <Text style={styles.historyMetaValue} numberOfLines={1}>{entry.user}</Text>
+                                        </View>
+
+                                        <View style={styles.historyMetaRow}>
+                                            <Text style={styles.historyMetaLabel}>Record</Text>
+                                            <Text style={[styles.historyMetaValue, styles.historyRecordIdText]} numberOfLines={1}>{recordShort || '-'}</Text>
+                                        </View>
+                                    </View>
+                                );
+                            })}
+                        </View>
+                    )}
+                </StyledCard>
             </View>
+        );
+    };
 
-            {/* Search and Filter */}
-            <View style={styles.searchFilterRow}>
-                <View style={styles.searchBar}>
-                    <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
-                    <TextInput
-                        style={styles.searchInput}
-                        placeholder="Search by table, user, or email..."
-                        placeholderTextColor={theme.colors.textSecondary}
-                        value={editHistorySearch}
-                        onChangeText={setEditHistorySearch}
-                    />
+    const getFreshAccessToken = async (): Promise<string | null> => {
+        try {
+            const refreshed = await supabase.auth.refreshSession();
+            const token = refreshed.data.session?.access_token;
+            if (token) return token;
+        } catch (_) { }
+
+        try {
+            const sessionRes = await supabase.auth.getSession();
+            return sessionRes.data.session?.access_token ?? null;
+        } catch (_) {
+            return null;
+        }
+    };
+
+    const callEdgeFunction = async <T,>(functionName: string, body: Record<string, any>): Promise<T> => {
+        const accessToken = await getFreshAccessToken();
+        if (!accessToken) {
+            throw new Error('Session expired. Please sign out and sign in again.');
+        }
+
+        const url = `${supabaseUrl}/functions/v1/${functionName}`;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+                apikey: supabaseAnonKey,
+            },
+            body: JSON.stringify(body),
+        });
+
+        const text = await res.text().catch(() => '');
+        let parsed: any = null;
+        try {
+            parsed = text ? JSON.parse(text) : null;
+        } catch (_) {
+            parsed = null;
+        }
+
+        if (!res.ok) {
+            const msg = parsed?.error || parsed?.message || text || `Request failed (${res.status}).`;
+            throw new Error(msg);
+        }
+        return (parsed ?? {}) as T;
+    };
+
+    const EmailConfigScreen = () => {
+        const [loading, setLoading] = useState(true);
+        const [saving, setSaving] = useState(false);
+        const [testing, setTesting] = useState(false);
+        const [config, setConfig] = useState<any>(null);
+        const [form, setForm] = useState({
+            m365_tenant_id: '',
+            m365_client_id: '',
+            m365_client_secret: '',
+            m365_sender_email: '',
+            m365_sender_name: '',
+        });
+
+        const fetchConfig = async () => {
+            if (!companyId) return;
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('company_email_config')
+                    .select('*')
+                    .eq('company_id', companyId)
+                    .maybeSingle();
+
+                if (error && error.code !== 'PGRST116') throw error;
+
+                setConfig(data ?? null);
+                setForm({
+                    m365_tenant_id: data?.m365_tenant_id || '',
+                    m365_client_id: data?.m365_client_id || '',
+                    m365_client_secret: '',
+                    m365_sender_email: data?.m365_sender_email || '',
+                    m365_sender_name: data?.m365_sender_name || '',
+                });
+            } catch (e: any) {
+                Alert.alert('Load failed', e?.message || 'Could not load email configuration.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        useEffect(() => {
+            if (!isSuperAdmin) return;
+            fetchConfig();
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [companyId, isSuperAdmin]);
+
+        const handleSave = async () => {
+            if (!companyId) return;
+            if (!form.m365_tenant_id || !form.m365_client_id || !form.m365_sender_email) {
+                Alert.alert('Validation error', 'Tenant ID, Client ID, and Sender Email are required.');
+                return;
+            }
+
+            setSaving(true);
+            try {
+                const { data: authData } = await supabase.auth.getUser();
+
+                let encryptedSecret: string | null = null;
+                if (form.m365_client_secret.trim()) {
+                    const encRes = await supabase.rpc('encrypt_secret', { secret: form.m365_client_secret.trim() });
+                    encryptedSecret = String(encRes.data ?? '');
+                    if (!encryptedSecret) throw new Error('Client secret encryption failed.');
+                }
+
+                const payload: any = {
+                    company_id: companyId,
+                    m365_tenant_id: form.m365_tenant_id.trim(),
+                    m365_client_id: form.m365_client_id.trim(),
+                    m365_sender_email: form.m365_sender_email.trim(),
+                    m365_sender_name: form.m365_sender_name.trim() || null,
+                    is_configured: true,
+                    configured_by: authData?.user?.id ?? null,
+                    configured_at: new Date().toISOString(),
+                };
+
+                if (encryptedSecret) payload.m365_client_secret_encrypted = encryptedSecret;
+
+                const { error } = await supabase
+                    .from('company_email_config')
+                    .upsert(payload, { onConflict: 'company_id' });
+
+                if (error) throw error;
+                Alert.alert('Saved', 'Email configuration saved successfully.');
+                setForm((prev) => ({ ...prev, m365_client_secret: '' }));
+                await fetchConfig();
+            } catch (e: any) {
+                Alert.alert('Save failed', e?.message || 'Could not save email configuration.');
+            } finally {
+                setSaving(false);
+            }
+        };
+
+        const handleTest = async () => {
+            if (!companyId) return;
+            setTesting(true);
+            try {
+                const res = await callEdgeFunction<any>('test-m365-connection', { company_id: companyId });
+                if (res?.success) {
+                    Alert.alert('Connection OK', res?.message || 'Microsoft 365 connection is working.');
+                } else {
+                    Alert.alert('Connection failed', res?.message || 'Failed to connect to Microsoft 365.');
+                }
+                await fetchConfig();
+            } catch (e: any) {
+                Alert.alert('Test failed', e?.message || 'Failed to test Microsoft 365 connection.');
+            } finally {
+                setTesting(false);
+            }
+        };
+
+        if (!isSuperAdmin) {
+            return (
+                <StyledCard style={styles.superAdminOnlyCard}>
+                    <Text style={styles.superAdminOnlyTitle}>Super admin only</Text>
+                    <Text style={styles.superAdminOnlySubtitle}>Email Config is available for super admins.</Text>
+                </StyledCard>
+            );
+        }
+
+        if (loading) {
+            return (
+                <View style={styles.screenLoadingWrap}>
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
                 </View>
-                <TouchableOpacity
-                    style={styles.filterDropdown}
-                    onPress={() => setShowTableFilterPicker(true)}
-                >
-                    <Text style={styles.filterDropdownText}>{selectedTableFilter}</Text>
-                    <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
-            </View>
+            );
+        }
 
-            {/* History Table */}
-            <StyledCard style={styles.historyTableCard}>
-                {/* Table Header */}
-                <View style={styles.tableHeader}>
-                    <View style={styles.tableHeaderCell}>
-                        <Text style={styles.tableHeaderText}>Date & Time</Text>
+        return (
+            <View style={styles.screenContainer}>
+                <StyledCard style={styles.sectionCard}>
+                    <View style={styles.sectionHeaderRow}>
+                        <Ionicons name="mail-outline" size={20} color={theme.colors.primary} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.sectionTitle}>Microsoft 365 Email Configuration</Text>
+                            <Text style={styles.sectionSubtitle}>Configure email sending for this company</Text>
+                        </View>
+                        {config?.is_configured && (
+                            <View style={styles.statusBadgeSuccess}>
+                                <Text style={styles.statusBadgeTextSuccess}>Configured</Text>
+                            </View>
+                        )}
                     </View>
-                    <View style={styles.tableHeaderCell}>
-                        <Text style={styles.tableHeaderText}>User</Text>
-                    </View>
-                    <View style={styles.tableHeaderCell}>
-                        <Text style={styles.tableHeaderText}>Table</Text>
-                    </View>
-                    <View style={styles.tableHeaderCell}>
-                        <Text style={styles.tableHeaderText}>Action</Text>
-                    </View>
-                    <View style={styles.tableHeaderCell}>
-                        <Text style={styles.tableHeaderText}>Record ID</Text>
-                    </View>
-                </View>
 
-                {/* Table Rows */}
-                <View style={styles.tableRows}>
-                    {editHistoryEntries.map((entry: any) => (
-                        <View key={entry.id} style={styles.tableRow}>
-                            <View style={styles.tableCell}>
-                                <Ionicons name="chevron-down" size={14} color={theme.colors.textSecondary} />
-                                <Text style={styles.tableCellText}>{entry.dateTime}</Text>
-                            </View>
-                            <View style={styles.tableCell}>
-                                <Text style={styles.tableCellText}>{entry.user}</Text>
-                            </View>
-                            <View style={styles.tableCell}>
-                                <View style={styles.tableTag}>
-                                    <Text style={styles.tableTagText}>{entry.table}</Text>
-                                </View>
-                            </View>
-                            <View style={styles.tableCell}>
-                                <View style={styles.actionTag}>
-                                    <Text style={styles.actionTagText}>{entry.action}</Text>
-                                </View>
-                            </View>
-                            <View style={styles.tableCell}>
-                                <Text style={styles.recordIdText}>{entry.recordId.substring(0, 8)}...</Text>
+                    {config?.last_tested_at && (
+                        <View style={styles.lastTestBox}>
+                            <Text style={styles.lastTestLabel}>Last tested</Text>
+                            <Text style={styles.lastTestValue}>{new Date(config.last_tested_at).toLocaleString()}</Text>
+                            <View
+                                style={[
+                                    styles.statusBadgePill,
+                                    config?.last_test_status === 'success' ? styles.statusBadgePillSuccess : styles.statusBadgePillError,
+                                ]}
+                            >
+                                <Text style={styles.statusBadgePillText}>{config?.last_test_status || 'unknown'}</Text>
                             </View>
                         </View>
+                    )}
+
+                    <View style={styles.formGrid}>
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Tenant ID *</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.m365_tenant_id}
+                                onChangeText={(v) => setForm((p) => ({ ...p, m365_tenant_id: v }))}
+                                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                                autoCapitalize="none"
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Client ID *</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.m365_client_id}
+                                onChangeText={(v) => setForm((p) => ({ ...p, m365_client_id: v }))}
+                                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                                autoCapitalize="none"
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>
+                                Client Secret {config?.m365_client_secret_encrypted ? '(leave blank to keep existing)' : '*'}
+                            </Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.m365_client_secret}
+                                onChangeText={(v) => setForm((p) => ({ ...p, m365_client_secret: v }))}
+                                placeholder={config?.m365_client_secret_encrypted ? '••••••••••••••••' : 'Enter client secret'}
+                                secureTextEntry
+                                autoCapitalize="none"
+                            />
+                            <Text style={styles.helpText}>Client secret is encrypted and never displayed after saving.</Text>
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Sender Email *</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.m365_sender_email}
+                                onChangeText={(v) => setForm((p) => ({ ...p, m365_sender_email: v }))}
+                                placeholder="notifications@yourcompany.com"
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Sender Display Name</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.m365_sender_name}
+                                onChangeText={(v) => setForm((p) => ({ ...p, m365_sender_name: v }))}
+                                placeholder="Tyler Hill Camp"
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.actionRow}>
+                        <TouchableOpacity
+                            style={[styles.secondaryButton, (saving || testing) && { opacity: 0.6 }]}
+                            disabled={saving || testing}
+                            onPress={handleTest}
+                        >
+                            {testing ? <ActivityIndicator color="white" /> : <Ionicons name="flask-outline" size={18} color="white" />}
+                            <Text style={styles.secondaryButtonText}>Test Connection</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.primaryButton, (saving || testing) && { opacity: 0.6 }]}
+                            disabled={saving || testing}
+                            onPress={handleSave}
+                        >
+                            {saving ? <ActivityIndicator color="white" /> : <Ionicons name="save-outline" size={18} color="white" />}
+                            <Text style={styles.primaryButtonText}>Save Configuration</Text>
+                        </TouchableOpacity>
+                    </View>
+                </StyledCard>
+
+                <StyledCard style={styles.sectionCard}>
+                    <Text style={styles.setupTitle}>Setup Instructions</Text>
+                    <View style={styles.setupList}>
+                        <Text style={styles.setupItem}>1. Go to Azure Portal → App registrations</Text>
+                        <Text style={styles.setupItem}>2. Create a new registration or select an existing app</Text>
+                        <Text style={styles.setupItem}>3. Note the Application (client) ID and Directory (tenant) ID</Text>
+                        <Text style={styles.setupItem}>4. Create a client secret under Certificates & secrets</Text>
+                        <Text style={styles.setupItem}>5. Add API permissions: Microsoft Graph → Mail.Send</Text>
+                        <Text style={styles.setupItem}>6. Grant admin consent for the permission</Text>
+                        <Text style={styles.setupItem}>7. Enter the credentials above and test the connection</Text>
+                    </View>
+                </StyledCard>
+            </View>
+        );
+    };
+
+    // NOTE: Mobile version intentionally focuses on the same workflows as web (save/test/sync).
+    const CompaniesScreen = () => {
+        const [loading, setLoading] = useState(true);
+        const [companies, setCompanies] = useState<any[]>([]);
+        const [modalOpen, setModalOpen] = useState(false);
+        const [editingCompany, setEditingCompany] = useState<any | null>(null);
+
+        const [form, setForm] = useState({
+            name: '',
+            slug: '',
+            theme_color: '#0066cc',
+            is_active: true,
+            campminder_sync_enabled: false,
+            campminder_api_key: '',
+            campminder_subscription_key: '',
+        });
+
+        const slugify = (s: string) =>
+            String(s || '')
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/(^-|-$)/g, '');
+
+        const fetchCompanies = async () => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('companies')
+                    .select('id, name, slug, logo_url, theme_color, is_active, campminder_sync_enabled, campminder_last_sync_at')
+                    .order('name');
+                if (error) throw error;
+
+                const list = (data || []) as any[];
+                const next = await Promise.all(
+                    list.map(async (c) => {
+                        const [profilesRes, childrenRes, staffRes] = await Promise.all([
+                            supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('company_id', c.id),
+                            supabase.from('children').select('id', { count: 'exact', head: true }).eq('company_id', c.id),
+                            supabase.from('staff').select('id', { count: 'exact', head: true }).eq('company_id', c.id),
+                        ]);
+                        return {
+                            ...c,
+                            usersCount: profilesRes.count || 0,
+                            childrenCount: childrenRes.count || 0,
+                            staffCount: staffRes.count || 0,
+                        };
+                    })
+                );
+                setCompanies(next);
+            } catch (e: any) {
+                Alert.alert('Load failed', e?.message || 'Could not load companies.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        useEffect(() => {
+            if (!isSuperAdmin) return;
+            fetchCompanies();
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [isSuperAdmin]);
+
+        const openCreate = () => {
+            setEditingCompany(null);
+            setForm({
+                name: '',
+                slug: '',
+                theme_color: '#0066cc',
+                is_active: true,
+                campminder_sync_enabled: false,
+                campminder_api_key: '',
+                campminder_subscription_key: '',
+            });
+            setModalOpen(true);
+        };
+
+        const openEdit = (c: any) => {
+            setEditingCompany(c);
+            setForm({
+                name: c.name || '',
+                slug: c.slug || '',
+                theme_color: c.theme_color || '#0066cc',
+                is_active: !!c.is_active,
+                campminder_sync_enabled: !!c.campminder_sync_enabled,
+                campminder_api_key: '',
+                campminder_subscription_key: '',
+            });
+            setModalOpen(true);
+        };
+
+        const handleTestCampMinder = async (companyIdToTest: string) => {
+            try {
+                const res = await callEdgeFunction<any>('test-campminder-connection', { company_id: companyIdToTest });
+                if (res?.success) Alert.alert('CampMinder OK', res?.message || 'Connection successful.');
+                else Alert.alert('CampMinder failed', res?.error || res?.message || 'Connection failed.');
+                await fetchCompanies();
+            } catch (e: any) {
+                Alert.alert('Test failed', e?.message || 'Could not test CampMinder connection.');
+            }
+        };
+
+        const handleSyncNow = async (companyIdToSync: string) => {
+            try {
+                const res = await callEdgeFunction<any>('sync-campminder', { company_id: companyIdToSync });
+                Alert.alert('Sync requested', res?.message || 'CampMinder sync triggered.');
+                await fetchCompanies();
+            } catch (e: any) {
+                Alert.alert('Sync failed', e?.message || 'Could not trigger CampMinder sync.');
+            }
+        };
+
+        const handleSaveCompany = async () => {
+            try {
+                const name = form.name.trim();
+                if (!name) {
+                    Alert.alert('Validation error', 'Company name is required.');
+                    return;
+                }
+                const slug = form.slug.trim() ? form.slug.trim() : slugify(name);
+                if (!slug) {
+                    Alert.alert('Validation error', 'Company slug is required.');
+                    return;
+                }
+
+                const payload: any = {
+                    name,
+                    slug,
+                    theme_color: form.theme_color || '#0066cc',
+                    is_active: !!form.is_active,
+                    campminder_sync_enabled: !!form.campminder_sync_enabled,
+                };
+
+                if (form.campminder_api_key.trim()) {
+                    const encApi = await supabase.rpc('encrypt_secret', { secret: form.campminder_api_key.trim() });
+                    payload.campminder_api_key_encrypted = String(encApi.data ?? '');
+                }
+                if (form.campminder_subscription_key.trim()) {
+                    const encSub = await supabase.rpc('encrypt_secret', { secret: form.campminder_subscription_key.trim() });
+                    payload.campminder_subscription_key_encrypted = String(encSub.data ?? '');
+                }
+
+                if (editingCompany?.id) {
+                    const { error } = await supabase.from('companies').update(payload).eq('id', editingCompany.id);
+                    if (error) throw error;
+                } else {
+                    const { error } = await supabase.from('companies').insert(payload);
+                    if (error) throw error;
+                }
+
+                Alert.alert('Saved', 'Company saved successfully.');
+                setModalOpen(false);
+                await fetchCompanies();
+            } catch (e: any) {
+                Alert.alert('Save failed', e?.message || 'Could not save company.');
+            }
+        };
+
+        if (!isSuperAdmin) {
+            return (
+                <StyledCard style={styles.superAdminOnlyCard}>
+                    <Text style={styles.superAdminOnlyTitle}>Super admin only</Text>
+                    <Text style={styles.superAdminOnlySubtitle}>Companies are available for super admins.</Text>
+                </StyledCard>
+            );
+        }
+
+        if (loading) {
+            return (
+                <View style={styles.screenLoadingWrap}>
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                </View>
+            );
+        }
+
+        return (
+            <View style={styles.screenContainer}>
+                <View style={styles.companiesHeaderRow}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.sectionTitle}>Company Management</Text>
+                        <Text style={styles.sectionSubtitle}>Manage companies and CampMinder sync</Text>
+                    </View>
+                    <TouchableOpacity style={styles.primaryButton} onPress={openCreate}>
+                        <Ionicons name="add-circle-outline" size={18} color="white" />
+                        <Text style={styles.primaryButtonText}>Create New Company</Text>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.companiesList}>
+                    {companies.map((c) => (
+                        <StyledCard key={c.id} style={styles.companyCard}>
+                            <View style={styles.companyCardHeader}>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.companyName}>{c.name}</Text>
+                                    <Text style={styles.companySlug}>{c.slug}</Text>
+                                </View>
+                                <View style={styles.companyActions}>
+                                    <TouchableOpacity onPress={() => openEdit(c)} style={styles.iconButton}>
+                                        <Ionicons name="create-outline" size={18} color={theme.colors.textSecondary} />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            <View style={styles.companyCountsRow}>
+                                <Text style={styles.companyCountText}>Users: {c.usersCount}</Text>
+                                <Text style={styles.companyCountText}>Children: {c.childrenCount}</Text>
+                                <Text style={styles.companyCountText}>Staff: {c.staffCount}</Text>
+                            </View>
+
+                            <View style={styles.companySyncRow}>
+                                <View style={[styles.syncDot, { backgroundColor: c.campminder_sync_enabled ? '#16a34a' : '#94a3b8' }]} />
+                                <Text style={styles.companySyncText}>
+                                    CampMinder {c.campminder_sync_enabled ? 'Connected' : 'Disabled'}
+                                </Text>
+                                {c.campminder_last_sync_at ? (
+                                    <Text style={styles.companySyncTextSecondary}>
+                                        (Last sync: {new Date(c.campminder_last_sync_at).toLocaleDateString()})
+                                    </Text>
+                                ) : (
+                                    <Text style={styles.companySyncTextSecondary}>(Not synced yet)</Text>
+                                )}
+                            </View>
+                        </StyledCard>
                     ))}
                 </View>
-            </StyledCard>
-        </View>
-    );
+
+                <Modal transparent visible={modalOpen} animationType="slide" onRequestClose={() => setModalOpen(false)}>
+                    <Pressable style={styles.centerModalOverlay} onPress={() => setModalOpen(false)}>
+                        <Pressable style={styles.centerModal} onPress={(e) => e.stopPropagation()}>
+                            <View style={styles.modalHeaderRow}>
+                                <Text style={styles.modalTitle}>{editingCompany ? 'Edit Company' : 'Create New Company'}</Text>
+                                <TouchableOpacity onPress={() => setModalOpen(false)} style={styles.iconButton}>
+                                    <Ionicons name="close-outline" size={18} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <ScrollView showsVerticalScrollIndicator={false}>
+                                <View style={styles.modalBody}>
+                                    <Text style={styles.label}>Company Name *</Text>
+                                    <TextInput style={styles.input} value={form.name} onChangeText={(v) => setForm((p) => ({ ...p, name: v }))} />
+
+                                    <Text style={styles.label}>Slug</Text>
+                                    <TextInput style={styles.input} value={form.slug} onChangeText={(v) => setForm((p) => ({ ...p, slug: v }))} autoCapitalize="none" />
+
+                                    <Text style={styles.label}>Theme Color</Text>
+                                    <TextInput style={styles.input} value={form.theme_color} onChangeText={(v) => setForm((p) => ({ ...p, theme_color: v }))} autoCapitalize="none" />
+
+                                    <View style={styles.switchRow}>
+                                        <Text style={styles.switchLabel}>Active</Text>
+                                        <Switch value={form.is_active} onValueChange={(v) => setForm((p) => ({ ...p, is_active: v }))} />
+                                    </View>
+
+                                    <View style={styles.switchRow}>
+                                        <Text style={styles.switchLabel}>CampMinder Sync Enabled</Text>
+                                        <Switch value={form.campminder_sync_enabled} onValueChange={(v) => setForm((p) => ({ ...p, campminder_sync_enabled: v }))} />
+                                    </View>
+
+                                    <Text style={styles.label}>CampMinder API Key</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={form.campminder_api_key}
+                                        onChangeText={(v) => setForm((p) => ({ ...p, campminder_api_key: v }))}
+                                        secureTextEntry
+                                        autoCapitalize="none"
+                                    />
+
+                                    <Text style={styles.label}>CampMinder Subscription Key</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={form.campminder_subscription_key}
+                                        onChangeText={(v) => setForm((p) => ({ ...p, campminder_subscription_key: v }))}
+                                        secureTextEntry
+                                        autoCapitalize="none"
+                                    />
+
+                                    <View style={styles.actionRow}>
+                                        <TouchableOpacity style={styles.secondaryButton} onPress={() => handleSaveCompany()}>
+                                            <Ionicons name="save-outline" size={18} color="white" />
+                                            <Text style={styles.secondaryButtonText}>{editingCompany ? 'Save Changes' : 'Create Company'}</Text>
+                                        </TouchableOpacity>
+                                        {editingCompany?.id ? (
+                                            <TouchableOpacity style={styles.secondaryButton} onPress={() => handleTestCampMinder(editingCompany.id)}>
+                                                <Ionicons name="flask-outline" size={18} color="white" />
+                                                <Text style={styles.secondaryButtonText}>Test CampMinder</Text>
+                                            </TouchableOpacity>
+                                        ) : null}
+                                    </View>
+
+                                    {editingCompany?.id ? (
+                                        <TouchableOpacity style={styles.primaryButton} onPress={() => handleSyncNow(editingCompany.id)}>
+                                            <Ionicons name="sync-outline" size={18} color="white" />
+                                            <Text style={styles.primaryButtonText}>Sync Now</Text>
+                                        </TouchableOpacity>
+                                    ) : null}
+                                </View>
+                            </ScrollView>
+                        </Pressable>
+                    </Pressable>
+                </Modal>
+            </View>
+        );
+    };
+
+    const DataManagementScreen = () => {
+        const [loading, setLoading] = useState(true);
+        const [deleting, setDeleting] = useState(false);
+        const [stats, setStats] = useState({
+            children: 0,
+            staff: 0,
+            awards: 0,
+            dailyNotes: 0,
+            trips: 0,
+            events: 0,
+        });
+
+        const countTable = async (table: string) => {
+            const { count } = await supabase
+                .from(table)
+                .select('id', { count: 'exact', head: true })
+                .eq('company_id', companyId);
+            return count ?? 0;
+        };
+
+        const fetchStats = async () => {
+            if (!companyId) return;
+            setLoading(true);
+            try {
+                const [children, staff, awards, dailyNotes, trips, events] = await Promise.all([
+                    countTable('children'),
+                    countTable('staff'),
+                    countTable('awards'),
+                    countTable('daily_notes'),
+                    countTable('trips'),
+                    countTable('events'),
+                ]);
+                setStats({ children, staff, awards, dailyNotes, trips, events });
+            } catch (e: any) {
+                Alert.alert('Load failed', e?.message || 'Could not load data stats.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const deleteFromTable = async (table: string) => {
+            if (!companyId) return;
+            const preserveId = '00000000-0000-0000-0000-000000000000';
+            try {
+                await supabase.from(table).delete().eq('company_id', companyId).neq('id', preserveId);
+            } catch (e) {
+                // Fallback for tables that don't have the `id` column or for older schemas.
+                await supabase.from(table).delete().eq('company_id', companyId);
+            }
+        };
+
+        const deleteAllTestData = async () => {
+            const tables = [
+                'children',
+                'staff',
+                'awards',
+                'daily_notes',
+                'trips',
+                'events',
+                'incident_reports',
+                'medication_logs',
+                'sports_academy',
+                'tutoring_therapy',
+                'activities_field_trips',
+                'special_events_activities',
+                'rainy_day_schedule',
+                'sports_calendar',
+                'menu_items',
+                'special_meals',
+                'health_center_admissions',
+                'trip_attendees',
+                'sports_event_roster',
+            ];
+
+            setDeleting(true);
+            try {
+                for (const table of tables) {
+                    await deleteFromTable(table);
+                }
+                Alert.alert('Deleted', 'All test data deleted successfully.');
+                await fetchStats();
+            } catch (e: any) {
+                Alert.alert('Delete failed', e?.message || 'Failed to delete all test data.');
+            } finally {
+                setDeleting(false);
+            }
+        };
+
+        const deleteTableData = async (tableName: string) => {
+            Alert.alert(
+                `Delete ${tableName}?`,
+                `This will permanently delete all ${tableName} records for the current company.`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                            setDeleting(true);
+                            try {
+                                await deleteFromTable(tableName);
+                                await fetchStats();
+                            } catch (e: any) {
+                                Alert.alert('Delete failed', e?.message || `Failed to delete ${tableName}.`);
+                            } finally {
+                                setDeleting(false);
+                            }
+                        }
+                    }
+                ]
+            );
+        };
+
+        useEffect(() => {
+            if (!isSuperAdmin) return;
+            fetchStats();
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [companyId, isSuperAdmin]);
+
+        if (!isSuperAdmin) {
+            return (
+                <StyledCard style={styles.superAdminOnlyCard}>
+                    <Text style={styles.superAdminOnlyTitle}>Super admin only</Text>
+                    <Text style={styles.superAdminOnlySubtitle}>Data Management is available for super admins.</Text>
+                </StyledCard>
+            );
+        }
+
+        if (loading) {
+            return (
+                <View style={styles.screenLoadingWrap}>
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                </View>
+            );
+        }
+
+        const cards = [
+            { title: 'Children', count: stats.children, table: 'children' },
+            { title: 'Staff', count: stats.staff, table: 'staff' },
+            { title: 'Awards', count: stats.awards, table: 'awards' },
+            { title: 'Daily Notes', count: stats.dailyNotes, table: 'daily_notes' },
+            { title: 'Trips', count: stats.trips, table: 'trips' },
+            { title: 'Events', count: stats.events, table: 'events' },
+        ];
+
+        return (
+            <View style={styles.screenContainer}>
+                <StyledCard style={styles.dangerCard}>
+                    <View style={styles.dangerHeaderRow}>
+                        <Ionicons name="alert-triangle-outline" size={20} color="#dc2626" />
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.dangerTitle}>Danger Zone</Text>
+                            <Text style={styles.dangerSubtitle}>Permanently delete data from the database. This action cannot be undone.</Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity
+                        style={[styles.dangerButton, deleting && { opacity: 0.7 }]}
+                        disabled={deleting}
+                        onPress={() => {
+                            Alert.alert(
+                                'Delete everything?',
+                                'This will permanently delete all test data for the current company.',
+                                [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    { text: 'Delete Everything', style: 'destructive', onPress: deleteAllTestData }
+                                ]
+                            );
+                        }}
+                    >
+                        <Ionicons name="trash-outline" size={18} color="white" />
+                        <Text style={styles.dangerButtonText}>Delete All Test Data</Text>
+                    </TouchableOpacity>
+                </StyledCard>
+
+                <View style={styles.exportGrid}>
+                    {cards.map((card) => (
+                        <StyledCard key={card.title} style={styles.dataCard}>
+                            <Text style={styles.dataCardTitle}>{card.title}</Text>
+                            <Text style={styles.dataCardCount}>{card.count}</Text>
+                            <Text style={styles.dataCardSubtitle}>Total records</Text>
+                            <TouchableOpacity
+                                style={[styles.outlineDangerButton, deleting && { opacity: 0.7 }]}
+                                disabled={deleting}
+                                onPress={() => deleteTableData(card.table)}
+                            >
+                                <Ionicons name="trash-outline" size={16} color={theme.colors.primary} />
+                                <Text style={styles.outlineDangerButtonText}>Delete All</Text>
+                            </TouchableOpacity>
+                        </StyledCard>
+                    ))}
+                </View>
+            </View>
+        );
+    };
+
+    const DataExportScreen = () => {
+        const [loading, setLoading] = useState(true);
+        const [exportType, setExportType] = useState<'children' | 'staff'>('children');
+        const [records, setRecords] = useState<any[]>([]);
+        const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+        const [exporting, setExporting] = useState(false);
+        const [companyName, setCompanyName] = useState<string>('Unknown');
+
+        const toggleSelection = (id: string) => {
+            setSelectedIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+            });
+        };
+
+        const fetchCompanyName = async () => {
+            if (!companyId) return;
+            const { data } = await supabase.from('companies').select('name').eq('id', companyId).maybeSingle();
+            setCompanyName(data?.name || 'Unknown');
+        };
+
+        const fetchRecords = async () => {
+            if (!companyId || !season) return;
+            setLoading(true);
+            try {
+                if (exportType === 'children') {
+                    const { data, error } = await supabase
+                        .from('children')
+                        .select(`
+                            id,
+                            name,
+                            person_id,
+                            rfid,
+                            photo_url,
+                            divisions:division_id(name),
+                            bunks:bunk_id(bunk_name, bunk_number)
+                        `)
+                        .eq('company_id', companyId)
+                        .eq('season', season)
+                        .order('name');
+                    if (error) throw error;
+
+                    const mapped = (data || []).map((c: any) => ({
+                        id: c.id,
+                        name: c.name,
+                        person_id: c.person_id,
+                        rfid: c.rfid ?? null,
+                        photo_url: c.photo_url ?? null,
+                        division: c.divisions?.name ?? null,
+                        bunk: c.bunks ? (c.bunks.bunk_name || `Bunk ${c.bunks.bunk_number}`) : null,
+                    }));
+                    setRecords(mapped);
+                } else {
+                    const { data, error } = await supabase
+                        .from('staff')
+                        .select(`
+                            id,
+                            name,
+                            person_id,
+                            rfid,
+                            photo_url,
+                            divisions:division_id(name)
+                        `)
+                        .eq('company_id', companyId)
+                        .eq('season', season)
+                        .order('name');
+                    if (error) throw error;
+
+                    const mapped = (data || []).map((s: any) => ({
+                        id: s.id,
+                        name: s.name,
+                        person_id: s.person_id,
+                        rfid: s.rfid ?? null,
+                        photo_url: s.photo_url ?? null,
+                        division: s.divisions?.name ?? null,
+                    }));
+                    setRecords(mapped);
+                }
+                setSelectedIds(new Set());
+            } catch (e: any) {
+                Alert.alert('Load failed', e?.message || 'Could not load export records.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        useEffect(() => {
+            if (!isSuperAdmin) return;
+            fetchCompanyName();
+            fetchRecords();
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [companyId, season, exportType, isSuperAdmin]);
+
+        const recordsWithPhotos = records.filter((r) => !!r.photo_url);
+        const recordsWithRfid = records.filter((r) => !!r.rfid);
+
+        const generateSignedPhotoUrl = async (photoPath: string | null): Promise<string | null> => {
+            if (!photoPath) return null;
+            try {
+                const signed = await getSignedUrl('profilePhotos', photoPath, 3600);
+                return signed || null;
+            } catch (_) {
+                return null;
+            }
+        };
+
+        const handleExport = async (mode: 'selected' | 'all') => {
+            if (!companyId || !season) return;
+            const toExport = mode === 'all' ? records : records.filter((r) => selectedIds.has(r.id));
+            if (toExport.length === 0) {
+                Alert.alert('Nothing to export', mode === 'selected' ? 'Select at least one record.' : 'No records available.');
+                return;
+            }
+
+            setExporting(true);
+            try {
+                const exportData = await Promise.all(
+                    toExport.map(async (r) => ({
+                        name: r.name,
+                        person_id: r.person_id,
+                        rfid: r.rfid || null,
+                        photo_path: r.photo_url || null,
+                        photo_url: await generateSignedPhotoUrl(r.photo_url),
+                        division: r.division || null,
+                        ...(exportType === 'children' ? { bunk: r.bunk || null } : {}),
+                    }))
+                );
+
+                const payload = {
+                    export_type: exportType,
+                    export_date: new Date().toISOString(),
+                    company: companyName,
+                    season,
+                    record_count: exportData.length,
+                    records: exportData,
+                };
+
+                if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${exportType}-export-${season}-${Date.now()}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    Alert.alert('Export ready', `Exported ${exportData.length} records (download started).`);
+                } else {
+                    // Mobile: show a preview size + push to logs so the user can export if needed.
+                    const preview = JSON.stringify(payload, null, 2);
+                    console.log('Data export payload preview:', preview.slice(0, 2000));
+                    Alert.alert('Export complete', `Created JSON for ${exportData.length} records. (Mobile download is not enabled in this build.)`);
+                }
+            } catch (e: any) {
+                Alert.alert('Export failed', e?.message || 'Could not export data.');
+            } finally {
+                setExporting(false);
+            }
+        };
+
+        if (!isSuperAdmin) {
+            return (
+                <StyledCard style={styles.superAdminOnlyCard}>
+                    <Text style={styles.superAdminOnlyTitle}>Super admin only</Text>
+                    <Text style={styles.superAdminOnlySubtitle}>Data Export is available for super admins.</Text>
+                </StyledCard>
+            );
+        }
+
+        if (loading) {
+            return (
+                <View style={styles.screenLoadingWrap}>
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                </View>
+            );
+        }
+
+        return (
+            <View style={styles.screenContainer}>
+                <StyledCard style={styles.sectionCard}>
+                    <View style={styles.sectionHeaderRow}>
+                        <Ionicons name="download-outline" size={20} color={theme.colors.primary} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.sectionTitle}>Data Export</Text>
+                            <Text style={styles.sectionSubtitle}>Export photos, person IDs, and RFID data as JSON</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.exportTypeRow}>
+                        <TouchableOpacity
+                            style={[styles.exportTypeButton, exportType === 'children' && styles.exportTypeButtonActive]}
+                            onPress={() => setExportType('children')}
+                        >
+                            <Text style={styles.exportTypeButtonText}>Campers</Text>
+                            <Text style={styles.exportTypeButtonCount}>
+                                ({exportType === 'children' ? records.length : '-'})
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.exportTypeButton, exportType === 'staff' && styles.exportTypeButtonActive]}
+                            onPress={() => setExportType('staff')}
+                        >
+                            <Text style={styles.exportTypeButtonText}>Staff</Text>
+                            <Text style={styles.exportTypeButtonCount}>
+                                ({exportType === 'staff' ? records.length : '-'})
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.badgesRow}>
+                        <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{recordsWithPhotos.length} with photos</Text>
+                        </View>
+                        <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{recordsWithRfid.length} with RFID</Text>
+                        </View>
+                        <View style={styles.badgeOutline}>
+                            <Text style={styles.badgeText}>{selectedIds.size} selected</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.exportActionRow}>
+                        <TouchableOpacity
+                            style={[styles.outlineButton, exporting && { opacity: 0.7 }]}
+                            disabled={exporting}
+                            onPress={() => handleExport('selected')}
+                        >
+                            <Ionicons name="checkmark-outline" size={18} color={theme.colors.primary} />
+                            <Text style={styles.outlineButtonText}>Export Selected</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.primaryButton, exporting && { opacity: 0.7 }]}
+                            disabled={exporting}
+                            onPress={() => handleExport('all')}
+                        >
+                            <Ionicons name="download-outline" size={18} color="white" />
+                            <Text style={styles.primaryButtonText}>Export All</Text>
+                        </TouchableOpacity>
+                    </View>
+                </StyledCard>
+
+                <View style={{ marginTop: theme.spacing.md }}>
+                    <View style={styles.exportList}>
+                        {records.map((r) => {
+                            const selected = selectedIds.has(r.id);
+                            return (
+                                <TouchableOpacity
+                                    key={r.id}
+                                    style={[styles.exportRowCard, selected && styles.exportRowCardSelected]}
+                                    onPress={() => toggleSelection(r.id)}
+                                >
+                                    <View style={styles.exportRowLeft}>
+                                        <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={selected ? theme.colors.primary : theme.colors.textSecondary} />
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.exportRowTitle} numberOfLines={1}>{r.name}</Text>
+                                            <Text style={styles.exportRowSub}>
+                                                ID: {r.person_id} {r.division ? `| ${r.division}` : ''}
+                                                {exportType === 'children' && r.bunk ? ` | ${r.bunk}` : ''}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </View>
+            </View>
+        );
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -694,6 +1779,31 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     >
                         <Text style={[styles.tabText, currentTab === 'emailAutomation' && styles.activeTabText]}>Email Automation</Text>
                     </TouchableOpacity>
+                    {isSuperAdmin && (
+                        <>
+                            <TouchableOpacity
+                                style={[styles.tab, currentTab === 'emailConfig' && styles.activeTab]}
+                                onPress={() => setCurrentTab('emailConfig')}
+                            >
+                                <Ionicons name="mail-outline" size={16} color={currentTab === 'emailConfig' ? theme.colors.text : theme.colors.textSecondary} />
+                                <Text style={[styles.tabText, currentTab === 'emailConfig' && styles.activeTabText]}>Email Config</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tab, currentTab === 'companies' && styles.activeTab]}
+                                onPress={() => setCurrentTab('companies')}
+                            >
+                                <Ionicons name="business-outline" size={16} color={currentTab === 'companies' ? theme.colors.text : theme.colors.textSecondary} />
+                                <Text style={[styles.tabText, currentTab === 'companies' && styles.activeTabText]}>Companies</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tab, currentTab === 'dataManagement' && styles.activeTab]}
+                                onPress={() => setCurrentTab('dataManagement')}
+                            >
+                                <Ionicons name="database-outline" size={16} color={currentTab === 'dataManagement' ? theme.colors.text : theme.colors.textSecondary} />
+                                <Text style={[styles.tabText, currentTab === 'dataManagement' && styles.activeTabText]}>Data Management</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
                     <TouchableOpacity
                         style={[styles.tab, currentTab === 'dataImport' && styles.activeTab]}
                         onPress={() => setCurrentTab('dataImport')}
@@ -701,6 +1811,15 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                         <Ionicons name="cloud-upload-outline" size={16} color={currentTab === 'dataImport' ? theme.colors.text : theme.colors.textSecondary} />
                         <Text style={[styles.tabText, currentTab === 'dataImport' && styles.activeTabText]}>Data Import</Text>
                     </TouchableOpacity>
+                    {isSuperAdmin && (
+                        <TouchableOpacity
+                            style={[styles.tab, currentTab === 'dataExport' && styles.activeTab]}
+                            onPress={() => setCurrentTab('dataExport')}
+                        >
+                            <Ionicons name="download-outline" size={16} color={currentTab === 'dataExport' ? theme.colors.text : theme.colors.textSecondary} />
+                            <Text style={[styles.tabText, currentTab === 'dataExport' && styles.activeTabText]}>Data Export</Text>
+                        </TouchableOpacity>
+                    )}
                     <TouchableOpacity
                         style={[styles.tab, currentTab === 'editHistory' && styles.activeTab]}
                         onPress={() => setCurrentTab('editHistory')}
@@ -710,7 +1829,23 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     </TouchableOpacity>
                 </ScrollView>
 
-                {currentTab === 'userManagement' ? renderUserManagement() : currentTab === 'userTags' ? renderUserTags() : currentTab === 'emailAutomation' ? renderEmailAutomation() : currentTab === 'dataImport' ? renderDataImport() : renderEditHistory()}
+                {currentTab === 'userManagement'
+                    ? renderUserManagement()
+                    : currentTab === 'userTags'
+                        ? renderUserTags()
+                        : currentTab === 'emailAutomation'
+                            ? renderEmailAutomation()
+                            : currentTab === 'emailConfig'
+                                ? <EmailConfigScreen />
+                                : currentTab === 'companies'
+                                    ? <CompaniesScreen />
+                                    : currentTab === 'dataManagement'
+                                        ? <DataManagementScreen />
+                                        : currentTab === 'dataImport'
+                                            ? renderDataImport()
+                                            : currentTab === 'dataExport'
+                                                ? <DataExportScreen />
+                                                : renderEditHistory()}
             </ScrollView>
 
             {/* Role Picker Bottom Sheet */}
@@ -2269,6 +3404,79 @@ const styles = StyleSheet.create({
         padding: 0,
         overflow: 'hidden',
     },
+    historyListCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.md,
+        overflow: 'hidden',
+    },
+    historyEmpty: {
+        paddingVertical: theme.spacing.lg,
+        alignItems: 'center',
+    },
+    historyEmptyText: {
+        color: theme.colors.textSecondary,
+        fontSize: 14,
+    },
+    historyList: {
+        gap: 10,
+    },
+    historyItemCard: {
+        backgroundColor: 'white',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#eef2f7',
+        padding: theme.spacing.md,
+        gap: 8,
+    },
+    historyItemDateText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    historyChipsRow: {
+        flexDirection: 'row',
+        gap: 8,
+        flexWrap: 'wrap',
+    },
+    historyChip: {
+        backgroundColor: '#f1f5f9',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 999,
+    },
+    historyChipText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    historyActionChip: {
+        backgroundColor: '#dbeafe',
+    },
+    historyActionChipText: {
+        color: '#2563eb',
+    },
+    historyMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        gap: 8,
+    },
+    historyMetaLabel: {
+        width: 52,
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+    },
+    historyMetaValue: {
+        flex: 1,
+        fontSize: 13,
+        fontWeight: '500',
+        color: theme.colors.text,
+    },
+    historyRecordIdText: {
+        fontFamily: 'monospace',
+        color: theme.colors.textSecondary,
+    },
     tableHeader: {
         flexDirection: 'row',
         backgroundColor: '#f8fafc',
@@ -2406,6 +3614,482 @@ const styles = StyleSheet.create({
         height: '80%',
         paddingBottom: theme.spacing.xl,
         paddingHorizontal: theme.spacing.md,
+    },
+
+    // ----------------------------
+    // Super-admin Screens Styles
+    // ----------------------------
+    superAdminOnlyCard: {
+        padding: theme.spacing.lg,
+        borderRadius: theme.borderRadius.lg,
+        backgroundColor: theme.colors.surface,
+    },
+    superAdminOnlyTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: theme.colors.text,
+        marginBottom: 6,
+    },
+    superAdminOnlySubtitle: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        lineHeight: 20,
+    },
+
+    screenLoadingWrap: {
+        paddingVertical: theme.spacing.xl,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    screenContainer: {
+        gap: theme.spacing.lg,
+    },
+
+    sectionCard: {
+        padding: theme.spacing.md,
+    },
+    sectionHeaderRow: {
+        flexDirection: 'row',
+        gap: 10,
+        alignItems: 'center',
+        marginBottom: theme.spacing.md,
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: theme.colors.text,
+    },
+    sectionSubtitle: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        marginTop: 3,
+        lineHeight: 18,
+    },
+
+    statusBadgeSuccess: {
+        backgroundColor: '#dcfce7',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 999,
+    },
+    statusBadgeTextSuccess: {
+        color: '#166534',
+        fontSize: 12,
+        fontWeight: '800',
+    },
+
+    lastTestBox: {
+        backgroundColor: '#f0f9ff',
+        borderRadius: 12,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.lg,
+    },
+    lastTestLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: theme.colors.textSecondary,
+        marginBottom: 6,
+    },
+    lastTestValue: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: 10,
+    },
+    statusBadgePill: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 999,
+    },
+    statusBadgePillSuccess: {
+        backgroundColor: '#d1fae5',
+    },
+    statusBadgePillError: {
+        backgroundColor: '#fee2e2',
+    },
+    statusBadgePillText: {
+        fontSize: 12,
+        fontWeight: '800',
+        color: theme.colors.text,
+    },
+
+    formGrid: {
+        gap: theme.spacing.md,
+    },
+    formGroup: {
+        gap: 6,
+    },
+    label: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: theme.colors.textSecondary,
+    },
+    input: {
+        backgroundColor: 'white',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    helpText: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        lineHeight: 18,
+    },
+
+    actionRow: {
+        flexDirection: 'row',
+        gap: theme.spacing.md,
+        marginTop: theme.spacing.lg,
+    },
+
+    primaryButton: {
+        backgroundColor: '#2563eb',
+        borderRadius: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    primaryButtonText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '800',
+    },
+    secondaryButton: {
+        backgroundColor: '#4f46e5',
+        borderRadius: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        flex: 1,
+    },
+    secondaryButtonText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '800',
+    },
+
+    setupTitle: {
+        fontSize: 14,
+        fontWeight: '900',
+        color: theme.colors.text,
+        marginBottom: 8,
+    },
+    setupList: {
+        gap: 6,
+    },
+    setupItem: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        lineHeight: 20,
+    },
+
+    companiesHeaderRow: {
+        flexDirection: 'row',
+        gap: theme.spacing.md,
+        alignItems: 'center',
+    },
+    companiesList: {
+        gap: theme.spacing.md,
+    },
+    companyCard: {
+        padding: theme.spacing.md,
+    },
+    companyCardHeader: {
+        flexDirection: 'row',
+        gap: theme.spacing.md,
+        alignItems: 'flex-start',
+        marginBottom: theme.spacing.md,
+    },
+    companyActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    iconButton: {
+        padding: 8,
+        backgroundColor: '#f8fafc',
+        borderRadius: 10,
+    },
+    companyName: {
+        fontSize: 15,
+        fontWeight: '900',
+        color: theme.colors.text,
+    },
+    companySlug: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
+    companyCountsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+        marginBottom: theme.spacing.md,
+    },
+    companyCountText: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        fontWeight: '600',
+    },
+    companySyncRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    syncDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 99,
+    },
+    companySyncText: {
+        fontSize: 13,
+        color: theme.colors.text,
+        fontWeight: '700',
+    },
+    companySyncTextSecondary: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        flex: 1,
+    },
+
+    modalHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingBottom: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        marginBottom: theme.spacing.md,
+    },
+    modalTitle: {
+        fontSize: 16,
+        fontWeight: '900',
+        color: theme.colors.text,
+    },
+    modalBody: {
+        padding: theme.spacing.md,
+    },
+    switchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        marginTop: theme.spacing.md,
+        marginBottom: 2,
+    },
+    switchLabel: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        fontWeight: '700',
+    },
+
+    dangerCard: {
+        borderRadius: theme.borderRadius.lg,
+        backgroundColor: '#fff7ed',
+        padding: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: '#fdba74',
+    },
+    dangerHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: theme.spacing.md,
+    },
+    dangerTitle: {
+        fontSize: 16,
+        fontWeight: '900',
+        color: '#dc2626',
+    },
+    dangerSubtitle: {
+        marginTop: 4,
+        color: '#7f1d1d',
+        fontSize: 13,
+        lineHeight: 20,
+    },
+    dangerButton: {
+        backgroundColor: '#dc2626',
+        borderRadius: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    dangerButtonText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '900',
+    },
+
+    exportGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.md,
+        marginTop: theme.spacing.md,
+    },
+    dataCard: {
+        width: '48%',
+        padding: theme.spacing.md,
+        borderRadius: 12,
+    },
+    dataCardTitle: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        fontWeight: '800',
+    },
+    dataCardCount: {
+        fontSize: 26,
+        fontWeight: '900',
+        color: theme.colors.text,
+        marginTop: 6,
+    },
+    dataCardSubtitle: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 4,
+        marginBottom: theme.spacing.md,
+    },
+    outlineDangerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        borderWidth: 1,
+        borderColor: '#dbeafe',
+        backgroundColor: '#eff6ff',
+        borderRadius: 10,
+        paddingVertical: 10,
+    },
+    outlineDangerButtonText: {
+        fontSize: 13,
+        fontWeight: '800',
+        color: theme.colors.primary,
+    },
+
+    exportTypeRow: {
+        flexDirection: 'row',
+        gap: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    exportTypeButton: {
+        flex: 1,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        padding: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        backgroundColor: 'white',
+    },
+    exportTypeButtonActive: {
+        borderColor: '#2563eb',
+        backgroundColor: '#eff6ff',
+    },
+    exportTypeButtonText: {
+        fontSize: 14,
+        fontWeight: '900',
+        color: theme.colors.text,
+    },
+    exportTypeButtonCount: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        fontWeight: '700',
+    },
+
+    badgesRow: {
+        flexDirection: 'row',
+        gap: 8,
+        flexWrap: 'wrap',
+        marginBottom: theme.spacing.md,
+    },
+    badge: {
+        backgroundColor: '#f1f5f9',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+    },
+    badgeOutline: {
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        backgroundColor: 'white',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+    },
+    badgeText: {
+        fontSize: 12,
+        fontWeight: '800',
+        color: theme.colors.textSecondary,
+    },
+
+    exportActionRow: {
+        flexDirection: 'row',
+        gap: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    outlineButton: {
+        flex: 1,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#2563eb',
+        backgroundColor: 'white',
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    outlineButtonText: {
+        color: theme.colors.primary,
+        fontSize: 14,
+        fontWeight: '900',
+    },
+
+    exportList: {
+        gap: theme.spacing.md,
+        paddingBottom: theme.spacing.xl,
+    },
+    exportRowCard: {
+        backgroundColor: 'white',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        padding: theme.spacing.md,
+    },
+    exportRowCardSelected: {
+        borderColor: '#2563eb',
+        backgroundColor: '#eff6ff',
+    },
+    exportRowLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    exportRowTitle: {
+        fontSize: 14,
+        fontWeight: '900',
+        color: theme.colors.text,
+    },
+    exportRowSub: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+        lineHeight: 18,
     },
 
 });

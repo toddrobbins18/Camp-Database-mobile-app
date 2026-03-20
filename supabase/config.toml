@@ -4,13 +4,16 @@ project_id = "qjbkvnzeejbqxbcbskdu"
 verify_jwt = false
 
 [functions.create-user]
-verify_jwt = true
+verify_jwt = false
 
 [functions.delete-user]
 verify_jwt = true
 
 [functions.send-user-invitation]
 verify_jwt = true
+
+[functions.confirm-user-email]
+verify_jwt = false
 
 [functions.notify-transportation-events]
 verify_jwt = false
