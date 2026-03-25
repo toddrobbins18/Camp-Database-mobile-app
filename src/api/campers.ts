@@ -31,7 +31,13 @@ export interface Camper {
     allergies?: string | null;
     medical_notes?: string | null;
     emergency_contact?: string | null;
-    assigned_leader?: string | null; // For the local select
+    guardian_email?: string | null;
+    guardian_phone?: string | null;
+    leader_id?: string | null;
+    bunk_id?: string | null;
+    group_name?: string | null;
+    tshirt_size?: string | null;
+    status?: string | null;
     created_at?: string;
 }
 
@@ -47,7 +53,6 @@ export const useCampers = (companyId: string | null, season: string) => {
                 .select('*, division:divisions(id, name, gender, sort_order)')
                 .eq('company_id', companyId)
                 .eq('season', season)
-                .eq('status', 'active')
                 .order('name', { ascending: true });
 
             if (error) throw error;
@@ -96,11 +101,15 @@ export const useEditCamper = () => {
             if (error) throw error;
             return data;
         },
-        onSuccess: (data) => {
+        onSuccess: (data, variables) => {
             if (data?.company_id && data?.season) {
                 queryClient.invalidateQueries({ queryKey: ['campers', data.company_id, data.season] });
             } else {
                 queryClient.invalidateQueries({ queryKey: ['campers'] });
+            }
+            // Camper detail screen uses ['child', id] as its queryKey.
+            if (variables?.id) {
+                queryClient.invalidateQueries({ queryKey: ['child', variables.id] });
             }
         },
     });

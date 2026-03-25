@@ -6,6 +6,7 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
+import { MobileUserMenu } from '../components/MobileUserMenu';
 
 interface NotificationPreference {
     id?: string;
@@ -143,7 +144,15 @@ export const NotificationPreferencesScreen = ({ navigation }: any) => {
                     <Ionicons name="menu" size={28} color={theme.colors.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Notification Preferences</Text>
-                <View style={styles.headerSpacer} />
+                <View style={styles.headerRight}>
+                    <TouchableOpacity
+                        onPress={() => navigation.navigate('Messages')}
+                        style={styles.headerIconBtn}
+                    >
+                        <Ionicons name="notifications-outline" size={26} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                    <MobileUserMenu navigation={navigation} />
+                </View>
             </View>
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <StyledCard style={styles.card}>
@@ -217,6 +226,18 @@ const styles = StyleSheet.create({
     },
     headerTitle: { ...theme.typography.h3 },
     headerSpacer: { width: 28 },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+    },
+    headerIconBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     scrollContent: { padding: theme.spacing.md },
     card: { padding: theme.spacing.lg },
     cardTitle: { ...theme.typography.h3, marginBottom: theme.spacing.xs },

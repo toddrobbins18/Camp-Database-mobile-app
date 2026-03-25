@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { MobileUserMenu } from '../components/MobileUserMenu';
 
 import { useCompany } from '../contexts/CompanyContext';
 import { useMenuItems, useAddMenuItem, useDeleteMenuItem, MenuItem } from '../api/menu';
@@ -109,9 +110,15 @@ export const MenuScreen = ({ navigation }: any) => {
                     <TouchableOpacity onPress={() => navigation.openDrawer()}>
                         <Ionicons name="menu" size={28} color={theme.colors.primary} />
                     </TouchableOpacity>
-                    <TouchableOpacity>
-                        <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
-                    </TouchableOpacity>
+                    <View style={styles.headerRight}>
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('Messages')}
+                            style={styles.headerIconBtn}
+                        >
+                            <Ionicons name="notifications-outline" size={26} color={theme.colors.primary} />
+                        </TouchableOpacity>
+                        <MobileUserMenu navigation={navigation} />
+                    </View>
                 </View>
 
                 {/* Title and Description Section */}
@@ -626,6 +633,18 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: theme.spacing.lg,
+    },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+    },
+    headerIconBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     titleSection: {
         marginBottom: theme.spacing.lg,

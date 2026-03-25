@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useStaff } from '../api/staff';
-import { useDivisions } from '../api/campers';
+import { useDivisions, useEditCamper } from '../api/campers';
 import { useCompany } from '../contexts/CompanyContext';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -23,7 +23,26 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
     const { companyId, season } = useCompany();
     const { data: divisionsData = [] } = useDivisions(companyId);
     const { data: staffLeaders = [] } = useStaff(companyId, season);
-    const leaders = staffLeaders.map((s: any) => ({ name: s.name, role: s.role || s.staff_type || 'Staff' }));
+    const leaders = staffLeaders.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        role: s.role || s.staff_type || 'Staff'
+    }));
+
+    const tshirtSizeOptions = [
+        { label: 'Not Specified', value: '' },
+        { label: 'Youth S', value: 'Youth S' },
+        { label: 'Youth M', value: 'Youth M' },
+        { label: 'Youth L', value: 'Youth L' },
+        { label: 'Youth XL', value: 'Youth XL' },
+        { label: 'Adult XS', value: 'Adult XS' },
+        { label: 'Adult S', value: 'Adult S' },
+        { label: 'Adult M', value: 'Adult M' },
+        { label: 'Adult L', value: 'Adult L' },
+        { label: 'Adult XL', value: 'Adult XL' },
+        { label: 'Adult 2XL', value: 'Adult 2XL' },
+        { label: 'Adult 3XL', value: 'Adult 3XL' },
+    ];
 
     // When navigating from Awards "View Profile" we only get { id, name }. Fetch full child so profile shows all details.
     const { data: fullChild, isLoading: fullChildLoading } = useQuery({
@@ -63,6 +82,26 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
         },
         enabled: !!camper?.id && !!companyId,
     });
+
+    // Fetch bunks for Bunk dropdown in Edit Profile
+    const { data: bunksData = [] } = useQuery({
+        queryKey: ['bunks', companyId, season],
+        queryFn: async () => {
+            if (!companyId || !season) return [];
+            const { data, error } = await supabase
+                .from('bunks')
+                .select('id, bunk_number, bunk_name, division_id')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .eq('is_active', true)
+                .order('bunk_number', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId && !!season,
+    });
+
+    const editCamperMutation = useEditCamper();
     const [activeTab, setActiveTab] = useState<TabType>('overview');
     const [activeBirthdaySubTab, setActiveBirthdaySubTab] = useState<BirthdaySubTabType>('info');
     const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -80,6 +119,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
     const [showLeaderDropdown, setShowLeaderDropdown] = useState(false);
     const [leaderButtonLayout, setLeaderButtonLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const leaderButtonRef = useRef<any>(null);
+    const [showTshirtSizeDropdown, setShowTshirtSizeDropdown] = useState(false);
     const [showBirthdayPartyModal, setShowBirthdayPartyModal] = useState(false);
     const [birthdayPartyFormData, setBirthdayPartyFormData] = useState({
         birthdayPartyType: '',
@@ -103,6 +143,8 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
         group: '',
         season: '2026',
         assignedLeader: '',
+        assignedLeaderId: '',
+        tshirtSize: '',
         guardianEmail: '',
         guardianPhone: '',
         emergencyContact: '',
@@ -114,6 +156,10 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
     // Initialize form data when modal opens
     useEffect(() => {
         if (showEditProfileModal && camper) {
+            const leaderId = (camper as any).leader_id || (camper as any).assigned_leader || '';
+            const leaderMatch = staffLeaders.find((s: any) => String(s?.id) === String(leaderId));
+            const leaderDisplay = leaderMatch ? `${leaderMatch.name} - ${leaderMatch.role || leaderMatch.staff_type || 'Staff'}` : '';
+
             setEditProfileFormData({
                 name: camper.name || '',
                 person_id: (camper as any).person_id || (camper as any).personId || '',
@@ -121,11 +167,13 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                 dateOfBirth: (camper as any).dateOfBirth || (camper as any).date_of_birth || '',
                 gender: (camper as any).gender || '',
                 division: camper.division_id || (camper as any).division?.id || '',
-                bunk: (camper as any).bunk || '',
+                bunk: (camper as any).bunk_id || (camper as any).bunk || '',
                 grade: camper.grade || '',
-                group: (camper as any).group || '',
+                group: (camper as any).group_name || (camper as any).group || '',
                 season: (camper as any).season || '2026',
-                assignedLeader: (camper as any).assignedLeader || '',
+                assignedLeaderId: leaderId,
+                assignedLeader: leaderDisplay,
+                tshirtSize: (camper as any).tshirt_size || '',
                 guardianEmail: (camper as any).guardianEmail || (camper as any).guardian_email || '',
                 guardianPhone: (camper as any).guardianPhone || (camper as any).guardian_phone || '',
                 emergencyContact: (camper as any).emergencyContact || (camper as any).emergency_contact || '',
@@ -134,7 +182,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                 medicalNotes: (camper as any).medicalNotes || (camper as any).medical_notes || '',
             });
         }
-    }, [showEditProfileModal, camper]);
+    }, [showEditProfileModal, camper, staffLeaders]);
 
     const tabs: { key: TabType; label: string }[] = [
         { key: 'overview', label: 'Overview' },
@@ -189,9 +237,31 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                             <Ionicons name="pencil" size={16} color={theme.colors.surface} />
                             <Text style={styles.editButtonText}>Edit Profile</Text>
                         </TouchableOpacity>
-                        <View style={styles.activeBadge}>
-                            <Text style={styles.activeBadgeText}>active</Text>
-                        </View>
+                        {(() => {
+                            const raw = (camper as any)?.status;
+                            const normalized = typeof raw === 'string' ? raw.toLowerCase() : 'active';
+                            const label =
+                                typeof raw === 'string' && raw.trim().length > 0 ? raw : 'Active';
+                            const isActive = normalized === 'active';
+
+                            return (
+                                <View
+                                    style={[
+                                        styles.activeBadge,
+                                        isActive ? styles.activeBadgeActive : styles.activeBadgeInactive,
+                                    ]}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.activeBadgeText,
+                                            isActive ? styles.activeBadgeTextActive : styles.activeBadgeTextInactive,
+                                        ]}
+                                    >
+                                        {label}
+                                    </Text>
+                                </View>
+                            );
+                        })()}
                     </View>
                 </View>
                 )}
@@ -400,10 +470,52 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                     </View>
                                 </View>
                                 <View style={styles.cardContent}>
-                                    <View style={styles.emptyPartyState}>
-                                        <Text style={styles.emptyPartyText}>No party preferences set</Text>
-                                        <Text style={styles.emptyPartySubtext}>Click 'Edit' to add birthday party details</Text>
-                                    </View>
+                                    {((camper as any).birthdayPartyType ||
+                                        (camper as any).birthday_party_type ||
+                                        (camper as any).birthdayCakeMeal ||
+                                        (camper as any).birthday_cake_meal ||
+                                        (camper as any).birthdayCakeType ||
+                                        (camper as any).birthday_cake_type ||
+                                        (camper as any).birthdayPartyComments ||
+                                        (camper as any).birthday_party_comments ||
+                                        (camper as any).birthdayCakeMessage ||
+                                        (camper as any).birthday_cake_message ||
+                                        (((camper as any).birthdayFrostingColors || (camper as any).birthday_frosting_colors || []).length > 0) ||
+                                        (((camper as any).birthdayToppings || (camper as any).birthday_toppings || []).length > 0) ||
+                                        (((camper as any).birthdayCakeAllergies || (camper as any).birthday_cake_allergies || []).length > 0)) ? (
+                                        <View style={{ paddingTop: theme.spacing.md, paddingBottom: theme.spacing.md, gap: theme.spacing.md }}>
+                                            {(camper as any).birthdayPartyType || (camper as any).birthday_party_type ? (
+                                                <Text style={{ fontWeight: '600', color: theme.colors.text }}>
+                                                    Party Type: {(camper as any).birthdayPartyType || (camper as any).birthday_party_type}
+                                                </Text>
+                                            ) : null}
+                                            {(camper as any).birthdayCakeMeal || (camper as any).birthday_cake_meal ? (
+                                                <Text style={{ color: theme.colors.textSecondary }}>
+                                                    Cake Served: {(camper as any).birthdayCakeMeal || (camper as any).birthday_cake_meal}
+                                                </Text>
+                                            ) : null}
+                                            {(camper as any).birthdayCakeType || (camper as any).birthday_cake_type ? (
+                                                <Text style={{ color: theme.colors.textSecondary }}>
+                                                    Cake Type: {(camper as any).birthdayCakeType || (camper as any).birthday_cake_type}
+                                                </Text>
+                                            ) : null}
+                                            {(camper as any).birthdayPartyComments || (camper as any).birthday_party_comments ? (
+                                                <Text style={{ color: theme.colors.textSecondary }}>
+                                                    Special Requests: {(camper as any).birthdayPartyComments || (camper as any).birthday_party_comments}
+                                                </Text>
+                                            ) : null}
+                                            {(camper as any).birthdayCakeMessage || (camper as any).birthday_cake_message ? (
+                                                <Text style={{ color: theme.colors.textSecondary }}>
+                                                    Cake Message: {(camper as any).birthdayCakeMessage || (camper as any).birthday_cake_message}
+                                                </Text>
+                                            ) : null}
+                                        </View>
+                                    ) : (
+                                        <View style={styles.emptyPartyState}>
+                                            <Text style={styles.emptyPartyText}>No party preferences set</Text>
+                                            <Text style={styles.emptyPartySubtext}>Click 'Edit' to add birthday party details</Text>
+                                        </View>
+                                    )}
                                 </View>
                             </StyledCard>
                         )}
@@ -742,7 +854,11 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                             }}
                                         >
                                             <Text style={[styles.formSelectText, !editProfileFormData.bunk && styles.formSelectPlaceholder]}>
-                                                {editProfileFormData.bunk || 'Select bunk'}
+                                                {(() => {
+                                                    if (!editProfileFormData.bunk) return 'Select bunk';
+                                                    const match = bunksData.find((b: any) => b.id === editProfileFormData.bunk);
+                                                    return match?.bunk_name || `Bunk ${match?.bunk_number}`;
+                                                })()}
                                             </Text>
                                             <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                                         </TouchableOpacity>
@@ -782,6 +898,27 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                             maxLength={4}
                                             keyboardType="numeric"
                                         />
+                                    </View>
+                                </View>
+
+                                {/* Row 6: T-Shirt Size (Full Width) */}
+                                <View style={styles.formRow}>
+                                    <View style={styles.formFieldFull}>
+                                        <Text style={styles.formLabel}>T-Shirt Size</Text>
+                                        <TouchableOpacity
+                                            style={styles.formSelect}
+                                            onPress={() => setShowTshirtSizeDropdown(true)}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.formSelectText,
+                                                    !editProfileFormData.tshirtSize && styles.formSelectPlaceholder
+                                                ]}
+                                            >
+                                                {editProfileFormData.tshirtSize || 'Not Specified'}
+                                            </Text>
+                                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                                        </TouchableOpacity>
                                     </View>
                                 </View>
 
@@ -838,6 +975,9 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                             value={editProfileFormData.guardianPhone}
                                             onChangeText={(text) => setEditProfileFormData({ ...editProfileFormData, guardianPhone: text })}
                                             keyboardType="phone-pad"
+                                            maxLength={15}
+                                            autoCorrect={false}
+                                            autoCapitalize="none"
                                         />
                                     </View>
                                 </View>
@@ -921,8 +1061,50 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                     <TouchableOpacity
                                         style={styles.submitButton}
                                         onPress={() => {
-                                            // TODO: Implement Edit Profile submission logic
-                                            console.log('Edit Profile Form Data:', editProfileFormData);
+                                            if (!companyId || !camper?.id) return;
+
+                                            const ageNumber = editProfileFormData.age
+                                                ? Number(editProfileFormData.age)
+                                                : null;
+                                            const age =
+                                                typeof ageNumber === 'number' && !Number.isNaN(ageNumber)
+                                                    ? ageNumber
+                                                    : null;
+
+                                            editCamperMutation.mutate(
+                                                {
+                                                    id: camper.id,
+                                                    company_id: companyId as string,
+                                                    season: editProfileFormData.season || season,
+                                                    name: editProfileFormData.name,
+                                                    age,
+                                                    gender: editProfileFormData.gender || null,
+                                                    division_id: editProfileFormData.division || null,
+                                                    bunk_id:
+                                                        editProfileFormData.bunk &&
+                                                        /^[0-9a-f-]{36}$/i.test(editProfileFormData.bunk)
+                                                            ? editProfileFormData.bunk
+                                                            : null,
+                                                    person_id: editProfileFormData.person_id,
+                                                    grade: editProfileFormData.grade || null,
+                                                    group_name: editProfileFormData.group || null,
+                                                    guardian_email: editProfileFormData.guardianEmail || null,
+                                                    guardian_phone: editProfileFormData.guardianPhone || null,
+                                                    emergency_contact: editProfileFormData.emergencyContact || null,
+                                                    rfid: editProfileFormData.rfid || null,
+                                                    allergies: editProfileFormData.allergies || null,
+                                                    medical_notes: editProfileFormData.medicalNotes || null,
+                                                    leader_id: editProfileFormData.assignedLeaderId || null,
+                                                    date_of_birth: editProfileFormData.dateOfBirth || null,
+                                                    tshirt_size: editProfileFormData.tshirtSize || null,
+                                                },
+                                                {
+                                                    onError: (error: any) => {
+                                                        console.error('Failed to update camper:', error);
+                                                    }
+                                                }
+                                            );
+
                                             setShowEditProfileModal(false);
                                         }}
                                     >
@@ -1148,7 +1330,8 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                     (!editProfileFormData.bunk || editProfileFormData.bunk === 'No Bunk Assigned') && styles.genderDropdownItemSelected
                                 ]}
                                 onPress={() => {
-                                    setEditProfileFormData({ ...editProfileFormData, bunk: 'No Bunk Assigned' });
+                                    // Empty string represents "No Bunk Assigned"
+                                    setEditProfileFormData({ ...editProfileFormData, bunk: '' });
                                     setShowBunkDropdown(false);
                                 }}
                             >
@@ -1162,6 +1345,91 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                     <Ionicons name="checkmark" size={20} color={theme.colors.surface} />
                                 )}
                             </Pressable>
+
+                            {bunksData.map((bunk: any) => {
+                                const label = bunk?.bunk_name || `Bunk ${bunk?.bunk_number}`;
+                                const isSelected = editProfileFormData.bunk === bunk?.id;
+                                return (
+                                    <Pressable
+                                        key={bunk.id}
+                                        style={[
+                                            styles.dropdownItem,
+                                            isSelected && styles.genderDropdownItemSelected
+                                        ]}
+                                        onPress={() => {
+                                            setEditProfileFormData({ ...editProfileFormData, bunk: bunk.id });
+                                            setShowBunkDropdown(false);
+                                        }}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.dropdownItemText,
+                                                isSelected && styles.genderDropdownItemTextSelected
+                                            ]}
+                                        >
+                                            {label}
+                                        </Text>
+                                        {isSelected && (
+                                            <Ionicons name="checkmark" size={20} color={theme.colors.surface} />
+                                        )}
+                                    </Pressable>
+                                );
+                            })}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* T-Shirt Size Dropdown Modal */}
+            <Modal
+                visible={showTshirtSizeDropdown}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowTshirtSizeDropdown(false)}
+            >
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={() => setShowTshirtSizeDropdown(false)}
+                >
+                    <Pressable
+                        style={styles.bottomSheet}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.bottomSheetHeader}>
+                            <Text style={styles.bottomSheetTitle}>Select T-Shirt Size</Text>
+                            <TouchableOpacity onPress={() => setShowTshirtSizeDropdown(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                            {tshirtSizeOptions.map((opt) => {
+                                const isSelected = editProfileFormData.tshirtSize === opt.value;
+                                return (
+                                    <Pressable
+                                        key={opt.value || 'none'}
+                                        style={[
+                                            styles.dropdownItem,
+                                            isSelected && styles.genderDropdownItemSelected
+                                        ]}
+                                        onPress={() => {
+                                            setEditProfileFormData({ ...editProfileFormData, tshirtSize: opt.value });
+                                            setShowTshirtSizeDropdown(false);
+                                        }}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.dropdownItemText,
+                                                isSelected && styles.genderDropdownItemTextSelected
+                                            ]}
+                                        >
+                                            {opt.label}
+                                        </Text>
+                                        {isSelected && (
+                                            <Ionicons name="checkmark" size={20} color={theme.colors.surface} />
+                                        )}
+                                    </Pressable>
+                                );
+                            })}
                         </ScrollView>
                     </Pressable>
                 </Pressable>
@@ -1191,16 +1459,20 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                         <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
                             {leaders.map((leader: any) => {
                                 const leaderDisplay = `${leader.name} - ${leader.role}`;
-                                const isSelected = editProfileFormData.assignedLeader === leaderDisplay;
+                                const isSelected = editProfileFormData.assignedLeaderId === leader.id || editProfileFormData.assignedLeader === leaderDisplay;
                                 return (
                                     <Pressable
-                                        key={leader.name}
+                                        key={leader.id}
                                         style={[
                                             styles.dropdownItem,
                                             isSelected && styles.genderDropdownItemSelected
                                         ]}
                                         onPress={() => {
-                                            setEditProfileFormData({ ...editProfileFormData, assignedLeader: leaderDisplay });
+                                            setEditProfileFormData({
+                                                ...editProfileFormData,
+                                                assignedLeader: leaderDisplay,
+                                                assignedLeaderId: leader.id
+                                            });
                                             setShowLeaderDropdown(false);
                                         }}
                                     >
@@ -1487,8 +1759,35 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                     <TouchableOpacity
                                         style={styles.submitButton}
                                         onPress={() => {
-                                            // TODO: Implement Birthday Party Preferences submission logic
-                                            console.log('Birthday Party Form Data:', birthdayPartyFormData);
+                                            if (!camper?.id || !companyId) return;
+
+                                            const frostingColors =
+                                                birthdayPartyFormData.birthdayFrostingColors.length > 0
+                                                    ? birthdayPartyFormData.birthdayFrostingColors
+                                                    : null;
+                                            const toppings =
+                                                birthdayPartyFormData.birthdayToppings.length > 0
+                                                    ? birthdayPartyFormData.birthdayToppings
+                                                    : null;
+                                            const cakeAllergies =
+                                                birthdayPartyFormData.birthdayCakeAllergies.length > 0
+                                                    ? birthdayPartyFormData.birthdayCakeAllergies
+                                                    : null;
+
+                                            editCamperMutation.mutate({
+                                                id: camper.id,
+                                                company_id: companyId as string,
+                                                season: (camper as any)?.season || season,
+                                                birthday_party_type: birthdayPartyFormData.birthdayPartyType || null,
+                                                birthday_cake_meal: birthdayPartyFormData.birthdayCakeMeal || null,
+                                                birthday_cake_type: birthdayPartyFormData.birthdayCakeType || null,
+                                                birthday_frosting_colors: frostingColors,
+                                                birthday_toppings: toppings,
+                                                birthday_cake_allergies: cakeAllergies,
+                                                birthday_cake_message: birthdayPartyFormData.birthdayCakeMessage || null,
+                                                birthday_party_comments: birthdayPartyFormData.birthdayPartyComments || null,
+                                            });
+
                                             setShowBirthdayPartyModal(false);
                                         }}
                                     >
@@ -1556,7 +1855,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     activeBadge: {
-        backgroundColor: '#a7f3d0',
         paddingHorizontal: theme.spacing.sm,
         paddingVertical: theme.spacing.xs,
         borderRadius: theme.borderRadius.sm,
@@ -1564,8 +1862,19 @@ const styles = StyleSheet.create({
     },
     activeBadgeText: {
         fontSize: 12,
-        color: '#065f46',
         fontWeight: '600',
+    },
+    activeBadgeActive: {
+        backgroundColor: '#a7f3d0',
+    },
+    activeBadgeInactive: {
+        backgroundColor: '#fee2e2',
+    },
+    activeBadgeTextActive: {
+        color: '#065f46',
+    },
+    activeBadgeTextInactive: {
+        color: '#991b1b',
     },
     scrollView: {
         flex: 1,
@@ -1998,6 +2307,9 @@ const styles = StyleSheet.create({
         paddingVertical: theme.spacing.sm,
         fontSize: isSmallScreen ? 13 : 14,
         color: theme.colors.text,
+        width: '100%',
+        flexGrow: 1,
+        overflow: 'hidden',
         minHeight: 40,
     },
     formSelect: {

@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
+import { MobileUserMenu } from '../components/MobileUserMenu';
 import { useTodayBirthdays, useTodayEvents, useTodayMeals } from '../api/dashboard';
 import { supabase } from '../lib/supabase';
 
@@ -103,9 +104,15 @@ export const DashboardScreen = ({ navigation }: any) => {
                         <View style={styles.centerDot} />
                     </View>
 
-                    <TouchableOpacity>
-                        <Ionicons name="person-circle-outline" size={28} color={theme.colors.text} />
-                    </TouchableOpacity>
+                    <View style={styles.headerRight}>
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('Messages')}
+                            style={styles.headerIconBtn}
+                        >
+                            <Ionicons name="notifications-outline" size={26} color={theme.colors.text} />
+                        </TouchableOpacity>
+                        <MobileUserMenu navigation={navigation} />
+                    </View>
                 </View>
 
                 {/* Title Section */}
@@ -331,6 +338,18 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: theme.spacing.lg,
+    },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+    },
+    headerIconBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     headerCenter: {
         flex: 1,
