@@ -1,109 +1,111 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { ageOnLocalDate, parseBirthdayCalendarParts } from '../lib/birthdayDate';
 
-// Fetch today's birthdays from children and staff tables (matches original app: Today's Birthdays section)
+/** Same as lovable-web-app usePermissions fullDivisionAccessRoles. */
+const FULL_DIVISION_ACCESS_ROLES = new Set([
+    'admin',
+    'super_admin',
+    'specialist',
+    'staff',
+    'health_center',
+]);
+
+/**
+ * Mirrors Dashboard.tsx getDivisionFilter + birthday branch:
+ * - null → full division access, do not add .in('division_id', …)
+ * - array (possibly empty) → restricted role; add .in only when length > 0
+ */
+async function resolveDashboardDivisionFilter(companyId: string): Promise<string[] | null> {
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) return [];
+
+    const { data: roleRows } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('company_id', companyId);
+
+    const roles = (roleRows ?? []).map((r) => r.role as string);
+    if (roles.some((r) => FULL_DIVISION_ACCESS_ROLES.has(r))) {
+        return null;
+    }
+
+    const { data: dp } = await supabase
+        .from('division_permissions')
+        .select('division_id')
+        .eq('user_id', user.id)
+        .eq('can_access', true);
+
+    const ids = [...new Set((dp ?? []).map((r) => r.division_id).filter(Boolean))] as string[];
+    return ids;
+}
+
+// Fetch today's birthdays from children and staff (aligned with lovable-web-app Dashboard.tsx)
 export const useTodayBirthdays = (companyId: string | null, todayMonth: number, todayDay: number) => {
     return useQuery({
         queryKey: ['dashboard_birthdays', companyId, todayMonth, todayDay],
         queryFn: async () => {
             if (!companyId) return [];
 
-            const birthdays: any[] = [];
+            const divisionFilter = await resolveDashboardDivisionFilter(companyId);
+            const hasFullAccess = divisionFilter === null;
 
-            const parseBirthdayValue = (value: any): { year?: number; month?: number; day?: number } | null => {
-                if (!value) return null;
-                const raw = String(value).trim();
-                if (!raw) return null;
-
-                // Common DB formats we might see:
-                // 1) YYYY-MM-DD (date type)
-                // 2) MM/DD/YYYY (older mobile saves)
-                // 3) ISO strings with time zone (rare but possible)
-                if (/^\d{4}-\d{1,2}-\d{1,2}/.test(raw)) {
-                    const [y, m, d] = raw.split('-').map((n) => parseInt(n, 10));
-                    if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
-                        return { year: y, month: m, day: d };
-                    }
-                }
-
-                if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(raw)) {
-                    const [m, d, y] = raw.split('/').map((n) => parseInt(n, 10));
-                    if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
-                        return { year: y, month: m, day: d };
-                    }
-                }
-
-                const parsed = new Date(raw);
-                if (!Number.isNaN(parsed.getTime())) {
-                    // Use UTC to avoid timezone shifting on ISO strings.
-                    const year = parsed.getUTCFullYear();
-                    const month = parsed.getUTCMonth() + 1;
-                    const day = parsed.getUTCDate();
-                    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
-                        return { year, month, day };
-                    }
-                }
-
-                return null;
-            };
-
-            const addBirthdays = (data: any[], type: string) => {
-                (data || []).forEach((person: any) => {
-                    if (!person.date_of_birth) return;
-
-                    const parsed = parseBirthdayValue(person.date_of_birth);
-                    if (!parsed?.month || !parsed?.day) return;
-
-                    const isMatch = parsed.month === todayMonth && parsed.day === todayDay;
-                    if (isMatch) {
-                        const fullName =
-                            person.name ||
-                            'Unknown';
-                        const birthYear = parsed.year ?? new Date().getFullYear();
-                        const age = new Date().getFullYear() - birthYear;
-                        birthdays.push({
-                            id: person.id,
-                            name: fullName,
-                            type,
-                            age,
-                        });
-                    }
-                });
-            };
-
-            const { data: childrenData, error: childrenError } = await supabase
+            let childrenQuery = supabase
                 .from('children')
-                // Keep in sync with web birthday query fields
-                .select('id, name, date_of_birth, division_id, status')
-                .eq('company_id', companyId);
+                .select('id, name, date_of_birth, division_id')
+                .eq('status', 'active')
+                .eq('company_id', companyId)
+                .not('date_of_birth', 'is', null);
+
+            if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
+                childrenQuery = childrenQuery.in('division_id', divisionFilter);
+            }
+
+            const { data: childrenData, error: childrenError } = await childrenQuery;
             if (childrenError) {
                 console.warn('Birthday children query failed:', childrenError.message);
-            } else {
-                addBirthdays(
-                    (childrenData ?? []).filter((c: any) => {
-                        const status = c?.status ? String(c.status).toLowerCase() : '';
-                        return !status || status === 'active';
-                    }),
-                    'child'
-                );
             }
 
             const { data: staffData, error: staffError } = await supabase
                 .from('staff')
-                // Mobile schema does not include first_name/last_name; keep in sync with web
-                .select('id, name, date_of_birth, status')
-                .eq('company_id', companyId);
+                .select('id, name, date_of_birth')
+                .eq('status', 'active')
+                .eq('company_id', companyId)
+                .not('date_of_birth', 'is', null);
+
             if (staffError) {
                 console.warn('Birthday staff query failed:', staffError.message);
-            } else {
-                addBirthdays(
-                    (staffData ?? []).filter((s: any) => {
-                        const status = s?.status ? String(s.status).toLowerCase() : '';
-                        return !status || status === 'active';
-                    }),
-                    'staff'
-                );
             }
+
+            const now = new Date();
+            const birthdays: any[] = [];
+
+            (childrenData ?? []).forEach((person: any) => {
+                const parts = parseBirthdayCalendarParts(person.date_of_birth);
+                if (!parts) return;
+                if (parts.month !== todayMonth || parts.day !== todayDay) return;
+                birthdays.push({
+                    id: person.id,
+                    name: person.name || 'Unknown',
+                    type: 'child',
+                    age: ageOnLocalDate(parts, now),
+                });
+            });
+
+            (staffData ?? []).forEach((person: any) => {
+                const parts = parseBirthdayCalendarParts(person.date_of_birth);
+                if (!parts) return;
+                if (parts.month !== todayMonth || parts.day !== todayDay) return;
+                birthdays.push({
+                    id: person.id,
+                    name: person.name || 'Unknown',
+                    type: 'staff',
+                    age: ageOnLocalDate(parts, now),
+                });
+            });
 
             return birthdays;
         },
@@ -141,11 +143,7 @@ export interface DailyNewsScheduleEvent {
     type: string;
 }
 
-export const useDailyNewsSchedule = (
-    companyId: string | null,
-    todayString: string,
-    season: string | null
-) => {
+export const useDailyNewsSchedule = (companyId: string | null, todayString: string, season: string | null) => {
     return useQuery({
         queryKey: ['daily_news_schedule', companyId, todayString, season],
         queryFn: async (): Promise<DailyNewsScheduleEvent[]> => {
@@ -178,14 +176,14 @@ export const useDailyNewsSchedule = (
             ]);
 
             if (sportsRes.data) {
-                events.push(...sportsRes.data.map(e => ({ ...e, type: 'Sports' })));
+                events.push(...sportsRes.data.map((e) => ({ ...e, type: 'Sports' })));
             }
             if (activitiesRes.data) {
-                events.push(...activitiesRes.data.map(e => ({ ...e, type: 'Activity' })));
+                events.push(...activitiesRes.data.map((e) => ({ ...e, type: 'Activity' })));
             }
             if (specialRes.data) {
                 events.push(
-                    ...specialRes.data.map(e => ({
+                    ...specialRes.data.map((e) => ({
                         id: e.id,
                         title: e.title,
                         time: e.time_slot,
@@ -225,7 +223,7 @@ export const useTodayMeals = (companyId: string | null, todayString: string) => 
                 if (error) throw error;
 
                 const meals = { breakfast: '', lunch: '', snack: '', dinner: '' };
-                (data || []).forEach(item => {
+                (data || []).forEach((item) => {
                     const type = item.meal_type?.toLowerCase() || '';
                     if (type === 'breakfast') meals.breakfast = item.items;
                     if (type === 'lunch') meals.lunch = item.items;

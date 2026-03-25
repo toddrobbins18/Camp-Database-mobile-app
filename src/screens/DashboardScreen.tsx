@@ -470,7 +470,9 @@ export const DashboardScreen = ({ navigation }: any) => {
                                     <View style={styles.birthdayContent}>
                                         <Text style={styles.birthdayName}>{person.name}</Text>
                                         <Text style={styles.birthdayDesc}>
-                                            {person.type === 'child' ? `Turning ${person.age} today! 🎉` : 'Staff Member'}
+                                            {person.type === 'child'
+                                                ? `Turning ${person.age} today! 🎂`
+                                                : 'Staff Member 🎉'}
                                         </Text>
                                     </View>
                                     <Ionicons name="balloon-outline" size={16} color={theme.colors.textSecondary} />
