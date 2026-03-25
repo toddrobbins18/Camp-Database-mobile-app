@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
@@ -22,11 +22,18 @@ function weatherIconName(condition: string | undefined): keyof typeof Ionicons.g
 }
 
 export const DashboardScreen = ({ navigation }: any) => {
-    const { companyId } = useCompany();
+    const { companyId, season, isTylerHill } = useCompany();
     const currentDate = new Date();
     const todayString = currentDate.toISOString().split('T')[0];
     const todayMonth = currentDate.getMonth() + 1;
     const todayDay = currentDate.getDate();
+
+    // Dashboard Notes (Tyler Hill)
+    const [notesLoading, setNotesLoading] = useState(false);
+    const [isEditingNotes, setIsEditingNotes] = useState(false);
+    const [dashboardNoteId, setDashboardNoteId] = useState<string | null>(null);
+    const [dashboardNotesContent, setDashboardNotesContent] = useState('');
+    const [editNotesContent, setEditNotesContent] = useState('');
 
     const { data: companyZip } = useQuery({
         queryKey: ['companyZip', companyId],
@@ -90,6 +97,102 @@ export const DashboardScreen = ({ navigation }: any) => {
         })();
         return () => { cancelled = true; };
     }, [companyZip]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchNotes = async () => {
+            if (!companyId || !season || !isTylerHill) {
+                setNotesLoading(false);
+                return;
+            }
+
+            setNotesLoading(true);
+            try {
+                const { data: authData } = await supabase.auth.getUser();
+                const userId = authData?.user?.id ?? null;
+
+                const { data, error } = await supabase
+                    .from('kanban_notes')
+                    .select('id, content, title, column_status, created_at')
+                    .eq('company_id', companyId)
+                    .eq('season', season)
+                    .eq('column_status', 'todo')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (cancelled) return;
+
+                if (error) throw error;
+
+                if (data) {
+                    setDashboardNoteId(data.id);
+                    setDashboardNotesContent(data.content || data.title || '');
+                    setEditNotesContent(data.content || data.title || '');
+                } else {
+                    setDashboardNoteId(null);
+                    setDashboardNotesContent('');
+                    setEditNotesContent('');
+                }
+            } catch (e) {
+                if (!cancelled) {
+                    setDashboardNoteId(null);
+                    setDashboardNotesContent('');
+                    setEditNotesContent('');
+                }
+            } finally {
+                if (!cancelled) setNotesLoading(false);
+            }
+        };
+
+        fetchNotes();
+        return () => {
+            cancelled = true;
+        };
+    }, [companyId, season, isTylerHill]);
+
+    const handleSaveNotes = async () => {
+        if (!companyId || !season) return;
+        setNotesLoading(true);
+        try {
+            const { data: authData } = await supabase.auth.getUser();
+            const userId = authData?.user?.id ?? null;
+            const content = (editNotesContent ?? '').trim();
+
+            if (!content) {
+                // Allow clearing note content (update existing or no-op)
+            }
+
+            if (dashboardNoteId) {
+                const { error } = await supabase
+                    .from('kanban_notes')
+                    .update({ title: 'Dashboard Notes', content })
+                    .eq('id', dashboardNoteId);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase
+                    .from('kanban_notes')
+                    .insert({
+                        title: 'Dashboard Notes',
+                        content,
+                        column_status: 'todo',
+                        company_id: companyId,
+                        season,
+                        created_by: userId,
+                        sort_order: 0,
+                    });
+                if (error) throw error;
+            }
+
+            setDashboardNotesContent(content);
+            setIsEditingNotes(false);
+        } catch (e) {
+            // ignore; keep edit view
+        } finally {
+            setNotesLoading(false);
+        }
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -284,6 +387,69 @@ export const DashboardScreen = ({ navigation }: any) => {
                         <Text style={styles.outlineBtnText}>View All Events</Text>
                     </TouchableOpacity>
                 </StyledCard>
+
+                {/* Notes (Tyler Hill only) */}
+                {isTylerHill && (
+                    <StyledCard style={styles.widgetCard}>
+                        <View style={styles.cardHeader}>
+                            <Ionicons name="document-text-outline" size={20} color={theme.colors.text} />
+                            <Text style={styles.cardTitle}>Notes</Text>
+                        </View>
+
+                        {notesLoading ? (
+                            <View style={styles.notesLoadingWrap}>
+                                <ActivityIndicator size="small" color={theme.colors.secondary} />
+                                <Text style={styles.notesLoadingText}>Loading...</Text>
+                            </View>
+                        ) : isEditingNotes ? (
+                            <View style={styles.notesEditWrap}>
+                                <TextInput
+                                    style={styles.notesTextInput}
+                                    value={editNotesContent}
+                                    onChangeText={setEditNotesContent}
+                                    placeholder="Add your notes here..."
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    multiline
+                                    numberOfLines={4}
+                                    textAlignVertical="top"
+                                />
+                                <View style={styles.notesButtonsRow}>
+                                    <TouchableOpacity
+                                        style={[styles.notesBtn, { backgroundColor: theme.colors.background }]}
+                                        onPress={() => {
+                                            setIsEditingNotes(false);
+                                            setEditNotesContent(dashboardNotesContent);
+                                        }}
+                                    >
+                                        <Text style={[styles.notesBtnText, { color: theme.colors.text }]}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.notesBtn, { backgroundColor: theme.colors.secondary }]}
+                                        onPress={handleSaveNotes}
+                                    >
+                                        <Text style={styles.notesBtnText}>Save</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ) : (
+                            <TouchableOpacity
+                                style={styles.notesDisplayWrap}
+                                onPress={() => {
+                                    setEditNotesContent(dashboardNotesContent);
+                                    setIsEditingNotes(true);
+                                }}
+                            >
+                                {dashboardNotesContent ? (
+                                    <Text style={styles.notesDisplayText} numberOfLines={4}>
+                                        {dashboardNotesContent}
+                                    </Text>
+                                ) : (
+                                    <Text style={styles.notesEmptyText}>Click to add notes...</Text>
+                                )}
+                            </TouchableOpacity>
+                        )}
+                    </StyledCard>
+                )}
 
                 {/* Today's Birthdays — matches original app: list in their section with Celebrate with them! */}
                 <StyledCard style={styles.widgetCard}>
@@ -592,6 +758,69 @@ const styles = StyleSheet.create({
     birthdayDesc: {
         fontSize: 13,
         color: theme.colors.textSecondary,
+    },
+
+    // Notes card styles
+    notesLoadingWrap: {
+        paddingVertical: theme.spacing.md,
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+    },
+    notesLoadingText: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    notesEditWrap: {
+        marginTop: theme.spacing.sm,
+        gap: theme.spacing.sm,
+    },
+    notesTextInput: {
+        backgroundColor: theme.colors.background,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        fontSize: 13,
+        color: theme.colors.text,
+        minHeight: 96,
+        textAlignVertical: 'top',
+    },
+    notesButtonsRow: {
+        flexDirection: 'row',
+        gap: theme.spacing.sm,
+        justifyContent: 'flex-end',
+    },
+    notesBtn: {
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        minWidth: 90,
+        alignItems: 'center',
+    },
+    notesBtnText: {
+        color: theme.colors.surface,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    notesDisplayWrap: {
+        marginTop: theme.spacing.sm,
+        padding: theme.spacing.md,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.background,
+    },
+    notesDisplayText: {
+        color: theme.colors.text,
+        fontSize: 13,
+    },
+    notesEmptyText: {
+        color: theme.colors.textSecondary,
+        fontSize: 13,
+        fontStyle: 'italic',
     },
     fab: {
         position: 'absolute',

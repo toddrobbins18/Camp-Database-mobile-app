@@ -10,18 +10,56 @@ export const useTodayBirthdays = (companyId: string | null, todayMonth: number, 
 
             const birthdays: any[] = [];
 
+            const parseBirthdayValue = (value: any): { year?: number; month?: number; day?: number } | null => {
+                if (!value) return null;
+                const raw = String(value).trim();
+                if (!raw) return null;
+
+                // Common DB formats we might see:
+                // 1) YYYY-MM-DD (date type)
+                // 2) MM/DD/YYYY (older mobile saves)
+                // 3) ISO strings with time zone (rare but possible)
+                if (/^\d{4}-\d{1,2}-\d{1,2}/.test(raw)) {
+                    const [y, m, d] = raw.split('-').map((n) => parseInt(n, 10));
+                    if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
+                        return { year: y, month: m, day: d };
+                    }
+                }
+
+                if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(raw)) {
+                    const [m, d, y] = raw.split('/').map((n) => parseInt(n, 10));
+                    if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
+                        return { year: y, month: m, day: d };
+                    }
+                }
+
+                const parsed = new Date(raw);
+                if (!Number.isNaN(parsed.getTime())) {
+                    // Use UTC to avoid timezone shifting on ISO strings.
+                    const year = parsed.getUTCFullYear();
+                    const month = parsed.getUTCMonth() + 1;
+                    const day = parsed.getUTCDate();
+                    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+                        return { year, month, day };
+                    }
+                }
+
+                return null;
+            };
+
             const addBirthdays = (data: any[], type: string) => {
                 (data || []).forEach((person: any) => {
                     if (!person.date_of_birth) return;
-                    // Parse YYYY-MM-DD directly to avoid timezone shifting (matches web dashboard logic)
-                    const parts = String(person.date_of_birth).split('-').map(Number);
-                    if (parts.length < 3) return;
-                    const [, month, day] = parts;
-                    if (month === todayMonth && day === todayDay) {
+
+                    const parsed = parseBirthdayValue(person.date_of_birth);
+                    if (!parsed?.month || !parsed?.day) return;
+
+                    const isMatch = parsed.month === todayMonth && parsed.day === todayDay;
+                    if (isMatch) {
                         const fullName =
                             person.name ||
                             'Unknown';
-                        const birthYear = parts[0] || new Date().getFullYear();
+                        const birthYear = parsed.year ?? new Date().getFullYear();
                         const age = new Date().getFullYear() - birthYear;
                         birthdays.push({
                             id: person.id,
@@ -35,13 +73,19 @@ export const useTodayBirthdays = (companyId: string | null, todayMonth: number, 
 
             const { data: childrenData, error: childrenError } = await supabase
                 .from('children')
-                // Mobile schema does not include first_name/last_name; keep in sync with web
+                // Keep in sync with web birthday query fields
                 .select('id, name, date_of_birth, division_id, status')
                 .eq('company_id', companyId);
             if (childrenError) {
                 console.warn('Birthday children query failed:', childrenError.message);
             } else {
-                addBirthdays((childrenData ?? []).filter((c: any) => !c.status || c.status === 'active'), 'child');
+                addBirthdays(
+                    (childrenData ?? []).filter((c: any) => {
+                        const status = c?.status ? String(c.status).toLowerCase() : '';
+                        return !status || status === 'active';
+                    }),
+                    'child'
+                );
             }
 
             const { data: staffData, error: staffError } = await supabase
@@ -52,7 +96,13 @@ export const useTodayBirthdays = (companyId: string | null, todayMonth: number, 
             if (staffError) {
                 console.warn('Birthday staff query failed:', staffError.message);
             } else {
-                addBirthdays((staffData ?? []).filter((s: any) => !s.status || s.status === 'active'), 'staff');
+                addBirthdays(
+                    (staffData ?? []).filter((s: any) => {
+                        const status = s?.status ? String(s.status).toLowerCase() : '';
+                        return !status || status === 'active';
+                    }),
+                    'staff'
+                );
             }
 
             return birthdays;
