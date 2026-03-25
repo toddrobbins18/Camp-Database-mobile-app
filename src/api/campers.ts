@@ -91,14 +91,20 @@ export const useEditCamper = () => {
         mutationFn: async (camperData: Partial<Camper> & { id: string }) => {
             const { id, ...updateData } = camperData;
 
-            const { data, error } = await supabase
+            // Avoid .single() after update — 406 if RETURNING is empty (RLS / 0 rows). Array response is always valid.
+            const { data: rows, error } = await supabase
                 .from('children')
                 .update(updateData)
                 .eq('id', id)
-                .select()
-                .single();
+                .select();
 
             if (error) throw error;
+            const data = rows?.[0];
+            if (!data) {
+                throw new Error(
+                    'Update did not return a row. Check children UPDATE permissions (RLS) or that the camper exists.'
+                );
+            }
             return data;
         },
         onSuccess: (data, variables) => {

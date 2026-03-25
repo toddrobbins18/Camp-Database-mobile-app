@@ -125,7 +125,7 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                 uploaded_by: user?.id ?? null,
             });
             if (error) throw error;
-            Alert.alert('Uploaded', 'Daily Wolf PDF uploaded successfully.');
+            Alert.alert('Uploaded', 'The Bear PDF uploaded successfully.');
             setShowDailyWolfUpload(false);
             setDailyWolfFileUri(null);
             setDailyWolfFileName('');
@@ -251,18 +251,18 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                     </View>
                 </StyledCard>
 
-                {/* Daily Wolf PDFs */}
+                {/* The Bear PDFs (Tyler Hill branding; storage/table keys remain daily_wolf_*) */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
                         <Ionicons name="document-text-outline" size={20} color={theme.colors.text} style={styles.sectionIcon} />
-                        <Text style={styles.sectionTitle}>Daily Wolf PDFs</Text>
+                        <Text style={styles.sectionTitle}>The Bear PDFs</Text>
                         <TouchableOpacity style={styles.uploadPdfButton} onPress={() => setShowDailyWolfUpload(true)}>
                             <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
                             <Text style={styles.uploadPdfButtonText}>Upload PDF</Text>
                         </TouchableOpacity>
                     </View>
                     {dailyWolfDocs.length === 0 ? (
-                        <Text style={styles.emptyMessage}>No Daily Wolf PDFs uploaded yet</Text>
+                        <Text style={styles.emptyMessage}>No Bear PDFs uploaded yet</Text>
                     ) : (
                         dailyWolfDocs.slice(0, 10).map((doc: any) => (
                             <View key={doc.id} style={styles.docRow}>
@@ -290,7 +290,7 @@ export const DailyNewsScreen = ({ navigation }: any) => {
             <Modal visible={showDailyWolfUpload} transparent animationType="slide">
                 <Pressable style={styles.modalOverlay} onPress={() => setShowDailyWolfUpload(false)}>
                     <Pressable style={styles.modalContent} onPress={e => e.stopPropagation()}>
-                        <Text style={styles.modalTitle}>Upload Daily Wolf PDF</Text>
+                        <Text style={styles.modalTitle}>Upload The Bear PDF</Text>
                         <Text style={styles.label}>Date</Text>
                         <TextInput
                             style={styles.input}

@@ -1,13 +1,29 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Dimensions, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import { useQueryClient } from '@tanstack/react-query';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useAddCamper, useEditCamper, useDeleteCamper, useDivisions } from '../api/campers';
 import { useRole } from '../hooks/useRole';
 import { useStaff } from '../api/staff';
+import { supabase } from '../lib/supabase';
+import { showAppAlert } from '../utils/showAppAlert';
+
+type BulkAssignRowResult = {
+    name: string;
+    rfid: string;
+    status: 'success' | 'error' | 'not_found';
+    message: string;
+};
+
+/** Normalize scanner / manual RFID input (trailing newlines from Bluetooth wedge). */
+function normalizeRfidInput(raw: string): string {
+    return raw.replace(/\u0000/g, '').trim().replace(/\r\n/g, '').replace(/\n/g, '').replace(/\r/g, '');
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 600; // Mobile: full width cards
@@ -29,6 +45,7 @@ const ScreenHeader = ({ title, navigation }: { title: string, navigation: any })
 
 export const CamperScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
     const { data: campersData = [], isLoading, isError } = useCampers(companyId, season);
     const { data: roleData } = useRole();
     const isAdmin = roleData?.isAdmin || false;
@@ -72,6 +89,12 @@ export const CamperScreen = ({ navigation }: any) => {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [selectedCamper, setSelectedCamper] = useState<any>(null);
     const [individualRfid, setIndividualRfid] = useState('');
+    const [assignSearchLoading, setAssignSearchLoading] = useState(false);
+    const [assignIndividualLoading, setAssignIndividualLoading] = useState(false);
+    const [bulkAssignLoading, setBulkAssignLoading] = useState(false);
+    const [bulkAssignResults, setBulkAssignResults] = useState<BulkAssignRowResult[]>([]);
+    const [pickedCsvLabel, setPickedCsvLabel] = useState('');
+    const individualRfidInputRef = useRef<TextInput>(null);
     const [csvData, setCsvData] = useState('');
     const [showAddChildModal, setShowAddChildModal] = useState(false);
     const [showAddGenderDropdown, setShowAddGenderDropdown] = useState(false);
@@ -179,14 +202,40 @@ export const CamperScreen = ({ navigation }: any) => {
     const totalCampers = filteredCampers.length;
     const totalPages = Math.ceil(totalCampers / campersPerPage);
 
-    // Keep scanner input focused when in scanner mode
+    // Keep scanner input focused when in scanner mode (matches web Roster “tap if focus lost”)
     useEffect(() => {
         if (scannerMode && rfidInputRef.current) {
-            setTimeout(() => {
-                rfidInputRef.current?.focus();
-            }, 100);
+            setTimeout(() => rfidInputRef.current?.focus(), 100);
         }
     }, [scannerMode]);
+
+    useEffect(() => {
+        if (!scannerMode || isScanning) return;
+        const t = setInterval(() => {
+            rfidInputRef.current?.focus();
+        }, 500);
+        return () => clearInterval(t);
+    }, [scannerMode, isScanning]);
+
+    useEffect(() => {
+        if (!showAssignWristbandsModal) {
+            setSearchCamperName('');
+            setSearchResults([]);
+            setSelectedCamper(null);
+            setIndividualRfid('');
+            setBulkAssignResults([]);
+            setPickedCsvLabel('');
+            setAssignSearchLoading(false);
+            setAssignIndividualLoading(false);
+            setBulkAssignLoading(false);
+        }
+    }, [showAssignWristbandsModal]);
+
+    useEffect(() => {
+        if (selectedCamper && showAssignWristbandsModal) {
+            setTimeout(() => individualRfidInputRef.current?.focus(), 120);
+        }
+    }, [selectedCamper, showAssignWristbandsModal]);
 
     const toggleScannerMode = () => {
         const newMode = !scannerMode;
@@ -196,15 +245,312 @@ export const CamperScreen = ({ navigation }: any) => {
         }
     };
 
-    const handleRfidScan = () => {
-        if (!rfidInput.trim()) return;
-        // TODO: Implement RFID scan logic
-        console.log('Scanning RFID:', rfidInput);
+    /** Find camper by wristband ID → open profile (same as lovable-web-app Roster.handleRfidScan). */
+    const handleRfidScan = async () => {
+        const valueToScan = normalizeRfidInput(rfidInput);
+        if (!valueToScan) {
+            showAppAlert('Wristband', 'Please scan a wristband or enter an RFID.');
+            return;
+        }
+        if (!companyId || !season) {
+            showAppAlert('Wristband', 'Company or season is not available.');
+            return;
+        }
+
         setIsScanning(true);
-        setTimeout(() => {
-            setIsScanning(false);
+        try {
+            const { data: rfidRows, error } = await supabase
+                .from('children')
+                .select('id, name, rfid')
+                .eq('rfid', valueToScan)
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .limit(1);
+
+            const child = rfidRows?.[0];
+
+            if (error || !child) {
+                const short = valueToScan.length > 18 ? `${valueToScan.slice(0, 18)}…` : valueToScan;
+                showAppAlert(
+                    'Wristband not found',
+                    `No camper in this season is assigned wristband ID:\n${short}`
+                );
+                setRfidInput('');
+                setTimeout(() => rfidInputRef.current?.focus(), 150);
+                return;
+            }
+
             setRfidInput('');
-        }, 1000);
+            navigation.navigate('CamperDetail', { camper: { id: child.id, name: child.name } });
+        } catch (e: any) {
+            showAppAlert('Error', e?.message || 'Could not look up wristband.');
+        } finally {
+            setIsScanning(false);
+            setTimeout(() => rfidInputRef.current?.focus(), 150);
+        }
+    };
+
+    /** Server-side search (matches BulkRfidAssignmentDialog.handleSearch). No division embed — avoids join/RLS errors. */
+    const handleAssignModalSearch = async () => {
+        const qRaw = searchCamperName.trim();
+        if (!qRaw) {
+            showAppAlert('Search', 'Enter a camper name.');
+            return;
+        }
+        if (!companyId) {
+            showAppAlert('Search', 'Company is not loaded. Try again in a moment.');
+            return;
+        }
+        if (!season) {
+            showAppAlert('Search', 'Season is not set.');
+            return;
+        }
+
+        const qSafe = qRaw.replace(/[%_\\]/g, '').trim();
+        if (!qSafe) {
+            showAppAlert('Search', 'Use letters or numbers in the name search.');
+            return;
+        }
+
+        setAssignSearchLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('children')
+                .select('id, name, rfid, division_id, company_id')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .ilike('name', `%${qSafe}%`)
+                .order('name')
+                .limit(25);
+
+            if (error) throw error;
+
+            const serverRows = data || [];
+            const seen = new Set(serverRows.map((r: any) => r.id));
+            const qLower = qRaw.toLowerCase();
+            const merged: any[] = [...serverRows];
+
+            for (const c of campersData) {
+                if (seen.has(c.id)) continue;
+                if ((c.name || '').toLowerCase().includes(qLower)) {
+                    merged.push({
+                        id: c.id,
+                        name: c.name,
+                        rfid: (c as any).rfid ?? null,
+                        division_id: c.division_id,
+                        company_id: c.company_id,
+                        division: (c as any).division,
+                    });
+                    seen.add(c.id);
+                }
+            }
+
+            const enrich = (row: any) => {
+                if (row.division) return row;
+                const fromList = campersData.find((c: any) => c.id === row.id);
+                return { ...row, division: fromList?.division ?? null };
+            };
+
+            setSearchResults(merged.slice(0, 25).map(enrich));
+            if (!merged.length) {
+                showAppAlert('Search', 'No campers match that name for this season.');
+            }
+        } catch (e: any) {
+            showAppAlert('Search failed', e?.message || 'Unknown error');
+            setSearchResults([]);
+        } finally {
+            setAssignSearchLoading(false);
+        }
+    };
+
+    /** Assign RFID to selected camper; overwrites profile and clears same ID from others (safe move). */
+    const handleAssignIndividualRfid = async () => {
+        const rfid = normalizeRfidInput(individualRfid);
+        if (!selectedCamper?.id || !rfid || !companyId || !season) {
+            showAppAlert('Assign wristband', 'Select a camper and scan or enter a wristband ID.');
+            return;
+        }
+        if (selectedCamper.company_id != null && selectedCamper.company_id !== companyId) {
+            showAppAlert(
+                'Assign wristband',
+                'This camper does not belong to the current company. Close the modal, confirm the camp switcher, and search again.'
+            );
+            return;
+        }
+
+        setAssignIndividualLoading(true);
+        try {
+            const { error: clearErr } = await supabase
+                .from('children')
+                .update({ rfid: null })
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .eq('rfid', rfid)
+                .neq('id', selectedCamper.id);
+            if (clearErr) {
+                console.warn('[RFID assign] clear duplicate:', clearErr.message);
+            }
+
+            // Do not use .single() here — PostgREST returns 406 if zero rows are returned (e.g. RLS hides RETURNING).
+            const { data: updatedRows, error } = await supabase
+                .from('children')
+                .update({ rfid })
+                .eq('id', selectedCamper.id)
+                .select('id, rfid');
+
+            if (error) throw error;
+            let updated = updatedRows?.[0];
+            // Some RLS setups allow UPDATE but return no rows from RETURNING; re-read to verify.
+            if (!updated) {
+                const { data: reread, error: readErr } = await supabase
+                    .from('children')
+                    .select('id, rfid')
+                    .eq('id', selectedCamper.id)
+                    .maybeSingle();
+                if (!readErr && reread) {
+                    updated = reread;
+                }
+            }
+            if (!updated || normalizeRfidInput(String(updated.rfid ?? '')) !== rfid) {
+                throw new Error(
+                    'Update did not apply. Your role may need permission to edit campers — apply the latest Supabase migration (children UPDATE for can_access_child).'
+                );
+            }
+
+            await queryClient.invalidateQueries({ queryKey: ['campers', companyId, season] });
+            await queryClient.invalidateQueries({ queryKey: ['child', selectedCamper.id] });
+
+            showAppAlert('Success', `Wristband assigned to ${selectedCamper.name}.`);
+            setIndividualRfid('');
+            setSelectedCamper(null);
+            setShowAssignWristbandsModal(false);
+        } catch (e: any) {
+            showAppAlert('Assign failed', e?.message || 'Could not save wristband.');
+        } finally {
+            setAssignIndividualLoading(false);
+        }
+    };
+
+    const pickCsvForBulk = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: ['text/csv', 'text/plain', 'application/vnd.ms-excel'],
+                copyToCacheDirectory: true,
+            });
+            if (result.canceled || !result.assets?.[0]) return;
+            const asset = result.assets[0];
+            setPickedCsvLabel(asset.name || 'File loaded');
+            const res = await fetch(asset.uri);
+            const text = await res.text();
+            const lines = text.split(/\n/);
+            const first = (lines[0] || '').toLowerCase();
+            if (first.includes('name') || first.includes('rfid') || first.includes('person')) {
+                setCsvData(lines.slice(1).join('\n'));
+            } else {
+                setCsvData(text);
+            }
+        } catch (_) {
+            showAppAlert('File', 'Could not read the selected file.');
+        }
+    };
+
+    /** Bulk assign (matches BulkRfidAssignmentDialog.handleBulkUpload). */
+    const handleBulkAssignRfid = async () => {
+        if (!csvData.trim() || !companyId || !season) {
+            showAppAlert('Bulk assign', 'Paste CSV rows or choose a file.');
+            return;
+        }
+
+        setBulkAssignLoading(true);
+        setBulkAssignResults([]);
+        const newResults: BulkAssignRowResult[] = [];
+
+        try {
+            const lines = csvData.trim().split('\n');
+            for (const line of lines) {
+                const parts = line.split(',').map((p) => p.trim());
+                if (parts.length < 2) continue;
+                const [identifier, rfidValRaw] = parts;
+                if (!identifier || !rfidValRaw) continue;
+                const rfidVal = normalizeRfidInput(rfidValRaw);
+                if (!rfidVal) continue;
+
+                let query = supabase
+                    .from('children')
+                    .select('id, name')
+                    .eq('company_id', companyId)
+                    .eq('season', season);
+
+                const isPersonId = /^[0-9a-f-]+$/i.test(identifier) && identifier.length > 5;
+                if (isPersonId) {
+                    query = query.eq('person_id', identifier);
+                } else {
+                    query = query.ilike('name', identifier);
+                }
+
+                const { data: foundRows, error } = await query.limit(1);
+                const data = foundRows?.[0];
+
+                if (error || !data) {
+                    newResults.push({
+                        name: identifier,
+                        rfid: rfidVal,
+                        status: 'not_found',
+                        message: 'Camper not found',
+                    });
+                    continue;
+                }
+
+                await supabase
+                    .from('children')
+                    .update({ rfid: null })
+                    .eq('company_id', companyId)
+                    .eq('season', season)
+                    .eq('rfid', rfidVal)
+                    .neq('id', data.id);
+
+                const { data: updatedRows, error: updateError } = await supabase
+                    .from('children')
+                    .update({ rfid: rfidVal })
+                    .eq('id', data.id)
+                    .select('id, rfid');
+
+                const updatedRow = updatedRows?.[0];
+                if (updateError || !updatedRow || normalizeRfidInput(String(updatedRow.rfid ?? '')) !== rfidVal) {
+                    newResults.push({
+                        name: data.name,
+                        rfid: rfidVal,
+                        status: 'error',
+                        message: updateError?.message || 'Update blocked or did not apply',
+                    });
+                } else {
+                    newResults.push({
+                        name: data.name,
+                        rfid: rfidVal,
+                        status: 'success',
+                        message: 'Wristband assigned',
+                    });
+                }
+            }
+
+            setBulkAssignResults(newResults);
+            const ok = newResults.filter((r) => r.status === 'success').length;
+            const bad = newResults.length - ok;
+            await queryClient.invalidateQueries({ queryKey: ['campers', companyId, season] });
+
+            if (ok > 0) {
+                showAppAlert(
+                    'Bulk assign',
+                    bad > 0 ? `Assigned ${ok} wristband(s). ${bad} row(s) failed or were not found.` : `Assigned ${ok} wristband(s).`
+                );
+            } else if (newResults.length > 0) {
+                showAppAlert('Bulk assign', 'No wristbands were assigned. Check names, person IDs, and format.');
+            }
+        } catch (e: any) {
+            showAppAlert('Bulk assign failed', e?.message || 'Unknown error');
+        } finally {
+            setBulkAssignLoading(false);
+        }
     };
 
     // Calculate pagination
@@ -319,11 +665,17 @@ export const CamperScreen = ({ navigation }: any) => {
                                         placeholderTextColor={theme.colors.textSecondary}
                                         autoFocus
                                         editable={!isScanning}
-                                        onSubmitEditing={handleRfidScan}
+                                        blurOnSubmit={false}
+                                        returnKeyType="search"
+                                        onSubmitEditing={() => {
+                                            void handleRfidScan();
+                                        }}
                                     />
                                     <TouchableOpacity
                                         style={[styles.findCamperButton, (!rfidInput.trim() || isScanning) && styles.findCamperButtonDisabled]}
-                                        onPress={handleRfidScan}
+                                        onPress={() => {
+                                            void handleRfidScan();
+                                        }}
                                         disabled={!rfidInput.trim() || isScanning}
                                     >
                                         <Text style={styles.findCamperButtonText}>
@@ -459,7 +811,10 @@ export const CamperScreen = ({ navigation }: any) => {
                     >
                         <Pressable
                             style={styles.largeBottomSheet}
-                            onPress={(e) => e.stopPropagation()}
+                            onPress={(e) => {
+                                e.stopPropagation();
+                                (e as any).nativeEvent?.stopImmediatePropagation?.();
+                            }}
                         >
                             {/* Modal Header */}
                             <View style={styles.assignWristbandsHeader}>
@@ -520,33 +875,32 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     placeholderTextColor={theme.colors.textSecondary}
                                                     value={searchCamperName}
                                                     onChangeText={setSearchCamperName}
+                                                    returnKeyType="search"
                                                     onSubmitEditing={() => {
-                                                        // TODO: Implement search
-                                                        const results = campersData.filter(c =>
-                                                            c.name?.toLowerCase().includes(searchCamperName.toLowerCase())
-                                                        ).slice(0, 10);
-                                                        setSearchResults(results);
+                                                        void handleAssignModalSearch();
                                                     }}
                                                 />
                                                 <TouchableOpacity
-                                                    style={styles.searchButton}
+                                                    style={[styles.searchButton, assignSearchLoading && { opacity: 0.7 }]}
                                                     onPress={() => {
-                                                        const results = campersData.filter(c =>
-                                                            c.name?.toLowerCase().includes(searchCamperName.toLowerCase())
-                                                        ).slice(0, 10);
-                                                        setSearchResults(results);
+                                                        void handleAssignModalSearch();
                                                     }}
+                                                    disabled={assignSearchLoading}
                                                 >
-                                                    <Text style={styles.searchButtonText}>Search</Text>
+                                                    {assignSearchLoading ? (
+                                                        <ActivityIndicator color="#fff" size="small" />
+                                                    ) : (
+                                                        <Text style={styles.searchButtonText}>Search</Text>
+                                                    )}
                                                 </TouchableOpacity>
                                             </View>
 
                                             {/* Search Results */}
                                             {searchResults.length > 0 && (
                                                 <View style={styles.searchResultsContainer}>
-                                                    {searchResults.map((camper, index) => (
+                                                    {searchResults.map((camper: any) => (
                                                         <TouchableOpacity
-                                                            key={index}
+                                                            key={camper.id}
                                                             style={styles.searchResultItem}
                                                             onPress={() => {
                                                                 setSelectedCamper(camper);
@@ -554,7 +908,27 @@ export const CamperScreen = ({ navigation }: any) => {
                                                                 setSearchCamperName('');
                                                             }}
                                                         >
-                                                            <Text style={styles.searchResultText}>{camper.name}</Text>
+                                                            <View style={{ flex: 1 }}>
+                                                                <Text style={styles.searchResultText}>{camper.name}</Text>
+                                                                <Text style={styles.searchResultSubtext}>
+                                                                    {(camper.division as any)?.name || 'No division'}
+                                                                </Text>
+                                                            </View>
+                                                            <View
+                                                                style={[
+                                                                    styles.rfidStatusPill,
+                                                                    camper.rfid ? styles.rfidStatusPillHas : styles.rfidStatusPillNone,
+                                                                ]}
+                                                            >
+                                                                <Text
+                                                                    style={[
+                                                                        styles.rfidStatusPillText,
+                                                                        camper.rfid ? styles.rfidStatusPillTextHas : styles.rfidStatusPillTextNone,
+                                                                    ]}
+                                                                >
+                                                                    {camper.rfid ? 'Has RFID' : 'No RFID'}
+                                                                </Text>
+                                                            </View>
                                                             <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
                                                         </TouchableOpacity>
                                                     ))}
@@ -568,7 +942,14 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 <View style={styles.selectedCamperHeader}>
                                                     <View>
                                                         <Text style={styles.selectedCamperName}>{selectedCamper.name}</Text>
-                                                        <Text style={styles.selectedCamperInfo}>{selectedCamper.division?.name || 'No Division'}</Text>
+                                                        <Text style={styles.selectedCamperInfo}>
+                                                            {selectedCamper.division?.name || 'No Division'}
+                                                        </Text>
+                                                        {selectedCamper.rfid ? (
+                                                            <Text style={styles.currentRfidHint}>
+                                                                Current RFID: {selectedCamper.rfid}
+                                                            </Text>
+                                                        ) : null}
                                                     </View>
                                                     <TouchableOpacity onPress={() => setSelectedCamper(null)}>
                                                         <Ionicons name="close-circle" size={24} color={theme.colors.textSecondary} />
@@ -578,25 +959,36 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     <Text style={styles.sectionLabel}>2. Scan Wristband (ISO 14443 Type A)</Text>
                                                     <View style={styles.rfidInputRow}>
                                                         <TextInput
+                                                            ref={individualRfidInputRef}
                                                             style={styles.rfidInputField}
                                                             placeholder="Scan wristband..."
                                                             placeholderTextColor={theme.colors.textSecondary}
                                                             value={individualRfid}
                                                             onChangeText={setIndividualRfid}
-                                                            autoFocus
+                                                            blurOnSubmit={false}
+                                                            returnKeyType="done"
+                                                            onSubmitEditing={() => {
+                                                                void handleAssignIndividualRfid();
+                                                            }}
                                                         />
-                                                        <TouchableOpacity
-                                                            style={[styles.assignButton, !individualRfid.trim() && styles.assignButtonDisabled]}
-                                                            disabled={!individualRfid.trim()}
-                                                            onPress={() => {
-                                                                // TODO: Implement assign
-                                                                console.log('Assign RFID:', individualRfid, 'to', selectedCamper.name);
-                                                                setIndividualRfid('');
-                                                                setSelectedCamper(null);
+                                                        <Pressable
+                                                            style={({ pressed }) => [
+                                                                styles.assignButton,
+                                                                (!individualRfid.trim() || assignIndividualLoading) && styles.assignButtonDisabled,
+                                                                pressed && !assignIndividualLoading && individualRfid.trim() ? { opacity: 0.88 } : null,
+                                                            ]}
+                                                            disabled={!individualRfid.trim() || assignIndividualLoading}
+                                                            onPress={(e) => {
+                                                                e.stopPropagation();
+                                                                void handleAssignIndividualRfid();
                                                             }}
                                                         >
-                                                            <Text style={styles.assignButtonText}>Assign</Text>
-                                                        </TouchableOpacity>
+                                                            {assignIndividualLoading ? (
+                                                                <ActivityIndicator color="#fff" size="small" />
+                                                            ) : (
+                                                                <Text style={styles.assignButtonText}>Assign</Text>
+                                                            )}
+                                                        </Pressable>
                                                     </View>
                                                 </View>
                                             </View>
@@ -609,10 +1001,12 @@ export const CamperScreen = ({ navigation }: any) => {
                                             <Text style={styles.bulkFormatText}>
                                                 Format: name,rfid or person_id,rfid (one per line)
                                             </Text>
-                                            <View style={styles.fileInputContainer}>
+                                            <TouchableOpacity style={styles.fileInputContainer} onPress={() => void pickCsvForBulk()}>
                                                 <Text style={styles.fileInputText}>Choose file</Text>
-                                                <Text style={styles.fileInputPlaceholder}>No file chosen</Text>
-                                            </View>
+                                                <Text style={styles.fileInputPlaceholder} numberOfLines={1}>
+                                                    {pickedCsvLabel || 'No file chosen'}
+                                                </Text>
+                                            </TouchableOpacity>
                                             <TextInput
                                                 style={styles.csvTextArea}
                                                 placeholder="John Smith,ABC123DEF456&#10;Jane Doe,XYZ789GHI012&#10;..."
@@ -623,18 +1017,58 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 textAlignVertical="top"
                                             />
                                             <TouchableOpacity
-                                                style={[styles.bulkAssignButton, !csvData.trim() && styles.bulkAssignButtonDisabled]}
-                                                disabled={!csvData.trim()}
+                                                style={[
+                                                    styles.bulkAssignButton,
+                                                    (!csvData.trim() || bulkAssignLoading) && styles.bulkAssignButtonDisabled,
+                                                ]}
+                                                disabled={!csvData.trim() || bulkAssignLoading}
                                                 onPress={() => {
-                                                    // TODO: Implement bulk assign
-                                                    const rows = csvData.trim().split('\n').filter(l => l.trim()).length;
-                                                    console.log('Bulk assign:', rows, 'rows');
+                                                    void handleBulkAssignRfid();
                                                 }}
                                             >
-                                                <Text style={styles.bulkAssignButtonText}>
-                                                    Assign Wristbands ({csvData.trim().split('\n').filter(l => l.trim()).length} rows)
-                                                </Text>
+                                                {bulkAssignLoading ? (
+                                                    <ActivityIndicator color="#fff" />
+                                                ) : (
+                                                    <Text style={styles.bulkAssignButtonText}>
+                                                        Assign Wristbands ({csvData.trim().split('\n').filter((l) => l.trim()).length} rows)
+                                                    </Text>
+                                                )}
                                             </TouchableOpacity>
+
+                                            {bulkAssignResults.length > 0 && (
+                                                <View style={styles.bulkResultsBox}>
+                                                    <Text style={styles.bulkResultsTitle}>Results</Text>
+                                                    <ScrollView style={styles.bulkResultsScroll} nestedScrollEnabled>
+                                                        {bulkAssignResults.map((row, idx) => (
+                                                            <View key={`${row.name}-${idx}`} style={styles.bulkResultRow}>
+                                                                <Ionicons
+                                                                    name={
+                                                                        row.status === 'success'
+                                                                            ? 'checkmark-circle'
+                                                                            : row.status === 'not_found'
+                                                                              ? 'alert-circle-outline'
+                                                                              : 'close-circle'
+                                                                    }
+                                                                    size={18}
+                                                                    color={
+                                                                        row.status === 'success'
+                                                                            ? theme.colors.success
+                                                                            : row.status === 'not_found'
+                                                                              ? theme.colors.warning
+                                                                              : theme.colors.danger
+                                                                    }
+                                                                />
+                                                                <Text style={styles.bulkResultName} numberOfLines={1}>
+                                                                    {row.name}
+                                                                </Text>
+                                                                <Text style={styles.bulkResultMsg} numberOfLines={1}>
+                                                                    {row.message}
+                                                                </Text>
+                                                            </View>
+                                                        ))}
+                                                    </ScrollView>
+                                                </View>
+                                            )}
                                         </View>
                                     </View>
                                 )}
@@ -982,11 +1416,11 @@ export const CamperScreen = ({ navigation }: any) => {
                                             onPress={async () => {
                                                 // Basic client-side validation
                                                 if (!formData.name.trim() || !formData.person_id.trim()) {
-                                                    Alert.alert('Missing required fields', 'Please enter both Name and Person ID.');
+                                                    showAppAlert('Missing required fields', 'Please enter both Name and Person ID.');
                                                     return;
                                                 }
                                                 if (!companyId || !season) {
-                                                    Alert.alert('Missing company info', 'Company or season is not set. Please try again.');
+                                                    showAppAlert('Missing company info', 'Company or season is not set. Please try again.');
                                                     return;
                                                 }
 
@@ -1013,7 +1447,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     // Use mutateAsync so we can await and catch errors reliably
                                                     await addCamperMutation.mutateAsync(payload as any);
 
-                                                    Alert.alert('Child created', 'The camper has been added successfully.');
+                                                    showAppAlert('Child created', 'The camper has been added successfully.');
                                                     setShowAddChildModal(false);
                                                     setFormData({
                                                         name: '',
@@ -1036,7 +1470,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     });
                                                 } catch (error: any) {
                                                     const message = error?.message || 'Could not add child.';
-                                                    Alert.alert('Add child failed', message);
+                                                    showAppAlert('Add child failed', message);
                                                 }
                                             }}
                                         >
@@ -2781,6 +3215,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: theme.spacing.md,
         maxHeight: '90%',
         width: '100%',
+        zIndex: 2,
+        elevation: 24,
     },
     bottomSheetHeader: {
         marginBottom: theme.spacing.md,
@@ -2968,7 +3404,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     assignWristbandsContent: {
-        maxHeight: 400,
+        maxHeight: 520,
     },
     individualTabContent: {
         padding: theme.spacing.lg,
@@ -3028,6 +3464,36 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
     },
+    searchResultSubtext: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
+    rfidStatusPill: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 999,
+        borderWidth: 1,
+        marginRight: theme.spacing.xs,
+    },
+    rfidStatusPillHas: {
+        borderColor: '#86efac',
+        backgroundColor: '#f0fdf4',
+    },
+    rfidStatusPillNone: {
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.background,
+    },
+    rfidStatusPillText: {
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    rfidStatusPillTextHas: {
+        color: '#15803d',
+    },
+    rfidStatusPillTextNone: {
+        color: theme.colors.textSecondary,
+    },
     selectedCamperSection: {
         backgroundColor: '#dcfce7',
         borderWidth: 1,
@@ -3050,6 +3516,11 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: theme.colors.textSecondary,
         marginTop: theme.spacing.xs,
+    },
+    currentRfidHint: {
+        fontSize: 11,
+        color: theme.colors.textSecondary,
+        marginTop: 6,
     },
     rfidInputSection: {
         gap: theme.spacing.sm,
@@ -3075,6 +3546,9 @@ const styles = StyleSheet.create({
         paddingVertical: theme.spacing.sm,
         borderRadius: theme.borderRadius.md,
         justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: 44,
+        cursor: 'pointer' as any,
     },
     assignButtonDisabled: {
         backgroundColor: theme.colors.textSecondary,
@@ -3135,6 +3609,43 @@ const styles = StyleSheet.create({
         color: theme.colors.surface,
         fontSize: 14,
         fontWeight: '600',
+    },
+    bulkResultsBox: {
+        marginTop: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        maxHeight: 200,
+    },
+    bulkResultsTitle: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: theme.colors.text,
+        padding: theme.spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    bulkResultsScroll: {
+        maxHeight: 160,
+    },
+    bulkResultRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: theme.spacing.xs,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    bulkResultName: {
+        flex: 1,
+        fontSize: 12,
+        color: theme.colors.text,
+    },
+    bulkResultMsg: {
+        maxWidth: 120,
+        fontSize: 11,
+        color: theme.colors.textSecondary,
     },
     addChildModal: {
         backgroundColor: theme.colors.surface,
