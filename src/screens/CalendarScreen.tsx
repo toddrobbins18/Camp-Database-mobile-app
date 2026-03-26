@@ -270,6 +270,7 @@ export const CalendarScreen = ({ navigation }: any) => {
             case 'sports_calendar': return 'trophy-outline';
             case 'activities_field_trips': return 'people-outline';
             case 'special_events_activities': return 'star-outline';
+            case 'tiger_times': return 'sparkles-outline';
             default: return 'calendar-outline';
         }
     };
@@ -278,7 +279,23 @@ export const CalendarScreen = ({ navigation }: any) => {
             case 'sports_calendar': return 'Sports';
             case 'activities_field_trips': return 'Field Trip';
             case 'special_events_activities': return 'Special Event';
+            case 'tiger_times': return 'Tiger Times';
             default: return 'Event';
+        }
+    };
+
+    const getDayAccent = (source?: EventSource) => {
+        switch (source) {
+            case 'sports_calendar':
+                return { bg: '#dbeafe', text: '#1d4ed8', marker: '#2563eb' };
+            case 'activities_field_trips':
+                return { bg: '#dcfce7', text: '#166534', marker: '#16a34a' };
+            case 'special_events_activities':
+                return { bg: '#f3e8ff', text: '#7e22ce', marker: '#a855f7' };
+            case 'tiger_times':
+                return { bg: '#fef3c7', text: '#92400e', marker: '#f59e0b' };
+            default:
+                return { bg: '#e5e7eb', text: theme.colors.text, marker: theme.colors.secondary };
         }
     };
     const getEventIcon = (type: string) => {
@@ -665,11 +682,16 @@ export const CalendarScreen = ({ navigation }: any) => {
                                                 style={[
                                                     styles.dayCell,
                                                     { height: monthCellHeight },
+                                                    dayEvents.length > 0 && day.isCurrentMonth && { backgroundColor: getDayAccent(dayEvents[0]?.source).bg },
                                                     !day.isCurrentMonth && styles.dayCellOtherMonth,
                                                     isSelected && styles.dayCellSelected
                                                 ]}
                                                 onPress={() => {
                                                     setSelectedDate(day.fullDate);
+                                                    if (dayEvents.length > 0) {
+                                                        const selected = filteredAndSorted.find((evt) => evt.id === dayEvents[0].id);
+                                                        if (selected) setSelectedEvent(selected);
+                                                    }
                                                     if (!day.isCurrentMonth) {
                                                         setCurrentDate(day.fullDate);
                                                     }
@@ -679,13 +701,18 @@ export const CalendarScreen = ({ navigation }: any) => {
                                                     styles.dayText,
                                                     !day.isCurrentMonth && styles.dayTextOtherMonth,
                                                     isSelected && styles.dayTextSelected,
+                                                    dayEvents.length > 0 && day.isCurrentMonth && { color: getDayAccent(dayEvents[0]?.source).text, fontWeight: '700' },
                                                     isToday && !isSelected && styles.dayTextToday
                                                 ]}>
                                                     {day.date}
                                                 </Text>
                                                 {/* Event indicator dot */}
                                                 {dayEvents.length > 0 && day.isCurrentMonth && (
-                                                    <View style={styles.eventDot} />
+                                                    <View style={[styles.eventDot, { backgroundColor: getDayAccent(dayEvents[0]?.source).marker }]}>
+                                                        {dayEvents.length > 1 && (
+                                                            <Text style={styles.eventCountText}>{dayEvents.length}</Text>
+                                                        )}
+                                                    </View>
                                                 )}
                                             </TouchableOpacity>
                                         );
@@ -1318,10 +1345,19 @@ const styles = StyleSheet.create({
     eventDot: {
         position: 'absolute',
         bottom: 4,
-        width: 4,
-        height: 4,
-        borderRadius: 2,
+        minWidth: 8,
+        height: 8,
+        borderRadius: 999,
+        paddingHorizontal: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
         backgroundColor: theme.colors.secondary,
+    },
+    eventCountText: {
+        color: '#fff',
+        fontSize: 8,
+        fontWeight: '700',
+        lineHeight: 8,
     },
     fab: {
         position: 'absolute',

@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 
 // ===================== CALENDAR / MASTER EVENTS =====================
 
-export type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities';
+export type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities' | 'tiger_times';
 
 export interface CalendarEvent {
     id: string;
@@ -50,7 +50,8 @@ export const useDivisions = (companyId: string | null) => {
 };
 
 /**
- * Fetches all events from sports_calendar, activities_field_trips, and special_events_activities
+ * Fetches all events from sports_calendar, activities_field_trips, special_events_activities,
+ * and tiger_times (daily_wolf_content), aligned with web Master Calendar workflow.
  * and merges into a unified CalendarEvent[] for the Master Calendar (aligned with web).
  */
 export const useCalendarEvents = (companyId: string | null, season: string) => {
@@ -61,32 +62,74 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
 
             const seasonFilter = season || '2026';
 
-            const [sportsRes, activitiesRes, specialRes] = await Promise.all([
+            // Mirror web behavior: pull in two pages per table to avoid 1000-row truncation.
+            const [
+                sportsBatch1,
+                sportsBatch2,
+                activitiesBatch1,
+                activitiesBatch2,
+                specialBatch1,
+                specialBatch2,
+                tigerTimesRes,
+            ] = await Promise.all([
                 supabase
                     .from('sports_calendar')
-                    .select('*, division:divisions(id, name, gender)')
+                    .select('*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))')
                     .eq('company_id', companyId)
-                    .order('event_date', { ascending: true }),
+                    .order('event_date', { ascending: true })
+                    .range(0, 999),
+                supabase
+                    .from('sports_calendar')
+                    .select('*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))')
+                    .eq('company_id', companyId)
+                    .order('event_date', { ascending: true })
+                    .range(1000, 1999),
                 supabase
                     .from('activities_field_trips')
                     .select('*, division:divisions(id, name, gender)')
                     .eq('company_id', companyId)
-                    .order('event_date', { ascending: true }),
+                    .order('event_date', { ascending: true })
+                    .range(0, 999),
+                supabase
+                    .from('activities_field_trips')
+                    .select('*, division:divisions(id, name, gender)')
+                    .eq('company_id', companyId)
+                    .order('event_date', { ascending: true })
+                    .range(1000, 1999),
                 supabase
                     .from('special_events_activities')
                     .select('*, division:divisions(id, name, gender)')
                     .eq('company_id', companyId)
-                    .order('event_date', { ascending: true }),
+                    .order('event_date', { ascending: true })
+                    .range(0, 999),
+                supabase
+                    .from('special_events_activities')
+                    .select('*, division:divisions(id, name, gender)')
+                    .eq('company_id', companyId)
+                    .order('event_date', { ascending: true })
+                    .range(1000, 1999),
+                supabase
+                    .from('daily_wolf_content')
+                    .select('*')
+                    .eq('company_id', companyId)
+                    .eq('season', seasonFilter)
+                    .order('date', { ascending: true }),
             ]);
 
-            const sportsData = (sportsRes.data || []).filter((e: any) => e.season === seasonFilter || e.season == null);
-            const activitiesData = (activitiesRes.data || []).filter((e: any) => e.season === seasonFilter || e.season == null);
-            const specialData = (specialRes.data || []).filter((e: any) => e.season === seasonFilter || e.season == null);
+            const sportsData = [...(sportsBatch1.data || []), ...(sportsBatch2.data || [])]
+                .filter((e: any) => e.season === seasonFilter || e.season == null);
+            const activitiesData = [...(activitiesBatch1.data || []), ...(activitiesBatch2.data || [])]
+                .filter((e: any) => e.season === seasonFilter || e.season == null);
+            const specialData = [...(specialBatch1.data || []), ...(specialBatch2.data || [])]
+                .filter((e: any) => e.season === seasonFilter || e.season == null);
 
             const events: CalendarEvent[] = [];
 
             sportsData.forEach((event: any) => {
-                const div = event.division;
+                const divisions =
+                    event.sports_calendar_divisions?.map((d: any) => d.division).filter(Boolean)
+                    || (event.division ? [event.division] : []);
+                const div = divisions[0];
                 events.push({
                     id: `sports_${event.id}`,
                     title: event.title || '',
@@ -100,7 +143,7 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                     divisionName: div?.name,
                     home_away: event.home_away,
                     tags: ['Sports', event.sport_type || event.custom_sport_type, div?.name].filter(Boolean),
-                    originalData: event,
+                    originalData: { ...event, divisions },
                 });
             });
 
@@ -137,6 +180,34 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                     divisionName: div?.name,
                     tags: ['Special Event', event.event_type, div?.name].filter(Boolean),
                     originalData: event,
+                });
+            });
+
+            // Tiger Times (Daily Wolf content): each populated field becomes a calendar event.
+            const tigerFields: { field: string; label: string; colorKey: string }[] = [
+                { field: 'laundry_info', label: 'Laundry', colorKey: 'TT: Laundry' },
+                { field: 'phone_calls_info', label: 'Phone Calls', colorKey: 'TT: Phone Calls' },
+                { field: 'outside_event', label: 'Outside Events', colorKey: 'TT: Outside Events' },
+                { field: 'staff_days_off', label: 'Staff Days Off', colorKey: 'TT: Staff Days Off' },
+                { field: 'od_notes', label: 'OD Notes', colorKey: 'TT: OD Notes' },
+            ];
+
+            (tigerTimesRes.data || []).forEach((entry: any) => {
+                tigerFields.forEach(({ field, label, colorKey }) => {
+                    const value = entry?.[field];
+                    if (typeof value === 'string' && value.trim()) {
+                        events.push({
+                            id: `tt_${entry.id}_${field}`,
+                            title: `Tiger Times: ${label}`,
+                            date: entry.date,
+                            location: '',
+                            description: value,
+                            type: colorKey,
+                            source: 'tiger_times',
+                            tags: ['Tiger Times', label],
+                            originalData: { ...entry, tiger_times_category: colorKey },
+                        });
+                    }
                 });
             });
 
