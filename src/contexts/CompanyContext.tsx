@@ -14,6 +14,7 @@ interface CompanyContextType {
     companyThemeColor: string | null;
     season: string;
     setSeason: (season: string) => void;
+    availableSeasons: string[];
     isTylerHill: boolean;
     isLoading: boolean;
     profile: any | null;
@@ -25,12 +26,15 @@ interface CompanyContextType {
     retryLoad: () => void;
 }
 
+const DEFAULT_SEASONS = ['2025', '2026'];
+
 const CompanyContext = createContext<CompanyContextType>({
     companyId: null,
     companySlug: null,
     companyThemeColor: null,
     season: new Date().getFullYear().toString(),
     setSeason: () => { },
+    availableSeasons: DEFAULT_SEASONS,
     isTylerHill: false,
     isLoading: true,
     profile: null,
@@ -47,11 +51,18 @@ interface CompanyProviderProps {
     children: ReactNode;
 }
 
+const ALLOWED_COMPANY_SLUGS = new Set([
+    'timber-lake-camp',
+    'timber-lake-west',
+    'tyler-hill-camp',
+]);
+
 export const CompanyProvider = ({ children }: CompanyProviderProps) => {
     const [companyId, setCompanyId] = useState<string | null>(null);
     const [companySlug, setCompanySlug] = useState<string | null>(null);
     const [companyThemeColor, setCompanyThemeColor] = useState<string | null>(null);
     const [season, setSeason] = useState(new Date().getFullYear().toString());
+    const [availableSeasons, setAvailableSeasons] = useState<string[]>(DEFAULT_SEASONS);
     const [isTylerHill, setIsTylerHill] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [profile, setProfile] = useState<any | null>(null);
@@ -106,8 +117,24 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                         .order('name');
 
                     if (allCompanies) {
-                        setAvailableCompanies(allCompanies);
+                        setAvailableCompanies(
+                            allCompanies.filter((company) => ALLOWED_COMPANY_SLUGS.has(company.slug))
+                        );
                     }
+                }
+
+                // Fetch distinct seasons from children table (same as web app)
+                const { data: seasonRows } = await supabase
+                    .from('children')
+                    .select('season')
+                    .order('season', { ascending: false });
+
+                if (seasonRows) {
+                    const dbSeasons = [...new Set(
+                        seasonRows.map((r: any) => r.season).filter(Boolean) as string[]
+                    )];
+                    const merged = [...new Set([...DEFAULT_SEASONS, ...dbSeasons])].sort().reverse();
+                    setAvailableSeasons(merged);
                 }
 
                 // Set initial company from profile
@@ -179,7 +206,11 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 setIsSuperAdmin(superAdmin);
                 if (superAdmin) {
                     const { data: allCompanies } = await supabase.from('companies').select('id, name, slug, theme_color').order('name');
-                    if (allCompanies) setAvailableCompanies(allCompanies);
+                    if (allCompanies) {
+                        setAvailableCompanies(
+                            allCompanies.filter((company) => ALLOWED_COMPANY_SLUGS.has(company.slug))
+                        );
+                    }
                 }
                 setCompanyId(profileData.company_id);
                 if (profileData.company_id) {
@@ -207,6 +238,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 companyThemeColor,
                 season,
                 setSeason,
+                availableSeasons,
                 isTylerHill,
                 isLoading,
                 profile,

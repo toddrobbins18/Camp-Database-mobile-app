@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer } from '@react-navigation/native';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Modal, Pressable, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Pressable, ScrollView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCompany } from '../contexts/CompanyContext';
 import { LoginScreen } from '../screens/LoginScreen';
@@ -97,10 +97,10 @@ const darkenHexForSidebar = (hex: string, amount = 40) => {
 // Custom Drawer Content with Role-Based Visibility
 const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
-    const [selectedYear, setSelectedYear] = useState('2026');
     const { data: roleData } = useRole();
-    const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad } = useCompany();
+    const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons } = useCompany();
     const [showCampPicker, setShowCampPicker] = useState(false);
+    const [showYearPicker, setShowYearPicker] = useState(false);
 
     // Role flags (default to showing Main Menu items while loading)
     const isSuperAdmin = roleData?.isSuperAdmin ?? false;
@@ -152,72 +152,101 @@ const CustomDrawerContent = (props: any) => {
                     />
                 </View>
 
-                {/* Year Selector */}
-                <View style={styles.inputFieldContainer}>
-                    <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                    <TextInput
-                        style={styles.inputField}
-                        value={selectedYear}
-                        onChangeText={setSelectedYear}
-                        editable={false}
-                    />
-                    <TouchableOpacity style={styles.dropdownIcon}>
-                        <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                {/* Year / Season Selector */}
+                <View style={styles.campSwitcherWrap}>
+                    <TouchableOpacity
+                        style={styles.campSwitcher}
+                        onPress={() => { setShowYearPicker((prev) => !prev); setShowCampPicker(false); }}
+                        activeOpacity={0.85}
+                    >
+                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                        <Text style={styles.campSwitcherText}>{season}</Text>
+                        <Ionicons name={showYearPicker ? 'chevron-up' : 'chevron-down'} size={16} color={theme.colors.textSecondary} />
                     </TouchableOpacity>
+
+                    {showYearPicker && (
+                        <View style={styles.campDropdown}>
+                            {availableSeasons.map((yr) => {
+                                const isActive = yr === season;
+                                return (
+                                    <TouchableOpacity
+                                        key={yr}
+                                        style={[
+                                            styles.campDropdownItem,
+                                            isActive && styles.campDropdownItemActive,
+                                        ]}
+                                        onPress={() => {
+                                            setSeason(yr);
+                                            setShowYearPicker(false);
+                                        }}
+                                        activeOpacity={0.8}
+                                    >
+                                        {isActive && (
+                                            <Ionicons name="checkmark" size={16} color="#fff" style={{ marginRight: 6 }} />
+                                        )}
+                                        <Text
+                                            style={[
+                                                styles.campDropdownItemText,
+                                                isActive && styles.campDropdownItemTextActive,
+                                            ]}
+                                        >
+                                            {yr}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    )}
                 </View>
 
                 {/* Camp Switcher (Super Admin only) */}
                 {(isSuperAdmin || isSuperAdminCompany) && availableCompanies.length > 1 && (
-                    <>
+                    <View style={styles.campSwitcherWrap}>
                         <TouchableOpacity
                             style={styles.campSwitcher}
-                            onPress={() => setShowCampPicker(true)}
+                            onPress={() => { setShowCampPicker((prev) => !prev); setShowYearPicker(false); }}
+                            activeOpacity={0.85}
                         >
                             <Ionicons name="business-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
                             <Text style={styles.campSwitcherText} numberOfLines={1}>{currentCompanyName}</Text>
-                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                            <Ionicons name={showCampPicker ? 'chevron-up' : 'chevron-down'} size={16} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
 
-                        <Modal
-                            visible={showCampPicker}
-                            transparent
-                            animationType="fade"
-                            onRequestClose={() => setShowCampPicker(false)}
-                        >
-                            <Pressable style={styles.campPickerOverlay} onPress={() => setShowCampPicker(false)}>
-                                <Pressable style={styles.campPickerContainer} onPress={e => e.stopPropagation()}>
-                                    <Text style={styles.campPickerTitle}>Switch Camp</Text>
-                                    <ScrollView style={{ maxHeight: 300 }}>
-                                        {availableCompanies.map(company => (
-                                            <TouchableOpacity
-                                                key={company.id}
+                        {showCampPicker && (
+                            <View style={styles.campDropdown}>
+                                {availableCompanies.map((company) => {
+                                    const isActive = company.id === companyId;
+                                    return (
+                                        <TouchableOpacity
+                                            key={company.id}
+                                            style={[
+                                                styles.campDropdownItem,
+                                                isActive && styles.campDropdownItemActive,
+                                            ]}
+                                            onPress={() => {
+                                                switchCompany(company.id);
+                                                setShowCampPicker(false);
+                                            }}
+                                            activeOpacity={0.8}
+                                        >
+                                            {isActive && (
+                                                <Ionicons name="checkmark" size={16} color={theme.colors.text} style={{ marginRight: 6 }} />
+                                            )}
+                                            <Text
                                                 style={[
-                                                    styles.campPickerItem,
-                                                    company.id === companyId && styles.campPickerItemActive,
+                                                    styles.campDropdownItemText,
+                                                    isActive && styles.campDropdownItemTextActive,
                                                 ]}
-                                                onPress={() => {
-                                                    switchCompany(company.id);
-                                                    setShowCampPicker(false);
-                                                }}
+                                                numberOfLines={1}
                                             >
-                                                <Ionicons
-                                                    name={company.id === companyId ? 'radio-button-on' : 'radio-button-off'}
-                                                    size={20}
-                                                    color={company.id === companyId ? '#6366f1' : theme.colors.textSecondary}
-                                                />
-                                                <Text style={[
-                                                    styles.campPickerItemText,
-                                                    company.id === companyId && styles.campPickerItemTextActive,
-                                                ]}>
-                                                    {company.name}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </ScrollView>
-                                </Pressable>
-                            </Pressable>
-                        </Modal>
-                    </>
+                                                {company.name}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        )}
+                    </View>
                 )}
 
                 <Text style={styles.sectionHeader}>Main Menu</Text>
@@ -606,9 +635,6 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         paddingVertical: 0,
     },
-    dropdownIcon: {
-        paddingLeft: theme.spacing.xs,
-    },
     sectionHeader: {
         color: '#64748b',
         fontSize: 12,
@@ -626,12 +652,15 @@ const styles = StyleSheet.create({
         borderTopColor: 'rgba(255,255,255,0.1)',
         paddingBottom: theme.spacing.lg,
     },
+    campSwitcherWrap: {
+        marginBottom: theme.spacing.md,
+        zIndex: 10,
+    },
     campSwitcher: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.md,
-        marginBottom: theme.spacing.md,
         paddingHorizontal: theme.spacing.sm,
         height: 44,
     },
@@ -641,44 +670,41 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         fontWeight: '600',
     },
-    campPickerOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    campPickerContainer: {
+    campDropdown: {
+        marginTop: 4,
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.xl,
-        padding: theme.spacing.lg,
-        width: '85%',
-        maxWidth: 360,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: 4,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.15,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 6,
+            },
+        }),
     },
-    campPickerTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.md,
-        textAlign: 'center',
-    },
-    campPickerItem: {
+    campDropdownItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 12,
+        paddingVertical: 11,
         paddingHorizontal: theme.spacing.md,
+        borderRadius: theme.borderRadius.sm,
+        marginHorizontal: 4,
+    },
+    campDropdownItemActive: {
+        backgroundColor: '#f97316',
         borderRadius: theme.borderRadius.md,
-        gap: 12,
-        marginBottom: 4,
     },
-    campPickerItemActive: {
-        backgroundColor: '#eef2ff',
-    },
-    campPickerItemText: {
-        fontSize: 15,
+    campDropdownItemText: {
+        fontSize: 14,
         color: theme.colors.text,
     },
-    campPickerItemTextActive: {
+    campDropdownItemTextActive: {
         fontWeight: '700',
-        color: '#6366f1',
+        color: '#fff',
     },
 });
