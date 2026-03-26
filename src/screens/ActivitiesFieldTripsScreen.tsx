@@ -166,8 +166,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         });
     };
 
-    // Use global company/season context for consistency with other screens
-    const [selectedYear, setSelectedYear] = useState(season || '2026');
+    const selectedYear = season || '2026';
 
     // Fetch divisions
     const { data: divisions = [] } = useQuery({
@@ -192,15 +191,22 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         queryFn: async () => {
             if (!companyId) return [];
 
-            // Parallel fetch for activities, division links, and division metadata.
-            // (Avoid nested selects which can 400 depending on PostgREST relationship names.)
-            const [activitiesResult, linksResult, divisionsMetaResult] = await Promise.all([
+            // Batch fetch to handle > 1000 rows (Supabase default limit)
+            const [activitiesBatch1, activitiesBatch2, linksResult, divisionsMetaResult] = await Promise.all([
                 supabase
                     .from("activities_field_trips")
                     .select("*")
                     .eq('company_id', companyId)
                     .eq('season', selectedYear)
-                    .order("event_date", { ascending: true }),
+                    .order("event_date", { ascending: true })
+                    .range(0, 999),
+                supabase
+                    .from("activities_field_trips")
+                    .select("*")
+                    .eq('company_id', companyId)
+                    .eq('season', selectedYear)
+                    .order("event_date", { ascending: true })
+                    .range(1000, 1999),
                 supabase
                     .from("activities_field_trips_divisions")
                     .select("activity_id, division_id")
@@ -211,7 +217,11 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     .eq('company_id', companyId)
             ]);
 
-            if (activitiesResult.error) throw activitiesResult.error;
+            if (activitiesBatch1.error) throw activitiesBatch1.error;
+            const allActivities = [
+                ...(activitiesBatch1.data || []),
+                ...(activitiesBatch2.data || []),
+            ];
 
             // Build a divisionId -> division meta lookup
             const divisionById: Record<string, any> = {};
@@ -233,7 +243,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                 divisionMap[aid].push(meta ? { id: meta.id, name: meta.name, gender: meta.gender } : { id: did, name: did, gender: null });
             });
 
-            return (activitiesResult.data || []).map(activity => ({
+            return allActivities.map(activity => ({
                 ...activity,
                 divisions: divisionMap[activity.id != null ? String(activity.id) : ''] || []
             }));
@@ -245,8 +255,9 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const [isDivisionDropdownOpen, setIsDivisionDropdownOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');
     const [calendarView, setCalendarView] = useState<CalendarView>('Month');
-    const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 22)); // January 22, 2026
-    const [currentMonth, setCurrentMonth] = useState(new Date(2026, 0, 1)); // January 2026
+    const seasonYear = parseInt(selectedYear, 10) || new Date().getFullYear();
+    const [currentDate, setCurrentDate] = useState(new Date(seasonYear, 0, 22));
+    const [currentMonth, setCurrentMonth] = useState(new Date(seasonYear, 0, 1));
     const [sortBy, setSortBy] = useState<'date' | 'division'>('date');
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingActivity, setEditingActivity] = useState<any>(null);
@@ -826,80 +837,78 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
                 {/* Controls Bar */}
                 <View style={styles.controlsBar}>
-                    {/* Division Filter and Sort */}
-                    <View style={styles.controlsLeft}>
-                        <View style={styles.divisionFilterContainer}>
+                    {/* Row 1: Filters + View Toggle */}
+                    <View style={styles.controlsTopRow}>
+                        <View style={styles.controlsLeft}>
+                            <View style={styles.divisionFilterContainer}>
+                                <TouchableOpacity
+                                    style={styles.divisionDropdown}
+                                    onPress={() => setIsDivisionDropdownOpen(!isDivisionDropdownOpen)}
+                                >
+                                    <Text style={styles.divisionText}>{selectedDivision}</Text>
+                                    <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+                            {viewMode === 'list' && (
+                                <TouchableOpacity
+                                    style={styles.sortButton}
+                                    onPress={() => setSortBy(sortBy === 'date' ? 'division' : 'date')}
+                                >
+                                    <Text style={styles.sortButtonText}>
+                                        Sort by {sortBy === 'date' ? 'Division' : 'Date'}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        <View style={styles.controlsRight}>
+                            <View style={styles.viewToggle}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.viewToggleButton,
+                                        viewMode === 'calendar' && styles.viewToggleButtonActive
+                                    ]}
+                                    onPress={() => setViewMode('calendar')}
+                                >
+                                    <Ionicons
+                                        name="calendar"
+                                        size={20}
+                                        color={viewMode === 'calendar' ? theme.colors.surface : theme.colors.textSecondary}
+                                    />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.viewToggleButton,
+                                        viewMode === 'list' && styles.viewToggleButtonActive
+                                    ]}
+                                    onPress={() => setViewMode('list')}
+                                >
+                                    <Ionicons
+                                        name="list"
+                                        size={20}
+                                        color={viewMode === 'list' ? theme.colors.surface : theme.colors.textSecondary}
+                                    />
+                                </TouchableOpacity>
+                            </View>
                             <TouchableOpacity
-                                style={styles.divisionDropdown}
-                                onPress={() => setIsDivisionDropdownOpen(!isDivisionDropdownOpen)}
+                                style={styles.iconButton}
+                                onPress={() => setIsHelpModalOpen(true)}
                             >
-                                <Text style={styles.divisionText}>{selectedDivision}</Text>
-                                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                                <Ionicons name="help-circle-outline" size={24} color={theme.colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
-                        {viewMode === 'list' && (
-                            <TouchableOpacity
-                                style={styles.sortButton}
-                                onPress={() => setSortBy(sortBy === 'date' ? 'division' : 'date')}
-                            >
-                                <Text style={styles.sortButtonText}>
-                                    Sort by {sortBy === 'date' ? 'Division' : 'Date'}
-                                </Text>
-                            </TouchableOpacity>
-                        )}
                     </View>
 
-
-                    {/* Action Buttons */}
-                    <View style={styles.actionButtons}>
-                        {/* View Toggle */}
-                        <View style={styles.viewToggle}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.viewToggleButton,
-                                    viewMode === 'calendar' && styles.viewToggleButtonActive
-                                ]}
-                                onPress={() => setViewMode('calendar')}
-                            >
-                                <Ionicons
-                                    name="calendar"
-                                    size={20}
-                                    color={viewMode === 'calendar' ? theme.colors.surface : theme.colors.textSecondary}
-                                />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[
-                                    styles.viewToggleButton,
-                                    viewMode === 'list' && styles.viewToggleButtonActive
-                                ]}
-                                onPress={() => setViewMode('list')}
-                            >
-                                <Ionicons
-                                    name="list"
-                                    size={20}
-                                    color={viewMode === 'list' ? theme.colors.surface : theme.colors.textSecondary}
-                                />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Help Icon */}
-                        <TouchableOpacity
-                            style={styles.iconButton}
-                            onPress={() => setIsHelpModalOpen(true)}
-                        >
-                            <Ionicons name="help-circle-outline" size={24} color={theme.colors.textSecondary} />
-                        </TouchableOpacity>
-
-                        {/* Upload CSV Button */}
+                    {/* Row 2: Action Buttons */}
+                    <View style={styles.actionButtonsRow}>
                         <TouchableOpacity
                             style={styles.uploadButton}
                             onPress={() => { setCsvUploadError(null); setIsUploadCSVModalOpen(true); }}
                         >
-                            <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.surface} />
+                            <Ionicons name="cloud-upload-outline" size={16} color={theme.colors.surface} />
                             <Text style={styles.uploadButtonText}>Upload CSV</Text>
                         </TouchableOpacity>
 
-                        {/* Add Activity Button */}
                         <TouchableOpacity
                             style={styles.addButton}
                             onPress={() => {
@@ -910,7 +919,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 setIsLocationTypeDropdownOpen(false);
                             }}
                         >
-                            <Ionicons name="add" size={20} color={theme.colors.surface} />
+                            <Ionicons name="add" size={18} color={theme.colors.surface} />
                             <Text style={styles.addButtonText}>Add Activity</Text>
                         </TouchableOpacity>
                     </View>
@@ -2746,7 +2755,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             {/* Hour Selection */}
                             <View style={styles.timePickerColumn}>
                                 <Text style={styles.timePickerLabel}>Hour</Text>
-                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                                     {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
                                         <TouchableOpacity
                                             key={hour}
@@ -2764,13 +2773,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             </Text>
                                         </TouchableOpacity>
                                     ))}
-                                </KeyboardAwareScrollView>
+                                </ScrollView>
                             </View>
 
                             {/* Minute Selection */}
                             <View style={styles.timePickerColumn}>
                                 <Text style={styles.timePickerLabel}>Minute</Text>
-                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                                     {Array.from({ length: 60 }, (_, i) => i).map((minute) => (
                                         <TouchableOpacity
                                             key={minute}
@@ -2788,13 +2797,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             </Text>
                                         </TouchableOpacity>
                                     ))}
-                                </KeyboardAwareScrollView>
+                                </ScrollView>
                             </View>
 
                             {/* AM/PM Selection */}
                             <View style={styles.timePickerColumn}>
                                 <Text style={styles.timePickerLabel}>Period</Text>
-                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                                     {['AM', 'PM'].map((period) => (
                                         <TouchableOpacity
                                             key={period}
@@ -2812,7 +2821,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             </Text>
                                         </TouchableOpacity>
                                     ))}
-                                </KeyboardAwareScrollView>
+                                </ScrollView>
                             </View>
                         </View>
 
@@ -2891,12 +2900,18 @@ const styles = StyleSheet.create({
         padding: theme.spacing.md,
     },
     controlsBar: {
+        marginBottom: theme.spacing.md,
+        gap: theme.spacing.sm,
+    },
+    controlsTopRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: theme.spacing.md,
-        flexWrap: 'wrap',
-        gap: theme.spacing.sm,
+    },
+    controlsRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
     },
     controlsLeft: {
         flexDirection: 'row',
@@ -2937,7 +2952,7 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
     },
-    actionButtons: {
+    actionButtonsRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: theme.spacing.sm,
@@ -2961,31 +2976,33 @@ const styles = StyleSheet.create({
         padding: theme.spacing.sm,
     },
     uploadButton: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: theme.spacing.xs,
+        justifyContent: 'center',
+        gap: 6,
         backgroundColor: theme.colors.textSecondary,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
+        paddingVertical: 10,
         borderRadius: theme.borderRadius.md,
     },
     uploadButtonText: {
         color: theme.colors.surface,
-        fontSize: 14,
-        fontWeight: '500',
+        fontSize: 13,
+        fontWeight: '600',
     },
     addButton: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: theme.spacing.xs,
+        justifyContent: 'center',
+        gap: 6,
         backgroundColor: theme.colors.secondary,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
+        paddingVertical: 10,
         borderRadius: theme.borderRadius.md,
     },
     addButtonText: {
         color: theme.colors.surface,
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '600',
     },
     calendarCard: {
@@ -3731,8 +3748,8 @@ const styles = StyleSheet.create({
     },
     timePickerContent: {
         flexDirection: 'row',
-        padding: theme.spacing.md,
-        maxHeight: 300,
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.sm,
     },
     timePickerColumn: {
         flex: 1,
@@ -3748,15 +3765,15 @@ const styles = StyleSheet.create({
     },
     timePickerScroll: {
         width: '100%',
-        maxHeight: 200,
+        maxHeight: 130,
     },
     timePickerOption: {
-        paddingVertical: theme.spacing.sm,
-        paddingHorizontal: theme.spacing.md,
+        paddingVertical: 6,
+        paddingHorizontal: theme.spacing.sm,
         borderRadius: theme.borderRadius.sm,
-        marginVertical: theme.spacing.xs,
+        marginVertical: 2,
         alignItems: 'center',
-        minWidth: 60,
+        minWidth: 56,
     },
     timePickerOptionSelected: {
         backgroundColor: theme.colors.secondary,
@@ -3771,7 +3788,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     timePickerDisplay: {
-        padding: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
         alignItems: 'center',
         borderTopWidth: 1,
         borderTopColor: theme.colors.border,
@@ -3787,7 +3804,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'flex-end',
         gap: theme.spacing.sm,
-        padding: theme.spacing.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.sm,
     },
     timePickerCancelButton: {
         paddingHorizontal: theme.spacing.lg,
@@ -4155,10 +4173,9 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.surface,
         borderTopLeftRadius: theme.borderRadius.xl,
         borderTopRightRadius: theme.borderRadius.xl,
-        paddingTop: theme.spacing.lg,
-        paddingBottom: theme.spacing.xl,
+        paddingTop: theme.spacing.md,
+        paddingBottom: 40,
         paddingHorizontal: theme.spacing.md,
-        maxHeight: '40%',
     },
     divisionBottomSheet: {
         backgroundColor: theme.colors.surface,
