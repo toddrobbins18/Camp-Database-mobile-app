@@ -234,6 +234,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                         { label: 'Sports', icon: 'trophy-outline', route: 'Sports' },
                         { label: 'Events', icon: 'star-outline', route: 'SpecialEvents' },
                         { label: 'Menu', icon: 'restaurant-outline', route: 'Menu' },
+                        { label: 'Owl Pay', icon: 'wallet-outline', route: 'OwlPay' },
                         { label: 'Transport', icon: 'car-outline', route: 'Transport' },
                         { label: 'Messages', icon: 'mail-outline', route: 'Messages' },
                         { label: 'Reports', icon: 'bar-chart-outline', route: 'Reports' },

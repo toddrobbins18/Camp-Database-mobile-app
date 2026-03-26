@@ -39,6 +39,7 @@ import { UserApprovalsScreen } from '../screens/UserApprovalsScreen';
 import { AccessDeniedScreen } from '../screens/AccessDeniedScreen';
 import { SpecialistSportAssignmentsScreen } from '../screens/SpecialistSportAssignmentsScreen';
 import { NotificationPreferencesScreen } from '../screens/NotificationPreferencesScreen';
+import { OwlPayScreen } from '../screens/OwlPayScreen';
 
 import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { useRole } from '../hooks/useRole';
@@ -241,6 +242,12 @@ const CustomDrawerContent = (props: any) => {
                             onPress={() => props.navigation.navigate('ODManagement')}
                             {...drawerItemProps}
                         />
+                <DrawerItem
+                    label="Owl Pay"
+                    icon={({ color }) => <Ionicons name="wallet-outline" size={22} color={color} />}
+                    onPress={() => props.navigation.navigate('OwlPay')}
+                    {...drawerItemProps}
+                />
                         <DrawerItem
                             label="Special Events & Evening Activities"
                             icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
@@ -471,6 +478,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="AccessDenied" component={AccessDeniedScreen} />
             <Drawer.Screen name="SpecialistSportAssignments" component={SpecialistSportAssignmentsScreen} />
             <Drawer.Screen name="ODManagement" component={ODManagementScreen} />
+            <Drawer.Screen name="OwlPay" component={OwlPayScreen} />
         </Drawer.Navigator>
     );
 };
