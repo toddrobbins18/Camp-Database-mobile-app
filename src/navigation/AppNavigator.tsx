@@ -49,12 +49,57 @@ import { theme } from '../theme/theme';
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
 
+const hexToHsl = (hex: string) => {
+    const cleaned = hex.replace('#', '');
+    if (cleaned.length !== 6) return null;
+
+    const r = parseInt(cleaned.substring(0, 2), 16) / 255;
+    const g = parseInt(cleaned.substring(2, 4), 16) / 255;
+    const b = parseInt(cleaned.substring(4, 6), 16) / 255;
+    if ([r, g, b].some((v) => Number.isNaN(v))) return null;
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h = 0;
+    let s = 0;
+    const l = (max + min) / 2;
+
+    if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r:
+                h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+                break;
+            case g:
+                h = ((b - r) / d + 2) / 6;
+                break;
+            default:
+                h = ((r - g) / d + 4) / 6;
+                break;
+        }
+    }
+
+    return {
+        h: Math.round(h * 360),
+        s: Math.round(s * 100),
+        l: Math.round(l * 100),
+    };
+};
+
+const darkenHexForSidebar = (hex: string, amount = 40) => {
+    const hsl = hexToHsl(hex);
+    if (!hsl) return theme.colors.primary;
+    const nextL = Math.max(0, hsl.l - amount);
+    return `hsl(${hsl.h}, ${hsl.s}%, ${nextL}%)`;
+};
+
 // Custom Drawer Content with Role-Based Visibility
 const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const [selectedYear, setSelectedYear] = useState('2026');
     const { data: roleData } = useRole();
-    const { availableCompanies, switchCompany, companyId, companySlug, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad } = useCompany();
+    const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad } = useCompany();
     const [showCampPicker, setShowCampPicker] = useState(false);
 
     // Role flags (default to showing Main Menu items while loading)
@@ -75,8 +120,12 @@ const CustomDrawerContent = (props: any) => {
 
     const currentCompanyName = availableCompanies.find(c => c.id === companyId)?.name || 'Select Camp';
 
+    const drawerBgColor = companyThemeColor
+        ? darkenHexForSidebar(companyThemeColor, 40)
+        : theme.colors.primary;
+
     return (
-        <View style={{ flex: 1, backgroundColor: theme.colors.primary }}>
+        <View style={{ flex: 1, backgroundColor: drawerBgColor }}>
             {loadError ? (
                 <View style={styles.loadErrorBanner}>
                     <Text style={styles.loadErrorText} numberOfLines={2}>{loadError}</Text>

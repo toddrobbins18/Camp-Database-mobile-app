@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -57,6 +57,9 @@ function formatTime12Hour(timeStr?: string): string {
 }
 
 export const CalendarScreen = ({ navigation }: any) => {
+    const ZOOM_BAR_WIDTH = 120;
+    const ZOOM_THUMB_SIZE = 16;
+    const { height: viewportHeight } = useWindowDimensions();
     const { companyId, season } = useCompany();
     const { data: liveEvents = [], isLoading: isLoadingEvents } = useCalendarEvents(companyId, season || '2026');
     const { data: divisionsList = [] } = useDivisions(companyId);
@@ -79,6 +82,8 @@ export const CalendarScreen = ({ navigation }: any) => {
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [showLocationTypePicker, setShowLocationTypePicker] = useState(false);
     const [showSortPicker, setShowSortPicker] = useState(false);
+    const [calendarZoomOffset, setCalendarZoomOffset] = useState(0);
+    const [zoomBarWidth, setZoomBarWidth] = useState(ZOOM_BAR_WIDTH);
 
     // Options for dropdowns (labels and values)
     const timeOptions: { label: string; value: string }[] = [
@@ -99,6 +104,40 @@ export const CalendarScreen = ({ navigation }: any) => {
         { label: 'Sort by Division', value: 'division' },
         { label: 'Sort by Source', value: 'source' },
     ];
+
+    const minCalendarHeight = 320;
+    const maxCalendarHeight = 900;
+    const autoCalendarHeight = useMemo(() => {
+        const available = viewportHeight - 380;
+        return Math.max(minCalendarHeight, Math.min(maxCalendarHeight, available));
+    }, [viewportHeight]);
+    const effectiveCalendarHeight = Math.max(
+        minCalendarHeight,
+        Math.min(maxCalendarHeight, autoCalendarHeight + calendarZoomOffset)
+    );
+    const monthGridHeight = Math.max(240, effectiveCalendarHeight - 48);
+    const monthCellHeight = Math.max(34, Math.floor(monthGridHeight / 6) - 6);
+
+    const handleZoomOut = () => {
+        setCalendarZoomOffset((prev) => Math.max(prev - 80, minCalendarHeight - autoCalendarHeight));
+    };
+    const handleZoomIn = () => {
+        setCalendarZoomOffset((prev) => Math.min(prev + 80, maxCalendarHeight - autoCalendarHeight));
+    };
+    const handleAutoAdjust = () => {
+        setCalendarZoomOffset(0);
+    };
+
+    const setZoomFromRatio = (ratio: number) => {
+        const safeRatio = Number.isFinite(ratio) ? ratio : 0;
+        const clamped = Math.max(0, Math.min(1, safeRatio));
+        const targetHeight = minCalendarHeight + clamped * (maxCalendarHeight - minCalendarHeight);
+        const nextOffset = targetHeight - autoCalendarHeight;
+        setCalendarZoomOffset(Number.isFinite(nextOffset) ? nextOffset : 0);
+    };
+
+    const zoomRatio = (effectiveCalendarHeight - minCalendarHeight) / (maxCalendarHeight - minCalendarHeight);
+    const isDraggingZoomRef = useRef(false);
 
     // Map CalendarEvent[] to Event[] and apply filters/sort (aligned with web)
     const filteredAndSorted: CalendarEvent[] = liveEvents
@@ -519,6 +558,64 @@ export const CalendarScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
 
+                        <View style={styles.zoomControlsRow}>
+                            <TouchableOpacity style={styles.zoomControlButton} onPress={handleZoomOut}>
+                                <Ionicons name="remove" size={16} color={theme.colors.text} />
+                            </TouchableOpacity>
+                            <Pressable
+                                style={[styles.zoomBarTrack, { width: ZOOM_BAR_WIDTH }]}
+                                onLayout={(e) => {
+                                    const w = e.nativeEvent.layout.width;
+                                    if (Number.isFinite(w) && w > 0) setZoomBarWidth(w);
+                                }}
+                                onPress={(event) => {
+                                    const tappedX = event.nativeEvent.locationX;
+                                    setZoomFromRatio(tappedX / zoomBarWidth);
+                                }}
+                                onStartShouldSetResponder={() => true}
+                                onMoveShouldSetResponder={() => true}
+                                onResponderGrant={(event) => {
+                                    isDraggingZoomRef.current = true;
+                                    const x = event.nativeEvent.locationX;
+                                    setZoomFromRatio(x / zoomBarWidth);
+                                }}
+                                onResponderMove={(event) => {
+                                    if (!isDraggingZoomRef.current) return;
+                                    const x = event.nativeEvent.locationX;
+                                    setZoomFromRatio(x / zoomBarWidth);
+                                }}
+                                onResponderRelease={() => {
+                                    isDraggingZoomRef.current = false;
+                                }}
+                                onResponderTerminate={() => {
+                                    isDraggingZoomRef.current = false;
+                                }}
+                            >
+                                <View
+                                    style={[
+                                        styles.zoomBarFill,
+                                        {
+                                            width: `${zoomRatio * 100}%`,
+                                        },
+                                    ]}
+                                />
+                                <View
+                                    style={[
+                                        styles.zoomBarThumb,
+                                        {
+                                            left: zoomRatio * (zoomBarWidth - ZOOM_THUMB_SIZE),
+                                        },
+                                    ]}
+                                />
+                            </Pressable>
+                            <TouchableOpacity style={styles.zoomControlButton} onPress={handleZoomIn}>
+                                <Ionicons name="add" size={16} color={theme.colors.text} />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.zoomControlButton} onPress={handleAutoAdjust}>
+                                <Ionicons name="expand-outline" size={16} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
                         {/* Month and Year */}
                         <Text style={styles.monthYear}>{formatMonthYear(currentDate)}</Text>
 
@@ -545,7 +642,7 @@ export const CalendarScreen = ({ navigation }: any) => {
 
                         {/* Conditional View Rendering */}
                         {activeView === 'Month' && (
-                            <View style={styles.calendarGrid}>
+                            <View style={[styles.calendarGrid, { height: effectiveCalendarHeight }]}>
                                 {/* Week Day Headers */}
                                 <View style={styles.weekHeader}>
                                     {weekDays.map((day) => (
@@ -556,7 +653,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                 </View>
 
                                 {/* Calendar Days */}
-                                <View style={styles.daysGrid}>
+                                <View style={[styles.daysGrid, { height: monthGridHeight }]}>
                                     {calendarDays.map((day, index) => {
                                         const isSelected = isSameDate(day.fullDate, selectedDate);
                                         const isToday = isSameDate(day.fullDate, new Date());
@@ -567,6 +664,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                                 key={index}
                                                 style={[
                                                     styles.dayCell,
+                                                    { height: monthCellHeight },
                                                     !day.isCurrentMonth && styles.dayCellOtherMonth,
                                                     isSelected && styles.dayCellSelected
                                                 ]}
@@ -624,7 +722,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                                             {day.getDate()}
                                                         </Text>
                                                     </TouchableOpacity>
-                                                    <ScrollView style={styles.weekEventsList}>
+                                                    <ScrollView style={[styles.weekEventsList, { maxHeight: Math.max(220, effectiveCalendarHeight - 80) }]}>
                                                         {dayEvents.map(event => (
                                                             <TouchableOpacity key={event.id} style={styles.weekEventItem}>
                                                                 <Text style={styles.weekEventTime}>
@@ -657,7 +755,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                                             {selectedDate.getFullYear()}
                                         </Text>
                                     </View>
-                                    <ScrollView style={styles.dayEventsList}>
+                                    <ScrollView style={[styles.dayEventsList, { maxHeight: effectiveCalendarHeight }]}>
                                         {dayEvents.length > 0 ? (
                                             dayEvents.map(event => (
                                                 <StyledCard key={event.id} style={styles.dayEventCard}>
@@ -705,7 +803,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                         })()}
 
                         {activeView === 'Agenda' && (
-                            <ScrollView style={styles.agendaViewContainer}>
+                            <ScrollView style={[styles.agendaViewContainer, { maxHeight: effectiveCalendarHeight }]}>
                                 {getAgendaEvents().length > 0 ? (
                                     getAgendaEvents().map(event => (
                                         <StyledCard key={event.id} style={styles.agendaEventCard}>
@@ -1073,6 +1171,55 @@ const styles = StyleSheet.create({
         gap: theme.spacing.sm,
         marginBottom: theme.spacing.md,
     },
+    zoomControlsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: theme.spacing.xs,
+        marginBottom: theme.spacing.md,
+    },
+    zoomControlButton: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.surface,
+    },
+    zoomLabel: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        minWidth: 56,
+        textAlign: 'center',
+    },
+    zoomBarTrack: {
+        height: 8,
+        borderRadius: 999,
+        backgroundColor: '#e5e7eb',
+        justifyContent: 'center',
+        position: 'relative',
+        marginHorizontal: 2,
+    },
+    zoomBarFill: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        backgroundColor: '#0ea5e9',
+        borderRadius: 999,
+    },
+    zoomBarThumb: {
+        position: 'absolute',
+        width: 16,
+        height: 16,
+        top: -4,
+        borderRadius: 8,
+        backgroundColor: '#ffffff',
+        borderWidth: 2,
+        borderColor: theme.colors.secondary,
+    },
     navButton: {
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.sm,
@@ -1141,7 +1288,6 @@ const styles = StyleSheet.create({
     },
     dayCell: {
         width: '14.28%',
-        aspectRatio: 1,
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: theme.spacing.xs,

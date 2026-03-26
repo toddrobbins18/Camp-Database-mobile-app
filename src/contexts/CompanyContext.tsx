@@ -5,11 +5,13 @@ interface Company {
     id: string;
     name: string;
     slug: string;
+    theme_color?: string | null;
 }
 
 interface CompanyContextType {
     companyId: string | null;
     companySlug: string | null;
+    companyThemeColor: string | null;
     season: string;
     setSeason: (season: string) => void;
     isTylerHill: boolean;
@@ -26,6 +28,7 @@ interface CompanyContextType {
 const CompanyContext = createContext<CompanyContextType>({
     companyId: null,
     companySlug: null,
+    companyThemeColor: null,
     season: new Date().getFullYear().toString(),
     setSeason: () => { },
     isTylerHill: false,
@@ -47,6 +50,7 @@ interface CompanyProviderProps {
 export const CompanyProvider = ({ children }: CompanyProviderProps) => {
     const [companyId, setCompanyId] = useState<string | null>(null);
     const [companySlug, setCompanySlug] = useState<string | null>(null);
+    const [companyThemeColor, setCompanyThemeColor] = useState<string | null>(null);
     const [season, setSeason] = useState(new Date().getFullYear().toString());
     const [isTylerHill, setIsTylerHill] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -60,6 +64,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
         if (company) {
             setCompanyId(newCompanyId);
             setCompanySlug(company.slug);
+            setCompanyThemeColor(company.theme_color ?? null);
             setIsTylerHill(company.slug === 'tyler-hill-camp');
         }
     };
@@ -97,7 +102,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 if (superAdmin) {
                     const { data: allCompanies } = await supabase
                         .from('companies')
-                        .select('id, name, slug')
+                        .select('id, name, slug, theme_color')
                         .order('name');
 
                     if (allCompanies) {
@@ -112,12 +117,13 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 if (profileData.company_id) {
                     const { data: companyData, error: companyError } = await supabase
                         .from('companies')
-                        .select('slug, name')
+                        .select('slug, name, theme_color')
                         .eq('id', profileData.company_id)
                         .single();
 
                     if (!companyError && companyData) {
                         setCompanySlug(companyData.slug);
+                        setCompanyThemeColor(companyData.theme_color ?? null);
                         setIsTylerHill(companyData.slug === 'tyler-hill-camp');
                     }
                 }
@@ -140,6 +146,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 } else if (event === 'SIGNED_OUT') {
                     setCompanyId(null);
                     setCompanySlug(null);
+                    setCompanyThemeColor(null);
                     setIsTylerHill(false);
                     setProfile(null);
                     setAvailableCompanies([]);
@@ -171,14 +178,15 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 const superAdmin = roleData?.some((r: any) => r.role === 'super_admin') || false;
                 setIsSuperAdmin(superAdmin);
                 if (superAdmin) {
-                    const { data: allCompanies } = await supabase.from('companies').select('id, name, slug').order('name');
+                    const { data: allCompanies } = await supabase.from('companies').select('id, name, slug, theme_color').order('name');
                     if (allCompanies) setAvailableCompanies(allCompanies);
                 }
                 setCompanyId(profileData.company_id);
                 if (profileData.company_id) {
-                    const { data: companyData, error: companyError } = await supabase.from('companies').select('slug, name').eq('id', profileData.company_id).single();
+                    const { data: companyData, error: companyError } = await supabase.from('companies').select('slug, name, theme_color').eq('id', profileData.company_id).single();
                     if (!companyError && companyData) {
                         setCompanySlug(companyData.slug);
+                        setCompanyThemeColor(companyData.theme_color ?? null);
                         setIsTylerHill(companyData.slug === 'tyler-hill-camp');
                     }
                 }
@@ -196,6 +204,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
             value={{
                 companyId,
                 companySlug,
+                companyThemeColor,
                 season,
                 setSeason,
                 isTylerHill,
