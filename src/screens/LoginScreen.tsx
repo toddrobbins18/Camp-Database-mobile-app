@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -15,32 +15,138 @@ import { theme } from '../theme/theme';
 import { useLogin } from '../hooks/useAuth';
 import { loginSchema } from '../lib/authSchemas';
 import { supabase } from '../lib/supabase';
+import * as SecureStore from 'expo-secure-store';
 
 interface LoginScreenProps {
     navigation: any;
 }
 
+interface RememberedCredential {
+    email: string;
+    password: string;
+    lastUsedAt: number;
+}
+
 export const LoginScreen = ({ navigation }: LoginScreenProps) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [rememberMe, setRememberMe] = useState(false);
+    const [rememberedCredentials, setRememberedCredentials] = useState<RememberedCredential[]>([]);
     const [isForgotPassword, setIsForgotPassword] = useState(false);
     const [resetStatus, setResetStatus] = useState<'none' | 'error' | 'success'>('none');
     const [error, setError] = useState('');
 
-    const { mutate: login, isPending } = useLogin((data: any) => {
+    const REMEMBER_EMAIL_KEY = 'remembered_login_email';
+    const REMEMBER_PASSWORD_KEY = 'remembered_login_password';
+    const REMEMBERED_CREDENTIALS_KEY = 'remembered_login_credentials_v2';
+
+    useEffect(() => {
+        const loadRememberedCredentials = async () => {
+            try {
+                const [savedListRaw, savedEmail, savedPassword] = await Promise.all([
+                    SecureStore.getItemAsync(REMEMBERED_CREDENTIALS_KEY),
+                    SecureStore.getItemAsync(REMEMBER_EMAIL_KEY),
+                    SecureStore.getItemAsync(REMEMBER_PASSWORD_KEY),
+                ]);
+
+                if (savedListRaw) {
+                    const parsed = JSON.parse(savedListRaw) as RememberedCredential[];
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        const clean = parsed
+                            .filter((item) => item?.email && item?.password)
+                            .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0));
+                        setRememberedCredentials(clean);
+                        setEmail(clean[0].email);
+                        setPassword(clean[0].password);
+                        setRememberMe(true);
+                        return;
+                    }
+                }
+
+                // Backward compatibility for previously saved single credential.
+                if (savedEmail && savedPassword) {
+                    const legacyCredential: RememberedCredential = {
+                        email: savedEmail,
+                        password: savedPassword,
+                        lastUsedAt: Date.now(),
+                    };
+                    setRememberedCredentials([legacyCredential]);
+                    setEmail(savedEmail);
+                    setPassword(savedPassword);
+                    setRememberMe(true);
+                    await SecureStore.setItemAsync(
+                        REMEMBERED_CREDENTIALS_KEY,
+                        JSON.stringify([legacyCredential])
+                    );
+                }
+            } catch {
+                // Non-blocking: if secure storage fails, login still works normally.
+            }
+        };
+
+        loadRememberedCredentials();
+    }, []);
+
+    const saveCredentialList = async (nextList: RememberedCredential[]) => {
+        setRememberedCredentials(nextList);
+        if (nextList.length === 0) {
+            await Promise.all([
+                SecureStore.deleteItemAsync(REMEMBERED_CREDENTIALS_KEY),
+                SecureStore.deleteItemAsync(REMEMBER_EMAIL_KEY),
+                SecureStore.deleteItemAsync(REMEMBER_PASSWORD_KEY),
+            ]);
+            return;
+        }
+        await Promise.all([
+            SecureStore.setItemAsync(REMEMBERED_CREDENTIALS_KEY, JSON.stringify(nextList)),
+            SecureStore.setItemAsync(REMEMBER_EMAIL_KEY, nextList[0].email),
+            SecureStore.setItemAsync(REMEMBER_PASSWORD_KEY, nextList[0].password),
+        ]);
+    };
+
+    const { mutate: login, isPending } = useLogin(async () => {
+        try {
+            if (rememberMe) {
+                const normalizedEmail = email.trim();
+                const nextList = [
+                    { email: normalizedEmail, password, lastUsedAt: Date.now() },
+                    ...rememberedCredentials.filter(
+                        (item) => item.email.toLowerCase() !== normalizedEmail.toLowerCase()
+                    ),
+                ].slice(0, 5);
+                await saveCredentialList(nextList);
+            } else {
+                const normalizedEmail = email.trim().toLowerCase();
+                const remaining = rememberedCredentials.filter(
+                    (item) => item.email.toLowerCase() !== normalizedEmail
+                );
+                await saveCredentialList(remaining);
+            }
+        } catch {
+            // Non-blocking: auth succeeded, so do not block navigation on storage failure.
+        }
         navigation.replace('MainApp');
     });
 
     const handleSignIn = () => {
         setError('');
 
-        const result = loginSchema.safeParse({ email, password });
+        const normalizedEmail = email.trim();
+        const result = loginSchema.safeParse({ email: normalizedEmail, password });
         if (!result.success) {
             setError(result.error.issues[0].message);
             return;
         }
 
-        login({ email, password });
+        login({ email: normalizedEmail, password });
+    };
+
+    const handleSavedCredentialLogin = (credential: RememberedCredential) => {
+        setError('');
+        setEmail(credential.email);
+        setPassword(credential.password);
+        setRememberMe(true);
+        login({ email: credential.email, password: credential.password });
     };
 
 
@@ -83,6 +189,9 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
                                             keyboardType="email-address"
                                             autoCapitalize="none"
                                             autoCorrect={false}
+                                            autoComplete="username"
+                                            textContentType="username"
+                                            importantForAutofill="yes"
                                         />
                                     </View>
 
@@ -98,8 +207,45 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
                                             secureTextEntry
                                             autoCapitalize="none"
                                             autoCorrect={false}
+                                            autoComplete="password"
+                                            textContentType="password"
+                                            importantForAutofill="yes"
                                         />
                                     </View>
+
+                                    {/* Remember me */}
+                                    <TouchableOpacity
+                                        style={styles.rememberMeRow}
+                                        onPress={() => setRememberMe((prev) => !prev)}
+                                        activeOpacity={0.8}
+                                    >
+                                        <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                                            {rememberMe ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
+                                        </View>
+                                        <Text style={styles.rememberMeText}>Remember me</Text>
+                                    </TouchableOpacity>
+
+                                    {rememberedCredentials.length > 0 && (
+                                        <View style={styles.savedAccountsContainer}>
+                                            <Text style={styles.savedAccountsTitle}>Saved accounts</Text>
+                                            {rememberedCredentials.map((credential) => (
+                                                <TouchableOpacity
+                                                    key={credential.email}
+                                                    style={styles.savedAccountItem}
+                                                    onPress={() => handleSavedCredentialLogin(credential)}
+                                                    activeOpacity={0.85}
+                                                    disabled={isPending}
+                                                >
+                                                    <Ionicons
+                                                        name="mail-outline"
+                                                        size={16}
+                                                        color={theme.colors.textSecondary}
+                                                    />
+                                                    <Text style={styles.savedAccountText}>{credential.email}</Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                    )}
 
                                     {/* Sign In Button */}
                                     <TouchableOpacity
@@ -276,6 +422,59 @@ const styles = StyleSheet.create({
         color: theme.colors.surface,
         fontSize: 16,
         fontWeight: '600',
+    },
+    rememberMeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: -4,
+        marginBottom: 8,
+        gap: 10,
+    },
+    checkbox: {
+        width: 20,
+        height: 20,
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.surface,
+    },
+    checkboxChecked: {
+        backgroundColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+    },
+    rememberMeText: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        fontWeight: '500',
+    },
+    savedAccountsContainer: {
+        marginBottom: theme.spacing.sm,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+    },
+    savedAccountsTitle: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        fontWeight: '600',
+        marginBottom: theme.spacing.xs,
+    },
+    savedAccountItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 6,
+        borderRadius: 8,
+    },
+    savedAccountText: {
+        fontSize: 14,
+        color: theme.colors.text,
+        fontWeight: '500',
     },
     linkContainer: {
         marginTop: theme.spacing.md,
