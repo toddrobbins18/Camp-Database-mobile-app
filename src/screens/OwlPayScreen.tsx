@@ -1,5 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+    ActivityIndicator,
+    Alert,
     Modal,
     Pressable,
     SafeAreaView,
@@ -13,32 +15,19 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { StyledCard } from '../components/StyledCard';
 import { theme } from '../theme/theme';
+import { useCompany } from '../contexts/CompanyContext';
+import {
+    OwlPayEmailConfig,
+    useOwlPayCampers,
+    useOwlPayEmailConfig,
+    useOwlPayItems,
+    useOwlPayReports,
+    useSaveOwlPayEmailConfig,
+    useSaveOwlPayItem,
+} from '../api/owlpay';
 
 type OwlPayTab = 'pos' | 'items' | 'balances' | 'reports' | 'settings';
 type ItemCategory = 'Food' | 'Snacks' | 'Drinks' | 'Other';
-
-type Camper = {
-    id: string;
-    name: string;
-    personId: string;
-    balance: number;
-};
-
-type CanteenItem = {
-    id: string;
-    name: string;
-    price: number;
-    category: ItemCategory;
-};
-
-const INITIAL_CAMPERS: Camper[] = [
-    { id: '1', name: 'Adam Elliott', personId: '8947944', balance: 0 },
-    { id: '2', name: 'Adrianna Gelb', personId: '11001910', balance: 0 },
-    { id: '3', name: 'Aiden Feld', personId: '18230467', balance: 0 },
-    { id: '4', name: 'Alex Haboush', personId: '8128371', balance: 0 },
-    { id: '5', name: 'Alex Stumacher', personId: '15611027', balance: 0 },
-    { id: '6', name: 'Alexa Alfred', personId: '11974301', balance: 0 },
-];
 
 const currency = (amount: number) => `$${amount.toFixed(2)}`;
 
@@ -46,13 +35,14 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const [activeTab, setActiveTab] = useState<OwlPayTab>('pos');
     const [camperQuery, setCamperQuery] = useState('');
     const [selectedCamperId, setSelectedCamperId] = useState<string | null>(null);
-    const [items, setItems] = useState<CanteenItem[]>([]);
     const [showAddItemModal, setShowAddItemModal] = useState(false);
     const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
     const [itemForm, setItemForm] = useState({ name: '', price: '', category: 'Snacks' as ItemCategory });
     const [reportsRange, setReportsRange] = useState<'Today' | 'This Week' | 'This Month' | 'All Time'>('All Time');
     const [lowBalanceAlertsEnabled, setLowBalanceAlertsEnabled] = useState(false);
     const [staffReportsEnabled, setStaffReportsEnabled] = useState(false);
+    const [staffReportFrequency, setStaffReportFrequency] = useState('daily');
+    const { companyId, season } = useCompany();
 
     const tabs: { key: OwlPayTab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
         { key: 'pos', label: 'POS', icon: 'cart-outline' },
@@ -62,36 +52,91 @@ export const OwlPayScreen = ({ navigation }: any) => {
         { key: 'settings', label: 'Settings', icon: 'settings-outline' },
     ];
 
-    const filteredCampers = useMemo(() => {
-        const q = camperQuery.trim().toLowerCase();
-        if (!q) return INITIAL_CAMPERS;
-        return INITIAL_CAMPERS.filter((c) => {
-            const haystack = `${c.name} ${c.personId}`.toLowerCase();
-            return haystack.includes(q);
-        });
-    }, [camperQuery]);
+    const { data: campers = [], isLoading: campersLoading } = useOwlPayCampers(companyId, season, camperQuery);
+    const { data: allItems = [], isLoading: itemsLoading } = useOwlPayItems(companyId, true);
+    const { data: settings, isLoading: settingsLoading } = useOwlPayEmailConfig(companyId);
+    const saveItemMutation = useSaveOwlPayItem();
+    const saveSettingsMutation = useSaveOwlPayEmailConfig();
 
-    const selectedCamper = INITIAL_CAMPERS.find((c) => c.id === selectedCamperId) || null;
-    const totalBalance = INITIAL_CAMPERS.reduce((sum, camper) => sum + camper.balance, 0);
-    const averageBalance = INITIAL_CAMPERS.length ? totalBalance / INITIAL_CAMPERS.length : 0;
+    const reportRange = useMemo(() => {
+        const now = new Date();
+        const end = new Date(now);
+        const start = new Date(now);
+        if (reportsRange === 'Today') {
+            start.setHours(0, 0, 0, 0);
+        } else if (reportsRange === 'This Week') {
+            const day = start.getDay();
+            start.setDate(start.getDate() - day);
+            start.setHours(0, 0, 0, 0);
+        } else if (reportsRange === 'This Month') {
+            start.setDate(1);
+            start.setHours(0, 0, 0, 0);
+        } else {
+            start.setFullYear(2020, 0, 1);
+            start.setHours(0, 0, 0, 0);
+        }
+        return { start, end };
+    }, [reportsRange]);
+
+    const { data: reportsData, isLoading: reportsLoading } = useOwlPayReports(
+        companyId,
+        reportRange.start.toISOString(),
+        reportRange.end.toISOString()
+    );
+
+    const selectedCamper = campers.find((c) => c.id === selectedCamperId) || null;
+    const totalBalance = campers.reduce((sum, camper) => sum + Number(camper.owl_pay_balance || 0), 0);
+    const averageBalance = campers.length ? totalBalance / campers.length : 0;
 
     const addItem = () => {
         const name = itemForm.name.trim();
         const price = Number(itemForm.price);
         if (!name || Number.isNaN(price) || price < 0) return;
 
-        setItems((prev) => [
-            ...prev,
+        if (!companyId) return;
+        saveItemMutation.mutate(
             {
-                id: `${Date.now()}`,
+                company_id: companyId,
                 name,
                 price,
-                category: itemForm.category,
+                category: itemForm.category.toLowerCase(),
+                active: true,
             },
-        ]);
-        setItemForm({ name: '', price: '', category: 'Snacks' });
-        setShowCategoryDropdown(false);
-        setShowAddItemModal(false);
+            {
+                onSuccess: () => {
+                    setItemForm({ name: '', price: '', category: 'Snacks' });
+                    setShowCategoryDropdown(false);
+                    setShowAddItemModal(false);
+                },
+                onError: (err: any) => {
+                    Alert.alert('Owl Pay', err?.message || 'Failed to save item');
+                },
+            }
+        );
+    };
+
+    useEffect(() => {
+        if (!settings) return;
+        setLowBalanceAlertsEnabled(settings.low_balance_alerts_enabled);
+        setStaffReportsEnabled(settings.staff_purchase_reports_enabled);
+        setStaffReportFrequency(settings.staff_report_frequency || 'daily');
+    }, [settings]);
+
+    const saveSettings = () => {
+        if (!companyId) return;
+        const payload: OwlPayEmailConfig = {
+            company_id: companyId,
+            low_balance_alerts_enabled: lowBalanceAlertsEnabled,
+            low_balance_threshold: settings?.low_balance_threshold ?? 5,
+            low_balance_recipient_email: settings?.low_balance_recipient_email ?? null,
+            staff_purchase_reports_enabled: staffReportsEnabled,
+            staff_report_frequency: staffReportFrequency,
+            staff_report_recipient_email: settings?.staff_report_recipient_email ?? null,
+        };
+        saveSettingsMutation.mutate(payload, {
+            onSuccess: () => Alert.alert('Owl Pay', 'Settings saved successfully'),
+            onError: (err: any) => Alert.alert('Owl Pay', err?.message || 'Failed to save settings'),
+        });
     };
 
     const renderHeader = () => (
@@ -158,7 +203,11 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 </View>
 
                 <ScrollView style={styles.camperList} contentContainerStyle={styles.camperListContent}>
-                    {filteredCampers.map((camper) => {
+                    {campersLoading ? (
+                        <View style={styles.loaderWrap}>
+                            <ActivityIndicator size="small" color={theme.colors.secondary} />
+                        </View>
+                    ) : campers.map((camper) => {
                         const isSelected = camper.id === selectedCamperId;
                         return (
                             <TouchableOpacity
@@ -173,7 +222,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                                     <Text style={styles.camperName}>{camper.name}</Text>
                                 </View>
                                 <View style={styles.balancePill}>
-                                    <Text style={styles.balancePillText}>{currency(camper.balance)}</Text>
+                                    <Text style={styles.balancePillText}>{currency(Number(camper.owl_pay_balance || 0))}</Text>
                                 </View>
                             </TouchableOpacity>
                         );
@@ -203,19 +252,23 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 </TouchableOpacity>
             </View>
 
-            {items.length === 0 ? (
+            {itemsLoading ? (
+                <View style={styles.emptyStateBox}>
+                    <ActivityIndicator size="small" color={theme.colors.secondary} />
+                </View>
+            ) : allItems.length === 0 ? (
                 <View style={styles.emptyStateBox}>
                     <Text style={styles.emptyStateText}>No items yet. Add your first canteen item!</Text>
                 </View>
             ) : (
                 <View style={styles.itemsList}>
-                    {items.map((item) => (
+                    {allItems.map((item) => (
                         <View key={item.id} style={styles.itemRow}>
                             <View>
                                 <Text style={styles.itemName}>{item.name}</Text>
                                 <Text style={styles.itemMeta}>{item.category}</Text>
                             </View>
-                            <Text style={styles.itemPrice}>{currency(item.price)}</Text>
+                            <Text style={styles.itemPrice}>{currency(Number(item.price))}</Text>
                         </View>
                     ))}
                 </View>
@@ -228,7 +281,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
             <View style={styles.statsGrid}>
                 <StyledCard style={styles.statCard}>
                     <Text style={styles.statLabel}>Total Campers</Text>
-                    <Text style={[styles.statValue, { color: theme.colors.secondary }]}>{INITIAL_CAMPERS.length}</Text>
+                    <Text style={[styles.statValue, { color: theme.colors.secondary }]}>{campers.length}</Text>
                 </StyledCard>
                 <StyledCard style={styles.statCard}>
                     <Text style={styles.statLabel}>Total Balance</Text>
@@ -253,12 +306,12 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Balance</Text>
                 </View>
                 <ScrollView style={styles.balancesList} contentContainerStyle={styles.balancesListContent}>
-                    {INITIAL_CAMPERS.map((camper) => (
+                    {campers.map((camper) => (
                         <View key={camper.id} style={styles.tableRow}>
                             <Text style={[styles.tableText, { flex: 2 }]}>{camper.name}</Text>
-                            <Text style={[styles.tableText, { flex: 1.3 }]}>{camper.personId}</Text>
+                            <Text style={[styles.tableText, { flex: 1.3 }]}>{camper.person_id || '-'}</Text>
                             <View style={styles.tableBalancePill}>
-                                <Text style={styles.tableBalancePillText}>{currency(camper.balance)}</Text>
+                                <Text style={styles.tableBalancePillText}>{currency(Number(camper.owl_pay_balance || 0))}</Text>
                             </View>
                         </View>
                     ))}
@@ -284,7 +337,9 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     ))}
                 </View>
                 <View style={styles.reportDateRow}>
-                    <Text style={styles.dateChip}>Jan 01, 2020 - Mar 26, 2026</Text>
+                    <Text style={styles.dateChip}>
+                        {reportRange.start.toLocaleDateString()} - {reportRange.end.toLocaleDateString()}
+                    </Text>
                     <TouchableOpacity style={styles.customRangeBtn}>
                         <Ionicons name="calendar-outline" size={16} color={theme.colors.text} />
                         <Text style={styles.customRangeText}>Custom Range</Text>
@@ -295,19 +350,19 @@ export const OwlPayScreen = ({ navigation }: any) => {
             <View style={styles.statsGrid}>
                 <StyledCard style={styles.statCard}>
                     <Text style={styles.statLabel}>Revenue</Text>
-                    <Text style={styles.statValue}>{currency(0)}</Text>
+                    <Text style={styles.statValue}>{currency(reportsData?.totalRevenue || 0)}</Text>
                 </StyledCard>
                 <StyledCard style={styles.statCard}>
                     <Text style={styles.statLabel}>Items Sold</Text>
-                    <Text style={styles.statValue}>0</Text>
+                    <Text style={styles.statValue}>{reportsData?.totalItems || 0}</Text>
                 </StyledCard>
                 <StyledCard style={styles.statCard}>
                     <Text style={styles.statLabel}>Most Popular</Text>
-                    <Text style={styles.statValue}>N/A</Text>
+                    <Text style={styles.statValue}>{reportsData?.mostPopular || 'N/A'}</Text>
                 </StyledCard>
                 <StyledCard style={styles.statCard}>
                     <Text style={styles.statLabel}>Avg Transaction</Text>
-                    <Text style={styles.statValue}>{currency(0)}</Text>
+                    <Text style={styles.statValue}>{currency(reportsData?.avgTransaction || 0)}</Text>
                 </StyledCard>
             </View>
 
@@ -320,7 +375,11 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     ))}
                 </View>
                 <View style={styles.emptyStateBox}>
-                    <Text style={styles.emptyStateText}>No sales data for this period.</Text>
+                    {reportsLoading ? (
+                        <ActivityIndicator size="small" color={theme.colors.secondary} />
+                    ) : (
+                        <Text style={styles.emptyStateText}>No sales data for this period.</Text>
+                    )}
                 </View>
             </StyledCard>
         </>
@@ -371,9 +430,9 @@ export const OwlPayScreen = ({ navigation }: any) => {
             </StyledCard>
 
             <View style={styles.saveRow}>
-                <TouchableOpacity style={styles.primarySaveButton}>
+                <TouchableOpacity style={styles.primarySaveButton} onPress={saveSettings} disabled={saveSettingsMutation.isPending || settingsLoading}>
                     <Ionicons name="save-outline" size={16} color="#fff" />
-                    <Text style={styles.primaryButtonText}>Save Settings</Text>
+                    <Text style={styles.primaryButtonText}>{saveSettingsMutation.isPending ? 'Saving...' : 'Save Settings'}</Text>
                 </TouchableOpacity>
                 <View style={styles.infoChip}>
                     <Ionicons name="mail-outline" size={14} color={theme.colors.textSecondary} />
@@ -539,6 +598,11 @@ const styles = StyleSheet.create({
     },
     camperListContent: {
         paddingBottom: 4,
+    },
+    loaderWrap: {
+        minHeight: 120,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     camperCard: {
         flexDirection: 'row',

@@ -54,7 +54,7 @@ const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const [selectedYear, setSelectedYear] = useState('2026');
     const { data: roleData } = useRole();
-    const { availableCompanies, switchCompany, companyId, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad } = useCompany();
+    const { availableCompanies, switchCompany, companyId, companySlug, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad } = useCompany();
     const [showCampPicker, setShowCampPicker] = useState(false);
 
     // Role flags (default to showing Main Menu items while loading)
@@ -242,12 +242,14 @@ const CustomDrawerContent = (props: any) => {
                             onPress={() => props.navigation.navigate('ODManagement')}
                             {...drawerItemProps}
                         />
-                <DrawerItem
-                    label="Owl Pay"
-                    icon={({ color }) => <Ionicons name="wallet-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('OwlPay')}
-                    {...drawerItemProps}
-                />
+                {companySlug === 'tyler-hill-camp' && (
+                    <DrawerItem
+                        label="Owl Pay"
+                        icon={({ color }) => <Ionicons name="wallet-outline" size={22} color={color} />}
+                        onPress={() => props.navigation.navigate('OwlPay')}
+                        {...drawerItemProps}
+                    />
+                )}
                         <DrawerItem
                             label="Special Events & Evening Activities"
                             icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
