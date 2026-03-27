@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { CalendarWidget, CalendarWidgetEvent } from '../components/CalendarWidget';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useDivisions } from '../api/campers';
 import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
@@ -62,6 +63,19 @@ export const HealthScreen = ({ navigation }: any) => {
     const addMedicationMutation = useAddMedicationLog();
     const administerMutation = useAdministerMedication();
     const safeMedications = Array.isArray(medicationsData) ? medicationsData : [];
+
+    const calendarWidgetEvents: CalendarWidgetEvent[] = useMemo(() => {
+        if (!safeMedications || safeMedications.length === 0) return [];
+        return safeMedications.map((med: any) => ({
+            id: med.id,
+            title: med.medication_name || 'Medication',
+            date: new Date((med.date || medicationQueryDate) + 'T00:00:00'),
+            time: med.scheduled_time || '',
+            location: '',
+            type: 'health',
+            accent: { bg: '#fce7f3', text: '#9d174d', marker: '#ec4899' },
+        }));
+    }, [safeMedications, medicationQueryDate]);
 
     // Admissions
     const admissionsQuery = useHealthCenterAdmissions(companyId);
@@ -232,77 +246,6 @@ export const HealthScreen = ({ navigation }: any) => {
         }
     };
 
-    // Calendar functions
-    const getDaysInMonth = (date: Date) => {
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const daysInMonth = lastDay.getDate();
-        const startingDayOfWeek = firstDay.getDay();
-
-        const days = [];
-
-        // Previous month days
-        const prevMonth = new Date(year, month - 1, 0);
-        const prevMonthDays = prevMonth.getDate();
-        for (let i = startingDayOfWeek - 1; i >= 0; i--) {
-            days.push({
-                date: prevMonthDays - i,
-                isCurrentMonth: false,
-                fullDate: new Date(year, month - 1, prevMonthDays - i)
-            });
-        }
-
-        // Current month days
-        for (let i = 1; i <= daysInMonth; i++) {
-            days.push({
-                date: i,
-                isCurrentMonth: true,
-                fullDate: new Date(year, month, i)
-            });
-        }
-
-        // Next month days to fill the grid
-        const remainingDays = 42 - days.length;
-        for (let i = 1; i <= remainingDays; i++) {
-            days.push({
-                date: i,
-                isCurrentMonth: false,
-                fullDate: new Date(year, month + 1, i)
-            });
-        }
-
-        return days;
-    };
-
-    const formatMonthYear = (date: Date) => {
-        const months = ['January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'];
-        return `${months[date.getMonth()]} ${date.getFullYear()}`;
-    };
-
-    const navigateMonth = (direction: 'prev' | 'next') => {
-        const newDate = new Date(currentDate);
-        if (direction === 'prev') {
-            newDate.setMonth(newDate.getMonth() - 1);
-        } else {
-            newDate.setMonth(newDate.getMonth() + 1);
-        }
-        setCurrentDate(newDate);
-    };
-
-    const isSameDate = (date1: Date, date2: Date) => {
-        return date1.getDate() === date2.getDate() &&
-            date1.getMonth() === date2.getMonth() &&
-            date1.getFullYear() === date2.getFullYear();
-    };
-
-    const isToday = (date: Date) => {
-        const today = new Date();
-        return isSameDate(date, today);
-    };
-
     const isPastDate = (date: Date) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -316,9 +259,6 @@ export const HealthScreen = ({ navigation }: any) => {
             'July', 'August', 'September', 'October', 'November', 'December'];
         return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
     };
-
-    const calendarDays = getDaysInMonth(currentDate);
-    const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
     const handleUploadCSV = () => {
         setShowUploadModal(true);
@@ -460,64 +400,16 @@ export const HealthScreen = ({ navigation }: any) => {
                 {/* Conditional Content: Calendar or List View */}
                 {activeView === 'calendar' ? (
                     <>
-                        {/* Calendar Component */}
-                        <StyledCard style={styles.calendarCard}>
-                            {/* Calendar Header */}
-                            <View style={styles.calendarHeader}>
-                                <TouchableOpacity onPress={() => navigateMonth('prev')}>
-                                    <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
-                                </TouchableOpacity>
-                                <Text style={styles.calendarMonthYear}>{formatMonthYear(currentDate)}</Text>
-                                <TouchableOpacity onPress={() => navigateMonth('next')}>
-                                    <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
-                                </TouchableOpacity>
-                            </View>
-
-                            {/* Week Days Header */}
-                            <View style={styles.weekDaysContainer}>
-                                {weekDays.map((day) => (
-                                    <View key={day} style={styles.weekDay}>
-                                        <Text style={styles.weekDayText}>{day}</Text>
-                                    </View>
-                                ))}
-                            </View>
-
-                            {/* Calendar Grid */}
-                            <View style={styles.calendarGrid}>
-                                {calendarDays.map((day, index) => {
-                                    const isSelected = isSameDate(day.fullDate, selectedDate);
-                                    const isTodayDate = isToday(day.fullDate);
-                                    const isPast = isPastDate(day.fullDate);
-
-                                    return (
-                                        <TouchableOpacity
-                                            key={index}
-                                            style={[
-                                                styles.calendarDay,
-                                                !day.isCurrentMonth && styles.calendarDayOtherMonth,
-                                                isSelected && styles.calendarDaySelected,
-                                                isTodayDate && !isSelected && styles.calendarDayToday,
-                                            ]}
-                                            onPress={() => setSelectedDate(day.fullDate)}
-                                        >
-                                            <Text
-                                                style={[
-                                                    styles.calendarDayText,
-                                                    !day.isCurrentMonth && styles.calendarDayTextOtherMonth,
-                                                    isSelected && styles.calendarDayTextSelected,
-                                                    isTodayDate && !isSelected && styles.calendarDayTextToday,
-                                                ]}
-                                            >
-                                                {day.date}
-                                            </Text>
-                                            {index === 27 && day.isCurrentMonth && (
-                                                <View style={styles.calendarDayDot} />
-                                            )}
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </View>
-                        </StyledCard>
+                        <CalendarWidget
+                            events={calendarWidgetEvents}
+                            currentDate={currentDate}
+                            onCurrentDateChange={setCurrentDate}
+                            selectedDate={selectedDate}
+                            onSelectedDateChange={setSelectedDate}
+                            views={['Month', 'Week', 'Day', 'Agenda']}
+                            showZoom={true}
+                            showNavigation={true}
+                        />
 
                         {/* Medications for Selected Date */}
                         <StyledCard style={styles.medicationDateCard}>
@@ -1617,88 +1509,6 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
-    },
-    calendarCard: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.lg,
-        marginBottom: theme.spacing.md,
-        width: '100%',
-    },
-    calendarHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: theme.spacing.lg,
-    },
-    calendarMonthYear: {
-        ...theme.typography.h2,
-        fontSize: 18,
-        fontWeight: '700',
-        color: theme.colors.text,
-    },
-    weekDaysContainer: {
-        flexDirection: 'row',
-        marginBottom: theme.spacing.sm,
-    },
-    weekDay: {
-        flex: 1,
-        alignItems: 'center',
-        paddingVertical: theme.spacing.xs,
-    },
-    weekDayText: {
-        ...theme.typography.bodySmall,
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-    },
-    calendarGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        width: '100%',
-    },
-    calendarDay: {
-        width: '14.28%',
-        minWidth: 40,
-        aspectRatio: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative',
-    },
-    calendarDayOtherMonth: {
-        opacity: 0.3,
-    },
-    calendarDaySelected: {
-        backgroundColor: theme.colors.secondary,
-        borderRadius: theme.borderRadius.md,
-    },
-    calendarDayToday: {
-        backgroundColor: '#FFA500',
-        borderRadius: theme.borderRadius.md,
-    },
-    calendarDayText: {
-        ...theme.typography.body,
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    calendarDayTextOtherMonth: {
-        color: theme.colors.textSecondary,
-    },
-    calendarDayTextSelected: {
-        color: 'white',
-        fontWeight: '700',
-    },
-    calendarDayTextToday: {
-        color: 'white',
-        fontWeight: '700',
-    },
-    calendarDayDot: {
-        position: 'absolute',
-        bottom: 4,
-        width: 4,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: theme.colors.secondary,
     },
     medicationDateCard: {
         backgroundColor: theme.colors.surface,

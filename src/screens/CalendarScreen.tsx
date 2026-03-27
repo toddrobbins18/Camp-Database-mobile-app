@@ -1,11 +1,12 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, useWindowDimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCalendarEvents, useDivisions, type CalendarEvent, type EventSource } from '../api/calendar_events';
+import { CalendarWidget, type CalendarWidgetEvent } from '../components/CalendarWidget';
 
 interface Event {
     id: string;
@@ -57,19 +58,15 @@ function formatTime12Hour(timeStr?: string): string {
 }
 
 export const CalendarScreen = ({ navigation }: any) => {
-    const ZOOM_BAR_WIDTH = 120;
-    const ZOOM_THUMB_SIZE = 16;
-    const { height: viewportHeight } = useWindowDimensions();
     const { companyId, season } = useCompany();
     const { data: liveEvents = [], isLoading: isLoadingEvents } = useCalendarEvents(companyId, season || '2026');
     const { data: divisionsList = [] } = useDivisions(companyId);
-    const [activeView, setActiveView] = useState('Month');
     const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1));
     const [selectedDate, setSelectedDate] = useState(new Date(2026, 6, 1));
     const [showEventList, setShowEventList] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
-    // Search and filter states (values match web: all, division id, morning/afternoon/evening/night, home/away/neutral)
+    // Search and filter states
     const [eventNameSearch, setEventNameSearch] = useState('');
     const [locationSearch, setLocationSearch] = useState('');
     const [selectedDivision, setSelectedDivision] = useState<string>('all');
@@ -82,10 +79,8 @@ export const CalendarScreen = ({ navigation }: any) => {
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [showLocationTypePicker, setShowLocationTypePicker] = useState(false);
     const [showSortPicker, setShowSortPicker] = useState(false);
-    const [calendarZoomOffset, setCalendarZoomOffset] = useState(0);
-    const [zoomBarWidth, setZoomBarWidth] = useState(ZOOM_BAR_WIDTH);
 
-    // Options for dropdowns (labels and values)
+    // Options for dropdowns
     const timeOptions: { label: string; value: string }[] = [
         { label: 'All Times', value: 'all' },
         { label: 'Morning', value: 'morning' },
@@ -105,41 +100,7 @@ export const CalendarScreen = ({ navigation }: any) => {
         { label: 'Sort by Source', value: 'source' },
     ];
 
-    const minCalendarHeight = 320;
-    const maxCalendarHeight = 900;
-    const autoCalendarHeight = useMemo(() => {
-        const available = viewportHeight - 380;
-        return Math.max(minCalendarHeight, Math.min(maxCalendarHeight, available));
-    }, [viewportHeight]);
-    const effectiveCalendarHeight = Math.max(
-        minCalendarHeight,
-        Math.min(maxCalendarHeight, autoCalendarHeight + calendarZoomOffset)
-    );
-    const monthGridHeight = Math.max(240, effectiveCalendarHeight - 48);
-    const monthCellHeight = Math.max(34, Math.floor(monthGridHeight / 6) - 6);
-
-    const handleZoomOut = () => {
-        setCalendarZoomOffset((prev) => Math.max(prev - 80, minCalendarHeight - autoCalendarHeight));
-    };
-    const handleZoomIn = () => {
-        setCalendarZoomOffset((prev) => Math.min(prev + 80, maxCalendarHeight - autoCalendarHeight));
-    };
-    const handleAutoAdjust = () => {
-        setCalendarZoomOffset(0);
-    };
-
-    const setZoomFromRatio = (ratio: number) => {
-        const safeRatio = Number.isFinite(ratio) ? ratio : 0;
-        const clamped = Math.max(0, Math.min(1, safeRatio));
-        const targetHeight = minCalendarHeight + clamped * (maxCalendarHeight - minCalendarHeight);
-        const nextOffset = targetHeight - autoCalendarHeight;
-        setCalendarZoomOffset(Number.isFinite(nextOffset) ? nextOffset : 0);
-    };
-
-    const zoomRatio = (effectiveCalendarHeight - minCalendarHeight) / (maxCalendarHeight - minCalendarHeight);
-    const isDraggingZoomRef = useRef(false);
-
-    // Map CalendarEvent[] to Event[] and apply filters/sort (aligned with web)
+    // Filter and sort events
     const filteredAndSorted: CalendarEvent[] = liveEvents
         .filter((event: CalendarEvent) => {
             if (selectedDivision !== 'all' && event.divisionId !== selectedDivision) return false;
@@ -182,81 +143,6 @@ export const CalendarScreen = ({ navigation }: any) => {
         originalData: e.originalData,
     }));
 
-    // Calendar functions
-    const getDaysInMonth = (date: Date) => {
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const daysInMonth = lastDay.getDate();
-        const startingDayOfWeek = firstDay.getDay();
-
-        const days = [];
-
-        // Previous month days
-        const prevMonth = new Date(year, month - 1, 0);
-        const prevMonthDays = prevMonth.getDate();
-        for (let i = startingDayOfWeek - 1; i >= 0; i--) {
-            days.push({
-                date: prevMonthDays - i,
-                isCurrentMonth: false,
-                fullDate: new Date(year, month - 1, prevMonthDays - i)
-            });
-        }
-
-        // Current month days
-        for (let i = 1; i <= daysInMonth; i++) {
-            days.push({
-                date: i,
-                isCurrentMonth: true,
-                fullDate: new Date(year, month, i)
-            });
-        }
-
-        // Next month days to fill the grid
-        const remainingDays = 42 - days.length;
-        for (let i = 1; i <= remainingDays; i++) {
-            days.push({
-                date: i,
-                isCurrentMonth: false,
-                fullDate: new Date(year, month + 1, i)
-            });
-        }
-
-        return days;
-    };
-
-    const navigateMonth = (direction: 'prev' | 'next' | 'today') => {
-        if (direction === 'today') {
-            const today = new Date();
-            setCurrentDate(today);
-            setSelectedDate(today);
-        } else {
-            const newDate = new Date(currentDate);
-            if (direction === 'prev') {
-                newDate.setMonth(newDate.getMonth() - 1);
-            } else {
-                newDate.setMonth(newDate.getMonth() + 1);
-            }
-            setCurrentDate(newDate);
-        }
-    };
-
-    const formatMonthYear = (date: Date) => {
-        const months = ['January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'];
-        return `${months[date.getMonth()]} ${date.getFullYear()}`;
-    };
-
-    const isSameDate = (date1: Date, date2: Date) => {
-        return date1.getDate() === date2.getDate() &&
-            date1.getMonth() === date2.getMonth() &&
-            date1.getFullYear() === date2.getFullYear();
-    };
-
-    const calendarDays = getDaysInMonth(currentDate);
-    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
     // Format date for event list
     const formatEventDate = (date: Date) => {
         const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -264,7 +150,6 @@ export const CalendarScreen = ({ navigation }: any) => {
         return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
     };
 
-    // Get event icon and label by source (match web)
     const getSourceIcon = (source: EventSource) => {
         switch (source) {
             case 'sports_calendar': return 'trophy-outline';
@@ -298,14 +183,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                 return { bg: '#e5e7eb', text: theme.colors.text, marker: theme.colors.secondary };
         }
     };
-    const getEventIcon = (type: string) => {
-        if (type === 'sports' || type === 'field-trip' || type === 'special-event') {
-            return type === 'sports' ? 'trophy-outline' : type === 'field-trip' ? 'people-outline' : 'star-outline';
-        }
-        return 'calendar-outline';
-    };
 
-    // Get tag color
     const getTagStyle = (tag: string) => {
         if (tag === 'Sports') {
             return { backgroundColor: '#dbeafe', color: '#1e40af' };
@@ -320,7 +198,19 @@ export const CalendarScreen = ({ navigation }: any) => {
         }
     };
 
-    // Group events by month (events already filtered and sorted above)
+    // Map filtered events to CalendarWidget format
+    const calendarWidgetEvents: CalendarWidgetEvent[] = filteredAndSorted.map((e) => ({
+        id: e.id,
+        title: e.title,
+        date: new Date(e.date + 'T00:00:00'),
+        time: e.time,
+        location: e.location || '',
+        type: e.type,
+        tags: e.tags || [],
+        accent: getDayAccent(e.source),
+    }));
+
+    // Group events by month for list view
     const groupedEvents = events.reduce((acc, event) => {
         const monthKey = `${event.date.getFullYear()}-${event.date.getMonth()}`;
         if (!acc[monthKey]) {
@@ -334,52 +224,6 @@ export const CalendarScreen = ({ navigation }: any) => {
         const months = ['January', 'February', 'March', 'April', 'May', 'June',
             'July', 'August', 'September', 'October', 'November', 'December'];
         return `${months[month]} ${year}`;
-    };
-
-    // Get week days for Week view
-    const getWeekDays = (date: Date) => {
-        const weekStart = new Date(date);
-        const day = weekStart.getDay();
-        const diff = weekStart.getDate() - day; // Get Monday
-        weekStart.setDate(diff);
-
-        const days = [];
-        for (let i = 0; i < 7; i++) {
-            const dayDate = new Date(weekStart);
-            dayDate.setDate(weekStart.getDate() + i);
-            days.push(dayDate);
-        }
-        return days;
-    };
-
-    // Get events for a specific date
-    const getEventsForDate = (date: Date) => {
-        return events.filter(event => isSameDate(event.date, date));
-    };
-
-    // Get events for week
-    const getWeekEvents = () => {
-        const weekDays = getWeekDays(currentDate);
-        const weekEvents: { [key: string]: Event[] } = {};
-        weekDays.forEach(day => {
-            const dayKey = `${day.getDate()}-${day.getMonth()}-${day.getFullYear()}`;
-            weekEvents[dayKey] = getEventsForDate(day);
-        });
-        return { weekDays, weekEvents };
-    };
-
-    // Format time for display
-    const formatTime = (date: Date) => {
-        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    };
-
-    // Get agenda events (sorted by date and time)
-    const getAgendaEvents = () => {
-        return [...events].sort((a, b) => {
-            const dateCompare = a.date.getTime() - b.date.getTime();
-            if (dateCompare !== 0) return dateCompare;
-            return (a.time || '').localeCompare(b.time || '');
-        });
     };
 
     return (
@@ -480,7 +324,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                     </View>
                 </StyledCard>
 
-                {/* Event List View (match web: icon, title, date, source/type/division badges, time, location, description) */}
+                {/* Event List View */}
                 {showEventList ? (
                     <View style={styles.eventListView}>
                         {events.length === 0 ? (
@@ -551,324 +395,22 @@ export const CalendarScreen = ({ navigation }: any) => {
                         })}
                     </View>
                 ) : (
-                    /* Calendar Section */
-                    <StyledCard style={styles.calendarCard}>
-                        {/* Navigation Buttons */}
-                        <View style={styles.calendarNav}>
-                            <TouchableOpacity
-                                style={styles.navButton}
-                                onPress={() => navigateMonth('today')}
-                            >
-                                <Text style={styles.navButtonText}>Today</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.navButton}
-                                onPress={() => navigateMonth('prev')}
-                            >
-                                <Text style={styles.navButtonText}>Back</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.navButton}
-                                onPress={() => navigateMonth('next')}
-                            >
-                                <Text style={styles.navButtonText}>Next</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.zoomControlsRow}>
-                            <TouchableOpacity style={styles.zoomControlButton} onPress={handleZoomOut}>
-                                <Ionicons name="remove" size={16} color={theme.colors.text} />
-                            </TouchableOpacity>
-                            <Pressable
-                                style={[styles.zoomBarTrack, { width: ZOOM_BAR_WIDTH }]}
-                                onLayout={(e) => {
-                                    const w = e.nativeEvent.layout.width;
-                                    if (Number.isFinite(w) && w > 0) setZoomBarWidth(w);
-                                }}
-                                onPress={(event) => {
-                                    const tappedX = event.nativeEvent.locationX;
-                                    setZoomFromRatio(tappedX / zoomBarWidth);
-                                }}
-                                onStartShouldSetResponder={() => true}
-                                onMoveShouldSetResponder={() => true}
-                                onResponderGrant={(event) => {
-                                    isDraggingZoomRef.current = true;
-                                    const x = event.nativeEvent.locationX;
-                                    setZoomFromRatio(x / zoomBarWidth);
-                                }}
-                                onResponderMove={(event) => {
-                                    if (!isDraggingZoomRef.current) return;
-                                    const x = event.nativeEvent.locationX;
-                                    setZoomFromRatio(x / zoomBarWidth);
-                                }}
-                                onResponderRelease={() => {
-                                    isDraggingZoomRef.current = false;
-                                }}
-                                onResponderTerminate={() => {
-                                    isDraggingZoomRef.current = false;
-                                }}
-                            >
-                                <View
-                                    style={[
-                                        styles.zoomBarFill,
-                                        {
-                                            width: `${zoomRatio * 100}%`,
-                                        },
-                                    ]}
-                                />
-                                <View
-                                    style={[
-                                        styles.zoomBarThumb,
-                                        {
-                                            left: zoomRatio * (zoomBarWidth - ZOOM_THUMB_SIZE),
-                                        },
-                                    ]}
-                                />
-                            </Pressable>
-                            <TouchableOpacity style={styles.zoomControlButton} onPress={handleZoomIn}>
-                                <Ionicons name="add" size={16} color={theme.colors.text} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.zoomControlButton} onPress={handleAutoAdjust}>
-                                <Ionicons name="expand-outline" size={16} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Month and Year */}
-                        <Text style={styles.monthYear}>{formatMonthYear(currentDate)}</Text>
-
-                        {/* View Tabs */}
-                        <View style={styles.viewTabs}>
-                            {['Month', 'Week', 'Day', 'Agenda'].map((view) => (
-                                <TouchableOpacity
-                                    key={view}
-                                    style={[
-                                        styles.viewTab,
-                                        activeView === view && styles.viewTabActive
-                                    ]}
-                                    onPress={() => setActiveView(view)}
-                                >
-                                    <Text style={[
-                                        styles.viewTabText,
-                                        activeView === view && styles.viewTabTextActive
-                                    ]}>
-                                        {view}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-
-                        {/* Conditional View Rendering */}
-                        {activeView === 'Month' && (
-                            <View style={[styles.calendarGrid, { height: effectiveCalendarHeight }]}>
-                                {/* Week Day Headers */}
-                                <View style={styles.weekHeader}>
-                                    {weekDays.map((day) => (
-                                        <View key={day} style={styles.weekDayHeader}>
-                                            <Text style={styles.weekDayText}>{day}</Text>
-                                        </View>
-                                    ))}
-                                </View>
-
-                                {/* Calendar Days */}
-                                <View style={[styles.daysGrid, { height: monthGridHeight }]}>
-                                    {calendarDays.map((day, index) => {
-                                        const isSelected = isSameDate(day.fullDate, selectedDate);
-                                        const isToday = isSameDate(day.fullDate, new Date());
-                                        const dayEvents = getEventsForDate(day.fullDate);
-
-                                        return (
-                                            <TouchableOpacity
-                                                key={index}
-                                                style={[
-                                                    styles.dayCell,
-                                                    { height: monthCellHeight },
-                                                    dayEvents.length > 0 && day.isCurrentMonth && { backgroundColor: getDayAccent(dayEvents[0]?.source).bg },
-                                                    !day.isCurrentMonth && styles.dayCellOtherMonth,
-                                                    isSelected && styles.dayCellSelected
-                                                ]}
-                                                onPress={() => {
-                                                    setSelectedDate(day.fullDate);
-                                                    if (dayEvents.length > 0) {
-                                                        const selected = filteredAndSorted.find((evt) => evt.id === dayEvents[0].id);
-                                                        if (selected) setSelectedEvent(selected);
-                                                    }
-                                                    if (!day.isCurrentMonth) {
-                                                        setCurrentDate(day.fullDate);
-                                                    }
-                                                }}
-                                            >
-                                                <Text style={[
-                                                    styles.dayText,
-                                                    !day.isCurrentMonth && styles.dayTextOtherMonth,
-                                                    isSelected && styles.dayTextSelected,
-                                                    dayEvents.length > 0 && day.isCurrentMonth && { color: getDayAccent(dayEvents[0]?.source).text, fontWeight: '700' },
-                                                    isToday && !isSelected && styles.dayTextToday
-                                                ]}>
-                                                    {day.date}
-                                                </Text>
-                                                {/* Event indicator dot */}
-                                                {dayEvents.length > 0 && day.isCurrentMonth && (
-                                                    <View style={[styles.eventDot, { backgroundColor: getDayAccent(dayEvents[0]?.source).marker }]}>
-                                                        {dayEvents.length > 1 && (
-                                                            <Text style={styles.eventCountText}>{dayEvents.length}</Text>
-                                                        )}
-                                                    </View>
-                                                )}
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </View>
-                            </View>
-                        )}
-
-                        {activeView === 'Week' && (() => {
-                            const { weekDays: weekDaysList, weekEvents } = getWeekEvents();
-                            return (
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                    <View style={styles.weekViewContainer}>
-                                        {weekDaysList.map((day, index) => {
-                                            const dayEvents = weekEvents[`${day.getDate()}-${day.getMonth()}-${day.getFullYear()}`] || [];
-                                            const isSelected = isSameDate(day, selectedDate);
-                                            const isToday = isSameDate(day, new Date());
-
-                                            return (
-                                                <View key={index} style={styles.weekDayColumn}>
-                                                    <TouchableOpacity
-                                                        style={[
-                                                            styles.weekDayHeaderCell,
-                                                            isSelected && styles.weekDayHeaderCellSelected,
-                                                            isToday && !isSelected && styles.weekDayHeaderCellToday
-                                                        ]}
-                                                        onPress={() => setSelectedDate(day)}
-                                                    >
-                                                        <Text style={styles.weekDayName}>{weekDays[day.getDay()]}</Text>
-                                                        <Text style={[
-                                                            styles.weekDayNumber,
-                                                            isSelected && styles.weekDayNumberSelected
-                                                        ]}>
-                                                            {day.getDate()}
-                                                        </Text>
-                                                    </TouchableOpacity>
-                                                    <ScrollView style={[styles.weekEventsList, { maxHeight: Math.max(220, effectiveCalendarHeight - 80) }]}>
-                                                        {dayEvents.map(event => (
-                                                            <TouchableOpacity key={event.id} style={styles.weekEventItem}>
-                                                                <Text style={styles.weekEventTime}>
-                                                                    {event.time || formatTime(event.date)}
-                                                                </Text>
-                                                                <Text style={styles.weekEventTitle}>{event.title}</Text>
-                                                                {event.location && (
-                                                                    <Text style={styles.weekEventLocation}>{event.location}</Text>
-                                                                )}
-                                                            </TouchableOpacity>
-                                                        ))}
-                                                    </ScrollView>
-                                                </View>
-                                            );
-                                        })}
-                                    </View>
-                                </ScrollView>
-                            );
-                        })()}
-
-                        {activeView === 'Day' && (() => {
-                            const dayEvents = getEventsForDate(selectedDate);
-                            return (
-                                <View style={styles.dayViewContainer}>
-                                    <View style={styles.dayHeader}>
-                                        <Text style={styles.dayHeaderDate}>
-                                            {formatEventDate(selectedDate)}
-                                        </Text>
-                                        <Text style={styles.dayHeaderYear}>
-                                            {selectedDate.getFullYear()}
-                                        </Text>
-                                    </View>
-                                    <ScrollView style={[styles.dayEventsList, { maxHeight: effectiveCalendarHeight }]}>
-                                        {dayEvents.length > 0 ? (
-                                            dayEvents.map(event => (
-                                                <StyledCard key={event.id} style={styles.dayEventCard}>
-                                                    <View style={styles.dayEventHeader}>
-                                                        <Text style={styles.dayEventTime}>
-                                                            {event.time || formatTime(event.date)}
-                                                        </Text>
-                                                        <Ionicons
-                                                            name={getEventIcon(event.type)}
-                                                            size={20}
-                                                            color={theme.colors.secondary}
-                                                        />
-                                                    </View>
-                                                    <Text style={styles.dayEventTitle}>{event.title}</Text>
-                                                    {event.location && (
-                                                        <View style={styles.dayEventLocation}>
-                                                            <Ionicons name="location" size={14} color="#ef4444" />
-                                                            <Text style={styles.dayEventLocationText}>{event.location}</Text>
-                                                        </View>
-                                                    )}
-                                                    {event.tags && event.tags.length > 0 && (
-                                                        <View style={styles.dayEventTags}>
-                                                            {event.tags.map((tag, idx) => {
-                                                                const tagStyle = getTagStyle(tag);
-                                                                return (
-                                                                    <View key={idx} style={[styles.dayEventTag, tagStyle]}>
-                                                                        <Text style={[styles.dayEventTagText, { color: tagStyle.color }]}>
-                                                                            {tag}
-                                                                        </Text>
-                                                                    </View>
-                                                                );
-                                                            })}
-                                                        </View>
-                                                    )}
-                                                </StyledCard>
-                                            ))
-                                        ) : (
-                                            <View style={styles.emptyDayState}>
-                                                <Text style={styles.emptyDayText}>No events scheduled for this day</Text>
-                                            </View>
-                                        )}
-                                    </ScrollView>
-                                </View>
-                            );
-                        })()}
-
-                        {activeView === 'Agenda' && (
-                            <ScrollView style={[styles.agendaViewContainer, { maxHeight: effectiveCalendarHeight }]}>
-                                {getAgendaEvents().length > 0 ? (
-                                    getAgendaEvents().map(event => (
-                                        <StyledCard key={event.id} style={styles.agendaEventCard}>
-                                            <View style={styles.agendaEventDate}>
-                                                <Text style={styles.agendaEventDay}>{event.date.getDate()}</Text>
-                                                <Text style={styles.agendaEventMonth}>
-                                                    {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][event.date.getMonth()]}
-                                                </Text>
-                                            </View>
-                                            <View style={styles.agendaEventContent}>
-                                                <View style={styles.agendaEventHeader}>
-                                                    <Text style={styles.agendaEventTime}>
-                                                        {event.time || formatTime(event.date)}
-                                                    </Text>
-                                                    <Ionicons
-                                                        name={getEventIcon(event.type)}
-                                                        size={18}
-                                                        color={theme.colors.secondary}
-                                                    />
-                                                </View>
-                                                <Text style={styles.agendaEventTitle}>{event.title}</Text>
-                                                {event.location && (
-                                                    <View style={styles.agendaEventLocation}>
-                                                        <Ionicons name="location" size={12} color="#ef4444" />
-                                                        <Text style={styles.agendaEventLocationText}>{event.location}</Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                        </StyledCard>
-                                    ))
-                                ) : (
-                                    <View style={styles.emptyAgendaState}>
-                                        <Text style={styles.emptyAgendaText}>No events found</Text>
-                                    </View>
-                                )}
-                            </ScrollView>
-                        )}
-                    </StyledCard>
+                    <CalendarWidget
+                        events={calendarWidgetEvents}
+                        currentDate={currentDate}
+                        onCurrentDateChange={setCurrentDate}
+                        selectedDate={selectedDate}
+                        onSelectedDateChange={setSelectedDate}
+                        onEventPress={(evt) => {
+                            const calEvt = filteredAndSorted.find(e => e.id === evt.id);
+                            if (calEvt) setSelectedEvent(calEvt);
+                        }}
+                        views={['Month', 'Week', 'Day', 'Agenda']}
+                        showZoom={true}
+                        showNavigation={true}
+                        getEventAccent={(evt) => evt.accent || { bg: '#e5e7eb', text: '#1e293b', marker: '#6b7280' }}
+                        getTagStyle={getTagStyle}
+                    />
                 )}
 
             </ScrollView>
@@ -1009,7 +551,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
-            {/* Event Detail Modal (match web: title, badges, division, date, time, location, home/away, description) */}
+            {/* Event Detail Modal */}
             <Modal
                 visible={!!selectedEvent}
                 transparent={true}
@@ -1188,177 +730,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.text,
     },
-    calendarCard: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.md,
-    },
-    calendarNav: {
-        flexDirection: 'row',
-        gap: theme.spacing.sm,
-        marginBottom: theme.spacing.md,
-    },
-    zoomControlsRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: theme.spacing.xs,
-        marginBottom: theme.spacing.md,
-    },
-    zoomControlButton: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.surface,
-    },
-    zoomLabel: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-        minWidth: 56,
-        textAlign: 'center',
-    },
-    zoomBarTrack: {
-        height: 8,
-        borderRadius: 999,
-        backgroundColor: '#e5e7eb',
-        justifyContent: 'center',
-        position: 'relative',
-        marginHorizontal: 2,
-    },
-    zoomBarFill: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        bottom: 0,
-        backgroundColor: '#0ea5e9',
-        borderRadius: 999,
-    },
-    zoomBarThumb: {
-        position: 'absolute',
-        width: 16,
-        height: 16,
-        top: -4,
-        borderRadius: 8,
-        backgroundColor: '#ffffff',
-        borderWidth: 2,
-        borderColor: theme.colors.secondary,
-    },
-    navButton: {
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-    },
-    navButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: theme.colors.text,
-    },
-    monthYear: {
-        ...theme.typography.h2,
-        fontSize: 20,
-        fontWeight: '600',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.md,
-        textAlign: 'center',
-    },
-    viewTabs: {
-        flexDirection: 'row',
-        backgroundColor: '#f3f4f6',
-        borderRadius: theme.borderRadius.md,
-        padding: 4,
-        marginBottom: theme.spacing.md,
-    },
-    viewTab: {
-        flex: 1,
-        paddingVertical: theme.spacing.sm,
-        alignItems: 'center',
-        borderRadius: theme.borderRadius.sm,
-    },
-    viewTabActive: {
-        backgroundColor: theme.colors.surface,
-    },
-    viewTabText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-    },
-    viewTabTextActive: {
-        color: theme.colors.text,
-    },
-    calendarGrid: {
-        marginTop: theme.spacing.sm,
-    },
-    weekHeader: {
-        flexDirection: 'row',
-        marginBottom: theme.spacing.xs,
-    },
-    weekDayHeader: {
-        flex: 1,
-        alignItems: 'center',
-        paddingVertical: theme.spacing.sm,
-    },
-    weekDayText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-    },
-    daysGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-    },
-    dayCell: {
-        width: '14.28%',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: theme.spacing.xs,
-        position: 'relative',
-    },
-    dayCellOtherMonth: {
-        opacity: 0.4,
-    },
-    dayCellSelected: {
-        backgroundColor: '#dbeafe',
-        borderRadius: theme.borderRadius.md,
-    },
-    dayText: {
-        fontSize: 14,
-        color: theme.colors.text,
-        fontWeight: '500',
-    },
-    dayTextOtherMonth: {
-        color: theme.colors.textSecondary,
-    },
-    dayTextSelected: {
-        color: theme.colors.secondary,
-        fontWeight: '700',
-    },
-    dayTextToday: {
-        fontWeight: '700',
-    },
-    eventDot: {
-        position: 'absolute',
-        bottom: 4,
-        minWidth: 8,
-        height: 8,
-        borderRadius: 999,
-        paddingHorizontal: 2,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.secondary,
-    },
-    eventCountText: {
-        color: '#fff',
-        fontSize: 8,
-        fontWeight: '700',
-        lineHeight: 8,
-    },
     fab: {
         position: 'absolute',
         bottom: theme.spacing.xl,
@@ -1415,14 +786,31 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
+    pickerOptionActive: {
+        backgroundColor: theme.colors.background,
+    },
     pickerOptionText: {
         ...theme.typography.body,
         fontSize: 16,
         color: theme.colors.text,
     },
+    pickerOptionTextActive: {
+        color: theme.colors.secondary,
+        fontWeight: '600',
+    },
     // Event List Styles
     eventListView: {
         gap: theme.spacing.md,
+    },
+    emptyState: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: theme.spacing.xl,
+    },
+    emptyText: {
+        ...theme.typography.body,
+        fontSize: 16,
+        color: theme.colors.textSecondary,
     },
     monthHeader: {
         ...theme.typography.h2,
@@ -1511,23 +899,6 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
         marginBottom: theme.spacing.xs,
     },
-    eventTimeContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.xs,
-        marginBottom: theme.spacing.xs,
-    },
-    eventTime: {
-        ...theme.typography.bodySmall,
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-    },
-    eventTags: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: theme.spacing.xs,
-        marginBottom: theme.spacing.xs,
-    },
     eventTag: {
         paddingHorizontal: theme.spacing.sm,
         paddingVertical: 4,
@@ -1536,17 +907,6 @@ const styles = StyleSheet.create({
     eventTagText: {
         fontSize: 12,
         fontWeight: '500',
-    },
-    eventLocation: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.xs,
-        marginTop: theme.spacing.xs,
-    },
-    eventLocationText: {
-        ...theme.typography.bodySmall,
-        fontSize: 14,
-        color: theme.colors.text,
     },
     eventDetailModal: {
         backgroundColor: theme.colors.surface,
@@ -1617,232 +977,6 @@ const styles = StyleSheet.create({
     eventDetailDescriptionText: {
         ...theme.typography.body,
         fontSize: 14,
-        color: theme.colors.textSecondary,
-    },
-    // Week View Styles
-    weekViewContainer: {
-        flexDirection: 'row',
-        minHeight: 400,
-    },
-    weekDayColumn: {
-        width: 120,
-        borderRightWidth: 1,
-        borderRightColor: theme.colors.border,
-        paddingHorizontal: theme.spacing.sm,
-    },
-    weekDayHeaderCell: {
-        padding: theme.spacing.sm,
-        alignItems: 'center',
-        borderRadius: theme.borderRadius.md,
-        marginBottom: theme.spacing.sm,
-    },
-    weekDayHeaderCellSelected: {
-        backgroundColor: theme.colors.secondary,
-    },
-    weekDayHeaderCellToday: {
-        backgroundColor: '#FFA500',
-    },
-    weekDayName: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.xs,
-    },
-    weekDayNumber: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: theme.colors.text,
-    },
-    weekDayNumberSelected: {
-        color: 'white',
-    },
-    weekEventsList: {
-        flex: 1,
-    },
-    weekEventItem: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.sm,
-        padding: theme.spacing.sm,
-        marginBottom: theme.spacing.xs,
-        borderLeftWidth: 3,
-        borderLeftColor: theme.colors.secondary,
-    },
-    weekEventTime: {
-        fontSize: 10,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-        marginBottom: 2,
-    },
-    weekEventTitle: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.text,
-        marginBottom: 2,
-    },
-    weekEventLocation: {
-        fontSize: 10,
-        color: theme.colors.textSecondary,
-    },
-    // Day View Styles
-    dayViewContainer: {
-        marginTop: theme.spacing.md,
-    },
-    dayHeader: {
-        alignItems: 'center',
-        marginBottom: theme.spacing.lg,
-        paddingBottom: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    dayHeaderDate: {
-        ...theme.typography.h1,
-        fontSize: 32,
-        fontWeight: '700',
-        color: theme.colors.text,
-    },
-    dayHeaderYear: {
-        ...theme.typography.body,
-        fontSize: 16,
-        color: theme.colors.textSecondary,
-        marginTop: theme.spacing.xs,
-    },
-    dayEventsList: {
-        maxHeight: 500,
-    },
-    dayEventCard: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.md,
-        padding: theme.spacing.md,
-        marginBottom: theme.spacing.md,
-    },
-    dayEventHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: theme.spacing.sm,
-    },
-    dayEventTime: {
-        ...theme.typography.h3,
-        fontSize: 18,
-        fontWeight: '700',
-        color: theme.colors.secondary,
-    },
-    dayEventTitle: {
-        ...theme.typography.h3,
-        fontSize: 18,
-        fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.sm,
-    },
-    dayEventLocation: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.xs,
-        marginBottom: theme.spacing.sm,
-    },
-    dayEventLocationText: {
-        ...theme.typography.body,
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    dayEventTags: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: theme.spacing.xs,
-    },
-    dayEventTag: {
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: 4,
-        borderRadius: theme.borderRadius.sm,
-    },
-    dayEventTagText: {
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    emptyDayState: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: theme.spacing.xl,
-    },
-    emptyDayText: {
-        ...theme.typography.body,
-        fontSize: 16,
-        color: theme.colors.textSecondary,
-    },
-    // Agenda View Styles
-    agendaViewContainer: {
-        marginTop: theme.spacing.md,
-        maxHeight: 500,
-    },
-    agendaEventCard: {
-        flexDirection: 'row',
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.md,
-        padding: theme.spacing.md,
-        marginBottom: theme.spacing.md,
-    },
-    agendaEventDate: {
-        width: 60,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: theme.spacing.md,
-        paddingRight: theme.spacing.md,
-        borderRightWidth: 1,
-        borderRightColor: theme.colors.border,
-    },
-    agendaEventDay: {
-        ...theme.typography.h2,
-        fontSize: 24,
-        fontWeight: '700',
-        color: theme.colors.text,
-    },
-    agendaEventMonth: {
-        ...theme.typography.bodySmall,
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-        textTransform: 'uppercase',
-    },
-    agendaEventContent: {
-        flex: 1,
-    },
-    agendaEventHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: theme.spacing.xs,
-    },
-    agendaEventTime: {
-        ...theme.typography.body,
-        fontSize: 14,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-    },
-    agendaEventTitle: {
-        ...theme.typography.h3,
-        fontSize: 16,
-        fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.xs,
-    },
-    agendaEventLocation: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.xs,
-    },
-    agendaEventLocationText: {
-        ...theme.typography.bodySmall,
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-    },
-    emptyAgendaState: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: theme.spacing.xl,
-    },
-    emptyAgendaText: {
-        ...theme.typography.body,
-        fontSize: 16,
         color: theme.colors.textSecondary,
     },
 });

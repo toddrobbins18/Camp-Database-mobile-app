@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, Alert, Pressable, Keyboard, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { useStaff, useAddStaff, useEditStaff } from '../api/staff';
 import { supabase } from '../lib/supabase';
 import { buildStaffInsertRow, formatIsoDateToUs, formatStaffTypeFromDb } from '../api/staffPayload';
 import { useRole } from '../hooks/useRole';
+import CalendarWidget, { type CalendarWidgetEvent } from '../components/CalendarWidget';
 
 const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
     <View style={styles.header}>
@@ -84,6 +85,36 @@ export const StaffScreen = ({ navigation }: any) => {
     const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
     const [isDOBPickerVisible, setIsDOBPickerVisible] = useState(false);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const [calendarPickerCurrentDate, setCalendarPickerCurrentDate] = useState(new Date());
+
+    const parseUsDateString = (s: string): Date | null => {
+        if (!s?.trim()) return null;
+        const m = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (!m) return null;
+        const month = parseInt(m[1], 10) - 1;
+        const day = parseInt(m[2], 10);
+        const year = parseInt(m[3], 10);
+        const d = new Date(year, month, day);
+        return Number.isNaN(d.getTime()) ? null : d;
+    };
+
+    const openHireDatePicker = () => {
+        Keyboard.dismiss();
+        const raw = modalVisible.editStaff ? editStaffData.hireDate : addStaffData.hireDate;
+        const d = parseUsDateString(raw) ?? new Date();
+        setCalendarPickerCurrentDate(d);
+        setSelectedDate(d);
+        setIsDatePickerVisible(true);
+    };
+
+    const openDobPicker = () => {
+        Keyboard.dismiss();
+        const raw = modalVisible.editStaff ? editStaffData.dob : addStaffData.dob;
+        const d = parseUsDateString(raw) ?? new Date();
+        setCalendarPickerCurrentDate(d);
+        setSelectedDate(d);
+        setIsDOBPickerVisible(true);
+    };
 
     // Season Picker State
     const [isSeasonPickerVisible, setIsSeasonPickerVisible] = useState(false);
@@ -456,10 +487,7 @@ export const StaffScreen = ({ navigation }: any) => {
                                     <TouchableOpacity
                                         style={styles.inputContainer}
                                         activeOpacity={0.7}
-                                        onPress={() => {
-                                            Keyboard.dismiss();
-                                            setIsDatePickerVisible(true);
-                                        }}
+                                        onPress={openHireDatePicker}
                                     >
                                         <TextInput
                                             style={[styles.input, { marginBottom: 0 }]}
@@ -812,7 +840,7 @@ export const StaffScreen = ({ navigation }: any) => {
                                     <Text style={styles.label}>Hire Date</Text>
                                     <TouchableOpacity
                                         style={styles.inputContainer}
-                                        onPress={() => setIsDatePickerVisible(true)}
+                                        onPress={openHireDatePicker}
                                     >
                                         <TextInput
                                             style={[styles.input, { marginBottom: 0 }]}
@@ -829,10 +857,7 @@ export const StaffScreen = ({ navigation }: any) => {
                                     <TouchableOpacity
                                         style={styles.inputContainer}
                                         activeOpacity={0.7}
-                                        onPress={() => {
-                                            Keyboard.dismiss();
-                                            setIsDOBPickerVisible(true);
-                                        }}
+                                        onPress={openDobPicker}
                                     >
                                         <TextInput
                                             style={[styles.input, { marginBottom: 0 }]}
@@ -973,44 +998,18 @@ export const StaffScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
 
-                        <View style={styles.pickerView}>
-                            <View style={styles.pickerHeader}>
-                                <TouchableOpacity onPress={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1))}>
-                                    <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
-                                </TouchableOpacity>
-                                <Text style={styles.pickerMonthText}>
-                                    {selectedDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
-                                </Text>
-                                <TouchableOpacity onPress={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1))}>
-                                    <Ionicons name="chevron-forward" size={24} color={theme.colors.text} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.weekdaysRow}>
-                                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-                                    <Text key={i} style={styles.weekdayText}>{day}</Text>
-                                ))}
-                            </View>
-
-                            <View style={styles.daysGrid}>
-                                {Array.from({ length: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1).getDay() }).map((_, i) => (
-                                    <View key={`empty-${i}`} style={styles.dayCell} />
-                                ))}
-                                {Array.from({ length: new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate() }).map((_, i) => {
-                                    const day = i + 1;
-                                    const isSelected = selectedDate.getDate() === day;
-                                    return (
-                                        <TouchableOpacity
-                                            key={day}
-                                            style={[styles.dayCell, isSelected && styles.selectedDayCell]}
-                                            onPress={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day))}
-                                        >
-                                            <Text style={[styles.dayText, isSelected && styles.selectedDayText]}>{day}</Text>
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </View>
-                        </View>
+                        <CalendarWidget
+                            events={[] as CalendarWidgetEvent[]}
+                            currentDate={calendarPickerCurrentDate}
+                            onCurrentDateChange={setCalendarPickerCurrentDate}
+                            selectedDate={selectedDate}
+                            onSelectedDateChange={setSelectedDate}
+                            views={['Month']}
+                            initialView="Month"
+                            showZoom={false}
+                            showNavigation={true}
+                            containerStyle={styles.datePickerCalendarCard}
+                        />
 
                         <TouchableOpacity style={styles.primaryBtnBlock} onPress={confirmDateSelection}>
                             <Text style={styles.primaryBtnText}>Confirm Date</Text>
@@ -1824,56 +1823,9 @@ const styles = StyleSheet.create({
         right: 12,
         top: 10,
     },
-    // Picker Styles
-    pickerView: {
-        paddingVertical: 10,
-    },
-    pickerHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-        paddingHorizontal: 10,
-    },
-    pickerMonthText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: theme.colors.text,
-    },
-    weekdaysRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        marginBottom: 10,
-    },
-    weekdayText: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-        width: 40,
-        textAlign: 'center',
-    },
-    daysGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'flex-start',
-    },
-    dayCell: {
-        width: '14.28%',
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginVertical: 2,
-    },
-    selectedDayCell: {
-        backgroundColor: theme.colors.secondary,
-        borderRadius: 20,
-    },
-    dayText: {
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    selectedDayText: {
-        color: 'white',
-        fontWeight: 'bold',
+    datePickerCalendarCard: {
+        marginVertical: 4,
+        alignSelf: 'stretch',
     },
     pickerItem: {
         flexDirection: 'row',

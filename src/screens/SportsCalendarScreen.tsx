@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { CalendarWidget, CalendarWidgetEvent } from '../components/CalendarWidget';
 import { useCampers } from '../api/campers';
 import { useStaff } from '../api/staff';
 import { useCompany } from '../contexts/CompanyContext';
@@ -77,7 +78,6 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     const { data: staffData = [] } = useStaff(companyId, season);
     const campers = camperData.map((c: any) => ({ id: c.id, name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim(), grade: c.grade || '' }));
     const staffMembers = staffData.map((s: any) => ({ id: s.id, name: s.name, role: s.role || s.staff_type || 'Staff' }));
-    const [activeView, setActiveView] = useState('Month');
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [showAddEventModal, setShowAddEventModal] = useState(false);
@@ -355,50 +355,6 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         return `${month}/${day}/${year}`;
     };
 
-    const getDaysInMonth = (date: Date) => {
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const daysInMonth = lastDay.getDate();
-        const startingDayOfWeek = firstDay.getDay();
-
-        const days = [];
-
-        // Previous month days
-        const prevMonth = new Date(year, month - 1, 0);
-        const prevMonthDays = prevMonth.getDate();
-        for (let i = startingDayOfWeek - 1; i >= 0; i--) {
-            days.push({
-                date: prevMonthDays - i,
-                isCurrentMonth: false,
-                fullDate: new Date(year, month - 1, prevMonthDays - i)
-            });
-        }
-
-        // Current month days
-        for (let i = 1; i <= daysInMonth; i++) {
-            days.push({
-                date: i,
-                isCurrentMonth: true,
-                fullDate: new Date(year, month, i)
-            });
-        }
-
-        // Next month days to fill the grid
-        const totalCells = days.length;
-        const remainingCells = 42 - totalCells; // 6 rows x 7 days
-        for (let i = 1; i <= remainingCells; i++) {
-            days.push({
-                date: i,
-                isCurrentMonth: false,
-                fullDate: new Date(year, month + 1, i)
-            });
-        }
-
-        return days;
-    };
-
     const getEventsForDate = (date: Date) => {
         return events.filter(event => {
             const eventDate = event.date;
@@ -406,12 +362,6 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 eventDate.getMonth() === date.getMonth() &&
                 eventDate.getFullYear() === date.getFullYear();
         });
-    };
-
-    const isSameDate = (date1: Date, date2: Date) => {
-        return date1.getDate() === date2.getDate() &&
-            date1.getMonth() === date2.getMonth() &&
-            date1.getFullYear() === date2.getFullYear();
     };
 
     const filteredEvents = events.filter(event => {
@@ -429,6 +379,20 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         if (selectedLocation !== 'All Locations' && event.location !== selectedLocation) return false;
         return true;
     });
+
+    const calendarWidgetEvents: CalendarWidgetEvent[] = useMemo(
+        () =>
+            filteredEvents.map((evt) => ({
+                id: evt.id,
+                title: evt.title || '',
+                date: new Date(evt.date),
+                time: evt.startTimeField || evt.departTime || '',
+                location: evt.location || '',
+                type: 'sports',
+                accent: { bg: '#dbeafe', text: '#1d4ed8', marker: '#2563eb' },
+            })),
+        [filteredEvents],
+    );
 
     const groupedEventsByMonth = useMemo(() => {
         return filteredEvents.reduce((acc: Record<string, SportsEvent[]>, event) => {
@@ -643,31 +607,11 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         setShowEditEventModal(false);
     };
 
-    const navigateMonth = (direction: 'prev' | 'next') => {
-        const newDate = new Date(currentDate);
-        if (direction === 'prev') {
-            newDate.setMonth(newDate.getMonth() - 1);
-        } else {
-            newDate.setMonth(newDate.getMonth() + 1);
-        }
-        setCurrentDate(newDate);
-    };
-
-    const goToToday = () => {
-        const today = new Date();
-        setCurrentDate(today);
-        setSelectedDate(today);
-    };
-
     const handleSelectFileOption = (option: string) => {
         console.log('Selected:', option);
         setShowUploadCSVModal(false);
         // TODO: Handle file selection
     };
-
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     const renderManageRosterModal = () => (
         <>
@@ -1270,94 +1214,30 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     </View>
                 </StyledCard>
 
-                {/* Calendar Card */}
-                <StyledCard style={styles.calendarCard}>
-                    {/* Calendar Navigation */}
-                    <View style={styles.calendarNav}>
-                        <TouchableOpacity onPress={goToToday}>
-                            <Text style={styles.navButton}>Today</Text>
-                        </TouchableOpacity>
-                        <View style={styles.navButtons}>
-                            <TouchableOpacity onPress={() => navigateMonth('prev')}>
-                                <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
-                            </TouchableOpacity>
-                            <Text style={styles.monthYear}>
-                                {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-                            </Text>
-                            <TouchableOpacity onPress={() => navigateMonth('next')}>
-                                <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                {/* Calendar Widget */}
+                <CalendarWidget
+                    events={calendarWidgetEvents}
+                    currentDate={currentDate}
+                    onCurrentDateChange={setCurrentDate}
+                    selectedDate={selectedDate}
+                    onSelectedDateChange={setSelectedDate}
+                    onEventPress={(evt) => {
+                        const found = filteredEvents.find((e) => e.id === evt.id);
+                        if (found) {
+                            setSelectedEventOptions(found);
+                            setShowEventOptionsModal(true);
+                        }
+                    }}
+                    onDatePress={(date) => setSelectedDate(date)}
+                    views={['Month', 'Week', 'Day', 'Agenda']}
+                    showZoom={true}
+                    showNavigation={true}
+                    containerStyle={styles.calendarCard}
+                />
 
-                    {/* View Toggles */}
-                    <View style={styles.viewToggles}>
-                        {['Month', 'Week', 'Day', 'Agenda'].map((view) => (
-                            <TouchableOpacity
-                                key={view}
-                                style={[
-                                    styles.viewToggle,
-                                    activeView === view && styles.viewToggleActive
-                                ]}
-                                onPress={() => setActiveView(view)}
-                            >
-                                <Text style={[
-                                    styles.viewToggleText,
-                                    activeView === view && styles.viewToggleTextActive
-                                ]}>
-                                    {view}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    {/* Calendar Grid */}
-                    {activeView === 'Month' && (
-                        <View style={styles.calendarGrid}>
-                            {/* Day Headers */}
-                            {dayNames.map((day) => (
-                                <View key={day} style={styles.dayHeader}>
-                                    <Text style={styles.dayHeaderText}>{day}</Text>
-                                </View>
-                            ))}
-
-                            {/* Calendar Days */}
-                            {getDaysInMonth(currentDate).map((day, index) => {
-                                const dayEvents = getEventsForDate(day.fullDate);
-                                const isSelected = isSameDate(day.fullDate, selectedDate);
-                                const isToday = isSameDate(day.fullDate, new Date());
-
-                                return (
-                                    <TouchableOpacity
-                                        key={index}
-                                        style={[
-                                            styles.calendarDay,
-                                            !day.isCurrentMonth && styles.calendarDayOtherMonth,
-                                            isSelected && styles.calendarDaySelected,
-                                            isToday && styles.calendarDayToday
-                                        ]}
-                                        onPress={() => setSelectedDate(day.fullDate)}
-                                    >
-                                        <Text style={[
-                                            styles.dayNumber,
-                                            !day.isCurrentMonth && styles.dayNumberOtherMonth,
-                                            isSelected && styles.dayNumberSelected
-                                        ]}>
-                                            {day.date}
-                                        </Text>
-                                        {dayEvents.length > 0 && (
-                                            <View style={styles.eventIndicator}>
-                                                <View style={styles.eventDot} />
-                                            </View>
-                                        )}
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
-                    )}
-
-                    {/* Selected Date Events */}
-                    {activeView === 'Month' && getEventsForDate(selectedDate).length > 0 && (
+                {/* Selected Date Events */}
+                {getEventsForDate(selectedDate).length > 0 && (
+                    <StyledCard style={styles.calendarCard}>
                         <View style={styles.selectedDateEvents}>
                             <Text style={styles.selectedDateTitle}>
                                 Events on {formatDate(selectedDate)}
@@ -1376,81 +1256,81 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                 </View>
                             ))}
                         </View>
-                    )}
+                    </StyledCard>
+                )}
 
-                    {/* Month List (web-like cards) */}
-                    {activeView === 'Month' && filteredEvents.length > 0 && (
-                        <View style={{ marginTop: theme.spacing.lg }}>
-                            {Object.entries(groupedEventsByMonth).map(([month, monthEvents]) => (
-                                <View key={month} style={{ marginBottom: theme.spacing.lg }}>
-                                    <Text style={{ ...theme.typography.h3, marginBottom: theme.spacing.sm }}>{month}</Text>
-                                    <View style={{ gap: theme.spacing.md }}>
-                                        {monthEvents.map((event) => (
-                                            <StyledCard key={`month-${event.id}`} style={styles.eventCard}>
-                                                <View style={styles.eventCardHeader}>
-                                                    <View style={{ flex: 1 }}>
-                                                        <Text style={styles.eventTitle}>{event.title}</Text>
-                                                        <Text style={styles.eventDate}>
-                                                            {event.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                                                        </Text>
-                                                    </View>
-                                                    <View style={styles.eventActions}>
-                                                        <TouchableOpacity style={styles.eventActionBtn} onPress={() => {
-                                                            setSelectedEventOptions(event);
-                                                            setShowEventOptionsModal(true);
-                                                        }}>
-                                                            <Ionicons name="people-outline" size={16} color={theme.colors.text} />
-                                                        </TouchableOpacity>
-                                                        <TouchableOpacity style={styles.eventActionBtn} onPress={() => {
-                                                            setSelectedRosterEvent(event);
-                                                            setShowManageRosterModal(true);
-                                                        }}>
-                                                            <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
-                                                        </TouchableOpacity>
-                                                        <TouchableOpacity style={styles.eventActionBtn} onPress={() => handleEdit(event)}>
-                                                            <Ionicons name="create-outline" size={16} color={theme.colors.text} />
-                                                        </TouchableOpacity>
-                                                        <TouchableOpacity style={styles.eventActionBtn} onPress={() => handleDeleteClick(event.id)}>
-                                                            <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
-                                                        </TouchableOpacity>
-                                                    </View>
+                {/* Month List (web-like cards) */}
+                {filteredEvents.length > 0 && (
+                    <View style={{ marginTop: theme.spacing.lg }}>
+                        {Object.entries(groupedEventsByMonth).map(([month, monthEvents]) => (
+                            <View key={month} style={{ marginBottom: theme.spacing.lg }}>
+                                <Text style={{ ...theme.typography.h3, marginBottom: theme.spacing.sm }}>{month}</Text>
+                                <View style={{ gap: theme.spacing.md }}>
+                                    {monthEvents.map((event) => (
+                                        <StyledCard key={`month-${event.id}`} style={styles.eventCard}>
+                                            <View style={styles.eventCardHeader}>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.eventTitle}>{event.title}</Text>
+                                                    <Text style={styles.eventDate}>
+                                                        {event.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                                    </Text>
                                                 </View>
+                                                <View style={styles.eventActions}>
+                                                    <TouchableOpacity style={styles.eventActionBtn} onPress={() => {
+                                                        setSelectedEventOptions(event);
+                                                        setShowEventOptionsModal(true);
+                                                    }}>
+                                                        <Ionicons name="people-outline" size={16} color={theme.colors.text} />
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity style={styles.eventActionBtn} onPress={() => {
+                                                        setSelectedRosterEvent(event);
+                                                        setShowManageRosterModal(true);
+                                                    }}>
+                                                        <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity style={styles.eventActionBtn} onPress={() => handleEdit(event)}>
+                                                        <Ionicons name="create-outline" size={16} color={theme.colors.text} />
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity style={styles.eventActionBtn} onPress={() => handleDeleteClick(event.id)}>
+                                                        <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
 
-                                                <View style={styles.eventTags}>
-                                                    <View style={[styles.tag, { backgroundColor: '#2563eb' }]}>
-                                                        <Text style={styles.tagText}>{event.sport}</Text>
-                                                    </View>
-                                                    {!!event.eventType && (
-                                                        <View style={[styles.tag, { backgroundColor: '#f3f4f6' }]}>
-                                                            <Text style={[styles.tagText, { color: theme.colors.text }]}>{event.eventType}</Text>
-                                                        </View>
-                                                    )}
-                                                    {(event.divisions || []).map((division: any) => (
-                                                        <View key={`${event.id}-${division.id}`} style={[styles.tag, { backgroundColor: '#14b8a6' }]}>
-                                                            <Text style={styles.tagText}>{division.name}</Text>
-                                                        </View>
-                                                    ))}
-                                                    <View style={[styles.tag, { backgroundColor: (event.rosterCount || 0) > 0 ? '#16a34a' : '#ef4444' }]}>
-                                                        <Text style={styles.tagText}>{event.rosterCount || 0} roster</Text>
-                                                    </View>
+                                            <View style={styles.eventTags}>
+                                                <View style={[styles.tag, { backgroundColor: '#2563eb' }]}>
+                                                    <Text style={styles.tagText}>{event.sport}</Text>
                                                 </View>
-                                                {!!event.location && (
-                                                    <View style={styles.eventFooter}>
-                                                        <Ionicons name="location" size={14} color={theme.colors.textSecondary} />
-                                                        <Text style={styles.eventLocation}>{event.location}</Text>
+                                                {!!event.eventType && (
+                                                    <View style={[styles.tag, { backgroundColor: '#f3f4f6' }]}>
+                                                        <Text style={[styles.tagText, { color: theme.colors.text }]}>{event.eventType}</Text>
                                                     </View>
                                                 )}
-                                                {!!event.description && (
-                                                    <Text style={styles.eventDescription} numberOfLines={2}>{event.description}</Text>
-                                                )}
-                                            </StyledCard>
-                                        ))}
-                                    </View>
+                                                {(event.divisions || []).map((division: any) => (
+                                                    <View key={`${event.id}-${division.id}`} style={[styles.tag, { backgroundColor: '#14b8a6' }]}>
+                                                        <Text style={styles.tagText}>{division.name}</Text>
+                                                    </View>
+                                                ))}
+                                                <View style={[styles.tag, { backgroundColor: (event.rosterCount || 0) > 0 ? '#16a34a' : '#ef4444' }]}>
+                                                    <Text style={styles.tagText}>{event.rosterCount || 0} roster</Text>
+                                                </View>
+                                            </View>
+                                            {!!event.location && (
+                                                <View style={styles.eventFooter}>
+                                                    <Ionicons name="location" size={14} color={theme.colors.textSecondary} />
+                                                    <Text style={styles.eventLocation}>{event.location}</Text>
+                                                </View>
+                                            )}
+                                            {!!event.description && (
+                                                <Text style={styles.eventDescription} numberOfLines={2}>{event.description}</Text>
+                                            )}
+                                        </StyledCard>
+                                    ))}
                                 </View>
-                            ))}
-                        </View>
-                    )}
-                </StyledCard>
+                            </View>
+                        ))}
+                    </View>
+                )}
             </ScrollView>
 
             {/* Floating Action Button */}
@@ -2983,105 +2863,6 @@ const styles = StyleSheet.create({
     },
     calendarCard: {
         marginBottom: theme.spacing.md,
-    },
-    calendarNav: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: theme.spacing.md,
-    },
-    navButton: {
-        fontSize: 14,
-        color: theme.colors.secondary,
-        fontWeight: '600',
-    },
-    navButtons: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.md,
-    },
-    monthYear: {
-        ...theme.typography.h3,
-        fontSize: 18,
-        fontWeight: '700',
-    },
-    viewToggles: {
-        flexDirection: 'row',
-        gap: theme.spacing.xs,
-        marginBottom: theme.spacing.md,
-    },
-    viewToggle: {
-        paddingVertical: theme.spacing.xs,
-        paddingHorizontal: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    viewToggleActive: {
-        backgroundColor: theme.colors.secondary,
-        borderColor: theme.colors.secondary,
-    },
-    viewToggleText: {
-        fontSize: 12,
-        color: theme.colors.text,
-        fontWeight: '600',
-    },
-    viewToggleTextActive: {
-        color: 'white',
-    },
-    calendarGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-    },
-    dayHeader: {
-        width: '14.28%',
-        paddingVertical: theme.spacing.sm,
-        alignItems: 'center',
-    },
-    dayHeaderText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-    },
-    calendarDay: {
-        width: '14.28%',
-        aspectRatio: 1,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        padding: theme.spacing.xs,
-        alignItems: 'flex-start',
-        justifyContent: 'flex-start',
-    },
-    calendarDayOtherMonth: {
-        backgroundColor: '#f9fafb',
-    },
-    calendarDaySelected: {
-        backgroundColor: '#dbeafe',
-        borderColor: theme.colors.secondary,
-    },
-    calendarDayToday: {
-        borderWidth: 2,
-        borderColor: theme.colors.secondary,
-    },
-    dayNumber: {
-        fontSize: 12,
-        color: theme.colors.text,
-    },
-    dayNumberOtherMonth: {
-        color: theme.colors.textSecondary,
-    },
-    dayNumberSelected: {
-        fontWeight: '700',
-        color: theme.colors.secondary,
-    },
-    eventIndicator: {
-        marginTop: theme.spacing.xs,
-    },
-    eventDot: {
-        width: 4,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: theme.colors.secondary,
     },
     selectedDateEvents: {
         marginTop: theme.spacing.md,

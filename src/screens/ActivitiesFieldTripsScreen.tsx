@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Switch, Pressable, ActivityIndicator, Platform, Alert } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,9 +9,7 @@ import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
 import * as DocumentPicker from 'expo-document-picker';
-
-// Calendar view types
-type CalendarView = 'Month' | 'Week' | 'Day' | 'Agenda';
+import { CalendarWidget, CalendarWidgetEvent } from '../components/CalendarWidget';
 
 export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
@@ -223,10 +221,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [isDivisionDropdownOpen, setIsDivisionDropdownOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');
-    const [calendarView, setCalendarView] = useState<CalendarView>('Month');
     const seasonYear = parseInt(selectedYear, 10) || new Date().getFullYear();
     const [currentDate, setCurrentDate] = useState(new Date(seasonYear, 0, 22));
-    const [currentMonth, setCurrentMonth] = useState(new Date(seasonYear, 0, 1));
     const [sortBy, setSortBy] = useState<'date' | 'division'>('date');
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingActivity, setEditingActivity] = useState<any>(null);
@@ -435,175 +431,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         }
     };
 
-    // Generate calendar days for the month
-    const getDaysInMonth = (date: Date) => {
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const daysInMonth = lastDay.getDate();
-        const startingDayOfWeek = firstDay.getDay();
 
-        const days = [];
 
-        // Add previous month's trailing days
-        const prevMonth = new Date(year, month - 1, 0);
-        const prevMonthDays = prevMonth.getDate();
-        for (let i = startingDayOfWeek - 1; i >= 0; i--) {
-            days.push({
-                date: new Date(year, month - 1, prevMonthDays - i),
-                isCurrentMonth: false,
-            });
-        }
 
-        // Add current month's days
-        for (let day = 1; day <= daysInMonth; day++) {
-            days.push({
-                date: new Date(year, month, day),
-                isCurrentMonth: true,
-            });
-        }
 
-        // Add next month's leading days to fill the grid (6 rows * 7 days = 42)
-        const remainingDays = 42 - days.length;
-        for (let day = 1; day <= remainingDays; day++) {
-            days.push({
-                date: new Date(year, month + 1, day),
-                isCurrentMonth: false,
-            });
-        }
 
-        return days;
-    };
 
-    const calendarDays = getDaysInMonth(currentMonth);
-
-    const isSelectedDate = (date: Date) => {
-        return date.getDate() === currentDate.getDate() &&
-            date.getMonth() === currentDate.getMonth() &&
-            date.getFullYear() === currentDate.getFullYear();
-    };
-
-    const isToday = (date: Date) => {
-        const today = new Date();
-        return date.getDate() === today.getDate() &&
-            date.getMonth() === today.getMonth() &&
-            date.getFullYear() === today.getFullYear();
-    };
-
-    const formatMonthYear = (date: Date) => {
-        return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    };
-
-    // Get week days starting from Sunday
-    const getWeekDays = (date: Date) => {
-        const weekStart = new Date(date);
-        const day = weekStart.getDay();
-        weekStart.setDate(weekStart.getDate() - day); // Go to Sunday
-
-        const days = [];
-        for (let i = 0; i < 7; i++) {
-            const dayDate = new Date(weekStart);
-            dayDate.setDate(weekStart.getDate() + i);
-            days.push(dayDate);
-        }
-        return days;
-    };
-
-    // Format week range (e.g., "January 18 â€“ 24")
-    const formatWeekRange = (date: Date) => {
-        const weekDays = getWeekDays(date);
-        const start = weekDays[0];
-        const end = weekDays[6];
-
-        if (start.getMonth() === end.getMonth()) {
-            return `${start.toLocaleDateString('en-US', { month: 'long' })} ${start.getDate()} â€“ ${end.getDate()}`;
-        } else {
-            return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} â€“ ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-        }
-    };
-
-    // Format day view date (e.g., "Thursday Jan 22")
-    const formatDayDate = (date: Date) => {
-        return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-    };
-
-    // Format agenda range (e.g., "01/22/2026 â€“ 02/21/2026")
-    const formatAgendaRange = (date: Date) => {
-        const start = new Date(date);
-        const end = new Date(date);
-        end.setMonth(end.getMonth() + 1);
-
-        const startStr = start.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-        const endStr = end.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-
-        return `${startStr} â€“ ${endStr}`;
-    };
-
-    // Generate time slots (24 hours)
-    const getTimeSlots = () => {
-        const slots = [];
-        for (let hour = 0; hour < 24; hour++) {
-            const time12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-            const ampm = hour < 12 ? 'AM' : 'PM';
-            slots.push({
-                hour,
-                label: `${time12}:00 ${ampm}`,
-            });
-        }
-        return slots;
-    };
-
-    const navigateCalendar = (direction: 'prev' | 'next' | 'today') => {
-        if (direction === 'today') {
-            const today = new Date();
-            setCurrentDate(today);
-            setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-            return;
-        }
-
-        if (calendarView === 'Week') {
-            // Navigate by week
-            const newDate = new Date(currentDate);
-            if (direction === 'prev') {
-                newDate.setDate(newDate.getDate() - 7);
-            } else {
-                newDate.setDate(newDate.getDate() + 7);
-            }
-            setCurrentDate(newDate);
-        } else if (calendarView === 'Day') {
-            // Navigate by day
-            const newDate = new Date(currentDate);
-            if (direction === 'prev') {
-                newDate.setDate(newDate.getDate() - 1);
-            } else {
-                newDate.setDate(newDate.getDate() + 1);
-            }
-            setCurrentDate(newDate);
-        } else if (calendarView === 'Agenda') {
-            // Navigate by month for agenda
-            const newDate = new Date(currentDate);
-            if (direction === 'prev') {
-                newDate.setMonth(newDate.getMonth() - 1);
-            } else {
-                newDate.setMonth(newDate.getMonth() + 1);
-            }
-            setCurrentDate(newDate);
-        } else {
-            // Navigate by month
-            const newMonth = new Date(currentMonth);
-            if (direction === 'prev') {
-                newMonth.setMonth(newMonth.getMonth() - 1);
-            } else {
-                newMonth.setMonth(newMonth.getMonth() + 1);
-            }
-            setCurrentMonth(newMonth);
-        }
-    };
-
-    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const weekDaysDates = getWeekDays(currentDate);
-    const timeSlots = getTimeSlots();
 
     // Format date for activity cards (match web: "Wed, Jul 8" or "Jul 28 - Jul 29, 2026")
     const formatActivityDate = (startDate: string, endDate?: string, isMultiDay?: boolean) => {
@@ -694,15 +527,29 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     };
 
-    // Group activities by month
-    const groupActivitiesByMonth = () => {
-        const grouped: Record<string, any[]> = {};
-
-        const filteredActivities = activities.filter(activity => {
+    const filteredActivities = useMemo(() =>
+        activities.filter(activity => {
             if (selectedDivision === 'All Divisions') return true;
             return activity.divisions?.some((div: any) => div.name === selectedDivision);
-        });
+        }),
+        [activities, selectedDivision]
+    );
 
+    const calendarWidgetEvents: CalendarWidgetEvent[] = useMemo(() =>
+        filteredActivities.map((act) => ({
+            id: act.id,
+            title: act.title || '',
+            date: new Date((act.event_date) + 'T00:00:00'),
+            time: act.depart_from_camp || '',
+            location: act.location || '',
+            type: 'field-trip',
+            accent: { bg: '#dcfce7', text: '#166534', marker: '#16a34a' },
+        })),
+        [filteredActivities]
+    );
+
+    const groupActivitiesByMonth = () => {
+        const grouped: Record<string, any[]> = {};
         filteredActivities.forEach(activity => {
             const date = new Date(activity.event_date + 'T00:00:00');
             const monthKey = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -933,259 +780,41 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
                 {/* Calendar View */}
                 {viewMode === 'calendar' && (
-                    <StyledCard style={styles.calendarCard}>
-                        {/* Calendar Navigation */}
-                        <View style={styles.calendarNavigation}>
-                            {/* Top Row: Navigation and Date */}
-                            <View style={styles.calendarNavTopRow}>
-                                <View style={styles.calendarNavLeft}>
-                                    <TouchableOpacity
-                                        style={styles.navButton}
-                                        onPress={() => navigateCalendar('today')}
-                                    >
-                                        <Text style={styles.navButtonText}>Today</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.navButton}
-                                        onPress={() => navigateCalendar('prev')}
-                                    >
-                                        <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.navButton}
-                                        onPress={() => navigateCalendar('next')}
-                                    >
-                                        <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                </View>
-
-                                <Text style={styles.monthYearText} numberOfLines={1}>
-                                    {calendarView === 'Week'
-                                        ? formatWeekRange(currentDate)
-                                        : calendarView === 'Day'
-                                            ? formatDayDate(currentDate)
-                                            : calendarView === 'Agenda'
-                                                ? formatAgendaRange(currentDate)
-                                                : formatMonthYear(currentMonth)}
-                                </Text>
-                            </View>
-
-                            {/* Bottom Row: View Options */}
-                            <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled"
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                style={styles.viewOptionsScroll}
-                                contentContainerStyle={styles.viewOptionsContainer}
-                            >
-                                {(['Month', 'Week', 'Day', 'Agenda'] as CalendarView[]).map((view) => (
-                                    <TouchableOpacity
-                                        key={view}
-                                        style={[
-                                            styles.viewOptionButton,
-                                            calendarView === view && styles.viewOptionButtonActive
-                                        ]}
-                                        onPress={() => setCalendarView(view)}
-                                    >
-                                        <Text style={[
-                                            styles.viewOptionText,
-                                            calendarView === view && styles.viewOptionTextActive
-                                        ]}>
-                                            {view}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </KeyboardAwareScrollView>
-                        </View>
-
-                        {/* Calendar Grid */}
-                        {calendarView === 'Week' ? (
-                            <View style={styles.weekViewContainer}>
-                                {/* Day headers row */}
-                                <View style={styles.weekDayHeadersContainer}>
-                                    <View style={styles.timeColumnHeader} />
-                                    <View style={styles.weekDayHeadersRow}>
-                                        {weekDaysDates.map((dayDate, index) => {
-                                            const isCurrentDay = isToday(dayDate);
-
-                                            return (
-                                                <View
-                                                    key={index}
-                                                    style={[
-                                                        styles.weekDayHeaderCell,
-                                                        isCurrentDay && styles.weekDayHeaderCellToday
-                                                    ]}
-                                                >
-                                                    <Text style={styles.weekDayHeaderText}>
-                                                        {weekDays[index]}
-                                                    </Text>
-                                                    <Text style={[
-                                                        styles.weekDayHeaderDate,
-                                                        isCurrentDay && styles.weekDayHeaderDateToday
-                                                    ]}>
-                                                        {dayDate.getDate()}
-                                                    </Text>
-                                                </View>
-                                            );
-                                        })}
-                                    </View>
-                                </View>
-
-                                {/* Scrollable time grid */}
-                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.weekScrollView} nestedScrollEnabled>
-                                    <View style={styles.weekTimeGrid}>
-                                        {/* Time column */}
-                                        <View style={styles.timeColumn}>
-                                            {timeSlots.map((slot, index) => (
-                                                <View key={index} style={styles.timeSlot}>
-                                                    <Text style={styles.timeSlotText}>{slot.label}</Text>
-                                                </View>
-                                            ))}
-                                        </View>
-
-                                        {/* Day columns */}
-                                        <View style={styles.weekDayColumns}>
-                                            {weekDaysDates.map((dayDate, dayIndex) => {
-                                                const isCurrentDay = isToday(dayDate);
-
-                                                return (
-                                                    <View
-                                                        key={dayIndex}
-                                                        style={[
-                                                            styles.weekDayColumn,
-                                                            isCurrentDay && styles.weekDayColumnToday
-                                                        ]}
-                                                    >
-                                                        {timeSlots.map((slot, timeIndex) => (
-                                                            <TouchableOpacity
-                                                                key={timeIndex}
-                                                                style={styles.weekTimeCell}
-                                                                onPress={() => {
-                                                                    // Handle time slot click
-                                                                    setCurrentDate(dayDate);
-                                                                }}
-                                                            >
-                                                                {/* Empty cell - activities would be rendered here */}
-                                                            </TouchableOpacity>
-                                                        ))}
-                                                    </View>
-                                                );
-                                            })}
-                                        </View>
-                                    </View>
-                                </KeyboardAwareScrollView>
-                            </View>
-                        ) : calendarView === 'Day' ? (
-                            <View style={styles.dayViewContainer}>
-                                {/* Day header */}
-                                <View style={styles.dayHeaderContainer}>
-                                    <View style={styles.timeColumnHeader} />
-                                    <View style={[
-                                        styles.dayHeaderCell,
-                                        isToday(currentDate) && styles.dayHeaderCellToday
-                                    ]}>
-                                        <Text style={styles.dayHeaderText}>
-                                            {currentDate.toLocaleDateString('en-US', { weekday: 'long' })}
-                                        </Text>
-                                        <Text style={[
-                                            styles.dayHeaderDate,
-                                            isToday(currentDate) && styles.dayHeaderDateToday
-                                        ]}>
-                                            {currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                {/* Scrollable time grid */}
-                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.dayScrollView} nestedScrollEnabled>
-                                    <View style={styles.dayTimeGrid}>
-                                        {/* Time column */}
-                                        <View style={styles.timeColumn}>
-                                            {timeSlots.map((slot, index) => (
-                                                <View key={index} style={styles.timeSlot}>
-                                                    <Text style={styles.timeSlotText}>{slot.label}</Text>
-                                                </View>
-                                            ))}
-                                        </View>
-
-                                        {/* Day column */}
-                                        <View style={[
-                                            styles.dayColumn,
-                                            isToday(currentDate) && styles.dayColumnToday
-                                        ]}>
-                                            {timeSlots.map((slot, timeIndex) => (
-                                                <TouchableOpacity
-                                                    key={timeIndex}
-                                                    style={styles.weekTimeCell}
-                                                    onPress={() => {
-                                                        // Handle time slot click
-                                                    }}
-                                                >
-                                                    {/* Empty cell - activities would be rendered here */}
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                    </View>
-                                </KeyboardAwareScrollView>
-                            </View>
-                        ) : calendarView === 'Agenda' ? (
-                            <View style={styles.agendaViewContainer}>
-                                <View style={styles.agendaEmptyContainer}>
-                                    <Text style={styles.agendaEmptyText}>
-                                        There are no events in this range.
-                                    </Text>
-                                </View>
-                            </View>
-                        ) : (
-                            <View style={styles.calendarGrid}>
-                                {/* Week Day Headers */}
-                                <View style={styles.weekDayRow}>
-                                    {weekDays.map((day) => (
-                                        <View key={day} style={styles.weekDayHeader}>
-                                            <Text style={styles.weekDayText}>{day}</Text>
-                                        </View>
-                                    ))}
-                                </View>
-
-                                {/* Calendar Days */}
-                                <View style={styles.calendarDaysContainer}>
-                                    {calendarDays.map((day, index) => {
-                                        const isSelected = isSelectedDate(day.date);
-                                        const isCurrentDay = isToday(day.date);
-
-                                        return (
-                                            <TouchableOpacity
-                                                key={index}
-                                                style={[
-                                                    styles.calendarDay,
-                                                    !day.isCurrentMonth && styles.calendarDayOtherMonth,
-                                                    isSelected && styles.calendarDaySelected,
-                                                    isCurrentDay && !isSelected && styles.calendarDayToday
-                                                ]}
-                                                onPress={() => setCurrentDate(day.date)}
-                                            >
-                                                <Text style={[
-                                                    styles.calendarDayText,
-                                                    !day.isCurrentMonth && styles.calendarDayTextOtherMonth,
-                                                    isSelected && styles.calendarDayTextSelected,
-                                                    isCurrentDay && !isSelected && styles.calendarDayTextToday
-                                                ]}>
-                                                    {day.date.getDate()}
-                                                </Text>
-                                                <View style={styles.calendarDayEvents}>
-                                                    {activities.filter(a => a.event_date === formatDateForStorage(day.date)).slice(0, 2).map((a, idx) => (
-                                                        <View key={idx} style={[styles.dayEventIndicator, { backgroundColor: a.home_away === 'away' ? theme.colors.primary : theme.colors.secondary }]} />
-                                                    ))}
-                                                    {activities.filter(a => a.event_date === formatDateForStorage(day.date)).length > 2 && (
-                                                        <View style={styles.dayEventMore} />
-                                                    )}
-                                                </View>
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </View>
-                            </View>
-                        )}
-                    </StyledCard>
+                    <CalendarWidget
+                        events={calendarWidgetEvents}
+                        currentDate={currentDate}
+                        onCurrentDateChange={setCurrentDate}
+                        selectedDate={selectedDate}
+                        onSelectedDateChange={setSelectedDate}
+                        onEventPress={(evt) => {
+                            const activity = filteredActivities.find((a) => a.id === evt.id);
+                            if (activity) {
+                                setEditingActivity(activity);
+                                setFormData({
+                                    event_date: activity.event_date,
+                                    end_date: activity.end_date || '',
+                                    is_multi_day: activity.is_multi_day || false,
+                                    title: activity.title,
+                                    activity_type: activity.activity_type,
+                                    home_away: activity.home_away || '',
+                                    division_ids: activity.divisions?.map((d: any) => d.id) || [],
+                                    depart_from_camp: activity.depart_from_camp || '',
+                                    depart_from_activity: activity.depart_from_activity || '',
+                                    location: activity.location || '',
+                                    capacity: activity.capacity ? String(activity.capacity) : '',
+                                    chaperone: activity.chaperone || '',
+                                    description: activity.description || '',
+                                    meal_options: activity.meal_options || [],
+                                    meal_notes: activity.meal_notes || '',
+                                });
+                                setIsEditModalOpen(true);
+                            }
+                        }}
+                        views={['Month', 'Week', 'Day', 'Agenda']}
+                        initialView={'Month'}
+                        showZoom={true}
+                        showNavigation={true}
+                    />
                 )}
 
                 {/* List View */}
@@ -3027,136 +2656,6 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '600',
     },
-    calendarCard: {
-        padding: 0,
-        overflow: 'hidden',
-    },
-    calendarNavigation: {
-        padding: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    calendarNavTopRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: theme.spacing.sm,
-    },
-    calendarNavLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.xs,
-        flexShrink: 1,
-    },
-    navButton: {
-        padding: theme.spacing.xs,
-        borderRadius: theme.borderRadius.sm,
-    },
-    navButtonText: {
-        ...theme.typography.body,
-        fontSize: 14,
-        color: theme.colors.secondary,
-    },
-    monthYearText: {
-        ...theme.typography.h3,
-        fontSize: 16,
-        flex: 1,
-        textAlign: 'center',
-        marginHorizontal: theme.spacing.sm,
-    },
-    viewOptionsScroll: {
-        maxHeight: 40,
-    },
-    viewOptionsContainer: {
-        flexDirection: 'row',
-        gap: theme.spacing.xs,
-        paddingRight: theme.spacing.md,
-    },
-    viewOptions: {
-        flexDirection: 'row',
-        gap: theme.spacing.xs,
-    },
-    viewOptionButton: {
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: theme.spacing.xs,
-        borderRadius: theme.borderRadius.sm,
-        backgroundColor: theme.colors.background,
-        minWidth: 60,
-    },
-    viewOptionButtonActive: {
-        backgroundColor: theme.colors.secondary,
-    },
-    viewOptionText: {
-        ...theme.typography.body,
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-    },
-    viewOptionTextActive: {
-        color: theme.colors.surface,
-        fontWeight: '600',
-    },
-    calendarGrid: {
-        padding: theme.spacing.md,
-    },
-    weekDayRow: {
-        flexDirection: 'row',
-        marginBottom: theme.spacing.sm,
-    },
-    weekDayHeader: {
-        flex: 1,
-        alignItems: 'center',
-        paddingVertical: theme.spacing.xs,
-    },
-    weekDayText: {
-        ...theme.typography.bodySmall,
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-    },
-    calendarDaysContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-    },
-    calendarDay: {
-        width: '14.28%',
-        aspectRatio: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    calendarDayOtherMonth: {
-        backgroundColor: theme.colors.background,
-    },
-    calendarDaySelected: {
-        backgroundColor: '#dbeafe', // Light blue
-        borderColor: theme.colors.secondary,
-    },
-    calendarDayToday: {
-        backgroundColor: '#f0f9ff', // Very light blue
-    },
-    calendarDayText: {
-        ...theme.typography.body,
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    calendarDayTextOtherMonth: {
-        color: theme.colors.textSecondary,
-        opacity: 0.5,
-    },
-    calendarDayTextSelected: {
-        color: theme.colors.secondary,
-        fontWeight: '600',
-    },
-    calendarDayTextToday: {
-        color: theme.colors.secondary,
-    },
-    emptyText: {
-        ...theme.typography.body,
-        textAlign: 'center',
-        color: theme.colors.textSecondary,
-        padding: theme.spacing.xl,
-    },
     // Modal styles
     modalOverlay: {
         flex: 1,
@@ -3189,165 +2688,6 @@ const styles = StyleSheet.create({
     dropdownItemTextSelected: {
         color: theme.colors.secondary,
         fontWeight: '600',
-    },
-    // Week view styles
-    weekViewContainer: {
-        flex: 1,
-        maxHeight: 600,
-    },
-    weekDayHeadersContainer: {
-        flexDirection: 'row',
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    timeColumnHeader: {
-        width: 80,
-        borderRightWidth: 1,
-        borderRightColor: theme.colors.border,
-    },
-    weekScrollView: {
-        flex: 1,
-    },
-    weekDayHeadersRow: {
-        flexDirection: 'row',
-        flex: 1,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    weekDayHeaderCell: {
-        flex: 1,
-        alignItems: 'center',
-        paddingVertical: theme.spacing.sm,
-        borderRightWidth: 1,
-        borderRightColor: theme.colors.border,
-        backgroundColor: theme.colors.surface,
-    },
-    weekDayHeaderCellToday: {
-        backgroundColor: '#dbeafe', // Light blue
-    },
-    weekDayHeaderText: {
-        ...theme.typography.bodySmall,
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.xs,
-    },
-    weekDayHeaderDate: {
-        ...theme.typography.body,
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.colors.text,
-    },
-    weekDayHeaderDateToday: {
-        color: theme.colors.secondary,
-    },
-    weekTimeGrid: {
-        flexDirection: 'row',
-    },
-    timeColumn: {
-        width: 80,
-        borderRightWidth: 1,
-        borderRightColor: theme.colors.border,
-    },
-    timeSlot: {
-        height: 60,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-        paddingRight: theme.spacing.sm,
-        alignItems: 'flex-end',
-        justifyContent: 'flex-start',
-        paddingTop: theme.spacing.xs,
-    },
-    timeSlotText: {
-        ...theme.typography.bodySmall,
-        fontSize: 11,
-        color: theme.colors.textSecondary,
-    },
-    weekDayColumns: {
-        flexDirection: 'row',
-        flex: 1,
-    },
-    weekDayColumn: {
-        flex: 1,
-        borderRightWidth: 1,
-        borderRightColor: theme.colors.border,
-    },
-    weekDayColumnToday: {
-        backgroundColor: '#f0f9ff', // Very light blue
-    },
-    weekTimeCell: {
-        height: 60,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-        backgroundColor: theme.colors.surface,
-    },
-    // Day view styles
-    dayViewContainer: {
-        flex: 1,
-        maxHeight: 600,
-    },
-    dayHeaderContainer: {
-        flexDirection: 'row',
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    dayHeaderCell: {
-        flex: 1,
-        alignItems: 'center',
-        paddingVertical: theme.spacing.md,
-        borderRightWidth: 1,
-        borderRightColor: theme.colors.border,
-        backgroundColor: theme.colors.surface,
-    },
-    dayHeaderCellToday: {
-        backgroundColor: '#dbeafe', // Light blue
-    },
-    dayHeaderText: {
-        ...theme.typography.bodySmall,
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.xs,
-    },
-    dayHeaderDate: {
-        ...theme.typography.h3,
-        fontSize: 18,
-        fontWeight: '600',
-        color: theme.colors.text,
-    },
-    dayHeaderDateToday: {
-        color: theme.colors.secondary,
-    },
-    dayScrollView: {
-        flex: 1,
-    },
-    dayTimeGrid: {
-        flexDirection: 'row',
-    },
-    dayColumn: {
-        flex: 1,
-        borderRightWidth: 1,
-        borderRightColor: theme.colors.border,
-    },
-    dayColumnToday: {
-        backgroundColor: '#f0f9ff', // Very light blue
-    },
-    // Agenda view styles
-    agendaViewContainer: {
-        flex: 1,
-        minHeight: 400,
-        padding: theme.spacing.xl,
-    },
-    agendaEmptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    agendaEmptyText: {
-        ...theme.typography.body,
-        fontSize: 16,
-        color: theme.colors.textSecondary,
-        textAlign: 'center',
     },
     // List view styles
     listViewContainer: {
@@ -4341,25 +3681,6 @@ const styles = StyleSheet.create({
         ...theme.shadows.card,
         elevation: 5,
         overflow: 'hidden',
-    },
-    calendarDayEvents: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 2,
-        marginTop: 2,
-        justifyContent: 'center',
-        paddingHorizontal: 2,
-    },
-    dayEventIndicator: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-    },
-    dayEventMore: {
-        width: 3,
-        height: 3,
-        borderRadius: 1.5,
-        backgroundColor: theme.colors.textSecondary,
     },
 });
 

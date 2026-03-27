@@ -27,6 +27,7 @@ import { theme } from '../theme/theme';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadTripAttachment, getSignedUrl, pathFromFileUrl } from '../api/storage';
 import { supabase } from '../lib/supabase';
+import { CalendarWidget as SharedCalendarWidget, CalendarWidgetEvent } from '../components/CalendarWidget';
 
 // Trip Interfaces
 interface Trip {
@@ -336,104 +337,6 @@ const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDe
     );
 };
 
-const CalendarWidget = ({ selectedDate, onSelectDate }: { selectedDate: string, onSelectDate: (date: string) => void }) => {
-    const [currentMonth, setCurrentMonth] = useState(() => {
-        if (selectedDate && /^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
-            const d = new Date(selectedDate + 'T12:00:00');
-            return new Date(d.getFullYear(), d.getMonth(), 1);
-        }
-        const n = new Date();
-        return new Date(n.getFullYear(), n.getMonth(), 1);
-    });
-
-    useEffect(() => {
-        if (selectedDate && /^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
-            const d = new Date(selectedDate + 'T12:00:00');
-            setCurrentMonth(new Date(d.getFullYear(), d.getMonth(), 1));
-        }
-    }, [selectedDate]);
-
-    const daysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
-    const firstDayOfMonth = (month: number, year: number) => new Date(year, month, 1).getDay();
-
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-    const generateCalendarDays = () => {
-        const year = currentMonth.getFullYear();
-        const month = currentMonth.getMonth();
-        const totalDays = daysInMonth(month, year);
-        const firstDay = firstDayOfMonth(month, year);
-        const days = [];
-
-        // Empty slots for previous month
-        for (let i = 0; i < firstDay; i++) {
-            days.push(null);
-        }
-
-        // Days of current month
-        for (let i = 1; i <= totalDays; i++) {
-            days.push(new Date(year, month, i).toISOString().split('T')[0]);
-        }
-
-        return days;
-    };
-
-    const handlePrevMonth = () => {
-        setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-    };
-
-    const handleNextMonth = () => {
-        setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
-    };
-
-    return (
-        <View style={styles.calendarContainer}>
-            <View style={styles.calendarHeader}>
-                <TouchableOpacity onPress={handlePrevMonth} style={styles.navBtn}>
-                    <Ionicons name="chevron-back" size={16} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
-                <Text style={styles.monthTitle}>{monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}</Text>
-                <TouchableOpacity onPress={handleNextMonth} style={styles.navBtn}>
-                    <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
-            </View>
-            <View style={styles.weekRow}>
-                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
-                    <Text key={day} style={styles.weekDayText}>{day}</Text>
-                ))}
-            </View>
-            <View style={styles.daysGrid}>
-                {generateCalendarDays().map((dateStr, index) => {
-                    if (!dateStr) return <View key={`empty-${index}`} style={styles.dayCell} />;
-
-                    const dayNum = dateStr.split('-')[2]; // Extract day part
-                    const isSelected = selectedDate === dateStr;
-                    const isToday = dateStr === new Date().toISOString().split('T')[0];
-
-                    return (
-                        <TouchableOpacity
-                            key={dateStr}
-                            style={[
-                                styles.dayCell,
-                                isSelected && styles.selectedDayCell,
-                                !isSelected && isToday && styles.todayCell
-                            ]}
-                            onPress={() => onSelectDate(dateStr)}
-                        >
-                            <Text style={[
-                                styles.dayText,
-                                isSelected && styles.selectedDayText,
-                                !isSelected && isToday && styles.todayText
-                            ]}>
-                                {parseInt(dayNum)}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
-        </View>
-    );
-};
 
 export const TransportScreen = ({ navigation }: any) => {
     const { width } = useWindowDimensions();
@@ -530,6 +433,25 @@ export const TransportScreen = ({ navigation }: any) => {
     // View State
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+    const [calendarCurrentDate, setCalendarCurrentDate] = useState(() => new Date());
+
+    const selectedDateObj = useMemo(
+        () => new Date(selectedDate + 'T00:00:00'),
+        [selectedDate],
+    );
+
+    const calendarWidgetEvents: CalendarWidgetEvent[] = useMemo(() =>
+        trips.map((trip) => ({
+            id: trip.id,
+            title: trip.name || trip.destination || '',
+            date: new Date(trip.date + 'T00:00:00'),
+            time: trip.departure_time || '',
+            location: trip.destination || '',
+            type: 'field-trip',
+            accent: { bg: '#fef3c7', text: '#92400e', marker: '#f59e0b' },
+        })),
+        [trips],
+    );
 
     // Filter State
     const [filterType, setFilterType] = useState('all');
@@ -944,7 +866,16 @@ export const TransportScreen = ({ navigation }: any) => {
             return (
                 <ScrollView contentContainerStyle={[styles.calendarViewContent, { flexDirection: 'row', gap: 24 }]}>
                     <View style={{ flex: 1, maxWidth: 400 }}>
-                        <CalendarWidget selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+                        <SharedCalendarWidget
+                            events={calendarWidgetEvents}
+                            currentDate={calendarCurrentDate}
+                            onCurrentDateChange={setCalendarCurrentDate}
+                            selectedDate={selectedDateObj}
+                            onSelectedDateChange={(d) => setSelectedDate(d.toISOString().split('T')[0])}
+                            views={['Month', 'Week', 'Day', 'Agenda']}
+                            showZoom={true}
+                            showNavigation={true}
+                        />
                     </View>
                     <View style={{ flex: 2 }}>
                         <Text style={[styles.selectedDateTitle, { fontSize: 24, marginBottom: 24 }]}>{selectedDateDisplay}</Text>
@@ -961,7 +892,16 @@ export const TransportScreen = ({ navigation }: any) => {
                     {selectedDateDisplay}
                 </Text>
 
-                <CalendarWidget selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+                <SharedCalendarWidget
+                    events={calendarWidgetEvents}
+                    currentDate={calendarCurrentDate}
+                    onCurrentDateChange={setCalendarCurrentDate}
+                    selectedDate={selectedDateObj}
+                    onSelectedDateChange={(d) => setSelectedDate(d.toISOString().split('T')[0])}
+                    views={['Month', 'Week', 'Day', 'Agenda']}
+                    showZoom={true}
+                    showNavigation={true}
+                />
 
                 <View style={styles.selectedDateContainer}>
                     {tripList}
@@ -1147,6 +1087,16 @@ export const TransportScreen = ({ navigation }: any) => {
 
     // Picker State
     const [activePicker, setActivePicker] = useState<'startDate' | 'endDate' | 'departureTime' | 'returnTime' | 'type' | 'locationType' | 'status' | 'transportation_type' | 'meal' | null>(null);
+    const [pickerCalendarDate, setPickerCalendarDate] = useState(() => new Date());
+
+    useEffect(() => {
+        if (activePicker === 'startDate') {
+            setPickerCalendarDate(new Date(tripFormData.date + 'T00:00:00'));
+        } else if (activePicker === 'endDate') {
+            const d = tripFormData.end_date || tripFormData.date;
+            setPickerCalendarDate(new Date(d + 'T00:00:00'));
+        }
+    }, [activePicker]);
 
     const handlePickerSelect = (value: string) => {
         if (!activePicker) return;
@@ -1198,9 +1148,15 @@ export const TransportScreen = ({ navigation }: any) => {
             return (
                 <View style={{ padding: 16 }}>
                     <Text style={styles.pickerTitle}>Select {activePicker === 'startDate' ? 'Start' : 'End'} Date</Text>
-                    <CalendarWidget
-                        selectedDate={currentSelected}
-                        onSelectDate={(date) => handlePickerSelect(date)}
+                    <SharedCalendarWidget
+                        events={[]}
+                        currentDate={pickerCalendarDate}
+                        onCurrentDateChange={setPickerCalendarDate}
+                        selectedDate={new Date(currentSelected + 'T00:00:00')}
+                        onSelectedDateChange={(d) => handlePickerSelect(d.toISOString().split('T')[0])}
+                        views={['Month']}
+                        showZoom={false}
+                        showNavigation={true}
                     />
                     <TouchableOpacity style={styles.closePickerBtn} onPress={() => setActivePicker(null)}>
                         <Text style={styles.closePickerText}>Cancel</Text>
@@ -2552,75 +2508,6 @@ const styles = StyleSheet.create({
     // Calendar Styles
     calendarViewContent: {
         padding: theme.spacing.md,
-    },
-    calendarContainer: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.md,
-        padding: theme.spacing.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        marginBottom: theme.spacing.lg,
-    },
-    calendarHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: theme.spacing.md,
-    },
-    monthTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: theme.colors.text,
-    },
-    navBtn: {
-        padding: 4,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: 4,
-    },
-    weekRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 8,
-    },
-    weekDayText: {
-        width: 32,
-        textAlign: 'center',
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-        fontWeight: '500',
-    },
-    daysGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        rowGap: 8,
-    },
-    dayCell: {
-        width: '14.28%', // 100/7
-        aspectRatio: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    selectedDayCell: {
-        backgroundColor: '#2563eb',
-        borderRadius: 4,
-    },
-    todayCell: {
-        borderWidth: 1,
-        borderColor: '#2563eb',
-        borderRadius: 4,
-    },
-    dayText: {
-        fontSize: 13,
-        color: theme.colors.text,
-    },
-    selectedDayText: {
-        color: '#fff',
-        fontWeight: 'bold',
-    },
-    todayText: {
-        color: '#2563eb',
-        fontWeight: '600',
     },
     selectedDateContainer: {
         paddingHorizontal: 4,

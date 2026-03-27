@@ -16,10 +16,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { CalendarWidget, type CalendarWidgetEvent } from '../components/CalendarWidget';
 import { useCompany } from '../contexts/CompanyContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { useSportsEnrollments, useAddSportsEnrollment, useUpdateSportsEnrollment } from '../api/sports';
+import {
+    useSportsEnrollments,
+    useAddSportsEnrollment,
+    useUpdateSportsEnrollment,
+} from '../api/sports';
 import { useCampers, useDivisions } from '../api/campers';
 
 interface SportsScreenProps {
@@ -55,6 +60,8 @@ const SCHEDULE_PERIODS = [
     'Other',
 ];
 
+const SPORTS_CALENDAR_ACCENT = { bg: '#dbeafe', text: '#1d4ed8', marker: '#2563eb' };
+
 export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [searchQuery, setSearchQuery] = useState('');
@@ -65,7 +72,8 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const [showGenderDropdown, setShowGenderDropdown] = useState(false);
     const [showSportDropdown, setShowSportDropdown] = useState(false);
     const [showCalendarView, setShowCalendarView] = useState(false);
-    const [selectedDate, setSelectedDate] = useState('01/22/2026');
+    const [currentDate, setCurrentDate] = useState(() => new Date());
+    const [selectedDate, setSelectedDate] = useState(() => new Date());
     const [showAddEnrollmentModal, setShowAddEnrollmentModal] = useState(false);
 
     const { companyId, season } = useCompany();
@@ -97,7 +105,43 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         }
         return filtered;
     }, [enrollmentsData, selectedDivision, selectedGender, selectedSport, searchQuery]);
-    
+
+    const calendarWidgetEvents = useMemo((): CalendarWidgetEvent[] => {
+        const out: CalendarWidgetEvent[] = [];
+        for (const enroll of filteredEnrollments) {
+            if (!enroll.id || !enroll.start_date) continue;
+            const startRaw = enroll.start_date.split('T')[0];
+            const endRaw = (enroll.end_date || enroll.start_date).split('T')[0];
+            const [sy, sm, sd] = startRaw.split('-').map(Number);
+            const [ey, em, ed] = endRaw.split('-').map(Number);
+            if (!Number.isFinite(sy) || !Number.isFinite(sm) || !Number.isFinite(sd)) continue;
+            let cur = new Date(sy, sm - 1, sd);
+            const end = new Date(
+                Number.isFinite(ey) ? ey : sy,
+                Number.isFinite(em) ? em - 1 : sm - 1,
+                Number.isFinite(ed) ? ed : sd,
+            );
+            if (cur > end) continue;
+            while (cur.getTime() <= end.getTime()) {
+                const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+                out.push({
+                    id: `${enroll.id}__${iso}`,
+                    title: enroll.sport_name || 'Sports Event',
+                    date: new Date(cur.getFullYear(), cur.getMonth(), cur.getDate()),
+                    time: enroll.schedule_periods?.filter(Boolean).join(', ') || undefined,
+                    location: enroll.instructor || undefined,
+                    type: 'sports',
+                    tags: enroll.children?.name ? [enroll.children.name] : undefined,
+                    accent: SPORTS_CALENDAR_ACCENT,
+                });
+                const next = new Date(cur);
+                next.setDate(next.getDate() + 1);
+                cur = next;
+            }
+        }
+        return out;
+    }, [filteredEnrollments]);
+
     const addEnrollmentMutation = useAddSportsEnrollment();
     const updateEnrollmentMutation = useUpdateSportsEnrollment();
     const [itemToDelete, setItemToDelete] = useState<any>(null);
@@ -121,10 +165,6 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const [startDatePickerYear, setStartDatePickerYear] = useState(new Date().getFullYear());
     const [endDatePickerMonth, setEndDatePickerMonth] = useState(new Date().getMonth());
     const [endDatePickerYear, setEndDatePickerYear] = useState(new Date().getFullYear());
-
-    // Calendar state
-    const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
-    const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
 
     // Help modal state
     const [showHelpModal, setShowHelpModal] = useState(false);
@@ -154,10 +194,6 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
             'December',
         ];
         return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
-    };
-
-    const handleDateSelect = (date: Date) => {
-        setSelectedDate(formatDate(date));
     };
 
     const handleEnrollmentDateSelect = (date: Date, type: 'start' | 'end') => {
@@ -445,67 +481,23 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     };
 
     const renderCalendarView = () => {
-        // Reuse calendar logic from existing code
-        const monthNames = [
-            'January',
-            'February',
-            'March',
-            'April',
-            'May',
-            'June',
-            'July',
-            'August',
-            'September',
-            'October',
-            'November',
-            'December',
-        ];
-
-        const firstDayOfMonth = new Date(calendarYear, calendarMonth, 1);
-        const lastDayOfMonth = new Date(calendarYear, calendarMonth + 1, 0);
-        const daysInMonth = lastDayOfMonth.getDate();
-        const startingDayOfWeek = firstDayOfMonth.getDay();
-
-        const monthDates = [];
-        // Add empty cells for days before the first day of the month
-        for (let i = 0; i < startingDayOfWeek; i++) {
-            monthDates.push(null);
-        }
-        // Add all days of the current month
-        for (let i = 1; i <= daysInMonth; i++) {
-            monthDates.push(new Date(calendarYear, calendarMonth, i));
-        }
-
-        const today = new Date();
-        const selectedDateObj = selectedDate
-            ? (() => {
-                const [month, day, year] = selectedDate.split('/').map(Number);
-                return new Date(year, month - 1, day);
-            })()
-            : null;
-
-        const selectedDateStr = selectedDateObj
-            ? `${selectedDateObj.getFullYear()}-${String(selectedDateObj.getMonth() + 1).padStart(2, '0')}-${String(selectedDateObj.getDate()).padStart(2, '0')}`
-            : null;
+        const selectedDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
 
         const todaysEnrollments = filteredEnrollments.filter(e => {
             if (!selectedDateStr) return false;
             if (e.start_date && e.end_date) {
-                return selectedDateStr >= e.start_date && selectedDateStr <= e.end_date;
+                return selectedDateStr >= e.start_date.split('T')[0] && selectedDateStr <= e.end_date.split('T')[0];
             }
             if (e.start_date) {
-                return e.start_date === selectedDateStr;
+                return e.start_date.split('T')[0] === selectedDateStr;
             }
             return false;
         });
 
         return (
             <View style={styles.calendarViewContainer}>
-                {/* Daily Schedule View - Above Calendar */}
                 <StyledCard style={styles.scheduleCard}>
-                    <Text style={styles.scheduleDate}>
-                        {selectedDateObj ? formatDateLong(selectedDateObj) : 'Select a date'}
-                    </Text>
+                    <Text style={styles.scheduleDate}>{formatDateLong(selectedDate)}</Text>
                     {todaysEnrollments.length === 0 ? (
                         <Text style={styles.scheduleEmptyText}>
                             No activities scheduled for this date
@@ -522,80 +514,21 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                     )}
                 </StyledCard>
 
-                {/* Calendar Widget */}
-                <StyledCard style={styles.calendarCard}>
-                    <View style={styles.calendarHeader}>
-                        <TouchableOpacity
-                            onPress={() => {
-                                if (calendarMonth === 0) {
-                                    setCalendarMonth(11);
-                                    setCalendarYear(calendarYear - 1);
-                                } else {
-                                    setCalendarMonth(calendarMonth - 1);
-                                }
-                            }}
-                        >
-                            <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
-                        </TouchableOpacity>
-                        <Text style={styles.calendarMonthYear}>
-                            {monthNames[calendarMonth]} {calendarYear}
-                        </Text>
-                        <TouchableOpacity
-                            onPress={() => {
-                                if (calendarMonth === 11) {
-                                    setCalendarMonth(0);
-                                    setCalendarYear(calendarYear + 1);
-                                } else {
-                                    setCalendarMonth(calendarMonth + 1);
-                                }
-                            }}
-                        >
-                            <Ionicons name="chevron-forward" size={24} color={theme.colors.text} />
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.calendarWeekdays}>
-                        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-                            <Text key={day} style={styles.calendarWeekday}>
-                                {day}
-                            </Text>
-                        ))}
-                    </View>
-
-                    <View style={styles.calendarGrid}>
-                        {monthDates.map((date, index) => {
-                            if (!date) {
-                                return <View key={index} style={styles.calendarDay} />;
-                            }
-                            const dateStr = formatDate(date);
-                            const isToday = formatDate(date) === formatDate(today);
-                            const isSelected =
-                                selectedDateObj &&
-                                formatDate(date) === formatDate(selectedDateObj);
-                            return (
-                                <TouchableOpacity
-                                    key={index}
-                                    style={[
-                                        styles.calendarDay,
-                                        isToday && styles.calendarDayToday,
-                                        isSelected && styles.calendarDaySelected,
-                                    ]}
-                                    onPress={() => handleDateSelect(date)}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.calendarDayText,
-                                            isToday && styles.calendarDayTextToday,
-                                            isSelected && styles.calendarDayTextSelected,
-                                        ]}
-                                    >
-                                        {date.getDate()}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
-                </StyledCard>
+                <CalendarWidget
+                    events={calendarWidgetEvents}
+                    currentDate={currentDate}
+                    onCurrentDateChange={setCurrentDate}
+                    selectedDate={selectedDate}
+                    onSelectedDateChange={setSelectedDate}
+                    onEventPress={(evt) => {
+                        const enrollId = evt.id.split('__')[0];
+                        const enroll = filteredEnrollments.find(e => e.id === enrollId);
+                        if (enroll) handleEditEnrollment(enroll);
+                    }}
+                    views={['Month', 'Week', 'Day', 'Agenda']}
+                    showZoom
+                    showNavigation
+                />
             </View>
         );
     };
@@ -2210,68 +2143,6 @@ const styles = StyleSheet.create({
     calendarViewContainer: {
         flexDirection: 'column',
         gap: theme.spacing.xs,
-    },
-    calendarCard: {
-        padding: theme.spacing.md,
-    },
-    calendarHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: theme.spacing.md,
-    },
-    calendarMonthYear: {
-        ...theme.typography.h3,
-        fontSize: 18,
-    },
-    calendarWeekdays: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        marginBottom: theme.spacing.sm,
-        paddingBottom: theme.spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    calendarWeekday: {
-        ...theme.typography.bodySmall,
-        fontWeight: '600',
-        width: '14.28%',
-        textAlign: 'center',
-        color: theme.colors.textSecondary,
-    },
-    calendarGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'flex-start',
-        marginTop: theme.spacing.sm,
-    },
-    calendarDay: {
-        width: '14.28%',
-        aspectRatio: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: 40,
-    },
-    calendarDayToday: {
-        borderRadius: 20,
-        backgroundColor: theme.colors.background,
-    },
-    calendarDaySelected: {
-        borderRadius: 20,
-        backgroundColor: theme.colors.secondary,
-    },
-    calendarDayText: {
-        ...theme.typography.body,
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    calendarDayTextToday: {
-        color: theme.colors.secondary,
-        fontWeight: '600',
-    },
-    calendarDayTextSelected: {
-        color: theme.colors.surface,
-        fontWeight: '600',
     },
     scheduleCard: {
         padding: theme.spacing.md,

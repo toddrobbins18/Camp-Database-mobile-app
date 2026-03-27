@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { CalendarWidget, type CalendarWidgetEvent } from '../components/CalendarWidget';
 import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
@@ -45,7 +46,8 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
     const [allergens, setAllergens] = useState('');
     const [showMealDatePicker, setShowMealDatePicker] = useState(false);
     const [showMealTypeDropdown, setShowMealTypeDropdown] = useState(false);
-    const [calendarDate, setCalendarDate] = useState(new Date());
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState(new Date());
 
     // Date picker state
     const [mealDatePickerMonth, setMealDatePickerMonth] = useState(new Date().getMonth());
@@ -289,38 +291,24 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
         }, {});
     }, [specialMeals]);
 
-    const monthLabel = useMemo(
-        () => calendarDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-        [calendarDate]
+    const calendarWidgetEvents = useMemo<CalendarWidgetEvent[]>(
+        () =>
+            (specialMeals || [])
+                .filter((meal: any) => meal?.date)
+                .map((meal: any) => {
+                    const parts = [meal.meal_type, meal.items].filter(Boolean);
+                    return {
+                        id: String(meal.id),
+                        title: parts.length ? parts.join(': ') : 'Special Meal',
+                        date: new Date(`${meal.date}T00:00:00`),
+                        time: '',
+                        location: '',
+                        type: 'special-event',
+                        accent: { bg: '#fef3c7', text: '#92400e', marker: '#f59e0b' },
+                    };
+                }),
+        [specialMeals],
     );
-
-    const monthCells = useMemo(() => {
-        const year = calendarDate.getFullYear();
-        const month = calendarDate.getMonth();
-        const first = new Date(year, month, 1);
-        const startWeekday = first.getDay();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const cells: Array<{ date: Date; inMonth: boolean }> = [];
-
-        for (let i = startWeekday - 1; i >= 0; i--) {
-            cells.push({ date: new Date(year, month, -i), inMonth: false });
-        }
-        for (let d = 1; d <= daysInMonth; d++) {
-            cells.push({ date: new Date(year, month, d), inMonth: true });
-        }
-        while (cells.length < 42) {
-            const nextDay = cells.length - (startWeekday + daysInMonth) + 1;
-            cells.push({ date: new Date(year, month + 1, nextDay), inMonth: false });
-        }
-        return cells;
-    }, [calendarDate]);
-
-    const formatIso = (date: Date) => {
-        const y = date.getFullYear();
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -408,56 +396,24 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                     </View>
                 ) : (
                     viewMode === 'calendar' ? (
-                        <StyledCard style={styles.calendarCard}>
-                            <View style={styles.calendarToolbar}>
-                                <View style={styles.navButtons}>
-                                    <TouchableOpacity style={styles.navButton} onPress={() => setCalendarDate(new Date())}>
-                                        <Text style={styles.navButtonText}>Today</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={styles.navButton} onPress={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}>
-                                        <Text style={styles.navButtonText}>Back</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={styles.navButton} onPress={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}>
-                                        <Text style={styles.navButtonText}>Next</Text>
-                                    </TouchableOpacity>
-                                </View>
-                                <Text style={styles.calendarMonthLabel}>{monthLabel}</Text>
-                            </View>
-
-                            <View style={styles.weekHeader}>
-                                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                                    <Text key={d} style={styles.weekHeaderText}>{d}</Text>
-                                ))}
-                            </View>
-
-                            <View style={styles.monthGrid}>
-                                {monthCells.map((cell, idx) => {
-                                    const iso = formatIso(cell.date);
-                                    const dayMeals = groupedMeals[iso] || [];
-                                    return (
-                                        <TouchableOpacity
-                                            key={`${iso}-${idx}`}
-                                            style={[styles.monthCell, !cell.inMonth && styles.monthCellMuted]}
-                                            onPress={() => {
-                                                setMealDate(formatDate(cell.date));
-                                                setShowAddMealModal(true);
-                                            }}
-                                        >
-                                            <Text style={[styles.monthCellDay, !cell.inMonth && styles.monthCellDayMuted]}>
-                                                {cell.date.getDate()}
-                                            </Text>
-                                            {dayMeals.length > 0 && (
-                                                <View style={styles.cellEventChip}>
-                                                    <Text style={styles.cellEventText} numberOfLines={1}>
-                                                        {`${dayMeals[0].meal_type}: ${dayMeals[0].items}`}
-                                                    </Text>
-                                                </View>
-                                            )}
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </View>
-                        </StyledCard>
+                        <CalendarWidget
+                            events={calendarWidgetEvents}
+                            currentDate={currentDate}
+                            onCurrentDateChange={setCurrentDate}
+                            selectedDate={selectedDate}
+                            onSelectedDateChange={setSelectedDate}
+                            onEventPress={(evt) => {
+                                setMealDate(formatDate(evt.date));
+                                setShowAddMealModal(true);
+                            }}
+                            onDatePress={(date) => {
+                                setMealDate(formatDate(date));
+                                setShowAddMealModal(true);
+                            }}
+                            views={['Month', 'Week', 'Day', 'Agenda']}
+                            showZoom={true}
+                            showNavigation={true}
+                        />
                     ) : (
                         <View style={styles.emptyStateContainer}>
                             {Object.entries(groupedMeals).map(([date, meals]) => (
@@ -784,85 +740,6 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         color: theme.colors.textSecondary,
         textAlign: 'center',
-    },
-    calendarCard: {
-        padding: theme.spacing.md,
-    },
-    calendarToolbar: {
-        gap: theme.spacing.sm,
-        marginBottom: theme.spacing.sm,
-    },
-    navButtons: {
-        flexDirection: 'row',
-        gap: theme.spacing.xs,
-    },
-    navButton: {
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.sm,
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: 6,
-        backgroundColor: theme.colors.surface,
-    },
-    navButtonText: {
-        ...theme.typography.bodySmall,
-        color: theme.colors.text,
-        fontWeight: '600',
-    },
-    calendarMonthLabel: {
-        ...theme.typography.h3,
-        textAlign: 'center',
-    },
-    weekHeader: {
-        flexDirection: 'row',
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderBottomWidth: 0,
-    },
-    weekHeaderText: {
-        flex: 1,
-        textAlign: 'center',
-        paddingVertical: theme.spacing.xs,
-        ...theme.typography.bodySmall,
-        fontWeight: '700',
-        color: theme.colors.textSecondary,
-    },
-    monthGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    monthCell: {
-        width: '14.28%',
-        minHeight: 72,
-        borderRightWidth: 1,
-        borderBottomWidth: 1,
-        borderColor: theme.colors.border,
-        padding: 4,
-    },
-    monthCellMuted: {
-        backgroundColor: '#f8fafc',
-    },
-    monthCellDay: {
-        ...theme.typography.bodySmall,
-        textAlign: 'right',
-        color: theme.colors.text,
-    },
-    monthCellDayMuted: {
-        color: theme.colors.textSecondary,
-    },
-    cellEventChip: {
-        marginTop: 4,
-        backgroundColor: '#1e3a8a',
-        borderRadius: 6,
-        paddingHorizontal: 4,
-        paddingVertical: 2,
-    },
-    cellEventText: {
-        ...theme.typography.bodySmall,
-        color: theme.colors.surface,
-        fontSize: 10,
     },
     dayGroupCard: {
         marginBottom: theme.spacing.md,
