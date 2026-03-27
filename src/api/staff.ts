@@ -102,10 +102,7 @@ export const useDeleteStaff = () => {
 
     return useMutation({
         mutationFn: async (params: { id: string, company_id: string, season: string }) => {
-            const { error } = await supabase
-                .from('staff')
-                .delete()
-                .eq('id', params.id);
+            const { error } = await supabase.from('staff').delete().eq('id', params.id);
 
             if (error) throw error;
             return params;

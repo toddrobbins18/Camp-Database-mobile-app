@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator, Alert, Platform } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useDivisions } from '../api/campers';
-import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useDeleteMedicationLog, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
+import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
 import { supabase } from '../lib/supabase';
 
 const getChildDisplayName = (child: any) =>
@@ -15,6 +16,7 @@ const getChildDisplayName = (child: any) =>
         : [child?.first_name, child?.last_name].filter(Boolean).join(' ').trim() || 'Unknown';
 
 export const HealthScreen = ({ navigation }: any) => {
+    const queryClient = useQueryClient();
     const { companyId, season } = useCompany();
     const { data: campersData, isLoading: campersLoading, isError: campersError } = useCampers(companyId, season);
     const { data: divisionsData, isError: divisionsError } = useDivisions(companyId);
@@ -44,6 +46,9 @@ export const HealthScreen = ({ navigation }: any) => {
     const [showChildPicker, setShowChildPicker] = useState(false);
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [expandedHistoryChildId, setExpandedHistoryChildId] = useState<string | null>(null);
+    const [itemToDelete, setItemToDelete] = useState<{ id: string } | null>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const todayDateString = useMemo(() => {
         const d = new Date();
@@ -56,7 +61,6 @@ export const HealthScreen = ({ navigation }: any) => {
     const { data: medicationsData } = useMedicationLogs(companyId, medicationQueryDate);
     const addMedicationMutation = useAddMedicationLog();
     const administerMutation = useAdministerMedication();
-    const deleteMedicationMutation = useDeleteMedicationLog();
     const safeMedications = Array.isArray(medicationsData) ? medicationsData : [];
 
     // Admissions
@@ -205,10 +209,27 @@ export const HealthScreen = ({ navigation }: any) => {
     };
 
     const handleDeleteMedication = (medId: string) => {
-        Alert.alert('Delete medication', 'Remove this medication log?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: () => deleteMedicationMutation.mutate(medId) }
-        ]);
+        setItemToDelete({ id: medId });
+        setIsDeleteConfirmVisible(true);
+    };
+
+    const handleDelete = async () => {
+        if (!itemToDelete?.id) return;
+        setIsDeleting(true);
+        console.log('[DELETE] medication_logs', itemToDelete.id);
+        try {
+            const { error } = await supabase.from('medication_logs').delete().eq('id', itemToDelete.id);
+            console.log('[DELETE] medication_logs response', error);
+            if (error) throw error;
+            await queryClient.invalidateQueries({ queryKey: ['medication_logs'] });
+            Alert.alert('Success', 'Medication log deleted.');
+        } catch (error: any) {
+            Alert.alert('Delete failed', error?.message ?? 'Unknown error');
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmVisible(false);
+            setItemToDelete(null);
+        }
     };
 
     // Calendar functions
@@ -1278,6 +1299,23 @@ export const HealthScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
+            <Modal visible={isDeleteConfirmVisible} transparent animationType="fade" onRequestClose={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                <Pressable style={styles.deleteModalOverlay} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                        <Text style={styles.deleteModalMessage}>Are you sure you want to delete this item? This cannot be undone.</Text>
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity style={styles.deleteModalCancelBtn} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }} disabled={isDeleting}>
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]} onPress={handleDelete} disabled={isDeleting}>
+                                {isDeleting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.deleteModalConfirmText}>Delete</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
             {/* Floating Action Button */}
             <TouchableOpacity style={styles.fab}>
                 <Ionicons name="notifications-outline" size={24} color="white" />
@@ -2281,7 +2319,7 @@ const styles = StyleSheet.create({
         color: '#f59e0b',
     },
     medicationCardIconBtn: {
-        padding: 4,
+        padding: 10,
     },
     medicationCardDetail: {
         fontSize: 14,
@@ -2552,4 +2590,13 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: theme.colors.text,
     },
+    deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    deleteModalContent: { backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '85%', maxWidth: 340 },
+    deleteModalTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
+    deleteModalMessage: { fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+    deleteModalActions: { flexDirection: 'row', gap: 8 },
+    deleteModalCancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
+    deleteModalCancelText: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
+    deleteModalConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#dc2626', alignItems: 'center' },
+    deleteModalConfirmText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });

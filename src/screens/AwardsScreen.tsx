@@ -198,27 +198,6 @@ export const AwardsScreen = ({ navigation }: any) => {
         },
     });
 
-    // Delete award mutation
-    const deleteAwardMutation = useMutation({
-        mutationFn: async (id: string) => {
-            const { data, error } = await supabase
-                .from('awards')
-                .delete()
-                .eq('id', id)
-                .select('id')
-                .maybeSingle();
-            if (error) throw error;
-            return data;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['awards'] });
-            Alert.alert('Success', 'Award deleted');
-        },
-        onError: (error: any) => {
-            Alert.alert('Delete failed', error?.message || 'Could not delete award. You may not have permission.');
-        },
-    });
-
     const [isCSVGuideOpen, setIsCSVGuideOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('awards');
     const [isAddAwardModalOpen, setIsAddAwardModalOpen] = useState(false);
@@ -239,6 +218,9 @@ export const AwardsScreen = ({ navigation }: any) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [notes, setNotes] = useState('');
     const [editingAwardId, setEditingAwardId] = useState<string | null>(null);
+    const [itemToDelete, setItemToDelete] = useState<any>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Calculate statistics - all will be 0 with empty data
     const totalAchievements = awards.length;
@@ -303,14 +285,31 @@ export const AwardsScreen = ({ navigation }: any) => {
             Alert.alert('Error', 'Cannot delete: missing award id');
             return;
         }
-        Alert.alert(
-            'Delete Award',
-            `Remove this award for ${award.childName || 'this child'}?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => deleteAwardMutation.mutate(awardId) },
-            ]
-        );
+        setItemToDelete(award);
+        setIsDeleteConfirmVisible(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete?.id) return;
+        setIsDeleting(true);
+        try {
+            console.log('[DELETE] Starting delete for:', itemToDelete.id);
+            const { error, status } = await supabase
+                .from('awards')
+                .delete()
+                .eq('id', itemToDelete.id);
+            console.log('[DELETE] Response:', { error, status });
+            if (error) {
+                Alert.alert('Delete failed', error.message);
+            } else {
+                queryClient.invalidateQueries({ queryKey: ['awards'] });
+                Alert.alert('Success', 'Item deleted');
+            }
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmVisible(false);
+            setItemToDelete(null);
+        }
     };
 
     const handleSubmitEditAward = () => {
@@ -1118,6 +1117,23 @@ export const AwardsScreen = ({ navigation }: any) => {
                         </ScrollView>
                     </View>
                 </View>
+            </Modal>
+
+            <Modal visible={isDeleteConfirmVisible} transparent animationType="fade" onRequestClose={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                <Pressable style={styles.deleteModalOverlay} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                        <Text style={styles.deleteModalMessage}>Are you sure? This cannot be undone.</Text>
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity style={styles.deleteModalCancelBtn} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }} disabled={isDeleting}>
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]} onPress={handleConfirmDelete} disabled={isDeleting}>
+                                {isDeleting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.deleteModalConfirmText}>Delete</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
         </SafeAreaView >
     );
@@ -2087,5 +2103,14 @@ const styles = StyleSheet.create({
     addAwardBottomSheetScroll: {
         flex: 1,
     },
+    deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    deleteModalContent: { backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '85%', maxWidth: 340 },
+    deleteModalTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
+    deleteModalMessage: { fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+    deleteModalActions: { flexDirection: 'row', gap: 8 },
+    deleteModalCancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
+    deleteModalCancelText: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
+    deleteModalConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#dc2626', alignItems: 'center' },
+    deleteModalConfirmText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });
 

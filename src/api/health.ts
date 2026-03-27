@@ -137,10 +137,7 @@ export const useDeleteMedicationLog = () => {
 
     return useMutation({
         mutationFn: async (id: string) => {
-            const { error } = await supabase
-                .from('medication_logs')
-                .delete()
-                .eq('id', id);
+            const { error } = await supabase.from('medication_logs').delete().eq('id', id);
 
             if (error) throw error;
             return id;

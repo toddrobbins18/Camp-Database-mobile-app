@@ -9,6 +9,7 @@ import {
     ScrollView,
     Modal,
     TouchableWithoutFeedback,
+    Pressable,
     useWindowDimensions,
     Switch,
     Platform,
@@ -18,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCompany } from '../contexts/CompanyContext';
-import { useTrips, useAddTrip, useUpdateTrip, useDeleteTrip, useManageTripRoster, useTripAttendees, useTripAttachments } from '../api/transport';
+import { useTrips, useAddTrip, useUpdateTrip, useManageTripRoster, useTripAttendees, useTripAttachments } from '../api/transport';
 import { useCampers, useDivisions } from '../api/campers';
 import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -448,7 +449,6 @@ export const TransportScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const addTripMutation = useAddTrip();
     const updateTripMutation = useUpdateTrip();
-    const deleteTripMutation = useDeleteTrip();
     const manageRosterMutation = useManageTripRoster();
 
     /** Must be declared before any hook that reads it (was below → ReferenceError → blank screen). */
@@ -618,45 +618,86 @@ export const TransportScreen = ({ navigation }: any) => {
     }, [selectedDate, trips]);
 
     // Delete Modal State and Handlers
-    const [tripToDelete, setTripToDelete] = useState<string | null>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<{ id: string } | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
-    const handleDeleteTrip = () => {
-        if (tripToDelete) {
-            deleteTripMutation.mutate(tripToDelete, {
-                onSuccess: () => setTripToDelete(null)
-            });
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete) return;
+        setIsDeleting(true);
+        console.log('[DELETE] Starting delete for:', itemToDelete.id);
+        try {
+            const { error, status, statusText } = await supabase.from('trips').delete().eq('id', itemToDelete.id);
+            console.log('[DELETE] Response:', { error, status, statusText });
+            if (error) throw error;
+            queryClient.invalidateQueries({ queryKey: ['trips'] });
+            Alert.alert('Success', 'Trip deleted');
+        } catch (err: any) {
+            console.error('[DELETE] Error:', err);
+            Alert.alert('Delete failed', err.message || 'Unknown error');
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmVisible(false);
+            setItemToDelete(null);
         }
+    };
+
+    const openDeleteTripModal = (tripId: string) => {
+        setItemToDelete({ id: tripId });
+        setIsDeleteConfirmVisible(true);
     };
 
     const renderDeleteConfirmationModal = () => (
         <Modal
+            visible={isDeleteConfirmVisible}
             transparent
             animationType="fade"
-            visible={!!tripToDelete}
-            onRequestClose={() => setTripToDelete(null)}
+            onRequestClose={() => {
+                if (!isDeleting) {
+                    setIsDeleteConfirmVisible(false);
+                    setItemToDelete(null);
+                }
+            }}
         >
-            <View style={styles.modalOverlay}>
-                <View style={styles.deleteModalContent}>
-                    <Text style={styles.deleteModalTitle}>Are you sure?</Text>
-                    <Text style={styles.deleteModalText}>
-                        This action cannot be undone. This will permanently delete the trip.
-                    </Text>
-                    <View style={styles.deleteModalButtons}>
+            <Pressable
+                style={styles.deleteTripModalOverlay}
+                onPress={() => {
+                    if (!isDeleting) {
+                        setIsDeleteConfirmVisible(false);
+                        setItemToDelete(null);
+                    }
+                }}
+            >
+                <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                    <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                    <Text style={styles.deleteModalMessage}>Are you sure? This cannot be undone.</Text>
+                    <View style={styles.deleteModalActions}>
                         <TouchableOpacity
                             style={styles.deleteModalCancelBtn}
-                            onPress={() => setTripToDelete(null)}
+                            onPress={() => {
+                                if (!isDeleting) {
+                                    setIsDeleteConfirmVisible(false);
+                                    setItemToDelete(null);
+                                }
+                            }}
+                            disabled={isDeleting}
                         >
                             <Text style={styles.deleteModalCancelText}>Cancel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={styles.deleteModalDeleteBtn}
-                            onPress={handleDeleteTrip}
+                            style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]}
+                            onPress={handleConfirmDelete}
+                            disabled={isDeleting}
                         >
-                            <Text style={styles.deleteModalDeleteText}>Delete</Text>
+                            {isDeleting ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <Text style={styles.deleteModalConfirmText}>Delete</Text>
+                            )}
                         </TouchableOpacity>
                     </View>
-                </View>
-            </View>
+                </Pressable>
+            </Pressable>
         </Modal>
     );
 
@@ -890,7 +931,7 @@ export const TransportScreen = ({ navigation }: any) => {
                         <TripCard
                             key={trip.id}
                             trip={trip}
-                            onDelete={() => setTripToDelete(trip.id)}
+                            onDelete={() => openDeleteTripModal(trip.id)}
                             onEdit={() => handleEditTrip(trip)}
                             onManageRoster={() => handleManageRoster(trip)}
                         />
@@ -1783,7 +1824,7 @@ export const TransportScreen = ({ navigation }: any) => {
                     renderItem={({ item }) => (
                         <TripCard
                             trip={item}
-                            onDelete={() => setTripToDelete(item.id)}
+                            onDelete={() => openDeleteTripModal(item.id)}
                             onEdit={() => handleEditTrip(item)}
                             onManageRoster={() => handleManageRoster(item)}
                         />
@@ -2010,7 +2051,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     iconBtn: {
-        padding: 4,
+        padding: 10,
     },
     cardTitle: {
         fontSize: 18,
@@ -2894,6 +2935,13 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
     },
     // Delete Confirmation Modal Styles
+    deleteTripModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: theme.spacing.lg,
+    },
     deleteModalContent: {
         backgroundColor: '#fff',
         borderRadius: 16,
@@ -2909,13 +2957,13 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         marginBottom: 8,
     },
-    deleteModalText: {
+    deleteModalMessage: {
         fontSize: 14,
         color: theme.colors.textSecondary,
         marginBottom: 24,
         lineHeight: 20,
     },
-    deleteModalButtons: {
+    deleteModalActions: {
         flexDirection: 'row',
         justifyContent: 'flex-end',
         gap: 12,
@@ -2933,13 +2981,16 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: theme.colors.text,
     },
-    deleteModalDeleteBtn: {
+    deleteModalConfirmBtn: {
         paddingHorizontal: 16,
         paddingVertical: 10,
         borderRadius: 8,
-        backgroundColor: '#2563eb', // Primary Blue
+        backgroundColor: '#2563eb',
+        minWidth: 88,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    deleteModalDeleteText: {
+    deleteModalConfirmText: {
         fontSize: 14,
         fontWeight: '600',
         color: '#fff',

@@ -8,13 +8,18 @@ import {
     TextInput,
     Modal,
     FlatList,
+    Alert,
+    ActivityIndicator,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
-import { useSportsEnrollments, useAddSportsEnrollment, useDeleteSportsEnrollment, useUpdateSportsEnrollment } from '../api/sports';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../lib/supabase';
+import { useSportsEnrollments, useAddSportsEnrollment, useUpdateSportsEnrollment } from '../api/sports';
 import { useCampers, useDivisions } from '../api/campers';
 
 interface SportsScreenProps {
@@ -64,6 +69,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const [showAddEnrollmentModal, setShowAddEnrollmentModal] = useState(false);
 
     const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
     const { data: campersData = [] } = useCampers(companyId, season);
     const { data: enrollmentsData = [] } = useSportsEnrollments(companyId, season);
     const { data: divisionsData = [] } = useDivisions(companyId);
@@ -93,8 +99,10 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     }, [enrollmentsData, selectedDivision, selectedGender, selectedSport, searchQuery]);
     
     const addEnrollmentMutation = useAddSportsEnrollment();
-    const deleteEnrollmentMutation = useDeleteSportsEnrollment();
     const updateEnrollmentMutation = useUpdateSportsEnrollment();
+    const [itemToDelete, setItemToDelete] = useState<any>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [editingEnrollment, setEditingEnrollment] = useState<any | null>(null);
 
     // Add Enrollment Modal States
@@ -405,14 +413,35 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     };
 
     const handleDeleteEnrollment = (enrollmentId: string) => {
-        Alert.alert('Delete Enrollment', 'Are you sure you want to delete this enrollment?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: () => deleteEnrollmentMutation.mutate(enrollmentId),
-            },
-        ]);
+        if (!enrollmentId) {
+            Alert.alert('Error', 'Cannot delete: missing enrollment id');
+            return;
+        }
+        setItemToDelete({ id: enrollmentId });
+        setIsDeleteConfirmVisible(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete?.id) return;
+        setIsDeleting(true);
+        try {
+            console.log('[DELETE] Starting delete for:', itemToDelete.id);
+            const { error, status } = await supabase
+                .from('sports_academy')
+                .delete()
+                .eq('id', itemToDelete.id);
+            console.log('[DELETE] Response:', { error, status });
+            if (error) {
+                Alert.alert('Delete failed', error.message);
+            } else {
+                queryClient.invalidateQueries({ queryKey: ['sports_enrollments'] });
+                Alert.alert('Success', 'Item deleted');
+            }
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmVisible(false);
+            setItemToDelete(null);
+        }
     };
 
     const renderCalendarView = () => {
@@ -1935,6 +1964,23 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                     </View>
                 </View>
             </Modal>
+
+            <Modal visible={isDeleteConfirmVisible} transparent animationType="fade" onRequestClose={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                <Pressable style={styles.deleteModalOverlay} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                        <Text style={styles.deleteModalMessage}>Are you sure? This cannot be undone.</Text>
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity style={styles.deleteModalCancelBtn} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }} disabled={isDeleting}>
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]} onPress={handleConfirmDelete} disabled={isDeleting}>
+                                {isDeleting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.deleteModalConfirmText}>Delete</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -2678,4 +2724,13 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         marginBottom: theme.spacing.xs,
     },
+    deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    deleteModalContent: { backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '85%', maxWidth: 340 },
+    deleteModalTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
+    deleteModalMessage: { fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+    deleteModalActions: { flexDirection: 'row', gap: 8 },
+    deleteModalCancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
+    deleteModalCancelText: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
+    deleteModalConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#dc2626', alignItems: 'center' },
+    deleteModalConfirmText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });

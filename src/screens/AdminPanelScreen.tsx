@@ -1,10 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Alert, ActivityIndicator, Switch, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { useAdminUsers, useUpdateUserRole, useDeleteUser, useSendPasswordReset, useCreateUser, useEmailConfigs, useUpdateEmailConfig, useEditHistory } from '../api/admin';
+import {
+    useAdminUsers,
+    useUpdateUserRole,
+    deleteAdminPanelUser,
+    useSendPasswordReset,
+    useCreateUser,
+    useEmailConfigs,
+    useUpdateEmailConfig,
+    useEditHistory,
+} from '../api/admin';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
 import { getSignedUrl } from '../api/storage';
@@ -17,8 +27,8 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     const { data: fetchedEmailConfigs = [] } = useEmailConfigs();
     const { data: fetchedHistory = [] } = useEditHistory();
 
+    const queryClient = useQueryClient();
     const updateUserRoleMutation = useUpdateUserRole();
-    const deleteUserMutation = useDeleteUser();
     const sendPasswordResetMutation = useSendPasswordReset();
     const createUserMutation = useCreateUser();
     const updateEmailConfigMutation = useUpdateEmailConfig();
@@ -32,7 +42,8 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     const [showRolePicker, setShowRolePicker] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [userToDelete, setUserToDelete] = useState<User | null>(null);
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [showAddTagModal, setShowAddTagModal] = useState(false);
     const [userForTags, setUserForTags] = useState<User | null>(null);
 
@@ -188,18 +199,20 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         }
     };
 
-    const handleDeleteUser = () => {
-        if (userToDelete) {
-            deleteUserMutation.mutate(userToDelete.id, {
-                onSuccess: () => {
-                    setShowDeleteModal(false);
-                    setUserToDelete(null);
-                    Alert.alert('Success', 'User has been deleted.');
-                },
-                onError: (err: Error) => {
-                    Alert.alert('Delete Failed', err.message || 'Could not delete user.');
-                },
-            });
+    const handleDeleteUser = async () => {
+        if (!userToDelete?.id) return;
+        console.log('[DELETE] admin panel user (profiles)', userToDelete.id, userToDelete.name);
+        setIsDeleting(true);
+        try {
+            await deleteAdminPanelUser(userToDelete.id);
+            await queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+            setIsDeleteConfirmVisible(false);
+            setUserToDelete(null);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Could not delete user.';
+            Alert.alert('Delete Failed', message);
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -266,7 +279,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                                     style={styles.actionIcon}
                                     onPress={() => {
                                         setUserToDelete(user);
-                                        setShowDeleteModal(true);
+                                        setIsDeleteConfirmVisible(true);
                                     }}
                                 >
                                     <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
@@ -1267,8 +1280,33 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     };
 
     const DataManagementScreen = () => {
+        const ALL_TEST_DATA_KEY = '__ALL_TEST_DATA__';
+        const bulkDeleteTables = [
+            'children',
+            'staff',
+            'awards',
+            'daily_notes',
+            'trips',
+            'events',
+            'incident_reports',
+            'medication_logs',
+            'sports_academy',
+            'tutoring_therapy',
+            'activities_field_trips',
+            'special_events_activities',
+            'rainy_day_schedule',
+            'sports_calendar',
+            'menu_items',
+            'special_meals',
+            'health_center_admissions',
+            'trip_attendees',
+            'sports_event_roster',
+        ];
+
         const [loading, setLoading] = useState(true);
-        const [deleting, setDeleting] = useState(false);
+        const [isDeleting, setIsDeleting] = useState(false);
+        const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+        const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
         const [stats, setStats] = useState({
             children: 0,
             staff: 0,
@@ -1317,66 +1355,28 @@ export const AdminPanelScreen = ({ navigation }: any) => {
             }
         };
 
-        const deleteAllTestData = async () => {
-            const tables = [
-                'children',
-                'staff',
-                'awards',
-                'daily_notes',
-                'trips',
-                'events',
-                'incident_reports',
-                'medication_logs',
-                'sports_academy',
-                'tutoring_therapy',
-                'activities_field_trips',
-                'special_events_activities',
-                'rainy_day_schedule',
-                'sports_calendar',
-                'menu_items',
-                'special_meals',
-                'health_center_admissions',
-                'trip_attendees',
-                'sports_event_roster',
-            ];
-
-            setDeleting(true);
+        const confirmDataManagementDelete = async () => {
+            if (!itemToDelete || !companyId) return;
+            const isAll = itemToDelete === ALL_TEST_DATA_KEY;
+            console.log('[DELETE] data management', isAll ? 'bulk test tables' : itemToDelete, 'company_id', companyId);
+            setIsDeleting(true);
             try {
-                for (const table of tables) {
-                    await deleteFromTable(table);
-                }
-                Alert.alert('Deleted', 'All test data deleted successfully.');
-                await fetchStats();
-            } catch (e: any) {
-                Alert.alert('Delete failed', e?.message || 'Failed to delete all test data.');
-            } finally {
-                setDeleting(false);
-            }
-        };
-
-        const deleteTableData = async (tableName: string) => {
-            Alert.alert(
-                `Delete ${tableName}?`,
-                `This will permanently delete all ${tableName} records for the current company.`,
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Delete',
-                        style: 'destructive',
-                        onPress: async () => {
-                            setDeleting(true);
-                            try {
-                                await deleteFromTable(tableName);
-                                await fetchStats();
-                            } catch (e: any) {
-                                Alert.alert('Delete failed', e?.message || `Failed to delete ${tableName}.`);
-                            } finally {
-                                setDeleting(false);
-                            }
-                        }
+                if (isAll) {
+                    for (const table of bulkDeleteTables) {
+                        await deleteFromTable(table);
                     }
-                ]
-            );
+                    Alert.alert('Deleted', 'All test data deleted successfully.');
+                } else {
+                    await deleteFromTable(itemToDelete);
+                }
+                await fetchStats();
+                setIsDeleteConfirmVisible(false);
+                setItemToDelete(null);
+            } catch (e: any) {
+                Alert.alert('Delete failed', e?.message || (isAll ? 'Failed to delete all test data.' : `Failed to delete ${itemToDelete}.`));
+            } finally {
+                setIsDeleting(false);
+            }
         };
 
         useEffect(() => {
@@ -1411,53 +1411,125 @@ export const AdminPanelScreen = ({ navigation }: any) => {
             { title: 'Events', count: stats.events, table: 'events' },
         ];
 
+        const dataDeleteTitle =
+            itemToDelete === ALL_TEST_DATA_KEY ? 'Delete all test data?' : itemToDelete ? `Delete ${itemToDelete}?` : '';
+        const dataDeleteMessage =
+            itemToDelete === ALL_TEST_DATA_KEY
+                ? 'This will permanently delete all test data for the current company.'
+                : itemToDelete
+                  ? `This will permanently delete all ${itemToDelete} records for the current company.`
+                  : '';
+
         return (
-            <View style={styles.screenContainer}>
-                <StyledCard style={styles.dangerCard}>
-                    <View style={styles.dangerHeaderRow}>
-                        <Ionicons name="alert-triangle-outline" size={20} color="#dc2626" />
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.dangerTitle}>Danger Zone</Text>
-                            <Text style={styles.dangerSubtitle}>Permanently delete data from the database. This action cannot be undone.</Text>
+            <>
+                <View style={styles.screenContainer}>
+                    <StyledCard style={styles.dangerCard}>
+                        <View style={styles.dangerHeaderRow}>
+                            <Ionicons name="alert-triangle-outline" size={20} color="#dc2626" />
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.dangerTitle}>Danger Zone</Text>
+                                <Text style={styles.dangerSubtitle}>
+                                    Permanently delete data from the database. This action cannot be undone.
+                                </Text>
+                            </View>
                         </View>
+                        <TouchableOpacity
+                            style={[styles.dangerButton, isDeleting && { opacity: 0.7 }]}
+                            disabled={isDeleting}
+                            onPress={() => {
+                                setItemToDelete(ALL_TEST_DATA_KEY);
+                                setIsDeleteConfirmVisible(true);
+                            }}
+                        >
+                            <Ionicons name="trash-outline" size={18} color="white" />
+                            <Text style={styles.dangerButtonText}>Delete All Test Data</Text>
+                        </TouchableOpacity>
+                    </StyledCard>
+
+                    <View style={styles.exportGrid}>
+                        {cards.map((card) => (
+                            <StyledCard key={card.title} style={styles.dataCard}>
+                                <Text style={styles.dataCardTitle}>{card.title}</Text>
+                                <Text style={styles.dataCardCount}>{card.count}</Text>
+                                <Text style={styles.dataCardSubtitle}>Total records</Text>
+                                <TouchableOpacity
+                                    style={[styles.outlineDangerButton, isDeleting && { opacity: 0.7 }]}
+                                    disabled={isDeleting}
+                                    onPress={() => {
+                                        setItemToDelete(card.table);
+                                        setIsDeleteConfirmVisible(true);
+                                    }}
+                                >
+                                    <Ionicons name="trash-outline" size={16} color={theme.colors.primary} />
+                                    <Text style={styles.outlineDangerButtonText}>Delete All</Text>
+                                </TouchableOpacity>
+                            </StyledCard>
+                        ))}
                     </View>
-                    <TouchableOpacity
-                        style={[styles.dangerButton, deleting && { opacity: 0.7 }]}
-                        disabled={deleting}
+                </View>
+
+                <Modal
+                    visible={isDeleteConfirmVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => {
+                        if (!isDeleting) {
+                            setIsDeleteConfirmVisible(false);
+                            setItemToDelete(null);
+                        }
+                    }}
+                >
+                    <Pressable
+                        style={styles.modalOverlay}
                         onPress={() => {
-                            Alert.alert(
-                                'Delete everything?',
-                                'This will permanently delete all test data for the current company.',
-                                [
-                                    { text: 'Cancel', style: 'cancel' },
-                                    { text: 'Delete Everything', style: 'destructive', onPress: deleteAllTestData }
-                                ]
-                            );
+                            if (!isDeleting) {
+                                setIsDeleteConfirmVisible(false);
+                                setItemToDelete(null);
+                            }
                         }}
                     >
-                        <Ionicons name="trash-outline" size={18} color="white" />
-                        <Text style={styles.dangerButtonText}>Delete All Test Data</Text>
-                    </TouchableOpacity>
-                </StyledCard>
-
-                <View style={styles.exportGrid}>
-                    {cards.map((card) => (
-                        <StyledCard key={card.title} style={styles.dataCard}>
-                            <Text style={styles.dataCardTitle}>{card.title}</Text>
-                            <Text style={styles.dataCardCount}>{card.count}</Text>
-                            <Text style={styles.dataCardSubtitle}>Total records</Text>
-                            <TouchableOpacity
-                                style={[styles.outlineDangerButton, deleting && { opacity: 0.7 }]}
-                                disabled={deleting}
-                                onPress={() => deleteTableData(card.table)}
+                        <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                            <View
+                                style={{
+                                    width: '100%',
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: theme.colors.border,
+                                    marginBottom: 20,
+                                    paddingBottom: 12,
+                                }}
                             >
-                                <Ionicons name="trash-outline" size={16} color={theme.colors.primary} />
-                                <Text style={styles.outlineDangerButtonText}>Delete All</Text>
-                            </TouchableOpacity>
-                        </StyledCard>
-                    ))}
-                </View>
-            </View>
+                                <Text style={styles.deleteModalTitle}>{dataDeleteTitle}</Text>
+                            </View>
+                            <Text style={styles.deleteModalMessage}>{dataDeleteMessage}</Text>
+                            <View style={styles.deleteModalActions}>
+                                {isDeleting ? (
+                                    <ActivityIndicator size="small" color={theme.colors.primary} style={{ alignSelf: 'center', paddingVertical: 8 }} />
+                                ) : (
+                                    <>
+                                        <TouchableOpacity
+                                            style={styles.deleteButton}
+                                            onPress={confirmDataManagementDelete}
+                                        >
+                                            <Text style={styles.deleteButtonText}>
+                                                {itemToDelete === ALL_TEST_DATA_KEY ? 'Delete Everything' : 'Delete'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.cancelButton}
+                                            onPress={() => {
+                                                setIsDeleteConfirmVisible(false);
+                                                setItemToDelete(null);
+                                            }}
+                                        >
+                                            <Text style={styles.cancelButtonText}>Cancel</Text>
+                                        </TouchableOpacity>
+                                    </>
+                                )}
+                            </View>
+                        </Pressable>
+                    </Pressable>
+                </Modal>
+            </>
         );
     };
 
@@ -2349,12 +2421,19 @@ export const AdminPanelScreen = ({ navigation }: any) => {
             </Modal>
             {/* Delete User Modal */}
             <Modal
-                visible={showDeleteModal}
+                visible={isDeleteConfirmVisible}
                 transparent={true}
                 animationType="fade"
-                onRequestClose={() => setShowDeleteModal(false)}
+                onRequestClose={() => {
+                    if (!isDeleting) setIsDeleteConfirmVisible(false);
+                }}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowDeleteModal(false)}>
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={() => {
+                        if (!isDeleting) setIsDeleteConfirmVisible(false);
+                    }}
+                >
                     <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
                         <View style={{ width: '100%', borderBottomWidth: 1, borderBottomColor: theme.colors.border, marginBottom: 20, paddingBottom: 12 }}>
                             <Text style={styles.deleteModalTitle}>Delete User</Text>
@@ -2365,18 +2444,21 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                         </Text>
 
                         <View style={styles.deleteModalActions}>
-                            <TouchableOpacity
-                                style={styles.deleteButton}
-                                onPress={handleDeleteUser}
-                            >
-                                <Text style={styles.deleteButtonText}>Delete</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.cancelButton}
-                                onPress={() => setShowDeleteModal(false)}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
+                            {isDeleting ? (
+                                <ActivityIndicator size="small" color={theme.colors.primary} style={{ alignSelf: 'center', paddingVertical: 8 }} />
+                            ) : (
+                                <>
+                                    <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteUser}>
+                                        <Text style={styles.deleteButtonText}>Delete</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.cancelButton}
+                                        onPress={() => setIsDeleteConfirmVisible(false)}
+                                    >
+                                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                </>
+                            )}
                         </View>
                     </Pressable>
                 </Pressable>
@@ -2574,7 +2656,7 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
     },
     actionIcon: {
-        padding: 4,
+        padding: 10,
     },
     // Tags Tab Styles
     tagsHeader: {

@@ -12,6 +12,7 @@ import {
     Pressable,
     Platform,
     Alert,
+    ActivityIndicator,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -85,6 +86,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     const [showListViewModal, setShowListViewModal] = useState(false);
     const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
     const [eventToDelete, setEventToDelete] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Search and filter states
     const [eventSearch, setEventSearch] = useState('');
@@ -543,16 +545,27 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     };
 
     const handleConfirmDelete = async () => {
-        if (eventToDelete) {
-            await supabase.from('sports_calendar').delete().eq('id', eventToDelete);
-            queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
-            queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
+        if (!eventToDelete) return;
+        setIsDeleting(true);
+        console.log('[DELETE] sports_calendar start', eventToDelete);
+        try {
+            const { error } = await supabase.from('sports_calendar').delete().eq('id', eventToDelete);
+            console.log('[DELETE] sports_calendar response', { error: error?.message ?? null });
+            if (error) {
+                Alert.alert('Delete failed', error.message);
+                return;
+            }
+            await queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
+            await queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
+            setShowDeleteConfirmModal(false);
+            setEventToDelete(null);
+        } finally {
+            setIsDeleting(false);
         }
-        setShowDeleteConfirmModal(false);
-        setEventToDelete(null);
     };
 
     const handleCancelDelete = () => {
+        if (isDeleting) return;
         setShowDeleteConfirmModal(false);
         setEventToDelete(null);
     };
@@ -628,12 +641,6 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
         queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
         setShowEditEventModal(false);
-    };
-
-    const handleDeleteEvent = async (id: string) => {
-        await supabase.from('sports_calendar').delete().eq('id', id);
-        queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
-        queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
     };
 
     const navigateMonth = (direction: 'prev' | 'next') => {
@@ -1363,7 +1370,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                             {event.sport} • {event.location} • {event.division}
                                         </Text>
                                     </View>
-                                    <TouchableOpacity onPress={() => handleDeleteEvent(event.id)}>
+                                    <TouchableOpacity onPress={() => handleDeleteClick(event.id)}>
                                         <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
                                     </TouchableOpacity>
                                 </View>
@@ -1929,32 +1936,36 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
             {/* Delete Confirmation Modal */}
             <Modal
                 visible={showDeleteConfirmModal}
-                transparent={true}
+                transparent
                 animationType="fade"
                 onRequestClose={handleCancelDelete}
             >
-                <View style={styles.deleteModalOverlay}>
-                    <View style={styles.deleteModalContent}>
-                        <Text style={styles.deleteModalTitle}>Delete Event?</Text>
-                        <Text style={styles.deleteModalMessage}>
-                            This action cannot be undone. This will permanently delete the sports event.
-                        </Text>
-                        <View style={styles.deleteModalButtons}>
+                <Pressable style={styles.deleteModalOverlay} onPress={handleCancelDelete}>
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                        <Text style={styles.deleteModalMessage}>Are you sure? This cannot be undone.</Text>
+                        <View style={styles.deleteModalActions}>
                             <TouchableOpacity
-                                style={styles.cancelButton}
+                                style={styles.deleteModalCancelBtn}
                                 onPress={handleCancelDelete}
+                                disabled={isDeleting}
                             >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={styles.deleteButton}
+                                style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]}
                                 onPress={handleConfirmDelete}
+                                disabled={isDeleting}
                             >
-                                <Text style={styles.deleteButtonText}>Delete</Text>
+                                {isDeleting ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.deleteModalConfirmText}>Delete</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
-                    </View>
-                </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* Division Filter Modal */}
@@ -3525,35 +3536,59 @@ const styles = StyleSheet.create({
     // Delete Confirmation Modal Styles
     deleteModalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: theme.spacing.md,
     },
     deleteModalContent: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.lg,
-        width: '90%',
-        maxWidth: 400,
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 24,
+        width: '85%',
+        maxWidth: 340,
     },
     deleteModalTitle: {
-        ...theme.typography.h3,
         fontSize: 18,
         fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.sm,
+        color: '#1e293b',
+        textAlign: 'center',
+        marginBottom: 8,
     },
     deleteModalMessage: {
-        ...theme.typography.body,
         fontSize: 14,
-        color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.lg,
+        color: '#64748b',
+        textAlign: 'center',
+        marginBottom: 24,
         lineHeight: 20,
     },
-    deleteModalButtons: {
+    deleteModalActions: {
         flexDirection: 'row',
-        gap: theme.spacing.sm,
+        gap: 8,
+    },
+    deleteModalCancelBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        alignItems: 'center',
+    },
+    deleteModalCancelText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1e293b',
+    },
+    deleteModalConfirmBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        backgroundColor: '#dc2626',
+        alignItems: 'center',
+    },
+    deleteModalConfirmText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#fff',
     },
     cancelButton: {
         flex: 1,
@@ -3570,20 +3605,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: theme.colors.text,
-    },
-    deleteButton: {
-        flex: 1,
-        paddingVertical: theme.spacing.sm,
-        paddingHorizontal: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-        backgroundColor: '#3b82f6',
-        alignItems: 'center',
-    },
-    deleteButtonText: {
-        ...theme.typography.body,
-        fontSize: 14,
-        fontWeight: '600',
-        color: 'white',
     },
     // New Form Styles for Edit Modal
     formGroup: {

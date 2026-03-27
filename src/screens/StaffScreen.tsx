@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, Alert, Pressable, Keyboard } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, Alert, Pressable, Keyboard, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
-import { useStaff, useAddStaff, useEditStaff, useDeleteStaff } from '../api/staff';
+import { useQueryClient } from '@tanstack/react-query';
+import { useStaff, useAddStaff, useEditStaff } from '../api/staff';
+import { supabase } from '../lib/supabase';
 import { buildStaffInsertRow, formatIsoDateToUs, formatStaffTypeFromDb } from '../api/staffPayload';
 import { useRole } from '../hooks/useRole';
 
@@ -22,6 +24,7 @@ const ScreenHeader = ({ title, navigation }: { title: string, navigation: any })
 
 export const StaffScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
     const { data: staffData = [], isLoading, isError } = useStaff(companyId, season);
     const { data: roleData } = useRole();
     const isSuperAdmin = roleData?.isSuperAdmin || false;
@@ -29,7 +32,6 @@ export const StaffScreen = ({ navigation }: any) => {
 
     const addStaffMutation = useAddStaff();
     const editStaffMutation = useEditStaff();
-    const deleteStaffMutation = useDeleteStaff();
 
     const [isScannerActive, setIsScannerActive] = useState(false);
     const [scanInput, setScanInput] = useState('');
@@ -96,8 +98,29 @@ export const StaffScreen = ({ navigation }: any) => {
     const SUPERVISORS = ['No Supervisor', 'Wendy Siegel - Director'];
 
     // Delete Modal State
-    const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
-    const [staffToDelete, setStaffToDelete] = useState<any>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<any>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete?.id) return;
+        setIsDeleting(true);
+        console.log('[DELETE] Starting delete for:', itemToDelete.id);
+        try {
+            const { error, status, statusText } = await supabase.from('staff').delete().eq('id', itemToDelete.id);
+            console.log('[DELETE] Response:', { error, status, statusText });
+            if (error) throw error;
+            queryClient.invalidateQueries({ queryKey: ['staff'] });
+            Alert.alert('Success', 'Staff member deleted');
+        } catch (err: any) {
+            console.error('[DELETE] Error:', err);
+            Alert.alert('Delete failed', err.message || 'Unknown error');
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmVisible(false);
+            setItemToDelete(null);
+        }
+    };
 
     // Eval Error State
     const [isEvalErrorVisible, setIsEvalErrorVisible] = useState(false);
@@ -261,8 +284,8 @@ export const StaffScreen = ({ navigation }: any) => {
                                         <TouchableOpacity
                                             style={styles.cardActionBtn}
                                             onPress={() => {
-                                                setStaffToDelete(staff);
-                                                setIsDeleteModalVisible(true);
+                                                setItemToDelete(staff);
+                                                setIsDeleteConfirmVisible(true);
                                             }}
                                         >
                                             <Ionicons name="trash-outline" size={14} color="#ef4444" />
@@ -1041,32 +1064,51 @@ export const StaffScreen = ({ navigation }: any) => {
 
             {/* 7. Delete Confirmation Modal */}
             <Modal
-                visible={isDeleteModalVisible}
+                visible={isDeleteConfirmVisible}
                 transparent={true}
                 animationType="fade"
-                onRequestClose={() => setIsDeleteModalVisible(false)}
+                onRequestClose={() => {
+                    if (!isDeleting) {
+                        setIsDeleteConfirmVisible(false);
+                        setItemToDelete(null);
+                    }
+                }}
             >
-                <Pressable style={styles.confirmOverlay} onPress={() => setIsDeleteModalVisible(false)}>
-                    <Pressable style={styles.confirmContent} onPress={(e: any) => e.stopPropagation()}>
-                        <Text style={styles.confirmTitle}>Are you sure?</Text>
-                        <Text style={styles.confirmMessage}>
-                            This action cannot be undone. This will permanently delete the staff member record.
-                        </Text>
-                        <View style={styles.confirmActions}>
+                <Pressable
+                    style={styles.deleteModalOverlay}
+                    onPress={() => {
+                        if (!isDeleting) {
+                            setIsDeleteConfirmVisible(false);
+                            setItemToDelete(null);
+                        }
+                    }}
+                >
+                    <Pressable style={styles.deleteModalContent} onPress={(e: any) => e.stopPropagation()}>
+                        <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                        <Text style={styles.deleteModalMessage}>Are you sure? This cannot be undone.</Text>
+                        <View style={styles.deleteModalActions}>
                             <TouchableOpacity
-                                style={styles.confirmCancelBtn}
-                                onPress={() => setIsDeleteModalVisible(false)}
+                                style={styles.deleteModalCancelBtn}
+                                onPress={() => {
+                                    if (!isDeleting) {
+                                        setIsDeleteConfirmVisible(false);
+                                        setItemToDelete(null);
+                                    }
+                                }}
+                                disabled={isDeleting}
                             >
-                                <Text style={styles.confirmCancelText}>Cancel</Text>
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={styles.confirmDeleteBtn}
-                                onPress={() => {
-                                    console.log('Deleting staff:', staffToDelete?.name);
-                                    setIsDeleteModalVisible(false);
-                                }}
+                                style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]}
+                                onPress={handleConfirmDelete}
+                                disabled={isDeleting}
                             >
-                                <Text style={styles.confirmDeleteText}>Delete</Text>
+                                {isDeleting ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.deleteModalConfirmText}>Delete</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
                     </Pressable>
@@ -1379,9 +1421,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     cardActionBtn: {
-        width: 24,
-        height: 24,
-        borderRadius: 4,
+        width: 32,
+        height: 32,
+        borderRadius: 6,
         backgroundColor: '#f3f4f6',
         alignItems: 'center',
         justifyContent: 'center',
@@ -1853,15 +1895,14 @@ const styles = StyleSheet.create({
         color: theme.colors.secondary,
         fontWeight: 'bold',
     },
-    // Confirm Modal Styles
-    confirmOverlay: {
+    deleteModalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.4)',
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
     },
-    confirmContent: {
+    deleteModalContent: {
         backgroundColor: 'white',
         borderRadius: 12,
         padding: 24,
@@ -1873,17 +1914,47 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
     },
-    confirmTitle: {
+    deleteModalTitle: {
         fontSize: 18,
         fontWeight: 'bold',
         color: theme.colors.text,
         marginBottom: 12,
     },
-    confirmMessage: {
+    deleteModalMessage: {
         fontSize: 14,
         color: theme.colors.textSecondary,
         lineHeight: 20,
         marginBottom: 24,
+    },
+    deleteModalActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 12,
+    },
+    deleteModalCancelBtn: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        backgroundColor: '#f3f4f6',
+    },
+    deleteModalCancelText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    deleteModalConfirmBtn: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        backgroundColor: '#2563eb',
+        minWidth: 88,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    deleteModalConfirmText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: 'white',
     },
     confirmActions: {
         flexDirection: 'row',
@@ -1905,7 +1976,7 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         paddingHorizontal: 16,
         borderRadius: 8,
-        backgroundColor: '#2563eb', // Matches blue in screenshot
+        backgroundColor: '#2563eb',
     },
     confirmDeleteText: {
         fontSize: 14,

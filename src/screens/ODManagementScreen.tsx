@@ -184,21 +184,31 @@ export const ODManagementScreen = ({ navigation }: any) => {
         },
     });
 
-    // Delete bunk by id (reliable; displayName can be "Bunk N" when bunk_name is null)
-    const deleteBunkMutation = useMutation({
-        mutationFn: async (bunkId: string) => {
-            const { error } = await supabase.from('bunks').delete().eq('id', bunkId);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<{ id: string } | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete) return;
+        setIsDeleting(true);
+        console.log('[DELETE] Starting delete for:', itemToDelete.id);
+        try {
+            const { error, status, statusText } = await supabase.from('bunks').delete().eq('id', itemToDelete.id);
+            console.log('[DELETE] Response:', { error, status, statusText });
             if (error) throw error;
-        },
-        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bunks'] });
             queryClient.invalidateQueries({ queryKey: ['bunk_staff'] });
             queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
-        },
-        onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to delete bunk');
-        },
-    });
+            Alert.alert('Success', 'Bunk deleted');
+        } catch (err: any) {
+            console.error('[DELETE] Error:', err);
+            Alert.alert('Delete failed', err.message || 'Unknown error');
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmVisible(false);
+            setItemToDelete(null);
+        }
+    };
 
     const assignStaffToBunkMutation = useMutation({
         mutationFn: async ({ bunkId, staffId }: { bunkId: string; staffId: string }) => {
@@ -310,15 +320,9 @@ export const ODManagementScreen = ({ navigation }: any) => {
         });
     }, [showManageBunksModal, bunksList]);
 
-    const handleDeleteBunk = (bunkId: string, displayName: string) => {
-        Alert.alert(
-            'Delete Bunk',
-            `Are you sure you want to delete "${displayName}"?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => deleteBunkMutation.mutate(bunkId) },
-            ]
-        );
+    const handleDeleteBunk = (bunkId: string, _displayName: string) => {
+        setItemToDelete({ id: bunkId });
+        setIsDeleteConfirmVisible(true);
     };
 
     const handleRfidScan = async () => {
@@ -1010,6 +1014,58 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
+
+            <Modal
+                visible={isDeleteConfirmVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => {
+                    if (!isDeleting) {
+                        setIsDeleteConfirmVisible(false);
+                        setItemToDelete(null);
+                    }
+                }}
+            >
+                <Pressable
+                    style={styles.deleteModalOverlay}
+                    onPress={() => {
+                        if (!isDeleting) {
+                            setIsDeleteConfirmVisible(false);
+                            setItemToDelete(null);
+                        }
+                    }}
+                >
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                        <Text style={styles.deleteModalMessage}>Are you sure? This cannot be undone.</Text>
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity
+                                style={styles.deleteModalCancelBtn}
+                                onPress={() => {
+                                    if (!isDeleting) {
+                                        setIsDeleteConfirmVisible(false);
+                                        setItemToDelete(null);
+                                    }
+                                }}
+                                disabled={isDeleting}
+                            >
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]}
+                                onPress={handleConfirmDelete}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.deleteModalConfirmText}>Delete</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -1592,6 +1648,66 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.text,
+    },
+    deleteModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    deleteModalContent: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 24,
+        width: '100%',
+        maxWidth: 340,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    deleteModalTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: 12,
+    },
+    deleteModalMessage: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        lineHeight: 20,
+        marginBottom: 24,
+    },
+    deleteModalActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 12,
+    },
+    deleteModalCancelBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        backgroundColor: '#f3f4f6',
+    },
+    deleteModalCancelText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    deleteModalConfirmBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        backgroundColor: theme.colors.secondary,
+        minWidth: 88,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    deleteModalConfirmText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#fff',
     },
 });
 

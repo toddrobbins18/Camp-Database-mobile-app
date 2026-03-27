@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Switch, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Switch, Pressable, ActivityIndicator, Platform, Alert } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,6 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert } from 'react-native';
 import { useCompany } from '../contexts/CompanyContext';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -126,25 +125,6 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         }
     });
 
-    const deleteActivityMutation = useMutation({
-        mutationFn: async (id: string) => {
-            const { error } = await supabase
-                .from('activities_field_trips')
-                .delete()
-                .eq('id', id);
-            if (error) throw error;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['activities'] });
-            Alert.alert('Success', 'Activity deleted successfully');
-            setIsDeleteModalOpen(false);
-            setActivityToDelete(null);
-        },
-        onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to delete activity');
-        }
-    });
-
     const resetFormData = () => {
         const todayStr = formatDateForStorage(new Date());
         setFormData({
@@ -191,22 +171,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         queryFn: async () => {
             if (!companyId) return [];
 
-            // Batch fetch to handle > 1000 rows (Supabase default limit)
-            const [activitiesBatch1, activitiesBatch2, linksResult, divisionsMetaResult] = await Promise.all([
+            const [activitiesResult, linksResult, divisionsMetaResult] = await Promise.all([
                 supabase
                     .from("activities_field_trips")
                     .select("*")
                     .eq('company_id', companyId)
                     .eq('season', selectedYear)
                     .order("event_date", { ascending: true })
-                    .range(0, 999),
-                supabase
-                    .from("activities_field_trips")
-                    .select("*")
-                    .eq('company_id', companyId)
-                    .eq('season', selectedYear)
-                    .order("event_date", { ascending: true })
-                    .range(1000, 1999),
+                    .limit(2000),
                 supabase
                     .from("activities_field_trips_divisions")
                     .select("activity_id, division_id")
@@ -217,11 +189,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     .eq('company_id', companyId)
             ]);
 
-            if (activitiesBatch1.error) throw activitiesBatch1.error;
-            const allActivities = [
-                ...(activitiesBatch1.data || []),
-                ...(activitiesBatch2.data || []),
-            ];
+            if (activitiesResult.error) throw activitiesResult.error;
+            const allActivities = activitiesResult.data || [];
 
             // Build a divisionId -> division meta lookup
             const divisionById: Record<string, any> = {};
@@ -263,6 +232,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const [editingActivity, setEditingActivity] = useState<any>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [activityToDelete, setActivityToDelete] = useState<any>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [helpModalTab, setHelpModalTab] = useState<string>('Trips');
     const [isUploadCSVModalOpen, setIsUploadCSVModalOpen] = useState(false);
@@ -294,6 +265,41 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     });
     const [csvUploading, setCsvUploading] = useState(false);
     const [csvUploadError, setCsvUploadError] = useState<string | null>(null);
+
+    const handleDeleteActivity = async () => {
+        if (!activityToDelete?.id) {
+            console.log('[DELETE] Aborted: missing activity id');
+            Alert.alert('Delete failed', 'Cannot delete: missing activity id');
+            return;
+        }
+        const id = activityToDelete.id;
+        setIsDeleting(true);
+        try {
+            console.log('[DELETE] Starting delete for activity:', id);
+            const { error, status, statusText } = await supabase
+                .from('activities_field_trips')
+                .delete()
+                .eq('id', id);
+
+            console.log('[DELETE] Response:', { error, status, statusText });
+
+            if (error) {
+                console.error('[DELETE] Supabase error:', error);
+                Alert.alert('Delete failed', error.message || 'Unknown error');
+            } else {
+                console.log('[DELETE] Success — invalidating queries');
+                queryClient.invalidateQueries({ queryKey: ['activities'] });
+                Alert.alert('Success', 'Activity deleted successfully');
+            }
+        } catch (err: any) {
+            console.error('[DELETE] Exception:', err);
+            Alert.alert('Delete failed', err?.message || 'Unexpected error');
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteModalOpen(false);
+            setActivityToDelete(null);
+        }
+    };
 
     // Parse CSV text into rows of objects (first line = headers)
     const parseCSV = (text: string): Record<string, string>[] => {
@@ -2215,15 +2221,28 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             {/* Delete Confirmation Modal */}
             <Modal
                 visible={isDeleteModalOpen}
-                transparent={true}
+                transparent
                 animationType="fade"
-                onRequestClose={() => setIsDeleteModalOpen(false)}
+                statusBarTranslucent={Platform.OS === 'android'}
+                onRequestClose={() => {
+                    if (isDeleting) return;
+                    setIsDeleteModalOpen(false);
+                    setActivityToDelete(null);
+                }}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.deleteModalContainer}>
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={() => {
+                        if (isDeleting) return;
+                        setIsDeleteModalOpen(false);
+                        setActivityToDelete(null);
+                    }}
+                >
+                    <Pressable style={styles.deleteModalContainer} onPress={(e) => e.stopPropagation()}>
+                        <Ionicons name="warning-outline" size={36} color={theme.colors.danger} style={{ alignSelf: 'center', marginBottom: 8 }} />
                         <Text style={styles.deleteModalTitle}>Delete Activity/Field Trip</Text>
                         <Text style={styles.deleteModalMessage}>
-                            Are you sure you want to delete this activity? This action cannot be undone.
+                            Remove &quot;{activityToDelete?.title || 'this activity'}&quot;? This cannot be undone.
                         </Text>
                         <View style={styles.deleteModalActions}>
                             <Pressable
@@ -2232,25 +2251,28 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     pressed && styles.deleteCancelButtonPressed
                                 ]}
                                 onPress={() => {
+                                    if (isDeleting) return;
                                     setIsDeleteModalOpen(false);
                                     setActivityToDelete(null);
                                 }}
+                                disabled={isDeleting}
                             >
                                 <Text style={styles.deleteCancelButtonText}>Cancel</Text>
                             </Pressable>
                             <TouchableOpacity
-                                style={styles.deleteConfirmButton}
-                                onPress={() => {
-                                    if (activityToDelete) {
-                                        deleteActivityMutation.mutate(activityToDelete.id);
-                                    }
-                                }}
+                                style={[styles.deleteConfirmButton, isDeleting && { opacity: 0.6 }]}
+                                onPress={handleDeleteActivity}
+                                disabled={isDeleting}
                             >
-                                <Text style={styles.deleteConfirmButtonText}>Delete</Text>
+                                {isDeleting ? (
+                                    <ActivityIndicator size="small" color={theme.colors.surface} />
+                                ) : (
+                                    <Text style={styles.deleteConfirmButtonText}>Delete</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
-                    </View>
-                </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* Date Picker Modal */}

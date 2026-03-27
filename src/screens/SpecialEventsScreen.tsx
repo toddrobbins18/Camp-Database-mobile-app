@@ -18,8 +18,8 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useDivisions } from '../api/campers';
-import { useSpecialEvents, useAddSpecialEvent, useUpdateSpecialEvent, useDeleteSpecialEvent } from '../api/calendar_events';
-import { useQuery } from '@tanstack/react-query';
+import { useSpecialEvents, useAddSpecialEvent, useUpdateSpecialEvent } from '../api/calendar_events';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
 interface SpecialEventsScreenProps {
@@ -105,11 +105,11 @@ const HELP_CONTENT: Record<string, { title: string, subtitle: string, columns: s
 
 export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) => {
     const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
     const { data: divisionsData = [] } = useDivisions(companyId);
     const { data: specialEventsData = [], isLoading: isLoadingEvents } = useSpecialEvents(companyId, season);
     const addSpecialEventMutation = useAddSpecialEvent();
     const updateSpecialEventMutation = useUpdateSpecialEvent();
-    const deleteSpecialEventMutation = useDeleteSpecialEvent();
 
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [selectedHelpTab, setSelectedHelpTab] = useState('Staff');
@@ -143,6 +143,9 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
     const [showEventTypeDropdown, setShowEventTypeDropdown] = useState(false);
     const [showEventDatePicker, setShowEventDatePicker] = useState(false);
+    const [eventToDelete, setEventToDelete] = useState<any>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const { data: staffData = [] } = useQuery({
         queryKey: ['special_events_staff', companyId, season],
@@ -480,29 +483,41 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         setShowAddEventModal(true);
     };
 
+    const closeDeleteConfirmModal = () => {
+        if (isDeleting) return;
+        setIsDeleteConfirmVisible(false);
+        setEventToDelete(null);
+    };
+
     const handleDeleteEvent = (eventId: string) => {
         if (!companyId) return;
-        Alert.alert(
-            'Delete Event',
-            'Are you sure you want to delete this event? This action cannot be undone.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () => {
-                        deleteSpecialEventMutation.mutate(
-                            { id: eventId, company_id: companyId, season },
-                            {
-                                onError: (error: any) => {
-                                    Alert.alert('Error', error?.message || 'Failed to delete event');
-                                },
-                            }
-                        );
-                    },
-                },
-            ]
-        );
+        setEventToDelete(eventId);
+        setIsDeleteConfirmVisible(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        const id = typeof eventToDelete === 'string' ? eventToDelete : eventToDelete?.id;
+        if (!id || !companyId) return;
+        setIsDeleting(true);
+        console.log('[DELETE] special_events_activities start', id);
+        try {
+            const { error } = await supabase
+                .from('special_events_activities')
+                .delete()
+                .eq('id', id)
+                .eq('company_id', companyId);
+            console.log('[DELETE] special_events_activities response', { error: error?.message ?? null });
+            if (error) {
+                Alert.alert('Delete failed', error.message);
+                return;
+            }
+            await queryClient.invalidateQueries({ queryKey: ['special_events', companyId, season] });
+            await queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
+            setIsDeleteConfirmVisible(false);
+            setEventToDelete(null);
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
     const toggleStaffSelection = (staffId: string) => {
@@ -1364,6 +1379,40 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                     </Pressable>
                 </Pressable>
             </Modal>
+
+            <Modal
+                visible={isDeleteConfirmVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={closeDeleteConfirmModal}
+            >
+                <Pressable style={styles.deleteModalOverlay} onPress={closeDeleteConfirmModal}>
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                        <Text style={styles.deleteModalMessage}>Are you sure? This cannot be undone.</Text>
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity
+                                style={styles.deleteModalCancelBtn}
+                                onPress={closeDeleteConfirmModal}
+                                disabled={isDeleting}
+                            >
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]}
+                                onPress={handleConfirmDelete}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.deleteModalConfirmText}>Delete</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -2220,5 +2269,61 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
         color: '#713f12',
+    },
+    deleteModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    deleteModalContent: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 24,
+        width: '85%',
+        maxWidth: 340,
+    },
+    deleteModalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1e293b',
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    deleteModalMessage: {
+        fontSize: 14,
+        color: '#64748b',
+        textAlign: 'center',
+        marginBottom: 24,
+        lineHeight: 20,
+    },
+    deleteModalActions: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    deleteModalCancelBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        alignItems: 'center',
+    },
+    deleteModalCancelText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1e293b',
+    },
+    deleteModalConfirmBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        backgroundColor: '#dc2626',
+        alignItems: 'center',
+    },
+    deleteModalConfirmText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#fff',
     },
 });

@@ -10,16 +10,18 @@ import {
     FlatList,
     ActivityIndicator,
     Alert,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../lib/supabase';
 import {
     useTutoringTherapy,
     useAddTutoringEntry,
     useUpdateTutoringEntry,
-    useDeleteTutoringEntry,
     type TutoringTherapyEntry,
 } from '../api/rainy_day_tutoring';
 import { useDivisions, useCampers } from '../api/campers';
@@ -91,6 +93,7 @@ type SheetOption = { value: string; label: string };
 
 export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps) => {
     const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
@@ -121,13 +124,39 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
     const [endDatePickerMonth, setEndDatePickerMonth] = useState(new Date().getMonth());
     const [endDatePickerYear, setEndDatePickerYear] = useState(new Date().getFullYear());
 
+    const [itemToDelete, setItemToDelete] = useState<any>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const { data: enrollments = [], isLoading: enrollmentsLoading } = useTutoringTherapy(companyId, season);
     const { data: divisionsData = [] } = useDivisions(companyId);
     const { data: campers = [] } = useCampers(companyId, season);
 
     const addEntryMutation = useAddTutoringEntry();
     const updateEntryMutation = useUpdateTutoringEntry();
-    const deleteEntryMutation = useDeleteTutoringEntry();
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete?.id) return;
+        setIsDeleting(true);
+        try {
+            console.log('[DELETE] Starting delete for:', itemToDelete.id);
+            const { error, status } = await supabase
+                .from('tutoring_therapy')
+                .delete()
+                .eq('id', itemToDelete.id);
+            console.log('[DELETE] Response:', { error, status });
+            if (error) {
+                Alert.alert('Delete failed', error.message);
+            } else {
+                queryClient.invalidateQueries({ queryKey: ['tutoring_therapy'] });
+                Alert.alert('Success', 'Item deleted');
+            }
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmVisible(false);
+            setItemToDelete(null);
+        }
+    };
 
     const divisionOptions: SheetOption[] = useMemo(
         () => [
@@ -555,18 +584,8 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                         </TouchableOpacity>
                                         <TouchableOpacity
                                             onPress={() => {
-                                                Alert.alert('Delete enrollment', 'Remove this tutoring/therapy enrollment?', [
-                                                    { text: 'Cancel', style: 'cancel' },
-                                                    {
-                                                        text: 'Delete',
-                                                        style: 'destructive',
-                                                        onPress: () =>
-                                                            deleteEntryMutation.mutate(entry.id, {
-                                                                onError: (e: any) =>
-                                                                    Alert.alert('Error', e?.message || 'Could not delete'),
-                                                            }),
-                                                    },
-                                                ]);
+                                                setItemToDelete(entry);
+                                                setIsDeleteConfirmVisible(true);
                                             }}
                                         >
                                             <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
@@ -870,6 +889,23 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                 setEndDatePickerMonth,
                 setEndDatePickerYear
             )}
+
+            <Modal visible={isDeleteConfirmVisible} transparent animationType="fade" onRequestClose={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                <Pressable style={styles.deleteModalOverlay} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                        <Text style={styles.deleteModalMessage}>Are you sure? This cannot be undone.</Text>
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity style={styles.deleteModalCancelBtn} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }} disabled={isDeleting}>
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]} onPress={handleConfirmDelete} disabled={isDeleting}>
+                                {isDeleting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.deleteModalConfirmText}>Delete</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -1272,4 +1308,13 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         fontSize: 14,
     },
+    deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    deleteModalContent: { backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '85%', maxWidth: 340 },
+    deleteModalTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
+    deleteModalMessage: { fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+    deleteModalActions: { flexDirection: 'row', gap: 8 },
+    deleteModalCancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
+    deleteModalCancelText: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
+    deleteModalConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#dc2626', alignItems: 'center' },
+    deleteModalConfirmText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });

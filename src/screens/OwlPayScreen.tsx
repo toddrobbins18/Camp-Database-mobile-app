@@ -12,12 +12,14 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { StyledCard } from '../components/StyledCard';
 import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
 import {
     OwlPayEmailConfig,
+    OwlPayItem,
     useOwlPayCampers,
     useOwlPayEmailConfig,
     useOwlPayItems,
@@ -25,6 +27,7 @@ import {
     useSaveOwlPayEmailConfig,
     useSaveOwlPayItem,
 } from '../api/owlpay';
+import { supabase } from '../lib/supabase';
 
 type OwlPayTab = 'pos' | 'items' | 'balances' | 'reports' | 'settings';
 type ItemCategory = 'Food' | 'Snacks' | 'Drinks' | 'Other';
@@ -42,7 +45,11 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const [lowBalanceAlertsEnabled, setLowBalanceAlertsEnabled] = useState(false);
     const [staffReportsEnabled, setStaffReportsEnabled] = useState(false);
     const [staffReportFrequency, setStaffReportFrequency] = useState('daily');
+    const [itemToDelete, setItemToDelete] = useState<OwlPayItem | null>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
 
     const tabs: { key: OwlPayTab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
         { key: 'pos', label: 'POS', icon: 'cart-outline' },
@@ -113,6 +120,25 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 },
             }
         );
+    };
+
+    const confirmDeleteOwlPayItem = async () => {
+        if (!itemToDelete?.id) return;
+        console.log('[DELETE] owl_pay_items', itemToDelete.id, itemToDelete.name);
+        setIsDeleting(true);
+        try {
+            const { error } = await supabase.from('owl_pay_items').delete().eq('id', itemToDelete.id);
+            if (error) throw error;
+            if (companyId) {
+                await queryClient.invalidateQueries({ queryKey: ['owlpay_items', companyId] });
+            }
+            setIsDeleteConfirmVisible(false);
+            setItemToDelete(null);
+        } catch (err: any) {
+            Alert.alert('Owl Pay', err?.message || 'Failed to delete item');
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
     useEffect(() => {
@@ -264,11 +290,25 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 <View style={styles.itemsList}>
                     {allItems.map((item) => (
                         <View key={item.id} style={styles.itemRow}>
-                            <View>
-                                <Text style={styles.itemName}>{item.name}</Text>
-                                <Text style={styles.itemMeta}>{item.category}</Text>
+                            <View style={styles.itemRowMain}>
+                                <View>
+                                    <Text style={styles.itemName}>{item.name}</Text>
+                                    <Text style={styles.itemMeta}>{item.category}</Text>
+                                </View>
+                                <View style={styles.itemRowActions}>
+                                    <Text style={styles.itemPrice}>{currency(Number(item.price))}</Text>
+                                    <TouchableOpacity
+                                        accessibilityLabel={`Delete ${item.name}`}
+                                        onPress={() => {
+                                            setItemToDelete(item);
+                                            setIsDeleteConfirmVisible(true);
+                                        }}
+                                        style={styles.itemDeleteBtn}
+                                    >
+                                        <Ionicons name="trash-outline" size={20} color="#dc2626" />
+                                    </TouchableOpacity>
+                                </View>
                             </View>
-                            <Text style={styles.itemPrice}>{currency(Number(item.price))}</Text>
                         </View>
                     ))}
                 </View>
@@ -526,6 +566,57 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
+
+            <Modal
+                visible={isDeleteConfirmVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => {
+                    if (!isDeleting) {
+                        setIsDeleteConfirmVisible(false);
+                        setItemToDelete(null);
+                    }
+                }}
+            >
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={() => {
+                        if (!isDeleting) {
+                            setIsDeleteConfirmVisible(false);
+                            setItemToDelete(null);
+                        }
+                    }}
+                >
+                    <Pressable style={styles.deleteConfirmCard} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.deleteConfirmTitle}>Delete item?</Text>
+                        <Text style={styles.deleteConfirmMessage}>
+                            {itemToDelete
+                                ? `Remove "${itemToDelete.name}" from canteen items? This cannot be undone.`
+                                : ''}
+                        </Text>
+                        <View style={styles.deleteConfirmActions}>
+                            {isDeleting ? (
+                                <ActivityIndicator size="small" color={theme.colors.secondary} style={styles.deleteConfirmSpinner} />
+                            ) : (
+                                <>
+                                    <TouchableOpacity
+                                        style={styles.deleteConfirmCancel}
+                                        onPress={() => {
+                                            setIsDeleteConfirmVisible(false);
+                                            setItemToDelete(null);
+                                        }}
+                                    >
+                                        <Text style={styles.deleteConfirmCancelText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.deleteConfirmDanger} onPress={confirmDeleteOwlPayItem}>
+                                        <Text style={styles.deleteConfirmDangerText}>Delete</Text>
+                                    </TouchableOpacity>
+                                </>
+                            )}
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -675,13 +766,17 @@ const styles = StyleSheet.create({
     emptyStateText: { color: theme.colors.textSecondary, fontSize: 15 },
     itemsList: { gap: 8 },
     itemRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         paddingVertical: 10,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
+    itemRowMain: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    itemRowActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    itemDeleteBtn: { padding: 6 },
     itemName: { color: theme.colors.text, fontWeight: '600', fontSize: 15 },
     itemMeta: { color: theme.colors.textSecondary, fontSize: 13 },
     itemPrice: { color: theme.colors.text, fontWeight: '700' },
@@ -878,4 +973,32 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     addItemButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+    deleteConfirmCard: {
+        width: '100%',
+        maxWidth: 400,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: 20,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    deleteConfirmTitle: { ...theme.typography.h3, marginBottom: 8 },
+    deleteConfirmMessage: { color: theme.colors.textSecondary, fontSize: 15, lineHeight: 21, marginBottom: 20 },
+    deleteConfirmActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 12 },
+    deleteConfirmSpinner: { alignSelf: 'center', paddingVertical: 8 },
+    deleteConfirmCancel: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    deleteConfirmCancelText: { color: theme.colors.text, fontWeight: '600', fontSize: 15 },
+    deleteConfirmDanger: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: '#dc2626',
+    },
+    deleteConfirmDangerText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
-import { useCampers, useAddCamper, useEditCamper, useDeleteCamper, useDivisions } from '../api/campers';
+import { useCampers, useAddCamper, useEditCamper, useDivisions } from '../api/campers';
 import { useRole } from '../hooks/useRole';
 import { useStaff } from '../api/staff';
 import { supabase } from '../lib/supabase';
@@ -54,7 +54,6 @@ export const CamperScreen = ({ navigation }: any) => {
 
     const addCamperMutation = useAddCamper();
     const editCamperMutation = useEditCamper();
-    const deleteCamperMutation = useDeleteCamper();
 
     // Fetch staff for the "Assigned Leader" dropdown (replaces old MOCK_LEADERS)
     const { data: staffList = [] } = useStaff(companyId, season);
@@ -107,8 +106,29 @@ export const CamperScreen = ({ navigation }: any) => {
     const [addLeaderButtonLayout, setAddLeaderButtonLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const addLeaderButtonRef = useRef<any>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [camperToDelete, setCamperToDelete] = useState<any>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<any>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete?.id) return;
+        setIsDeleting(true);
+        console.log('[DELETE] Starting delete for:', itemToDelete.id);
+        try {
+            const { error, status, statusText } = await supabase.from('children').delete().eq('id', itemToDelete.id);
+            console.log('[DELETE] Response:', { error, status, statusText });
+            if (error) throw error;
+            queryClient.invalidateQueries({ queryKey: ['campers'] });
+            Alert.alert('Success', 'Camper deleted');
+        } catch (err: any) {
+            console.error('[DELETE] Error:', err);
+            Alert.alert('Delete failed', err.message || 'Unknown error');
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmVisible(false);
+            setItemToDelete(null);
+        }
+    };
     const [showEditChildModal, setShowEditChildModal] = useState(false);
     const [camperToEdit, setCamperToEdit] = useState<any>(null);
     const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
@@ -1650,54 +1670,51 @@ export const CamperScreen = ({ navigation }: any) => {
 
                 {/* Delete Confirmation Modal */}
                 <Modal
-                    visible={showDeleteModal}
+                    visible={isDeleteConfirmVisible}
                     transparent={true}
                     animationType="fade"
                     onRequestClose={() => {
-                        setShowDeleteModal(false);
-                        setCamperToDelete(null);
+                        if (!isDeleting) {
+                            setIsDeleteConfirmVisible(false);
+                            setItemToDelete(null);
+                        }
                     }}
                 >
                     <Pressable
-                        style={styles.modalOverlay}
+                        style={styles.deleteModalOverlay}
                         onPress={() => {
-                            setShowDeleteModal(false);
-                            setCamperToDelete(null);
+                            if (!isDeleting) {
+                                setIsDeleteConfirmVisible(false);
+                                setItemToDelete(null);
+                            }
                         }}
                     >
-                        <Pressable
-                            style={styles.deleteModalContainer}
-                            onPress={(e) => e.stopPropagation()}
-                        >
-                            <Text style={styles.deleteModalTitle}>Are you sure?</Text>
-                            <Text style={styles.deleteModalMessage}>
-                                This action cannot be undone. This will permanently delete the camper record.
-                            </Text>
-                            <View style={styles.deleteModalButtons}>
+                        <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                            <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                            <Text style={styles.deleteModalMessage}>Are you sure? This cannot be undone.</Text>
+                            <View style={styles.deleteModalActions}>
                                 <TouchableOpacity
-                                    style={styles.deleteCancelButton}
+                                    style={styles.deleteModalCancelBtn}
                                     onPress={() => {
-                                        setShowDeleteModal(false);
-                                        setCamperToDelete(null);
+                                        if (!isDeleting) {
+                                            setIsDeleteConfirmVisible(false);
+                                            setItemToDelete(null);
+                                        }
                                     }}
+                                    disabled={isDeleting}
                                 >
-                                    <Text style={styles.deleteCancelButtonText}>Cancel</Text>
+                                    <Text style={styles.deleteModalCancelText}>Cancel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
-                                    style={styles.deleteConfirmButton}
-                                    onPress={() => {
-                                        if (camperToDelete?.id) {
-                                            deleteCamperMutation.mutate({
-                                                id: camperToDelete.id,
-                                                company_id: companyId as string,
-                                                season: camperToDelete.season || season
-                                            });
-                                        }
-                                        setShowDeleteModal(false);
-                                        setCamperToDelete(null);
-                                    }}
+                                    style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]}
+                                    onPress={handleConfirmDelete}
+                                    disabled={isDeleting}
                                 >
-                                    <Text style={styles.deleteConfirmButtonText}>Delete</Text>
+                                    {isDeleting ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <Text style={styles.deleteModalConfirmText}>Delete</Text>
+                                    )}
                                 </TouchableOpacity>
                             </View>
                         </Pressable>
@@ -2768,8 +2785,8 @@ export const CamperScreen = ({ navigation }: any) => {
                                             style={styles.cardIconButton}
                                             onPress={(e) => {
                                                 e.stopPropagation();
-                                                setCamperToDelete(camper);
-                                                setShowDeleteModal(true);
+                                                setItemToDelete(camper);
+                                                setIsDeleteConfirmVisible(true);
                                             }}
                                         >
                                             <Ionicons name="trash-outline" size={18} color="#9ca3af" />
@@ -3876,14 +3893,19 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         flexShrink: 1,
     },
-    deleteModalContainer: {
+    deleteModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: theme.spacing.lg,
+    },
+    deleteModalContent: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
-        width: '85%',
+        width: '90%',
         maxWidth: 400,
         padding: theme.spacing.xl,
-        alignSelf: 'center',
-        marginTop: '30%',
         ...theme.shadows.card,
         elevation: 10,
     },
@@ -3899,12 +3921,12 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.xl,
         lineHeight: 20,
     },
-    deleteModalButtons: {
+    deleteModalActions: {
         flexDirection: 'row',
         justifyContent: 'flex-end',
         gap: theme.spacing.md,
     },
-    deleteCancelButton: {
+    deleteModalCancelBtn: {
         paddingHorizontal: theme.spacing.lg,
         paddingVertical: theme.spacing.md,
         borderRadius: theme.borderRadius.md,
@@ -3914,20 +3936,21 @@ const styles = StyleSheet.create({
         minWidth: 80,
         alignItems: 'center',
     },
-    deleteCancelButtonText: {
+    deleteModalCancelText: {
         color: theme.colors.text,
         fontSize: 14,
         fontWeight: '600',
     },
-    deleteConfirmButton: {
+    deleteModalConfirmBtn: {
         paddingHorizontal: theme.spacing.lg,
         paddingVertical: theme.spacing.md,
         borderRadius: theme.borderRadius.md,
         backgroundColor: theme.colors.secondary,
-        minWidth: 80,
+        minWidth: 88,
         alignItems: 'center',
+        justifyContent: 'center',
     },
-    deleteConfirmButtonText: {
+    deleteModalConfirmText: {
         color: theme.colors.surface,
         fontSize: 14,
         fontWeight: '600',

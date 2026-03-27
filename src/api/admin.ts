@@ -184,7 +184,7 @@ export const useSendPasswordReset = () => {
 /**
  * Delete a user. Tries RPC (bypasses RLS) then falls back to direct table delete.
  */
-async function adminDeleteUser(userId: string): Promise<void> {
+export async function deleteAdminPanelUser(userId: string): Promise<void> {
     // Method 1: RPC (SECURITY DEFINER — works if run_in_sql_editor.sql was executed)
     const { error: rpcError } = await supabase.rpc('admin_delete_user', { target_user_id: userId });
     if (!rpcError) return; // success
@@ -197,24 +197,15 @@ async function adminDeleteUser(userId: string): Promise<void> {
     // Nullify incident_reports FKs
     await supabase.from('incident_reports').update({ resolved_by: null }).eq('resolved_by', userId);
     await supabase.from('incident_reports').update({ created_by: null }).eq('created_by', userId);
-    // Delete the profile — use .select() to verify it actually deleted
-    const { data, error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', userId)
-        .select('id');
-
+    const { error } = await supabase.from('profiles').delete().eq('id', userId);
     if (error) throw new Error(error.message);
-    if (!data || data.length === 0) {
-        throw new Error('Could not delete user. RLS may be blocking. Run run_in_sql_editor.sql in Supabase SQL Editor.');
-    }
 }
 
 /** Permanently delete user from Admin Panel. */
 export const useDeleteUser = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: adminDeleteUser,
+        mutationFn: deleteAdminPanelUser,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
         },
@@ -393,7 +384,7 @@ export const useApproveUser = () => {
 export const useRejectUser = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: adminDeleteUser,
+        mutationFn: deleteAdminPanelUser,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['pendingUsers'] });
             queryClient.invalidateQueries({ queryKey: ['adminUsers'] });

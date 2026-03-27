@@ -1,25 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Platform, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Platform, Alert, ActivityIndicator } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers } from '../api/campers';
-import { useIncidentReports, useAddIncidentReport, useDeleteIncidentReport, useUpdateIncidentReport } from '../api/incidents_approvals';
+import { useIncidentReports, useAddIncidentReport, useUpdateIncidentReport } from '../api/incidents_approvals';
+import { supabase } from '../lib/supabase';
 
 export const IncidentReportsScreen = ({ navigation }: any) => {
+    const queryClient = useQueryClient();
     const { companyId, season } = useCompany();
     const { data: incidentReports = [], isLoading: isLoadingReports } = useIncidentReports(companyId, season);
     const { data: campersList = [] } = useCampers(companyId, season);
     const addIncidentMutation = useAddIncidentReport();
-    const deleteIncidentMutation = useDeleteIncidentReport();
     const updateIncidentMutation = useUpdateIncidentReport();
     const childrenNames = campersList.map((c: any) => ({ id: c.id, name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim() }));
     const [showBottomSheet, setShowBottomSheet] = useState(false);
     const [showAddIncidentModal, setShowAddIncidentModal] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
-    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [itemToDelete, setItemToDelete] = useState<any>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [editingIncident, setEditingIncident] = useState<any>(null);
     const [editForm, setEditForm] = useState({
         date: '',
@@ -153,25 +157,29 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     }, [editingIncident]);
 
     const handleDeletePress = (report: any) => {
-        Alert.alert(
-            'Delete Incident Report',
-            'Are you sure you want to delete this incident report? This action cannot be undone.',
-            [
-                { text: 'Cancel', style: 'cancel', onPress: () => setDeletingId(null) },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () => {
-                        if (companyId && report.id) {
-                            deleteIncidentMutation.mutate(
-                                { id: report.id, company_id: companyId },
-                                { onSettled: () => setDeletingId(null) }
-                            );
-                        }
-                    },
-                },
-            ]
-        );
+        setItemToDelete(report);
+        setIsDeleteConfirmVisible(true);
+    };
+
+    const handleDelete = async () => {
+        if (!itemToDelete?.id) return;
+        setIsDeleting(true);
+        console.log('[DELETE] incident_reports', itemToDelete.id);
+        try {
+            const { error } = await supabase.from('incident_reports').delete().eq('id', itemToDelete.id);
+            console.log('[DELETE] incident_reports response', error);
+            if (error) throw error;
+            if (companyId) {
+                await queryClient.invalidateQueries({ queryKey: ['incident_reports', companyId, season] });
+            }
+            Alert.alert('Success', 'Incident report deleted.');
+        } catch (error: any) {
+            Alert.alert('Delete failed', error?.message ?? 'Unknown error');
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmVisible(false);
+            setItemToDelete(null);
+        }
     };
 
     return (
@@ -988,6 +996,23 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
+
+            <Modal visible={isDeleteConfirmVisible} transparent animationType="fade" onRequestClose={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                <Pressable style={styles.deleteModalOverlay} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                        <Text style={styles.deleteModalMessage}>Are you sure you want to delete this item? This cannot be undone.</Text>
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity style={styles.deleteModalCancelBtn} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }} disabled={isDeleting}>
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]} onPress={handleDelete} disabled={isDeleting}>
+                                {isDeleting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.deleteModalConfirmText}>Delete</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -1127,7 +1152,7 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     incidentCardActionBtn: {
-        padding: theme.spacing.xs,
+        padding: 10,
     },
     incidentCardBadges: {
         flexDirection: 'row',
@@ -1673,5 +1698,14 @@ const styles = StyleSheet.create({
         color: theme.colors.secondary,
         fontWeight: '600',
     },
+    deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    deleteModalContent: { backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '85%', maxWidth: 340 },
+    deleteModalTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
+    deleteModalMessage: { fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+    deleteModalActions: { flexDirection: 'row', gap: 8 },
+    deleteModalCancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
+    deleteModalCancelText: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
+    deleteModalConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#dc2626', alignItems: 'center' },
+    deleteModalConfirmText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });
 

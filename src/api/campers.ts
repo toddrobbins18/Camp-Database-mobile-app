@@ -127,10 +127,7 @@ export const useDeleteCamper = () => {
 
     return useMutation({
         mutationFn: async (params: { id: string, company_id: string, season: string }) => {
-            const { error } = await supabase
-                .from('children')
-                .delete()
-                .eq('id', params.id);
+            const { error } = await supabase.from('children').delete().eq('id', params.id);
 
             if (error) throw error;
             return params;

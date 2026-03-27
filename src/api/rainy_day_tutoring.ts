@@ -179,11 +179,13 @@ export const useDeleteTutoringEntry = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (id: string) => {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('tutoring_therapy')
                 .delete()
-                .eq('id', id);
+                .eq('id', id)
+                .select('id');
             if (error) throw error;
+            if (!data || data.length === 0) throw new Error('Delete was blocked — you may not have permission.');
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['tutoring_therapy'] });

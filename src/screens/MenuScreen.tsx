@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, ActivityIndicator, Alert, Platform } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -7,9 +8,11 @@ import { StyledCard } from '../components/StyledCard';
 import { MobileUserMenu } from '../components/MobileUserMenu';
 
 import { useCompany } from '../contexts/CompanyContext';
-import { useMenuItems, useAddMenuItem, useDeleteMenuItem, MenuItem } from '../api/menu';
+import { useMenuItems, useAddMenuItem, MenuItem } from '../api/menu';
+import { supabase } from '../lib/supabase';
 
 export const MenuScreen = ({ navigation }: any) => {
+    const queryClient = useQueryClient();
     const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
     const [showGuideModal, setShowGuideModal] = useState(false);
     const [showSelectFileModal, setShowSelectFileModal] = useState(false);
@@ -19,7 +22,9 @@ export const MenuScreen = ({ navigation }: any) => {
     const { companyId } = useCompany();
     const { data: menuItemsList = [] } = useMenuItems(companyId);
     const addMenuItemMutation = useAddMenuItem();
-    const deleteMenuItemMutation = useDeleteMenuItem();
+    const [itemToDelete, setItemToDelete] = useState<any>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Add Menu Item form states
     const [menuDate, setMenuDate] = useState(new Date(2026, 0, 22));
@@ -80,9 +85,28 @@ export const MenuScreen = ({ navigation }: any) => {
         });
     };
 
-    const handleDeleteMenuItem = (id: string | undefined) => {
-        if (id && companyId) {
-            deleteMenuItemMutation.mutate({ id, company_id: companyId });
+    const handleDeleteMenuItemPress = (item: MenuItem) => {
+        setItemToDelete(item);
+        setIsDeleteConfirmVisible(true);
+    };
+
+    const handleDelete = async () => {
+        if (!itemToDelete?.id || !companyId) return;
+        setIsDeleting(true);
+        console.log('[DELETE] menu_items', itemToDelete.id);
+        try {
+            const { error } = await supabase.from('menu_items').delete().eq('id', itemToDelete.id);
+            console.log('[DELETE] menu_items response', error);
+            if (error) throw error;
+            await queryClient.invalidateQueries({ queryKey: ['menu_items', companyId] });
+            await queryClient.invalidateQueries({ queryKey: ['dashboard_meals'] });
+            Alert.alert('Success', 'Menu item deleted.');
+        } catch (error: any) {
+            Alert.alert('Delete failed', error?.message ?? 'Unknown error');
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmVisible(false);
+            setItemToDelete(null);
         }
     };
 
@@ -184,7 +208,7 @@ export const MenuScreen = ({ navigation }: any) => {
                                             <Text style={styles.menuItemDate}>{item.date}</Text>
                                         </View>
                                         <TouchableOpacity
-                                            onPress={() => handleDeleteMenuItem(item.id)}
+                                            onPress={() => handleDeleteMenuItemPress(item)}
                                             style={styles.deleteButton}
                                         >
                                             <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
@@ -612,6 +636,23 @@ export const MenuScreen = ({ navigation }: any) => {
                                     )}
                                 </TouchableOpacity>
                             ))}
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            <Modal visible={isDeleteConfirmVisible} transparent animationType="fade" onRequestClose={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                <Pressable style={styles.deleteModalOverlay} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
+                        <Text style={styles.deleteModalMessage}>Are you sure you want to delete this item? This cannot be undone.</Text>
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity style={styles.deleteModalCancelBtn} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }} disabled={isDeleting}>
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]} onPress={handleDelete} disabled={isDeleting}>
+                                {isDeleting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.deleteModalConfirmText}>Delete</Text>}
+                            </TouchableOpacity>
                         </View>
                     </Pressable>
                 </Pressable>
@@ -1171,5 +1212,14 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: 'white',
     },
+    deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    deleteModalContent: { backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '85%', maxWidth: 340 },
+    deleteModalTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
+    deleteModalMessage: { fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+    deleteModalActions: { flexDirection: 'row', gap: 8 },
+    deleteModalCancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
+    deleteModalCancelText: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
+    deleteModalConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#dc2626', alignItems: 'center' },
+    deleteModalConfirmText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });
 

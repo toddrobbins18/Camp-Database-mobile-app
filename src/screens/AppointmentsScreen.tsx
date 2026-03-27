@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Pressable, Switch, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Pressable, Switch, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -198,24 +198,40 @@ export const AppointmentsScreen = ({ navigation }: any) => {
         },
     });
 
-    // Delete appointment mutation - removes row from database
-    const deleteAppointmentMutation = useMutation({
-        mutationFn: async (id: string) => {
-            const { error } = await supabase
+    // Delete appointment
+    const [appointmentToDelete, setAppointmentToDelete] = useState<any>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleDeleteAppointment = async () => {
+        if (!appointmentToDelete?.id) return;
+        setIsDeleting(true);
+        try {
+            console.log('[DELETE] Starting delete for appointment:', appointmentToDelete.id);
+            const { error, status, statusText } = await supabase
                 .from('appointments')
                 .delete()
-                .eq('id', id);
-            if (error) throw error;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['appointments'] });
-            Alert.alert('Success', 'Appointment deleted successfully');
-        },
-        onError: (error: any) => {
-            const msg = error?.message || error?.error_description || 'Failed to delete appointment';
-            Alert.alert('Delete failed', msg);
-        },
-    });
+                .eq('id', appointmentToDelete.id);
+
+            console.log('[DELETE] Response:', { error, status, statusText });
+
+            if (error) {
+                console.error('[DELETE] Supabase error:', error);
+                Alert.alert('Delete failed', error.message || 'Unknown error');
+            } else {
+                console.log('[DELETE] Success — invalidating queries');
+                queryClient.invalidateQueries({ queryKey: ['appointments'] });
+                Alert.alert('Success', 'Appointment deleted successfully');
+            }
+        } catch (err: any) {
+            console.error('[DELETE] Exception:', err);
+            Alert.alert('Delete failed', err?.message || 'Unexpected error');
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteConfirmVisible(false);
+            setAppointmentToDelete(null);
+        }
+    };
     const [activeTab, setActiveTab] = useState<AppointmentTab>('Upcoming');
     const [searchQuery, setSearchQuery] = useState('');
     const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
@@ -619,23 +635,13 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                                     pressed && styles.actionIconButtonPressed
                                                 ]}
                                                 onPress={() => {
-                                                    const id = appointment.id;
-                                                    if (!id) {
+                                                    console.log('[DELETE] Trash icon pressed for:', appointment.id, appointment.person);
+                                                    if (!appointment.id) {
                                                         Alert.alert('Error', 'Cannot delete: missing appointment id');
                                                         return;
                                                     }
-                                                    Alert.alert(
-                                                        'Delete appointment',
-                                                        `Remove the appointment for ${appointment.person || 'this person'}? This will remove it from the database.`,
-                                                        [
-                                                            { text: 'Cancel', style: 'cancel' },
-                                                            {
-                                                                text: 'Delete',
-                                                                style: 'destructive',
-                                                                onPress: () => deleteAppointmentMutation.mutate(String(id)),
-                                                            },
-                                                        ]
-                                                    );
+                                                    setAppointmentToDelete(appointment);
+                                                    setIsDeleteConfirmVisible(true);
                                                 }}
                                             >
                                                 <Ionicons name="trash-outline" size={20} color={theme.colors.danger} />
@@ -1359,6 +1365,47 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
+
+            {/* Delete Confirmation Modal */}
+            <Modal
+                visible={isDeleteConfirmVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => { setIsDeleteConfirmVisible(false); setAppointmentToDelete(null); }}
+            >
+                <Pressable
+                    style={styles.deleteModalOverlay}
+                    onPress={() => { setIsDeleteConfirmVisible(false); setAppointmentToDelete(null); }}
+                >
+                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
+                        <Ionicons name="warning-outline" size={36} color={theme.colors.danger} style={{ alignSelf: 'center', marginBottom: 8 }} />
+                        <Text style={styles.deleteModalTitle}>Delete Appointment</Text>
+                        <Text style={styles.deleteModalMessage}>
+                            Remove the appointment for {appointmentToDelete?.person || 'this person'}? This cannot be undone.
+                        </Text>
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity
+                                style={styles.deleteModalCancelBtn}
+                                onPress={() => { setIsDeleteConfirmVisible(false); setAppointmentToDelete(null); }}
+                                disabled={isDeleting}
+                            >
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]}
+                                onPress={handleDeleteAppointment}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.deleteModalConfirmText}>Delete</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -1596,7 +1643,7 @@ const styles = StyleSheet.create({
         gap: theme.spacing.xs,
     },
     actionIconButton: {
-        padding: theme.spacing.xs,
+        padding: 10,
         borderRadius: theme.borderRadius.sm,
     },
     actionIconButtonPressed: {
@@ -2084,6 +2131,62 @@ const styles = StyleSheet.create({
         ...theme.shadows.card,
         elevation: 5,
         overflow: 'hidden',
+    },
+    deleteModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    deleteModalContent: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.lg,
+        width: '85%',
+        maxWidth: 340,
+    },
+    deleteModalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    deleteModalMessage: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        marginBottom: theme.spacing.lg,
+        lineHeight: 20,
+    },
+    deleteModalActions: {
+        flexDirection: 'row',
+        gap: theme.spacing.sm,
+    },
+    deleteModalCancelBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+    },
+    deleteModalCancelText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    deleteModalConfirmBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.danger || '#dc2626',
+        alignItems: 'center',
+    },
+    deleteModalConfirmText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#fff',
     },
 });
 
