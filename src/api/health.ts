@@ -150,26 +150,35 @@ export const useDeleteMedicationLog = () => {
 
 // --- Hooks for Health Center Admissions ---
 
-export const useHealthCenterAdmissions = (companyId: string | null) => {
+export const useHealthCenterAdmissions = (companyId: string | null, season?: string | null) => {
     return useQuery({
-        queryKey: ['health_center_admissions', companyId],
+        queryKey: ['health_center_admissions', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
 
-            const { data, error } = await supabase
+            let query = supabase
                 .from('health_center_admissions')
                 .select(`
                     *,
-                    children (
+                    children!fk_health_center_admissions_child_id (
                         id,
                         name,
                         group_name
                     )
                 `)
-                .eq('company_id', companyId)
-                .order('admitted_at', { ascending: false });
+                .eq('company_id', companyId);
 
-            if (error) throw error;
+            if (season) {
+                query = query.eq('season', season);
+            }
+
+            const { data, error } = await query.order('admitted_at', { ascending: false });
+
+            if (error) {
+                console.error('[HEALTH] Failed to fetch admissions:', error);
+                throw error;
+            }
+            console.log('[HEALTH] Fetched admissions:', data?.length, 'rows');
             return data as HealthCenterAdmission[];
         },
         enabled: !!companyId,

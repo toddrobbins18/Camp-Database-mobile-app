@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator, Alert, Platform } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -37,7 +37,10 @@ export const HealthScreen = ({ navigation }: any) => {
     const [selectedChild, setSelectedChild] = useState<string | null>(null);
     const [showAdmitModal, setShowAdmitModal] = useState(false);
     const [admitReason, setAdmitReason] = useState('');
+    const [admitNotes, setAdmitNotes] = useState('');
     const [childToAdmit, setChildToAdmit] = useState<{ id: string; name: string } | null>(null);
+    const [isAdmitting, setIsAdmitting] = useState(false);
+    const admitLockRef = useRef(false);
     const [selectedMedicationChild, setSelectedMedicationChild] = useState<string>('');
     const [medicationName, setMedicationName] = useState('');
     const [dosage, setDosage] = useState('');
@@ -78,7 +81,7 @@ export const HealthScreen = ({ navigation }: any) => {
     }, [safeMedications, medicationQueryDate]);
 
     // Admissions
-    const admissionsQuery = useHealthCenterAdmissions(companyId);
+    const admissionsQuery = useHealthCenterAdmissions(companyId, season);
     const admissionsData = admissionsQuery.data;
     const safeAdmissions = Array.isArray(admissionsData) ? admissionsData : [];
     const addAdmissionMutation = useAddHealthCenterAdmission();
@@ -114,49 +117,76 @@ export const HealthScreen = ({ navigation }: any) => {
     
 
     const handleAdmitChild = async () => {
+        if (admitLockRef.current) return;
         if (!childToAdmit || !companyId) {
             Alert.alert('Cannot admit child', 'Missing child or company information.');
             return;
         }
 
+        admitLockRef.current = true;
+        setIsAdmitting(true);
+
+        const childId = childToAdmit.id;
+        const childName = childToAdmit.name;
+        const reasonSnapshot = admitReason.trim() || null;
+        const notesSnapshot = admitNotes.trim() || null;
+
+        setShowAdmitModal(false);
+        setAdmitReason('');
+        setAdmitNotes('');
+        setChildToAdmit(null);
+
+        console.log('[ADMIT] Starting admit for:', childId, childName);
+
         try {
-            // Prevent duplicate active health-center stays (matches web flow)
-            const { data: existing } = await supabase
+            const { data: existing, error: checkErr } = await supabase
                 .from('health_center_admissions')
                 .select('id')
-                .eq('child_id', childToAdmit.id)
+                .eq('child_id', childId)
                 .eq('company_id', companyId)
                 .is('checked_out_at', null)
                 .maybeSingle();
 
+            console.log('[ADMIT] Duplicate check:', { existing, checkErr });
+
             if (existing) {
-                Alert.alert('Child already admitted', `${childToAdmit.name} is already in the health center.`);
+                Alert.alert('Already admitted', `${childName} is already in the health center.`);
                 return;
             }
 
             const { data: { user } } = await supabase.auth.getUser();
-            await addAdmissionMutation.mutateAsync({
+
+            const insertPayload = {
                 company_id: companyId,
-                child_id: childToAdmit.id,
-                reason: admitReason.trim() || null,
-                notes: null,
-                season,
-                admitted_by: user?.id ?? undefined,
-            } as any);
+                child_id: childId,
+                reason: reasonSnapshot,
+                notes: notesSnapshot,
+                season: season || null,
+                admitted_by: user?.id || null,
+            };
+            console.log('[ADMIT] Insert payload:', insertPayload);
 
-            // Ensure the lists update immediately (Currently Admitted + History)
+            const { data: insertedRow, error: insertErr, status, statusText } = await supabase
+                .from('health_center_admissions')
+                .insert([insertPayload])
+                .select()
+                .single();
+
+            console.log('[ADMIT] Insert response:', { insertedRow, insertErr, status, statusText });
+
+            if (insertErr) throw insertErr;
+
+            await queryClient.invalidateQueries({ queryKey: ['health_center_admissions'] });
             await admissionsQuery.refetch();
+            console.log('[ADMIT] Refetch complete');
 
-            setShowAdmitModal(false);
-            setAdmitReason('');
-            setChildToAdmit(null);
-            // Avoid modal teardown race in RN web by alerting after close.
-            setTimeout(() => {
-                Alert.alert('Child admitted', `${childToAdmit.name} has been admitted to the health center.`);
-            }, 0);
+            setTimeout(() => Alert.alert('Success', `${childName} admitted to health center.`), 100);
         } catch (error: any) {
-            const message = error?.message || 'Could not admit child to health center.';
-            Alert.alert('Admit failed', message);
+            console.error('[ADMIT] Error:', error);
+            Alert.alert('Admit failed', error?.message || 'Could not admit child. Check console for details.');
+        } finally {
+            admitLockRef.current = false;
+            setIsAdmitting(false);
         }
     };
 
@@ -171,15 +201,30 @@ export const HealthScreen = ({ navigation }: any) => {
     };
 
     const handleCheckoutChild = async (admissionId: string) => {
+        console.log('[CHECKOUT] Starting checkout for admission:', admissionId);
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            await checkoutMutation.mutateAsync({ id: admissionId, checkedOutBy: user?.id });
+            console.log('[CHECKOUT] User:', user?.id);
 
-            // Ensure the admission moves from "Currently Admitted" to "Health Center Log"
+            const { error, status, statusText } = await supabase
+                .from('health_center_admissions')
+                .update({
+                    checked_out_at: new Date().toISOString(),
+                    checked_out_by: user?.id || null,
+                })
+                .eq('id', admissionId);
+
+            console.log('[CHECKOUT] Response:', { error, status, statusText });
+
+            if (error) throw error;
+
+            await queryClient.invalidateQueries({ queryKey: ['health_center_admissions'] });
             await admissionsQuery.refetch();
+            console.log('[CHECKOUT] Refetch complete');
+            Alert.alert('Success', 'Child checked out from health center.');
         } catch (error: any) {
-            const message = error?.message || 'Could not check out child from the health center.';
-            Alert.alert('Checkout failed', message);
+            console.error('[CHECKOUT] Error:', error);
+            Alert.alert('Checkout failed', error?.message || 'Could not check out child.');
         }
     };
 
@@ -547,15 +592,18 @@ export const HealthScreen = ({ navigation }: any) => {
                                 </View>
 
                                 {/* Currently Admitted Section */}
-                                {currentlyAdmitted.length > 0 && (
-                                    <View style={styles.currentlyAdmittedSection}>
-                                        <View style={styles.currentlyAdmittedHeader}>
-                                            <Ionicons name="warning" size={20} color={theme.colors.danger} />
-                                            <Text style={styles.currentlyAdmittedTitle}>Currently Admitted ({currentlyAdmitted.length})</Text>
+                                <View style={styles.currentlyAdmittedSection}>
+                                    <View style={styles.currentlyAdmittedHeader}>
+                                        <Ionicons name="warning" size={20} color={currentlyAdmitted.length > 0 ? '#ef4444' : theme.colors.textSecondary} />
+                                        <Text style={styles.currentlyAdmittedTitle}>Currently Admitted ({currentlyAdmitted.length})</Text>
+                                    </View>
+                                    {currentlyAdmitted.length === 0 ? (
+                                        <View style={{ padding: 16, alignItems: 'center' }}>
+                                            <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>No children currently admitted</Text>
                                         </View>
-                                        {currentlyAdmitted.map((admission: any) => {
+                                    ) : (
+                                        currentlyAdmitted.map((admission: any) => {
                                             const name = admission.children?.name || 'Unknown';
-                                            const groupName = admission.children?.group_name || '';
                                             return (
                                                 <View key={admission.id} style={styles.admittedCard}>
                                                     <View style={styles.admittedCardContent}>
@@ -566,7 +614,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                         <View style={styles.admittedCardTimeRow}>
                                                             <Ionicons name="time-outline" size={14} color={theme.colors.textSecondary} />
                                                             <Text style={styles.admittedCardTime}>
-                                                                Admitted {admission.admitted_at ? new Date(admission.admitted_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
+                                                                Admitted {admission.admitted_at ? new Date(admission.admitted_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' + new Date(admission.admitted_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}
                                                             </Text>
                                                             <View style={styles.durationBadge}>
                                                                 <Text style={styles.durationBadgeText}>{getAdmissionDuration(admission.admitted_at)}</Text>
@@ -574,9 +622,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                         </View>
                                                         {admission.reason ? (
                                                             <Text style={styles.admittedReason}><Text style={styles.admittedReasonLabel}>Reason: </Text>{admission.reason}</Text>
-                                                        ) : (
-                                                            <Text style={styles.admittedReason}><Text style={styles.admittedReasonLabel}>Reason: </Text>unknown</Text>
-                                                        )}
+                                                        ) : null}
                                                         {admission.notes ? <Text style={styles.admittedNotes}>{admission.notes}</Text> : null}
                                                     </View>
                                                     <TouchableOpacity
@@ -588,9 +634,9 @@ export const HealthScreen = ({ navigation }: any) => {
                                                     </TouchableOpacity>
                                                 </View>
                                             );
-                                        })}
-                                    </View>
-                                )}
+                                        })
+                                    )}
+                                </View>
 
                                 {/* RFID Quick Check-in / Check-Out Card */}
                                 <StyledCard style={styles.rfidCard}>
@@ -1059,21 +1105,34 @@ export const HealthScreen = ({ navigation }: any) => {
             <Modal
                 visible={showAdmitModal}
                 transparent={true}
-                animationType="slide"
+                animationType="fade"
                 onRequestClose={() => {
-                    setShowAdmitModal(false);
-                    setAdmitReason('');
-                    setChildToAdmit(null);
+                    if (!isAdmitting) {
+                        setShowAdmitModal(false);
+                        setAdmitReason('');
+                        setAdmitNotes('');
+                        setChildToAdmit(null);
+                    }
                 }}
             >
-                <View style={styles.modalOverlay}>
-                    <Pressable
-                        style={styles.admitModal}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        <Text style={styles.admitModalTitle}>Notice from site thenest.camp</Text>
-                        <Text style={styles.admitModalSubtitle}>Reason for admission (optional)</Text>
+                <Pressable
+                    style={styles.admitModalOverlay}
+                    onPress={() => {
+                        if (!isAdmitting) {
+                            setShowAdmitModal(false);
+                            setAdmitReason('');
+                            setAdmitNotes('');
+                            setChildToAdmit(null);
+                        }
+                    }}
+                >
+                    <Pressable style={styles.admitModal} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.admitModalTitle}>Admit to Health Center</Text>
+                        {childToAdmit && (
+                            <Text style={styles.admitModalChildName}>{childToAdmit.name}</Text>
+                        )}
 
+                        <Text style={styles.admitModalLabel}>Reason for admission (optional):</Text>
                         <TextInput
                             style={styles.admitReasonInput}
                             placeholder="Enter reason..."
@@ -1081,28 +1140,49 @@ export const HealthScreen = ({ navigation }: any) => {
                             value={admitReason}
                             onChangeText={setAdmitReason}
                             multiline={true}
-                            numberOfLines={4}
+                            numberOfLines={3}
+                            editable={!isAdmitting}
                         />
 
-                        <TouchableOpacity
-                            style={styles.confirmButton}
-                            onPress={handleAdmitChild}
-                        >
-                            <Text style={styles.confirmButtonText}>Confirm</Text>
-                        </TouchableOpacity>
+                        <Text style={styles.admitModalLabel}>Additional notes (optional):</Text>
+                        <TextInput
+                            style={styles.admitReasonInput}
+                            placeholder="Enter notes..."
+                            placeholderTextColor={theme.colors.textSecondary}
+                            value={admitNotes}
+                            onChangeText={setAdmitNotes}
+                            multiline={true}
+                            numberOfLines={3}
+                            editable={!isAdmitting}
+                        />
 
-                        <TouchableOpacity
-                            style={styles.cancelButton}
-                            onPress={() => {
-                                setShowAdmitModal(false);
-                                setAdmitReason('');
-                                setChildToAdmit(null);
-                            }}
-                        >
-                            <Text style={styles.cancelButtonText}>Cancel</Text>
-                        </TouchableOpacity>
+                        <View style={styles.admitModalActions}>
+                            <TouchableOpacity
+                                style={[styles.admitConfirmButton, isAdmitting && { opacity: 0.6 }]}
+                                onPress={handleAdmitChild}
+                                disabled={isAdmitting}
+                            >
+                                {isAdmitting ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.admitConfirmButtonText}>Admit</Text>
+                                )}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.admitCancelButton}
+                                onPress={() => {
+                                    setShowAdmitModal(false);
+                                    setAdmitReason('');
+                                    setAdmitNotes('');
+                                    setChildToAdmit(null);
+                                }}
+                                disabled={isAdmitting}
+                            >
+                                <Text style={styles.admitCancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
                     </Pressable>
-                </View>
+                </Pressable>
             </Modal>
 
             {/* Child Picker Modal for Add Medication */}
@@ -1801,73 +1881,82 @@ const styles = StyleSheet.create({
         color: 'white',
     },
     // Admit Modal Styles
+    admitModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     admitModal: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        padding: theme.spacing.xl,
-        marginHorizontal: theme.spacing.lg,
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 24,
         width: '90%',
-        maxWidth: 500,
-        alignSelf: 'center',
-        marginTop: '20%',
+        maxWidth: 400,
     },
     admitModalTitle: {
-        ...theme.typography.h2,
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.sm,
+        color: '#1e293b',
         textAlign: 'center',
+        marginBottom: 4,
     },
-    admitModalSubtitle: {
-        ...theme.typography.body,
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.lg,
-        textAlign: 'center',
-    },
-    admitReasonInput: {
-        backgroundColor: theme.colors.surface,
-        borderWidth: 2,
-        borderColor: theme.colors.secondary,
-        borderRadius: theme.borderRadius.md,
-        padding: theme.spacing.md,
-        fontSize: 16,
-        color: theme.colors.text,
-        minHeight: 120,
-        textAlignVertical: 'top',
-        marginBottom: theme.spacing.lg,
-        outlineWidth: 0,
-        outlineColor: 'transparent',
-    },
-    confirmButton: {
-        backgroundColor: theme.colors.secondary,
-        borderRadius: theme.borderRadius.md,
-        paddingVertical: theme.spacing.md,
-        paddingHorizontal: theme.spacing.lg,
-        alignItems: 'center',
-        marginBottom: theme.spacing.sm,
-    },
-    confirmButtonText: {
-        ...theme.typography.body,
-        fontSize: 16,
-        fontWeight: '600',
-        color: 'white',
-    },
-    cancelButton: {
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.md,
-        paddingVertical: theme.spacing.md,
-        paddingHorizontal: theme.spacing.lg,
-        alignItems: 'center',
-    },
-    cancelButtonText: {
-        ...theme.typography.body,
+    admitModalChildName: {
         fontSize: 16,
         fontWeight: '600',
         color: theme.colors.secondary,
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    admitModalLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#475569',
+        marginBottom: 6,
+    },
+    admitReasonInput: {
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        padding: 12,
+        fontSize: 14,
+        color: theme.colors.text,
+        minHeight: 70,
+        textAlignVertical: 'top',
+        marginBottom: 12,
+        outlineWidth: 0,
+        outlineColor: 'transparent',
+    },
+    admitModalActions: {
+        flexDirection: 'row',
+        gap: 8,
+        marginTop: 4,
+    },
+    admitConfirmButton: {
+        flex: 1,
+        backgroundColor: theme.colors.secondary,
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    admitConfirmButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#fff',
+    },
+    admitCancelButton: {
+        flex: 1,
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    admitCancelButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1e293b',
     },
     // Health Center Log Styles
     healthCenterLogCard: {
