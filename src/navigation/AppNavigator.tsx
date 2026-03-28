@@ -40,6 +40,9 @@ import { AccessDeniedScreen } from '../screens/AccessDeniedScreen';
 import { SpecialistSportAssignmentsScreen } from '../screens/SpecialistSportAssignmentsScreen';
 import { NotificationPreferencesScreen } from '../screens/NotificationPreferencesScreen';
 import { OwlPayScreen } from '../screens/OwlPayScreen';
+import { DailyScheduleScreen } from '../screens/DailyScheduleScreen';
+import { TigerTimesScreen } from '../screens/TigerTimesScreen';
+import { ElectiveSignUpScreen } from '../screens/ElectiveSignUpScreen';
 
 import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { useRole } from '../hooks/useRole';
@@ -98,7 +101,7 @@ const darkenHexForSidebar = (hex: string, amount = 40) => {
 const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const { data: roleData } = useRole();
-    const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons } = useCompany();
+    const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp } = useCompany();
     const [showCampPicker, setShowCampPicker] = useState(false);
     const [showYearPicker, setShowYearPicker] = useState(false);
 
@@ -321,23 +324,47 @@ const CustomDrawerContent = (props: any) => {
                             {...drawerItemProps}
                         />
                 {companySlug === 'tyler-hill-camp' && (
-                    <DrawerItem
-                        label="Owl Pay"
-                        icon={({ color }) => <Ionicons name="wallet-outline" size={22} color={color} />}
-                        onPress={() => props.navigation.navigate('OwlPay')}
-                        {...drawerItemProps}
-                    />
-                )}
-                        <DrawerItem
-                            label="Special Events & Evening Activities"
-                            icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('SpecialEvents')}
-                            {...drawerItemProps}
-                        />
+                    <>
                         <DrawerItem
                             label="Special Meals"
                             icon={({ color }) => <Ionicons name="restaurant-outline" size={22} color={color} />}
                             onPress={() => props.navigation.navigate('SpecialMeals')}
+                            {...drawerItemProps}
+                        />
+                        <DrawerItem
+                            label="Owl Pay"
+                            icon={({ color }) => <Ionicons name="wallet-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('OwlPay')}
+                            {...drawerItemProps}
+                        />
+                    </>
+                )}
+                        {isTimberLakeCamp && (
+                            <>
+                                <DrawerItem
+                                    label="Daily Schedule"
+                                    icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
+                                    onPress={() => props.navigation.navigate('DailySchedule')}
+                                    {...drawerItemProps}
+                                />
+                                <DrawerItem
+                                    label="Tiger Times"
+                                    icon={({ color }) => <Ionicons name="newspaper-outline" size={22} color={color} />}
+                                    onPress={() => props.navigation.navigate('TigerTimes')}
+                                    {...drawerItemProps}
+                                />
+                                <DrawerItem
+                                    label="Elective Sign-Up"
+                                    icon={({ color }) => <Ionicons name="link-outline" size={22} color={color} />}
+                                    onPress={() => props.navigation.navigate('ElectiveSignUp')}
+                                    {...drawerItemProps}
+                                />
+                            </>
+                        )}
+                        <DrawerItem
+                            label="Special Events & Evening Activities"
+                            icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
+                            onPress={() => props.navigation.navigate('SpecialEvents')}
                             {...drawerItemProps}
                         />
                         <DrawerItem
@@ -347,7 +374,7 @@ const CustomDrawerContent = (props: any) => {
                             {...drawerItemProps}
                         />
                         <DrawerItem
-                            label="Sports Calendar"
+                            label={companySlug === 'timber-lake-west' ? 'Athletics' : 'Sports Calendar'}
                             icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
                             onPress={() => props.navigation.navigate('SportsCalendar')}
                             {...drawerItemProps}
@@ -378,14 +405,16 @@ const CustomDrawerContent = (props: any) => {
                             activeTintColor={theme.colors.surface}
                             activeBackgroundColor={theme.colors.sidebarActiveBg}
                         />
-                        <DrawerItem
-                            label="Daily News"
-                            icon={({ color }) => <Ionicons name="document-text-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('DailyNews')}
-                            {...drawerItemProps}
-                            activeTintColor={theme.colors.surface}
-                            activeBackgroundColor={theme.colors.sidebarActiveBg}
-                        />
+                        {companySlug !== 'timber-lake-camp' && (
+                            <DrawerItem
+                                label={companySlug === 'tyler-hill-camp' ? 'Daily News' : 'Daily Notes'}
+                                icon={({ color }) => <Ionicons name="document-text-outline" size={22} color={color} />}
+                                onPress={() => props.navigation.navigate('DailyNews')}
+                                {...drawerItemProps}
+                                activeTintColor={theme.colors.surface}
+                                activeBackgroundColor={theme.colors.sidebarActiveBg}
+                            />
+                        )}
                         <DrawerItem
                             label="Incident Reports"
                             icon={({ color }) => <Ionicons name="warning-outline" size={22} color={color} />}
@@ -559,6 +588,9 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="SpecialistSportAssignments" component={SpecialistSportAssignmentsScreen} />
             <Drawer.Screen name="ODManagement" component={ODManagementScreen} />
             <Drawer.Screen name="OwlPay" component={OwlPayScreen} />
+            <Drawer.Screen name="DailySchedule" component={DailyScheduleScreen} />
+            <Drawer.Screen name="TigerTimes" component={TigerTimesScreen} />
+            <Drawer.Screen name="ElectiveSignUp" component={ElectiveSignUpScreen} />
         </Drawer.Navigator>
     );
 };

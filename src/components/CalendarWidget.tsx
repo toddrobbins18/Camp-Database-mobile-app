@@ -1,12 +1,12 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
     View,
     Text,
     ScrollView,
     StyleSheet,
     TouchableOpacity,
-    Pressable,
     useWindowDimensions,
+    PanResponder,
     type ViewStyle,
     type StyleProp,
 } from 'react-native';
@@ -169,7 +169,10 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     /* ── Zoom state ── */
     const [calendarZoomOffset, setCalendarZoomOffset] = useState(0);
     const [zoomBarWidth, setZoomBarWidth] = useState(ZOOM_BAR_WIDTH);
-    const isDraggingZoomRef = useRef(false);
+    const zoomBarWidthRef = useRef(ZOOM_BAR_WIDTH);
+    const zoomTrackRef = useRef<View>(null);
+    const zoomMoveRafRef = useRef<number | null>(null);
+    const pendingZoomPageXRef = useRef<number | null>(null);
 
     const minCalendarHeight = 320;
     const maxCalendarHeight = 900;
@@ -189,14 +192,83 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     const handleZoomIn = () => setCalendarZoomOffset((p) => Math.min(p + 80, maxCalendarHeight - autoCalendarHeight));
     const handleAutoAdjust = () => setCalendarZoomOffset(0);
 
+    const zoomMathRef = useRef({
+        minCalendarHeight,
+        maxCalendarHeight,
+        autoCalendarHeight,
+    });
+    zoomMathRef.current = {
+        minCalendarHeight,
+        maxCalendarHeight,
+        autoCalendarHeight,
+    };
+
     const setZoomFromRatio = (ratio: number) => {
+        const { minCalendarHeight: minH, maxCalendarHeight: maxH, autoCalendarHeight: autoH } =
+            zoomMathRef.current;
         const clamped = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0));
-        const targetHeight = minCalendarHeight + clamped * (maxCalendarHeight - minCalendarHeight);
-        const nextOffset = targetHeight - autoCalendarHeight;
+        const targetHeight = minH + clamped * (maxH - minH);
+        const nextOffset = targetHeight - autoH;
         setCalendarZoomOffset(Number.isFinite(nextOffset) ? nextOffset : 0);
     };
 
     const zoomRatio = (effectiveCalendarHeight - minCalendarHeight) / (maxCalendarHeight - minCalendarHeight);
+
+    const applyZoomFromPageXRef = useRef((_pageX: number) => {});
+    applyZoomFromPageXRef.current = (pageX: number) => {
+        zoomTrackRef.current?.measureInWindow((mx, _y, mw) => {
+            const width = Math.max(mw > 0 ? mw : zoomBarWidthRef.current, 1);
+            setZoomFromRatio((pageX - mx) / width);
+        });
+    };
+
+    const scheduleZoomFromPageXRef = useRef((_pageX: number) => {});
+    scheduleZoomFromPageXRef.current = (pageX: number) => {
+        pendingZoomPageXRef.current = pageX;
+        if (zoomMoveRafRef.current != null) return;
+        zoomMoveRafRef.current = requestAnimationFrame(() => {
+            zoomMoveRafRef.current = null;
+            const px = pendingZoomPageXRef.current;
+            pendingZoomPageXRef.current = null;
+            if (px != null) applyZoomFromPageXRef.current(px);
+        });
+    };
+
+    useEffect(
+        () => () => {
+            if (zoomMoveRafRef.current != null) {
+                cancelAnimationFrame(zoomMoveRafRef.current);
+            }
+        },
+        []
+    );
+
+    const zoomPanResponder = useMemo(
+        () =>
+            PanResponder.create({
+                onStartShouldSetPanResponder: () => true,
+                onStartShouldSetPanResponderCapture: () => true,
+                onMoveShouldSetPanResponder: () => true,
+                onMoveShouldSetPanResponderCapture: () => true,
+                onPanResponderTerminationRequest: () => false,
+                onShouldBlockNativeResponder: () => true,
+                onPanResponderGrant: (evt) => {
+                    applyZoomFromPageXRef.current(evt.nativeEvent.pageX);
+                },
+                onPanResponderMove: (evt) => {
+                    scheduleZoomFromPageXRef.current(evt.nativeEvent.pageX);
+                },
+                onPanResponderRelease: (evt, gestureState) => {
+                    if (
+                        Math.abs(gestureState.dx) < 6 &&
+                        Math.abs(gestureState.dy) < 6
+                    ) {
+                        applyZoomFromPageXRef.current(evt.nativeEvent.pageX);
+                    }
+                },
+            }),
+        []
+    );
 
     /* ── Derived data ── */
 
@@ -257,23 +329,22 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                     <TouchableOpacity style={s.zoomBtn} onPress={handleZoomOut}>
                         <Ionicons name="remove" size={16} color={theme.colors.text} />
                     </TouchableOpacity>
-                    <Pressable
-                        style={[s.zoomTrack, { width: ZOOM_BAR_WIDTH }]}
-                        onLayout={(e) => {
-                            const w = e.nativeEvent.layout.width;
-                            if (Number.isFinite(w) && w > 0) setZoomBarWidth(w);
-                        }}
-                        onPress={(e) => setZoomFromRatio(e.nativeEvent.locationX / zoomBarWidth)}
-                        onStartShouldSetResponder={() => true}
-                        onMoveShouldSetResponder={() => true}
-                        onResponderGrant={(e) => { isDraggingZoomRef.current = true; setZoomFromRatio(e.nativeEvent.locationX / zoomBarWidth); }}
-                        onResponderMove={(e) => { if (isDraggingZoomRef.current) setZoomFromRatio(e.nativeEvent.locationX / zoomBarWidth); }}
-                        onResponderRelease={() => { isDraggingZoomRef.current = false; }}
-                        onResponderTerminate={() => { isDraggingZoomRef.current = false; }}
-                    >
-                        <View style={[s.zoomFill, { width: `${zoomRatio * 100}%` }]} />
-                        <View style={[s.zoomThumb, { left: zoomRatio * (zoomBarWidth - ZOOM_THUMB_SIZE) }]} />
-                    </Pressable>
+                    <View style={s.zoomTrackHit} {...zoomPanResponder.panHandlers}>
+                        <View
+                            ref={zoomTrackRef}
+                            style={[s.zoomTrack, { width: ZOOM_BAR_WIDTH }]}
+                            onLayout={(e) => {
+                                const w = e.nativeEvent.layout.width;
+                                if (Number.isFinite(w) && w > 0) {
+                                    zoomBarWidthRef.current = w;
+                                    setZoomBarWidth(w);
+                                }
+                            }}
+                        >
+                            <View style={[s.zoomFill, { width: `${zoomRatio * 100}%` }]} />
+                            <View style={[s.zoomThumb, { left: zoomRatio * (zoomBarWidth - ZOOM_THUMB_SIZE) }]} />
+                        </View>
+                    </View>
                     <TouchableOpacity style={s.zoomBtn} onPress={handleZoomIn}>
                         <Ionicons name="add" size={16} color={theme.colors.text} />
                     </TouchableOpacity>
@@ -498,6 +569,8 @@ const s = StyleSheet.create({
     navBtnText: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
     /* Zoom */
     zoomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.spacing.xs, marginBottom: theme.spacing.md },
+    /** Wider vertical hit area so drags aren’t lost to the parent ScrollView */
+    zoomTrackHit: { paddingVertical: 12, justifyContent: 'center', alignItems: 'center' },
     zoomBtn: {
         width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.border,
         alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surface,

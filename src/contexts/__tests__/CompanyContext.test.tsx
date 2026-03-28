@@ -86,7 +86,7 @@ describe('CompanyContext', () => {
                     select: jest.fn().mockReturnValue({
                         eq: jest.fn().mockReturnValue({
                             single: jest.fn().mockResolvedValue({
-                                data: { slug: 'tyler-hill', name: 'Tyler Hill' },
+                                data: { slug: 'tyler-hill-camp', name: 'Tyler Hill' },
                                 error: null,
                             }),
                         }),
@@ -112,8 +112,9 @@ describe('CompanyContext', () => {
         });
 
         expect(result.current.companyId).toBe('company-123');
-        expect(result.current.companySlug).toBe('tyler-hill');
+        expect(result.current.companySlug).toBe('tyler-hill-camp');
         expect(result.current.isTylerHill).toBe(true);
+        expect(result.current.isTimberLakeCamp).toBe(false);
     });
 
     it('should allow season to be updated', async () => {

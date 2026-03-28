@@ -7,6 +7,7 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { MobileUserMenu } from '../components/MobileUserMenu';
+import { TigerTimesCategoryCards } from '../components/TigerTimesCategoryCards';
 import { useTodayBirthdays, useTodayEvents, useTodayMeals } from '../api/dashboard';
 import { supabase } from '../lib/supabase';
 
@@ -22,7 +23,7 @@ function weatherIconName(condition: string | undefined): keyof typeof Ionicons.g
 }
 
 export const DashboardScreen = ({ navigation }: any) => {
-    const { companyId, season, isTylerHill } = useCompany();
+    const { companyId, season, isTylerHill, isTimberLakeCamp } = useCompany();
     const currentDate = new Date();
     const todayString = currentDate.toISOString().split('T')[0];
     const todayMonth = currentDate.getMonth() + 1;
@@ -220,38 +221,17 @@ export const DashboardScreen = ({ navigation }: any) => {
 
                 {/* Title Section */}
                 <View style={styles.titleSection}>
-                    <Text style={styles.title}>Dashboard</Text>
-                    <Text style={styles.welcomeText}>Welcome back! Here's what's happening today.</Text>
-                </View>
-
-                {/* Quick Menu Grid */}
-                <View style={styles.quickMenuGrid}>
-                    {[
-                        { label: 'Camper', icon: 'people-outline', route: 'Camper' },
-                        { label: 'Staff', icon: 'person-outline', route: 'Staff' },
-                        { label: 'Calendar', icon: 'calendar-outline', route: 'Calendar' },
-                        { label: 'Health', icon: 'medical-outline', route: 'Health' },
-                        { label: 'Sports', icon: 'trophy-outline', route: 'Sports' },
-                        { label: 'Events', icon: 'star-outline', route: 'SpecialEvents' },
-                        { label: 'Menu', icon: 'restaurant-outline', route: 'Menu' },
-                        ...(isTylerHill ? [{ label: 'Owl Pay', icon: 'wallet-outline', route: 'OwlPay' }] : []),
-                        { label: 'Transport', icon: 'car-outline', route: 'Transport' },
-                        { label: 'Messages', icon: 'mail-outline', route: 'Messages' },
-                        { label: 'Reports', icon: 'bar-chart-outline', route: 'Reports' },
-                        { label: 'Admin', icon: 'shield-outline', route: 'AdminPanel' },
-                        { label: 'Approvals', icon: 'checkmark-circle-outline', route: 'UserApprovals' },
-                    ].map((item, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            style={styles.gridTile}
-                            onPress={() => navigation.navigate(item.route)}
-                        >
-                            <View style={styles.tileIconContainer}>
-                                <Ionicons name={item.icon as any} size={24} color={theme.colors.secondary} />
-                            </View>
-                            <Text style={styles.tileLabel} numberOfLines={1}>{item.label}</Text>
-                        </TouchableOpacity>
-                    ))}
+                    <Text style={styles.title}>{isTimberLakeCamp ? 'Tiger Times' : 'Dashboard'}</Text>
+                    <Text style={styles.welcomeText}>
+                        {isTimberLakeCamp
+                            ? new Date().toLocaleDateString(undefined, {
+                                  weekday: 'long',
+                                  month: 'long',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                              })
+                            : "Welcome back! Here's what's happening today."}
+                    </Text>
                 </View>
 
                 {/* Weather Widget */}
@@ -483,10 +463,21 @@ export const DashboardScreen = ({ navigation }: any) => {
                     </View>
                 </StyledCard>
 
+                {/* Tiger Times — five category cards (Timber Lake Camp only) */}
+                {isTimberLakeCamp && (
+                    <TigerTimesCategoryCards
+                        companyId={companyId}
+                        season={season}
+                        todayYmd={todayString}
+                    />
+                )}
+
             </ScrollView>
 
-            {/* Floating Action Button */}
-            <TouchableOpacity style={styles.fab}>
+            {/* Floating Action Button — Timber Lake uses brand green */}
+            <TouchableOpacity
+                style={[styles.fab, isTimberLakeCamp && styles.fabTimberLake]}
+            >
                 <Ionicons name="chatbubble-ellipses" size={20} color="white" />
             </TouchableOpacity>
         </SafeAreaView>
@@ -545,34 +536,6 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.textSecondary,
-    },
-    quickMenuGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        gap: theme.spacing.sm,
-        marginBottom: theme.spacing.lg,
-    },
-    gridTile: {
-        width: '23%', // 4 columns
-        aspectRatio: 1,
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.md,
-        padding: theme.spacing.xs,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        ...theme.shadows.card,
-    },
-    tileIconContainer: {
-        marginBottom: 4,
-    },
-    tileLabel: {
-        fontSize: 10,
-        fontWeight: '600',
-        color: theme.colors.text,
-        textAlign: 'center',
     },
     widgetCard: {
         backgroundColor: theme.colors.surface,
@@ -824,6 +787,9 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
         fontSize: 13,
         fontStyle: 'italic',
+    },
+    fabTimberLake: {
+        backgroundColor: '#286422',
     },
     fab: {
         position: 'absolute',
