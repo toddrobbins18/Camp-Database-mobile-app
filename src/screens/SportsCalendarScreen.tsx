@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import {
@@ -13,6 +13,7 @@ import {
     Platform,
     Alert,
     ActivityIndicator,
+    FlatList,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -42,6 +43,43 @@ function normalizeHomeAway(raw: string | undefined | null): string {
     if (l === 'home' || l === 'away' || l === 'neutral') return l;
     return '';
 }
+
+/** Align with web SportsCalendar: division.gender is often male/female; filter uses Boys/Girls. */
+function divisionGenderMatchesFilter(
+    filter: 'All Genders' | 'Boys' | 'Girls',
+    divisionGender: string | null | undefined,
+): boolean {
+    if (filter === 'All Genders') return true;
+    const g = (divisionGender || '').toLowerCase().trim();
+    if (filter === 'Boys') {
+        return (
+            g === 'boys' ||
+            g === 'boy' ||
+            g === 'male' ||
+            g === 'm' ||
+            g.startsWith('boy')
+        );
+    }
+    return (
+        g === 'girls' ||
+        g === 'girl' ||
+        g === 'female' ||
+        g === 'f' ||
+        g.startsWith('girl')
+    );
+}
+
+const SORT_OPTIONS = [
+    'Sort by Date',
+    'Sort by Division',
+    'Sort by Sport',
+    'Sort by Location',
+    'Sort by Event Type',
+] as const;
+
+type SortOptionLabel = (typeof SORT_OPTIONS)[number];
+
+const FILTER_SHEET_ORANGE = '#f97316';
 
 interface SportsEvent {
     id: string;
@@ -99,11 +137,11 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
     // Selected filter values
     const [selectedDivisions, setSelectedDivisions] = useState<string[]>([]);
-    const [selectedGender, setSelectedGender] = useState('All Genders');
+    const [selectedGender, setSelectedGender] = useState<'All Genders' | 'Boys' | 'Girls'>('All Genders');
     const [selectedSport, setSelectedSport] = useState('All Sports');
     const [selectedEventType, setSelectedEventType] = useState('All Event Types');
     const [selectedLocation, setSelectedLocation] = useState('All Locations');
-    const [selectedSort, setSelectedSort] = useState('Sort by Date');
+    const [selectedSort, setSelectedSort] = useState<SortOptionLabel>('Sort by Date');
 
 
 
@@ -330,23 +368,56 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         setSelectedDate(new Date(firstEventDate));
     }, [sportsCalendarData.length]);
 
-    const divisionOptions = useMemo(
-        () => Array.from(new Set(events.flatMap((event) => (event.divisions || []).map((d: any) => d.id)))),
-        [events]
-    );
-    const divisionNameById = useMemo(() => {
-        const map = new Map<string, string>();
-        events.forEach((event) => {
-            (event.divisions || []).forEach((d: any) => map.set(d.id, d.name));
+    /** Web: girls-first + sort_order (see sortDivisionsGirlsFirst on web). */
+    const divisionsForFilter = useMemo(() => {
+        const rows = [...companyDivisions] as Array<{
+            id: string;
+            name: string;
+            gender?: string;
+            sort_order?: number;
+        }>;
+        const genderOrder = (g: string | undefined) => {
+            const x = (g || '').toLowerCase();
+            if (x === 'female' || x.startsWith('girl')) return 0;
+            if (x === 'male' || x.startsWith('boy')) return 1;
+            return 2;
+        };
+        rows.sort((a, b) => {
+            const cmp = genderOrder(a.gender) - genderOrder(b.gender);
+            if (cmp !== 0) return cmp;
+            return (a.sort_order ?? 0) - (b.sort_order ?? 0);
         });
-        return map;
+        return rows;
+    }, [companyDivisions]);
+
+    const divisionModalRows = useMemo(
+        () => [
+            { id: '__all__', name: 'All Divisions' },
+            ...divisionsForFilter.map((d) => ({ id: d.id, name: d.name })),
+        ],
+        [divisionsForFilter],
+    );
+
+    const sportFilterOptions = useMemo(() => {
+        const u = [...new Set(events.map((e) => e.sport).filter(Boolean) as string[])].sort((a, b) =>
+            a.localeCompare(b),
+        );
+        return ['All Sports', ...u];
     }, [events]);
-    const divisions = divisionOptions;
-    const genders = ['All Genders', 'Boys', 'Girls'];
-    const sports = ['All Sports', ...Array.from(new Set(events.map((e) => e.sport).filter(Boolean))).sort()];
-    const eventTypes = ['All Event Types', ...Array.from(new Set(events.map((e) => e.eventType).filter(Boolean))).sort()];
-    const locations = ['All Locations', ...Array.from(new Set(events.map((e) => e.location).filter(Boolean))).sort()];
-    const sortOptions = ['Sort by Date', 'Sort by Name', 'Sort by Sport', 'Sort by Location'];
+
+    const eventTypeFilterOptions = useMemo(() => {
+        const u = [...new Set(events.map((e) => e.eventType).filter(Boolean) as string[])].sort((a, b) =>
+            a.localeCompare(b),
+        );
+        return ['All Event Types', ...u];
+    }, [events]);
+
+    const locationFilterOptions = useMemo(() => {
+        const u = [...new Set(events.map((e) => e.location).filter(Boolean) as string[])].sort((a, b) =>
+            a.localeCompare(b),
+        );
+        return ['All Locations', ...u];
+    }, [events]);
 
     const formatDate = (date: Date): string => {
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -355,34 +426,113 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         return `${month}/${day}/${year}`;
     };
 
-    const getEventsForDate = (date: Date) => {
-        return events.filter(event => {
-            const eventDate = event.date;
-            return eventDate.getDate() === date.getDate() &&
-                eventDate.getMonth() === date.getMonth() &&
-                eventDate.getFullYear() === date.getFullYear();
+    const filteredAndSortedEvents = useMemo(() => {
+        const q = eventSearch.trim().toLowerCase();
+        let list = events.filter((event) => {
+            if (q) {
+                const haystack = [
+                    event.title,
+                    event.description,
+                    event.location,
+                    event.team,
+                    event.opponent,
+                    event.sport,
+                    event.eventType,
+                ]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase();
+                if (!haystack.includes(q)) return false;
+            }
+            if (selectedDivisions.length > 0) {
+                const eventDivisionIds = (event.divisions || []).map((d: any) => d.id);
+                if (!eventDivisionIds.some((id) => selectedDivisions.includes(id))) return false;
+            }
+            if (selectedGender !== 'All Genders') {
+                const divs = event.divisions || [];
+                if (divs.length === 0) return false;
+                if (
+                    !divs.some((d: any) =>
+                        divisionGenderMatchesFilter(selectedGender, d.gender),
+                    )
+                )
+                    return false;
+            }
+            if (selectedSport !== 'All Sports' && event.sport !== selectedSport) return false;
+            if (selectedEventType !== 'All Event Types' && event.eventType !== selectedEventType)
+                return false;
+            if (selectedLocation !== 'All Locations' && event.location !== selectedLocation)
+                return false;
+            return true;
         });
-    };
 
-    const filteredEvents = events.filter(event => {
-        if (eventSearch && !event.title.toLowerCase().includes(eventSearch.toLowerCase())) return false;
-        if (selectedDivisions.length > 0) {
-            const eventDivisionIds = (event.divisions || []).map((d: any) => d.id);
-            if (!eventDivisionIds.some((id) => selectedDivisions.includes(id))) return false;
+        const orderMap = new Map(
+            companyDivisions.map((d: any) => [d.id, d.sort_order ?? 999] as const),
+        );
+        const genderOrder = (g: string | undefined) => {
+            const x = (g || '').toLowerCase();
+            if (x === 'female' || x.startsWith('girl')) return 0;
+            if (x === 'male' || x.startsWith('boy')) return 1;
+            return 2;
+        };
+        const sortTime = (e: SportsEvent) => (e.startTimeField || e.departTime || '').trim();
+
+        list = [...list];
+        if (selectedSort === 'Sort by Date') {
+            list.sort((a, b) => {
+                const d = a.date.getTime() - b.date.getTime();
+                if (d !== 0) return d;
+                return sortTime(a).localeCompare(sortTime(b));
+            });
+        } else if (selectedSort === 'Sort by Division') {
+            list.sort((a, b) => {
+                const da = (a.divisions || [])[0];
+                const db = (b.divisions || [])[0];
+                if (!da && !db) return 0;
+                if (!da) return 1;
+                if (!db) return -1;
+                const ga = genderOrder(da.gender);
+                const gb = genderOrder(db.gender);
+                if (ga !== gb) return ga - gb;
+                return (orderMap.get(da.id) ?? 999) - (orderMap.get(db.id) ?? 999);
+            });
+        } else if (selectedSort === 'Sort by Sport') {
+            list.sort((a, b) => (a.sport || '').localeCompare(b.sport || ''));
+        } else if (selectedSort === 'Sort by Location') {
+            list.sort((a, b) => (a.location || '').localeCompare(b.location || ''));
+        } else if (selectedSort === 'Sort by Event Type') {
+            list.sort((a, b) => (a.eventType || '').localeCompare(b.eventType || ''));
         }
-        if (selectedGender !== 'All Genders') {
-            const genders = (event.divisions || []).map((d: any) => (d.gender || '').toLowerCase());
-            if (genders.length > 0 && !genders.includes(selectedGender.toLowerCase())) return false;
-        }
-        if (selectedSport !== 'All Sports' && event.sport !== selectedSport) return false;
-        if (selectedEventType !== 'All Event Types' && event.eventType !== selectedEventType) return false;
-        if (selectedLocation !== 'All Locations' && event.location !== selectedLocation) return false;
-        return true;
-    });
+
+        return list;
+    }, [
+        events,
+        eventSearch,
+        selectedDivisions,
+        selectedGender,
+        selectedSport,
+        selectedEventType,
+        selectedLocation,
+        selectedSort,
+        companyDivisions,
+    ]);
+
+    const getEventsForDate = useCallback(
+        (date: Date) =>
+            filteredAndSortedEvents.filter((event) => {
+                const eventDate = event.date;
+                return (
+                    eventDate.getDate() === date.getDate() &&
+                    eventDate.getMonth() === date.getMonth() &&
+                    eventDate.getFullYear() === date.getFullYear()
+                );
+            }),
+        [filteredAndSortedEvents],
+    );
 
     const calendarWidgetEvents: CalendarWidgetEvent[] = useMemo(
         () =>
-            filteredEvents.map((evt) => ({
+            filteredAndSortedEvents.map((evt) => ({
                 id: evt.id,
                 title: evt.title || '',
                 date: new Date(evt.date),
@@ -391,17 +541,17 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 type: 'sports',
                 accent: { bg: '#dbeafe', text: '#1d4ed8', marker: '#2563eb' },
             })),
-        [filteredEvents],
+        [filteredAndSortedEvents],
     );
 
     const groupedEventsByMonth = useMemo(() => {
-        return filteredEvents.reduce((acc: Record<string, SportsEvent[]>, event) => {
+        return filteredAndSortedEvents.reduce((acc: Record<string, SportsEvent[]>, event) => {
             const key = event.date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
             if (!acc[key]) acc[key] = [];
             acc[key].push(event);
             return acc;
         }, {});
-    }, [filteredEvents]);
+    }, [filteredAndSortedEvents]);
 
     const handleAddEvent = async () => {
         if (!addFormData.sport_type && !addFormData.custom_sport_type) {
@@ -1171,7 +1321,9 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             style={styles.filterChip}
                             onPress={() => setShowDivisionFilter(true)}
                         >
-                            <Text style={styles.filterText}>{selectedDivisions.length > 0 ? `Divisions (${selectedDivisions.length})` : 'All Divisions'}</Text>
+                            <Text style={styles.filterText}>
+                                {selectedDivisions.length > 0 ? `Divisions (${selectedDivisions.length})` : 'Divisions'}
+                            </Text>
                             <Ionicons name="chevron-down" size={12} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -1222,7 +1374,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     selectedDate={selectedDate}
                     onSelectedDateChange={setSelectedDate}
                     onEventPress={(evt) => {
-                        const found = filteredEvents.find((e) => e.id === evt.id);
+                        const found = filteredAndSortedEvents.find((e) => e.id === evt.id);
                         if (found) {
                             setSelectedEventOptions(found);
                             setShowEventOptionsModal(true);
@@ -1260,7 +1412,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 )}
 
                 {/* Month List (web-like cards) */}
-                {filteredEvents.length > 0 && (
+                {filteredAndSortedEvents.length > 0 && (
                     <View style={{ marginTop: theme.spacing.lg }}>
                         {Object.entries(groupedEventsByMonth).map(([month, monthEvents]) => (
                             <View key={month} style={{ marginBottom: theme.spacing.lg }}>
@@ -1704,7 +1856,9 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     <View style={styles.filterContainer}>
                         <View style={styles.filterRow}>
                             <TouchableOpacity style={styles.filterButton} onPress={() => setShowDivisionFilter(true)}>
-                                <Text style={styles.filterButtonText}>{selectedDivisions.length > 0 ? `Divisions (${selectedDivisions.length})` : 'All Divisions'}</Text>
+                                <Text style={styles.filterButtonText}>
+                                    {selectedDivisions.length > 0 ? `Divisions (${selectedDivisions.length})` : 'Divisions'}
+                                </Text>
                                 <Ionicons name="chevron-down" size={16} color={theme.colors.text} />
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.filterButton} onPress={() => setShowGenderFilter(true)}>
@@ -1735,12 +1889,12 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     </View>
 
                     <ScrollView style={styles.listViewContent}>
-                        {filteredEvents.length === 0 ? (
+                        {filteredAndSortedEvents.length === 0 ? (
                             <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                                 <Text style={{ color: theme.colors.textSecondary }}>No sports events match your filters.</Text>
                             </View>
                         ) : (
-                            filteredEvents.map((event) => (
+                            filteredAndSortedEvents.map((event) => (
                                 <View key={`list-${event.id}`} style={styles.eventCard}>
                                     <View style={styles.eventCardHeader}>
                                         <Text style={styles.eventTitle}>{event.title}</Text>
@@ -1848,52 +2002,69 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
-            {/* Division Filter Modal */}
+            {/* Division Filter Modal — multi-select like web; backdrop + sheet are siblings for reliable taps (web/native). */}
             <Modal
                 visible={showDivisionFilter}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowDivisionFilter(false)}
             >
-                <Pressable style={styles.filterModalOverlay} onPress={() => setShowDivisionFilter(false)}>
-                    <Pressable style={styles.filterModalContent} onPress={(e) => e.stopPropagation()}>
+                <View style={styles.filterSheetRoot}>
+                    <Pressable
+                        style={styles.filterSheetBackdrop}
+                        onPress={() => setShowDivisionFilter(false)}
+                        accessibilityLabel="Dismiss"
+                    />
+                    <View style={styles.filterSheetPanel}>
                         <View style={styles.filterModalHeader}>
-                            <Text style={styles.filterModalTitle}>Select Division</Text>
-                            <TouchableOpacity onPress={() => setShowDivisionFilter(false)}>
+                            <Text style={styles.filterModalTitle}>Select Divisions</Text>
+                            <TouchableOpacity onPress={() => setShowDivisionFilter(false)} hitSlop={12}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
-                        <ScrollView style={styles.filterModalScroll}>
-                            <TouchableOpacity
-                                style={styles.filterOption}
-                                onPress={() => {
-                                    setSelectedDivisions([]);
-                                    setShowDivisionFilter(false);
-                                }}
-                            >
-                                <Text style={styles.filterOptionText}>All Divisions</Text>
-                                {selectedDivisions.length === 0 && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                            </TouchableOpacity>
-                            {divisions.map((divisionId) => (
-                                <TouchableOpacity
-                                    key={divisionId}
-                                    style={styles.filterOption}
-                                    onPress={() => {
-                                        setSelectedDivisions([divisionId]);
-                                        setShowDivisionFilter(false);
-                                    }}
-                                >
-                                    <Text style={styles.filterOptionText}>
-                                        {divisionNameById.get(divisionId) || 'Unknown Division'}
-                                    </Text>
-                                    {selectedDivisions.includes(divisionId) && (
-                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
+                        <FlatList
+                            data={divisionModalRows}
+                            keyExtractor={(item) => item.id}
+                            keyboardShouldPersistTaps="handled"
+                            style={styles.filterModalScroll}
+                            renderItem={({ item }) => {
+                                const isAll = item.id === '__all__';
+                                const selected = isAll
+                                    ? selectedDivisions.length === 0
+                                    : selectedDivisions.includes(item.id);
+                                return (
+                                    <TouchableOpacity
+                                        style={[styles.filterOption, selected && styles.filterOptionSelected]}
+                                        onPress={() => {
+                                            if (isAll) {
+                                                setSelectedDivisions([]);
+                                                return;
+                                            }
+                                            setSelectedDivisions((prev) =>
+                                                prev.includes(item.id)
+                                                    ? prev.filter((x) => x !== item.id)
+                                                    : [...prev, item.id],
+                                            );
+                                        }}
+                                        activeOpacity={0.85}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.filterOptionText,
+                                                selected && styles.filterOptionTextSelected,
+                                            ]}
+                                        >
+                                            {item.name}
+                                        </Text>
+                                        {selected && (
+                                            <Ionicons name="checkmark" size={20} color="#fff" />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            }}
+                        />
+                    </View>
+                </View>
             </Modal>
 
             {/* Gender Filter Modal */}
@@ -1903,31 +2074,52 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={() => setShowGenderFilter(false)}
             >
-                <Pressable style={styles.filterModalOverlay} onPress={() => setShowGenderFilter(false)}>
-                    <Pressable style={styles.filterModalContent} onPress={(e) => e.stopPropagation()}>
+                <View style={styles.filterSheetRoot}>
+                    <Pressable
+                        style={styles.filterSheetBackdrop}
+                        onPress={() => setShowGenderFilter(false)}
+                        accessibilityLabel="Dismiss"
+                    />
+                    <View style={styles.filterSheetPanel}>
                         <View style={styles.filterModalHeader}>
                             <Text style={styles.filterModalTitle}>Select Gender</Text>
-                            <TouchableOpacity onPress={() => setShowGenderFilter(false)}>
+                            <TouchableOpacity onPress={() => setShowGenderFilter(false)} hitSlop={12}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
-                        <ScrollView style={styles.filterModalScroll}>
-                            {['All Genders', 'Boys', 'Girls'].map((gender) => (
-                                <TouchableOpacity
-                                    key={gender}
-                                    style={styles.filterOption}
-                                    onPress={() => {
-                                        setSelectedGender(gender);
-                                        setShowGenderFilter(false);
-                                    }}
-                                >
-                                    <Text style={styles.filterOptionText}>{gender}</Text>
-                                    {selectedGender === gender && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
+                        <FlatList
+                            data={['All Genders', 'Boys', 'Girls']}
+                            keyExtractor={(item) => item}
+                            keyboardShouldPersistTaps="handled"
+                            style={styles.filterModalScroll}
+                            renderItem={({ item: gender }) => {
+                                const selected = selectedGender === gender;
+                                return (
+                                    <TouchableOpacity
+                                        style={[styles.filterOption, selected && styles.filterOptionSelected]}
+                                        onPress={() => {
+                                            setSelectedGender(gender);
+                                            setShowGenderFilter(false);
+                                        }}
+                                        activeOpacity={0.85}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.filterOptionText,
+                                                selected && styles.filterOptionTextSelected,
+                                            ]}
+                                        >
+                                            {gender}
+                                        </Text>
+                                        {selected && (
+                                            <Ionicons name="checkmark" size={20} color="#fff" />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            }}
+                        />
+                    </View>
+                </View>
             </Modal>
 
             {/* Sport Filter Modal */}
@@ -1937,31 +2129,52 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={() => setShowSportFilter(false)}
             >
-                <Pressable style={styles.filterModalOverlay} onPress={() => setShowSportFilter(false)}>
-                    <Pressable style={styles.filterModalContent} onPress={(e) => e.stopPropagation()}>
+                <View style={styles.filterSheetRoot}>
+                    <Pressable
+                        style={styles.filterSheetBackdrop}
+                        onPress={() => setShowSportFilter(false)}
+                        accessibilityLabel="Dismiss"
+                    />
+                    <View style={styles.filterSheetPanel}>
                         <View style={styles.filterModalHeader}>
                             <Text style={styles.filterModalTitle}>Select Sport</Text>
-                            <TouchableOpacity onPress={() => setShowSportFilter(false)}>
+                            <TouchableOpacity onPress={() => setShowSportFilter(false)} hitSlop={12}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
-                        <ScrollView style={styles.filterModalScroll}>
-                            {['All Sports', 'Soccer', 'Hockey', 'Basketball', 'Baseball', 'Softball'].map((sport) => (
-                                <TouchableOpacity
-                                    key={sport}
-                                    style={styles.filterOption}
-                                    onPress={() => {
-                                        setSelectedSport(sport);
-                                        setShowSportFilter(false);
-                                    }}
-                                >
-                                    <Text style={styles.filterOptionText}>{sport}</Text>
-                                    {selectedSport === sport && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
+                        <FlatList
+                            data={sportFilterOptions}
+                            keyExtractor={(item) => item}
+                            keyboardShouldPersistTaps="handled"
+                            style={styles.filterModalScroll}
+                            renderItem={({ item: sport }) => {
+                                const selected = selectedSport === sport;
+                                return (
+                                    <TouchableOpacity
+                                        style={[styles.filterOption, selected && styles.filterOptionSelected]}
+                                        onPress={() => {
+                                            setSelectedSport(sport);
+                                            setShowSportFilter(false);
+                                        }}
+                                        activeOpacity={0.85}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.filterOptionText,
+                                                selected && styles.filterOptionTextSelected,
+                                            ]}
+                                        >
+                                            {sport}
+                                        </Text>
+                                        {selected && (
+                                            <Ionicons name="checkmark" size={20} color="#fff" />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            }}
+                        />
+                    </View>
+                </View>
             </Modal>
 
             {/* Event Type Filter Modal */}
@@ -1971,31 +2184,52 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={() => setShowEventTypeFilter(false)}
             >
-                <Pressable style={styles.filterModalOverlay} onPress={() => setShowEventTypeFilter(false)}>
-                    <Pressable style={styles.filterModalContent} onPress={(e) => e.stopPropagation()}>
+                <View style={styles.filterSheetRoot}>
+                    <Pressable
+                        style={styles.filterSheetBackdrop}
+                        onPress={() => setShowEventTypeFilter(false)}
+                        accessibilityLabel="Dismiss"
+                    />
+                    <View style={styles.filterSheetPanel}>
                         <View style={styles.filterModalHeader}>
                             <Text style={styles.filterModalTitle}>Select Event Type</Text>
-                            <TouchableOpacity onPress={() => setShowEventTypeFilter(false)}>
+                            <TouchableOpacity onPress={() => setShowEventTypeFilter(false)} hitSlop={12}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
-                        <ScrollView style={styles.filterModalScroll}>
-                            {['All Event Types', 'Invitational', 'Tournament', 'League Game', 'Friendly'].map((type) => (
-                                <TouchableOpacity
-                                    key={type}
-                                    style={styles.filterOption}
-                                    onPress={() => {
-                                        setSelectedEventType(type);
-                                        setShowEventTypeFilter(false);
-                                    }}
-                                >
-                                    <Text style={styles.filterOptionText}>{type}</Text>
-                                    {selectedEventType === type && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
+                        <FlatList
+                            data={eventTypeFilterOptions}
+                            keyExtractor={(item) => item}
+                            keyboardShouldPersistTaps="handled"
+                            style={styles.filterModalScroll}
+                            renderItem={({ item: type }) => {
+                                const selected = selectedEventType === type;
+                                return (
+                                    <TouchableOpacity
+                                        style={[styles.filterOption, selected && styles.filterOptionSelected]}
+                                        onPress={() => {
+                                            setSelectedEventType(type);
+                                            setShowEventTypeFilter(false);
+                                        }}
+                                        activeOpacity={0.85}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.filterOptionText,
+                                                selected && styles.filterOptionTextSelected,
+                                            ]}
+                                        >
+                                            {type}
+                                        </Text>
+                                        {selected && (
+                                            <Ionicons name="checkmark" size={20} color="#fff" />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            }}
+                        />
+                    </View>
+                </View>
             </Modal>
 
             {/* Location Filter Modal */}
@@ -2005,34 +2239,53 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={() => setShowLocationFilter(false)}
             >
-                <Pressable style={styles.filterModalOverlay} onPress={() => setShowLocationFilter(false)}>
-                    <Pressable style={styles.filterModalContent} onPress={(e) => e.stopPropagation()}>
+                <View style={styles.filterSheetRoot}>
+                    <Pressable
+                        style={styles.filterSheetBackdrop}
+                        onPress={() => setShowLocationFilter(false)}
+                        accessibilityLabel="Dismiss"
+                    />
+                    <View style={styles.filterSheetPanel}>
                         <View style={styles.filterModalHeader}>
                             <Text style={styles.filterModalTitle}>Select Location</Text>
-                            <TouchableOpacity onPress={() => setShowLocationFilter(false)}>
+                            <TouchableOpacity onPress={() => setShowLocationFilter(false)} hitSlop={12}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
-                        <ScrollView style={styles.filterModalScroll}>
-                            {['All Locations', 'Bearmont', 'Blue Ridge', 'Equinunk'].map((location) => (
-                                <TouchableOpacity
-                                    key={location}
-                                    style={styles.filterOption}
-                                    onPress={() => {
-                                        setSelectedLocation(location);
-                                        setShowLocationFilter(false);
-                                    }}
-                                >
-                                    <Text style={styles.filterOptionText}>{location}</Text>
-                                    {selectedLocation === location && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
+                        <FlatList
+                            data={locationFilterOptions}
+                            keyExtractor={(item) => item}
+                            keyboardShouldPersistTaps="handled"
+                            style={styles.filterModalScroll}
+                            renderItem={({ item: location }) => {
+                                const selected = selectedLocation === location;
+                                return (
+                                    <TouchableOpacity
+                                        style={[styles.filterOption, selected && styles.filterOptionSelected]}
+                                        onPress={() => {
+                                            setSelectedLocation(location);
+                                            setShowLocationFilter(false);
+                                        }}
+                                        activeOpacity={0.85}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.filterOptionText,
+                                                selected && styles.filterOptionTextSelected,
+                                            ]}
+                                        >
+                                            {location}
+                                        </Text>
+                                        {selected && (
+                                            <Ionicons name="checkmark" size={20} color="#fff" />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            }}
+                        />
+                    </View>
+                </View>
             </Modal>
-
-
 
             {/* Sort Filter Modal */}
             <Modal
@@ -2041,31 +2294,52 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={() => setShowSortFilter(false)}
             >
-                <Pressable style={styles.filterModalOverlay} onPress={() => setShowSortFilter(false)}>
-                    <Pressable style={styles.filterModalContent} onPress={(e) => e.stopPropagation()}>
+                <View style={styles.filterSheetRoot}>
+                    <Pressable
+                        style={styles.filterSheetBackdrop}
+                        onPress={() => setShowSortFilter(false)}
+                        accessibilityLabel="Dismiss"
+                    />
+                    <View style={styles.filterSheetPanel}>
                         <View style={styles.filterModalHeader}>
-                            <Text style={styles.filterModalTitle}>Sort By</Text>
-                            <TouchableOpacity onPress={() => setShowSortFilter(false)}>
+                            <Text style={styles.filterModalTitle}>Sort by</Text>
+                            <TouchableOpacity onPress={() => setShowSortFilter(false)} hitSlop={12}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
-                        <ScrollView style={styles.filterModalScroll}>
-                            {['Sort by Date', 'Sort by Division', 'Sort by Sport', 'Sort by Location', 'Sort by Event Type'].map((sort) => (
-                                <TouchableOpacity
-                                    key={sort}
-                                    style={styles.filterOption}
-                                    onPress={() => {
-                                        setSelectedSort(sort);
-                                        setShowSortFilter(false);
-                                    }}
-                                >
-                                    <Text style={styles.filterOptionText}>{sort}</Text>
-                                    {selectedSort === sort && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
+                        <FlatList
+                            data={[...SORT_OPTIONS]}
+                            keyExtractor={(item) => item}
+                            keyboardShouldPersistTaps="handled"
+                            style={styles.filterModalScroll}
+                            renderItem={({ item: sort }) => {
+                                const selected = selectedSort === sort;
+                                return (
+                                    <TouchableOpacity
+                                        style={[styles.filterOption, selected && styles.filterOptionSelected]}
+                                        onPress={() => {
+                                            setSelectedSort(sort);
+                                            setShowSortFilter(false);
+                                        }}
+                                        activeOpacity={0.85}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.filterOptionText,
+                                                selected && styles.filterOptionTextSelected,
+                                            ]}
+                                        >
+                                            {sort}
+                                        </Text>
+                                        {selected && (
+                                            <Ionicons name="checkmark" size={20} color="#fff" />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            }}
+                        />
+                    </View>
+                </View>
             </Modal>
             {/* Edit Event Modal */}
             <Modal
@@ -2856,6 +3130,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: theme.spacing.sm,
         paddingVertical: theme.spacing.xs,
         gap: theme.spacing.xs,
+        flexGrow: 1,
+        flexShrink: 1,
+        minWidth: '28%',
+        maxWidth: '100%',
+        ...(Platform.OS === 'web'
+            ? { outlineStyle: 'none' as const, outlineWidth: 0 as const }
+            : {}),
     },
     filterText: {
         fontSize: 12,
@@ -3132,7 +3413,25 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
     },
 
-    // Filter Modal Styles
+    // Filter bottom sheets (backdrop + panel are siblings — matches web / Elective pattern)
+    filterSheetRoot: {
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
+    filterSheetBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    filterSheetPanel: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '70%',
+        paddingBottom: theme.spacing.xl,
+        width: '100%',
+        maxWidth: 600,
+        alignSelf: 'center',
+    },
     filterModalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -3177,6 +3476,14 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 16,
         color: theme.colors.text,
+        flex: 1,
+    },
+    filterOptionSelected: {
+        backgroundColor: FILTER_SHEET_ORANGE,
+    },
+    filterOptionTextSelected: {
+        color: '#fff',
+        fontWeight: '600',
     },
 
     // List View Modal Styles
@@ -3238,6 +3545,9 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.md,
         paddingVertical: theme.spacing.xs,
         paddingHorizontal: theme.spacing.sm,
+        ...(Platform.OS === 'web'
+            ? { outlineStyle: 'none' as const, outlineWidth: 0 as const }
+            : {}),
     },
     filterButtonText: {
         ...theme.typography.body,

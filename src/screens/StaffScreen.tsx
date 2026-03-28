@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { buildStaffInsertRow, formatIsoDateToUs, formatStaffTypeFromDb } from '../api/staffPayload';
 import { useRole } from '../hooks/useRole';
 import CalendarWidget, { type CalendarWidgetEvent } from '../components/CalendarWidget';
+import { StaffLeaderAssignmentModal } from '../components/StaffLeaderAssignmentModal';
 
 const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
     <View style={styles.header}>
@@ -42,8 +43,9 @@ export const StaffScreen = ({ navigation }: any) => {
         addStaff: false,
         editStaff: false,
         assignWristband: false,
+        assignLeaders: false,
         uploadCsv: false,
-        formatGuide: false
+        formatGuide: false,
     });
 
     const [assignTab, setAssignTab] = useState<'individual' | 'bulk'>('individual');
@@ -206,8 +208,31 @@ export const StaffScreen = ({ navigation }: any) => {
                         </Text>
                     </TouchableOpacity>
 
+                    {isAdmin && (
+                        <Pressable
+                            onPress={() => toggleModal('assignLeaders', true)}
+                            style={({ pressed, hovered }) => [
+                                styles.actionBtn,
+                                styles.secondaryBtn,
+                                (Boolean(hovered) || pressed) && styles.assignLeadersBtnHover,
+                            ]}
+                        >
+                            {({ pressed, hovered }) => {
+                                const hot = Boolean(hovered) || pressed;
+                                return (
+                                    <>
+                                        <Ionicons name="people" size={18} color={hot ? '#fff' : theme.colors.text} />
+                                        <Text style={[styles.btnText, hot && styles.assignLeadersBtnHotText]}>
+                                            Assign Leaders
+                                        </Text>
+                                    </>
+                                );
+                            }}
+                        </Pressable>
+                    )}
+
                     <TouchableOpacity style={styles.secondaryBtn} onPress={() => toggleModal('assignWristband', true)}>
-                        <Ionicons name="pricetag-outline" size={18} color={theme.colors.text} />
+                        <Ionicons name="radio-outline" size={18} color={theme.colors.text} />
                         <Text style={styles.btnText}>Assign Wristbands</Text>
                     </TouchableOpacity>
 
@@ -355,6 +380,15 @@ export const StaffScreen = ({ navigation }: any) => {
             </ScrollView>
 
             {/* --- MODALS --- */}
+
+            {companyId ? (
+                <StaffLeaderAssignmentModal
+                    visible={modalVisible.assignLeaders}
+                    onClose={() => toggleModal('assignLeaders', false)}
+                    companyId={companyId}
+                    season={season}
+                />
+            ) : null}
 
             {/* 1. Assign Wristbands Modal */}
             <Modal
@@ -1292,6 +1326,11 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         gap: 6,
     },
+    assignLeadersBtnHover: {
+        backgroundColor: '#f97316',
+        borderColor: '#ea580c',
+    },
+    assignLeadersBtnHotText: { color: '#fff' },
     primaryBtn: {
         backgroundColor: theme.colors.secondary,
         flexDirection: 'row',
