@@ -12,6 +12,9 @@ import {
     Pressable,
     Platform,
     KeyboardAvoidingView,
+    LayoutAnimation,
+    UIManager,
+    useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,6 +24,13 @@ import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { MobileUserMenu } from '../components/MobileUserMenu';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+/** Match web `md:grid-cols-2` — side-by-side from this width. */
+const TIGER_EDITOR_TWO_COL_MIN_WIDTH = 560;
 
 function formatYmd(d: Date): string {
     const y = d.getFullYear();
@@ -103,6 +113,8 @@ const TLC_EDITOR_CARDS: {
     emoji: string;
     placeholder: string;
     minHeight: number;
+    /** In two-column layout, span full row (web `md:col-span-2`). */
+    wideGridFullWidth?: boolean;
 }[] = [
     {
         key: 'laundry',
@@ -153,6 +165,7 @@ const TLC_EDITOR_CARDS: {
         emoji: '🗓️',
         placeholder: 'Enter staff days off information',
         minHeight: 140,
+        wideGridFullWidth: true,
     },
 ];
 
@@ -161,6 +174,8 @@ const SETTINGS_ORANGE = '#f97316';
 const SETTINGS_ORANGE_BORDER = '#ea580c';
 
 export const TigerTimesScreen = ({ navigation }: { navigation: any }) => {
+    const { width: windowWidth } = useWindowDimensions();
+    const editorTwoColumn = windowWidth >= TIGER_EDITOR_TWO_COL_MIN_WIDTH;
     const { companyId, season, isTimberLakeCamp } = useCompany();
     const [selectedDate, setSelectedDate] = useState(() => new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -376,7 +391,10 @@ export const TigerTimesScreen = ({ navigation }: { navigation: any }) => {
                 .select('id')
                 .single();
             if (error) throw error;
-            if (data?.id) setRowId(data.id);
+            if (data?.id) {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                setRowId(data.id);
+            }
             Alert.alert('Created', 'New entry created successfully.');
         } catch (e: any) {
             Alert.alert('Error', e?.message ?? 'Failed to create entry. Check your permissions.');
@@ -491,11 +509,23 @@ export const TigerTimesScreen = ({ navigation }: { navigation: any }) => {
                         </View>
                     ) : (
                         <>
-                            <View style={styles.editorGrid}>
+                            <View
+                                style={[
+                                    styles.editorGrid,
+                                    editorTwoColumn && styles.editorGridTwoColumn,
+                                ]}
+                            >
                                 {TLC_EDITOR_CARDS.map((c) => (
                                     <View
                                         key={c.key}
-                                        style={[styles.categoryCard, { borderTopColor: tigerColors[c.colorLabel] }]}
+                                        style={[
+                                            styles.categoryCard,
+                                            editorTwoColumn &&
+                                                (c.wideGridFullWidth
+                                                    ? styles.categoryCardGridFull
+                                                    : styles.categoryCardGridHalf),
+                                            { borderTopColor: tigerColors[c.colorLabel] },
+                                        ]}
                                     >
                                         <View style={styles.categoryHeader}>
                                             <Text style={styles.categoryEmoji}>{c.emoji}</Text>
@@ -947,7 +977,24 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     createEntryBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
-    editorGrid: { gap: theme.spacing.md },
+    editorGrid: {
+        width: '100%',
+        gap: theme.spacing.md,
+    },
+    editorGridTwoColumn: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        rowGap: theme.spacing.md,
+        columnGap: theme.spacing.sm,
+    },
+    categoryCardGridHalf: {
+        width: '48%',
+        flexGrow: 0,
+    },
+    categoryCardGridFull: {
+        width: '100%',
+    },
     categoryCard: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
