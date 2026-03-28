@@ -11,6 +11,7 @@ import {
     Alert,
     ActivityIndicator,
     Pressable,
+    Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,7 +35,21 @@ interface SportsScreenProps {
 
 
 const GENDERS = ['All Genders', 'Boys', 'Girls'];
-const SPORTS = ['All Sports', 'Soccer', 'Basketball', 'Tennis', 'Swimming', 'Baseball', 'Volleyball'];
+
+/** Match web SportsAcademy: compare normalized strings; support common DB spellings. */
+function childGenderMatchesFilter(
+    childGender: string | null | undefined,
+    filter: (typeof GENDERS)[number],
+): boolean {
+    if (filter === 'All Genders') return true;
+    const g = (childGender || '').toLowerCase().trim();
+    const sel = filter === 'Boys' ? 'boys' : 'girls';
+    if (g === sel) return true;
+    if (filter === 'Boys') {
+        return g === 'boy' || g === 'male' || g === 'm' || g.startsWith('boy');
+    }
+    return g === 'girl' || g === 'female' || g === 'f' || g.startsWith('girl');
+}
 
 const ENROLLMENT_SPORTS = [
     'Baseball',
@@ -66,7 +81,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
-    const [selectedGender, setSelectedGender] = useState('All Genders');
+    const [selectedGender, setSelectedGender] = useState<(typeof GENDERS)[number]>('All Genders');
     const [selectedSport, setSelectedSport] = useState('All Sports');
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
     const [showGenderDropdown, setShowGenderDropdown] = useState(false);
@@ -81,7 +96,15 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const { data: campersData = [] } = useCampers(companyId, season);
     const { data: enrollmentsData = [] } = useSportsEnrollments(companyId, season);
     const { data: divisionsData = [] } = useDivisions(companyId);
-    
+
+    /** Same idea as web: All Sports + unique sport_name values from enrollments. */
+    const sportFilterOptions = useMemo(() => {
+        const unique = [
+            ...new Set(enrollmentsData.map((e) => e.sport_name).filter(Boolean) as string[]),
+        ].sort((a, b) => a.localeCompare(b));
+        return ['All Sports', ...unique];
+    }, [enrollmentsData]);
+
     const filteredEnrollments = useMemo(() => {
         let filtered = enrollmentsData;
         
@@ -89,8 +112,9 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
             filtered = filtered.filter(e => e.children?.division_id === selectedDivision);
         }
         if (selectedGender !== 'All Genders') {
-            const genderFilter = selectedGender === 'Boys' ? 'boy' : 'girl';
-            filtered = filtered.filter(e => e.children?.gender === genderFilter);
+            filtered = filtered.filter((e) =>
+                childGenderMatchesFilter(e.children?.gender, selectedGender),
+            );
         }
         if (selectedSport !== 'All Sports') {
             filtered = filtered.filter(e => e.sport_name === selectedSport);
@@ -657,7 +681,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         {/* Division Filter */}
                         <View style={styles.filterItem}>
                             <TouchableOpacity
-                                style={styles.filterDropdown}
+                                style={[styles.filterDropdown, styles.filterDropdownTouchable]}
                                 onPress={() => {
                                     setShowDivisionDropdown(!showDivisionDropdown);
                                     setShowGenderDropdown(false);
@@ -676,7 +700,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         {/* Gender Filter */}
                         <View style={styles.filterItem}>
                             <TouchableOpacity
-                                style={styles.filterDropdown}
+                                style={[styles.filterDropdown, styles.filterDropdownTouchable]}
                                 onPress={() => {
                                     setShowGenderDropdown(!showGenderDropdown);
                                     setShowDivisionDropdown(false);
@@ -695,7 +719,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         {/* Sport Filter */}
                         <View style={styles.filterItem}>
                             <TouchableOpacity
-                                style={styles.filterDropdown}
+                                style={[styles.filterDropdown, styles.filterDropdownTouchable]}
                                 onPress={() => {
                                     setShowSportDropdown(!showSportDropdown);
                                     setShowDivisionDropdown(false);
@@ -768,63 +792,61 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                     animationType="slide"
                     onRequestClose={() => setShowDivisionDropdown(false)}
                 >
-                    <TouchableOpacity
-                        style={styles.dropdownModalOverlay}
-                        activeOpacity={1}
-                        onPress={() => setShowDivisionDropdown(false)}
-                    >
-                        <View style={styles.dropdownModalContent} onStartShouldSetResponder={() => true}>
-                            <View style={styles.filterDropdownMenuModal}>
-                                <View style={styles.filterDropdownHeader}>
-                                    <Text style={styles.filterDropdownTitle}>Select Division</Text>
-                                    <TouchableOpacity
-                                        onPress={() => setShowDivisionDropdown(false)}
-                                        style={styles.closeButton}
-                                    >
-                                        <Ionicons name="close" size={24} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                </View>
-                                
-                               <FlatList
-                                    data={[{id: 'All Divisions', name: 'All Divisions'}, ...divisionsData]}
-                                    keyExtractor={(item) => item.id}
-                                    renderItem={({ item }) => (
-                                        <TouchableOpacity
-                                            style={[
-                                                styles.filterDropdownItem,
-                                                selectedDivision === item.id &&
-                                                styles.filterDropdownItemSelected,
-                                            ]}
-                                            onPress={() => {
-                                                setSelectedDivision(item.id);
-                                                setShowDivisionDropdown(false);
-                                            }}
-                                        >
-                                            <Text
-                                                style={[
-                                                    styles.filterDropdownItemText,
-                                                    selectedDivision === item.id &&
-                                                    styles.filterDropdownItemTextSelected,
-                                                ]}
-                                            >
-                                                {item.name}
-                                            </Text>
-                                            {selectedDivision === item.id && (
-                                                <Ionicons
-                                                    name="checkmark"
-                                                    size={20}
-                                                    color={theme.colors.secondary}
-                                                    style={styles.checkIcon}
-                                                />
-                                            )}
-                                        </TouchableOpacity>
-                                    )}
-                                    nestedScrollEnabled={true}
-                                />
-    
+                    <View style={styles.filterModalRoot}>
+                        <Pressable
+                            style={styles.filterModalBackdrop}
+                            onPress={() => setShowDivisionDropdown(false)}
+                            accessibilityLabel="Dismiss"
+                        />
+                        <View style={styles.filterDropdownMenuModal}>
+                            <View style={styles.filterDropdownHeader}>
+                                <Text style={styles.filterDropdownTitle}>Select Division</Text>
+                                <TouchableOpacity
+                                    onPress={() => setShowDivisionDropdown(false)}
+                                    style={styles.closeButton}
+                                >
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
                             </View>
+
+                            <FlatList
+                                data={[{ id: 'All Divisions', name: 'All Divisions' }, ...divisionsData]}
+                                keyExtractor={(item) => item.id}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.filterDropdownItem,
+                                            selectedDivision === item.id &&
+                                                styles.filterDropdownItemSelected,
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedDivision(item.id);
+                                            setShowDivisionDropdown(false);
+                                        }}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.filterDropdownItemText,
+                                                selectedDivision === item.id &&
+                                                    styles.filterDropdownItemTextSelected,
+                                            ]}
+                                        >
+                                            {item.name}
+                                        </Text>
+                                        {selectedDivision === item.id && (
+                                            <Ionicons
+                                                name="checkmark"
+                                                size={20}
+                                                color={theme.colors.secondary}
+                                                style={styles.checkIcon}
+                                            />
+                                        )}
+                                    </TouchableOpacity>
+                                )}
+                                nestedScrollEnabled={true}
+                            />
                         </View>
-                    </TouchableOpacity>
+                    </View>
                 </Modal>
             )}
 
@@ -835,61 +857,59 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                     animationType="slide"
                     onRequestClose={() => setShowGenderDropdown(false)}
                 >
-                    <TouchableOpacity
-                        style={styles.dropdownModalOverlay}
-                        activeOpacity={1}
-                        onPress={() => setShowGenderDropdown(false)}
-                    >
-                        <View style={styles.dropdownModalContent} onStartShouldSetResponder={() => true}>
-                            <View style={styles.filterDropdownMenuModal}>
-                                <View style={styles.filterDropdownHeader}>
-                                    <Text style={styles.filterDropdownTitle}>Select Gender</Text>
-                                    <TouchableOpacity
-                                        onPress={() => setShowGenderDropdown(false)}
-                                        style={styles.closeButton}
-                                    >
-                                        <Ionicons name="close" size={24} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                </View>
-                                <FlatList
-                                    data={GENDERS}
-                                    keyExtractor={(item) => item}
-                                    renderItem={({ item }) => (
-                                        <TouchableOpacity
-                                            style={[
-                                                styles.filterDropdownItem,
-                                                selectedGender === item &&
-                                                styles.filterDropdownItemSelected,
-                                            ]}
-                                            onPress={() => {
-                                                setSelectedGender(item);
-                                                setShowGenderDropdown(false);
-                                            }}
-                                        >
-                                            <Text
-                                                style={[
-                                                    styles.filterDropdownItemText,
-                                                    selectedGender === item &&
-                                                    styles.filterDropdownItemTextSelected,
-                                                ]}
-                                            >
-                                                {item}
-                                            </Text>
-                                            {selectedGender === item && (
-                                                <Ionicons
-                                                    name="checkmark"
-                                                    size={20}
-                                                    color={theme.colors.secondary}
-                                                    style={styles.checkIcon}
-                                                />
-                                            )}
-                                        </TouchableOpacity>
-                                    )}
-                                    nestedScrollEnabled={true}
-                                />
+                    <View style={styles.filterModalRoot}>
+                        <Pressable
+                            style={styles.filterModalBackdrop}
+                            onPress={() => setShowGenderDropdown(false)}
+                            accessibilityLabel="Dismiss"
+                        />
+                        <View style={styles.filterDropdownMenuModal}>
+                            <View style={styles.filterDropdownHeader}>
+                                <Text style={styles.filterDropdownTitle}>Select Gender</Text>
+                                <TouchableOpacity
+                                    onPress={() => setShowGenderDropdown(false)}
+                                    style={styles.closeButton}
+                                >
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
                             </View>
+                            <FlatList
+                                data={GENDERS}
+                                keyExtractor={(item) => item}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.filterDropdownItem,
+                                            selectedGender === item && styles.filterDropdownItemSelected,
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedGender(item);
+                                            setShowGenderDropdown(false);
+                                        }}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.filterDropdownItemText,
+                                                selectedGender === item &&
+                                                    styles.filterDropdownItemTextSelected,
+                                            ]}
+                                        >
+                                            {item}
+                                        </Text>
+                                        {selectedGender === item && (
+                                            <Ionicons
+                                                name="checkmark"
+                                                size={20}
+                                                color={theme.colors.secondary}
+                                                style={styles.checkIcon}
+                                            />
+                                        )}
+                                    </TouchableOpacity>
+                                )}
+                                nestedScrollEnabled={true}
+                            />
                         </View>
-                    </TouchableOpacity>
+                    </View>
                 </Modal>
             )}
 
@@ -900,61 +920,59 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                     animationType="slide"
                     onRequestClose={() => setShowSportDropdown(false)}
                 >
-                    <TouchableOpacity
-                        style={styles.dropdownModalOverlay}
-                        activeOpacity={1}
-                        onPress={() => setShowSportDropdown(false)}
-                    >
-                        <View style={styles.dropdownModalContent} onStartShouldSetResponder={() => true}>
-                            <View style={styles.filterDropdownMenuModal}>
-                                <View style={styles.filterDropdownHeader}>
-                                    <Text style={styles.filterDropdownTitle}>Select Sport</Text>
-                                    <TouchableOpacity
-                                        onPress={() => setShowSportDropdown(false)}
-                                        style={styles.closeButton}
-                                    >
-                                        <Ionicons name="close" size={24} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                </View>
-                                <FlatList
-                                    data={SPORTS}
-                                    keyExtractor={(item) => item}
-                                    renderItem={({ item }) => (
-                                        <TouchableOpacity
-                                            style={[
-                                                styles.filterDropdownItem,
-                                                selectedSport === item &&
-                                                styles.filterDropdownItemSelected,
-                                            ]}
-                                            onPress={() => {
-                                                setSelectedSport(item);
-                                                setShowSportDropdown(false);
-                                            }}
-                                        >
-                                            <Text
-                                                style={[
-                                                    styles.filterDropdownItemText,
-                                                    selectedSport === item &&
-                                                    styles.filterDropdownItemTextSelected,
-                                                ]}
-                                            >
-                                                {item}
-                                            </Text>
-                                            {selectedSport === item && (
-                                                <Ionicons
-                                                    name="checkmark"
-                                                    size={20}
-                                                    color={theme.colors.secondary}
-                                                    style={styles.checkIcon}
-                                                />
-                                            )}
-                                        </TouchableOpacity>
-                                    )}
-                                    nestedScrollEnabled={true}
-                                />
+                    <View style={styles.filterModalRoot}>
+                        <Pressable
+                            style={styles.filterModalBackdrop}
+                            onPress={() => setShowSportDropdown(false)}
+                            accessibilityLabel="Dismiss"
+                        />
+                        <View style={styles.filterDropdownMenuModal}>
+                            <View style={styles.filterDropdownHeader}>
+                                <Text style={styles.filterDropdownTitle}>Select Sport</Text>
+                                <TouchableOpacity
+                                    onPress={() => setShowSportDropdown(false)}
+                                    style={styles.closeButton}
+                                >
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
                             </View>
+                            <FlatList
+                                data={sportFilterOptions}
+                                keyExtractor={(item) => item}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.filterDropdownItem,
+                                            selectedSport === item && styles.filterDropdownItemSelected,
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedSport(item);
+                                            setShowSportDropdown(false);
+                                        }}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.filterDropdownItemText,
+                                                selectedSport === item &&
+                                                    styles.filterDropdownItemTextSelected,
+                                            ]}
+                                        >
+                                            {item}
+                                        </Text>
+                                        {selectedSport === item && (
+                                            <Ionicons
+                                                name="checkmark"
+                                                size={20}
+                                                color={theme.colors.secondary}
+                                                style={styles.checkIcon}
+                                            />
+                                        )}
+                                    </TouchableOpacity>
+                                )}
+                                nestedScrollEnabled={true}
+                            />
                         </View>
-                    </TouchableOpacity>
+                    </View>
                 </Modal>
             )}
 
@@ -2079,20 +2097,22 @@ const styles = StyleSheet.create({
         paddingVertical: theme.spacing.xs,
         minHeight: 36,
     },
+    /** Web: avoid thick focus ring on one control (dropdowns should look identical). */
+    filterDropdownTouchable:
+        Platform.OS === 'web'
+            ? { outlineStyle: 'none' as const, outlineWidth: 0 as const }
+            : {},
     filterDropdownText: {
         ...theme.typography.bodySmall,
         flex: 1,
     },
-    dropdownModalOverlay: {
+    filterModalRoot: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    },
-    dropdownModalContent: {
-        // removed flex: 1 to prevent collapse on mobile
         justifyContent: 'flex-end',
-        alignItems: 'center',
-        paddingTop: 0,
-        paddingHorizontal: 0,
+    },
+    filterModalBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
     },
     filterDropdownMenuModal: {
         backgroundColor: theme.colors.surface,

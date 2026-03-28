@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
 import { useStaff } from '../api/staff';
+import { isTylerHillCamp } from '../constants/camps';
 
 interface StaffMember {
     id: string;
@@ -16,6 +17,8 @@ interface StaffMember {
     isOut: boolean;
     isIn: boolean;
     isSleepingOut: boolean;
+    /** Matches web: on duty = not marked day off */
+    isDayOff: boolean;
     staffId: string;
     bunkId: string;
     dayOffId?: string;
@@ -26,6 +29,7 @@ interface BunkRow {
     bunk_number: number;
     bunk_name: string | null;
     division_id: string | null;
+    divisions?: { id?: string; name?: string; gender?: string | null } | null;
 }
 
 interface BunkStaffRow {
@@ -39,17 +43,20 @@ interface BunkStaffRow {
 }
 
 export const ODManagementScreen = ({ navigation }: any) => {
-    const { companyId, season } = useCompany();
+    const { companyId, season, companySlug } = useCompany();
+    /** Same as web ODManagement.tsx — Free Play hidden for Tyler Hill */
+    const showFreePlay = !isTylerHillCamp(companySlug);
     const queryClient = useQueryClient();
     const { width } = useWindowDimensions();
     const isCompactModal = width < 760;
 
-    const [activeTab, setActiveTab] = useState<'OD' | 'OFF'>('OD');
+    const [activeTab, setActiveTab] = useState<'OD' | 'OFF' | 'FREE_PLAY'>('OD');
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [searchQuery, setSearchQuery] = useState('');
+    /** Matches web ODManagement.tsx `genderFilter` */
+    const [genderFilter, setGenderFilter] = useState<'all' | 'girls' | 'boys'>('all');
     const [showManageBunksModal, setShowManageBunksModal] = useState(false);
     const [showNewModal, setShowNewModal] = useState(false);
-    const [showModeModal, setShowModeModal] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [newBunkNumber, setNewBunkNumber] = useState('1');
     const [newBunkName, setNewBunkName] = useState('');
@@ -96,7 +103,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
             if (!companyId) return [];
             const { data, error } = await supabase
                 .from('bunks')
-                .select('id, bunk_number, bunk_name, division_id')
+                .select('id, bunk_number, bunk_name, division_id, divisions:division_id(id, name, gender)')
                 .eq('company_id', companyId)
                 .eq('season', season)
                 .eq('is_active', true)
@@ -128,7 +135,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
             if (!companyId) return [];
             const { data, error } = await supabase
                 .from('divisions')
-                .select('id, name')
+                .select('id, name, gender')
                 .eq('company_id', companyId)
                 .eq('is_active', true)
                 .order('sort_order', { ascending: true });
@@ -266,6 +273,14 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const bunkById = new Map((bunksList || []).map((b: BunkRow) => [b.id, b]));
     const dayOffByStaffId = new Map((staffDaysOff || []).map((row: any) => [row.staff_id, row]));
 
+    /** Same as web `getBunkGender` (ODManagement.tsx) */
+    const getBunkGender = (bunk: BunkRow | undefined): string | null => {
+        if (!bunk) return null;
+        const d = bunk.divisions as { gender?: string | null } | { gender?: string | null }[] | null | undefined;
+        if (Array.isArray(d)) return d[0]?.gender ?? null;
+        return d?.gender ?? null;
+    };
+
     const staffMembers: StaffMember[] = (bunkStaffList || [])
         .map((bs: BunkStaffRow) => {
             const staff = bs.staff || staffById.get(bs.staff_id);
@@ -282,17 +297,31 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 isOut: !!dayOff?.checked_out,
                 isIn: !!dayOff?.checked_in,
                 isSleepingOut: !!dayOff?.is_sleeping_out,
+                isDayOff: !!dayOff?.is_day_off,
             };
         })
         .filter(Boolean) as StaffMember[];
 
-    const filteredStaff = staffMembers.filter(staff => {
-        if (activeTab === 'OD' && (staff.isOut || staff.isSleepingOut)) return false;
-        if (activeTab === 'OFF' && !staff.isOut && !staff.isSleepingOut && !staff.isIn) return false;
+    const filteredStaff = staffMembers.filter((staff) => {
         if (searchQuery && !staff.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
             !staff.bunk.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        const bunk = bunkById.get(staff.bunkId);
+        const raw = getBunkGender(bunk);
+        const bunkGender = raw ? String(raw).toLowerCase() : null;
+        const matchesGender =
+            genderFilter === 'all' ||
+            (genderFilter === 'girls' && bunkGender === 'girls') ||
+            (genderFilter === 'boys' && bunkGender === 'boys');
+        if (!matchesGender) return false;
+        if (activeTab === 'OD') return !staff.isDayOff;
+        if (activeTab === 'OFF') return staff.isDayOff;
+        if (activeTab === 'FREE_PLAY') return staff.isSleepingOut;
         return true;
     });
+
+    useEffect(() => {
+        if (!showFreePlay && activeTab === 'FREE_PLAY') setActiveTab('OD');
+    }, [showFreePlay, activeTab]);
 
     const handleManageBunks = () => {
         setShowManageBunksModal(true);
@@ -373,25 +402,35 @@ export const ODManagementScreen = ({ navigation }: any) => {
         }
     };
 
-    const handleOutPress = (staff: StaffMember) => {
-        const dayOff = dayOffByStaffId.get(staff.staffId);
-        if (dayOff?.is_day_off) {
-            supabase
-                .from('staff_days_off')
-                .update({ checked_out: true, checked_out_at: new Date().toISOString() })
-                .eq('id', dayOff.id)
-                .then(({ error }) => {
-                    if (error) {
-                        Alert.alert('Error', error.message || 'Failed to mark out');
-                        return;
-                    }
-                    queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
-                });
-            return;
+    /** Align with web `handleToggleDayOff` (ODManagement.tsx) */
+    const handleToggleDayOff = async (staffId: string, field: 'is_day_off' | 'is_night_off' | 'is_sleeping_out') => {
+        if (!companyId || !season) return;
+        const existing = (staffDaysOff as any[]).find((d) => d.staff_id === staffId);
+        try {
+            if (existing) {
+                const cur = !!existing[field];
+                const newValue = !cur;
+                const updates: Record<string, boolean> = { [field]: newValue };
+                if (field === 'is_day_off') updates.is_night_off = newValue;
+                const { error } = await supabase.from('staff_days_off').update(updates).eq('id', existing.id);
+                if (error) throw error;
+            } else {
+                const newRecord = {
+                    company_id: companyId,
+                    staff_id: staffId,
+                    date: dateString,
+                    season,
+                    is_day_off: field === 'is_day_off',
+                    is_night_off: field === 'is_day_off' || field === 'is_night_off',
+                    is_sleeping_out: field === 'is_sleeping_out',
+                };
+                const { error } = await supabase.from('staff_days_off').insert(newRecord);
+                if (error) throw error;
+            }
+            await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+        } catch (e: any) {
+            Alert.alert('Error', e?.message ?? 'Could not update');
         }
-        setLateOverrideStaffId(staff.staffId);
-        setLateOverrideReason('');
-        setShowLateOverrideModal(true);
     };
 
     const handleApproveLateOverride = async () => {
@@ -508,29 +547,32 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     </TouchableOpacity>
                 </View>
 
-                {/* Additional Action Buttons */}
-                <View style={styles.additionalActions}>
-                    <TouchableOpacity
-                        style={styles.newButton}
-                        onPress={() => setShowNewModal(true)}
-                    >
-                        <Text style={styles.newButtonText}>NEW</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.modeButton}
-                        onPress={() => setShowModeModal(true)}
-                    >
-                        <Text style={styles.modeButtonText}>MODE</Text>
-                    </TouchableOpacity>
+                {/* Filter by Gender — matches web ODManagement.tsx */}
+                <View style={styles.genderFilterBlock}>
+                    <Text style={styles.genderFilterLabel}>Filter by Gender</Text>
+                    <View style={styles.genderFilterRow}>
+                        {(['all', 'girls', 'boys'] as const).map((key) => (
+                            <TouchableOpacity
+                                key={key}
+                                style={[styles.genderChip, genderFilter === key && styles.genderChipActive]}
+                                onPress={() => setGenderFilter(key)}
+                                activeOpacity={0.85}
+                            >
+                                <Text style={[styles.genderChipText, genderFilter === key && styles.genderChipTextActive]}>
+                                    {key === 'all' ? 'All' : key === 'girls' ? 'Girls' : 'Boys'}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
                 </View>
 
-                {/* Tabs */}
+                {/* OD / Off / Free Play — matches web ODManagement.tsx tabs */}
                 <View style={styles.tabsContainer}>
                     <TouchableOpacity
                         style={[styles.tab, activeTab === 'OD' && styles.tabActive]}
                         onPress={() => setActiveTab('OD')}
                     >
-                        <Text style={[styles.tabText, activeTab === 'OD' && styles.tabTextActive]}>
+                        <Text style={[styles.tabText, activeTab === 'OD' && styles.tabTextActive]} numberOfLines={1}>
                             OD
                         </Text>
                     </TouchableOpacity>
@@ -538,24 +580,48 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         style={[styles.tab, activeTab === 'OFF' && styles.tabActive]}
                         onPress={() => setActiveTab('OFF')}
                     >
-                        <Text style={[styles.tabText, activeTab === 'OFF' && styles.tabTextActive]}>
-                            OFF
+                        <Text style={[styles.tabText, activeTab === 'OFF' && styles.tabTextActive]} numberOfLines={1}>
+                            Off
                         </Text>
                     </TouchableOpacity>
+                    {showFreePlay ? (
+                        <TouchableOpacity
+                            style={[styles.tab, activeTab === 'FREE_PLAY' && styles.tabActiveFreePlay]}
+                            onPress={() => setActiveTab('FREE_PLAY')}
+                        >
+                            <Text
+                                style={[styles.tabText, activeTab === 'FREE_PLAY' && styles.tabTextActiveFreePlay]}
+                                numberOfLines={1}
+                            >
+                                Free Play
+                            </Text>
+                        </TouchableOpacity>
+                    ) : null}
                 </View>
 
-                {/* On Duty Staff Card */}
                 <StyledCard style={styles.staffCard}>
                     <View style={styles.cardHeader}>
-                        <Text style={styles.cardTitle}>
-                            {activeTab === 'OD' ? 'On Duty Staff' : 'Off Duty Staff'}
-                        </Text>
+                        <View style={styles.cardTitleRow}>
+                            <Text style={[styles.cardTitle, { flex: 1, minWidth: 0 }]} numberOfLines={2}>
+                                {activeTab === 'OD'
+                                    ? 'On Duty Staff'
+                                    : activeTab === 'OFF'
+                                      ? 'Staff Off'
+                                      : 'Free Play Shifts'}
+                            </Text>
+                            <TouchableOpacity onPress={() => setShowNewModal(true)} hitSlop={8} style={styles.cardAddEntryBtn}>
+                                <Text style={styles.cardAddEntryText}>Add entry</Text>
+                            </TouchableOpacity>
+                        </View>
                         <Text style={styles.cardSubtitle}>
-                            Staff members {activeTab === 'OD' ? 'on duty' : 'off duty'} for {formatDate(selectedDate)}
+                            {activeTab === 'OD'
+                                ? `Staff members on duty for ${formatDate(selectedDate)}`
+                                : activeTab === 'OFF'
+                                  ? `Staff members off for ${formatDate(selectedDate)}`
+                                  : `Staff scheduled for Free Play for ${formatDate(selectedDate)}`}
                         </Text>
                     </View>
 
-                    {/* Search Bar */}
                     <View style={styles.searchBar}>
                         <Ionicons name="search-outline" size={20} color={theme.colors.textSecondary} />
                         <TextInput
@@ -567,32 +633,81 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         />
                     </View>
 
-                    {/* Table Headers */}
-                    {bunksList.length > 0 && (
-                        <View style={styles.tableHeaders}>
-                            <Text style={[styles.tableHeader, { flex: 1.5 }]}>Bunk</Text>
-                            <Text style={[styles.tableHeader, { flex: 2 }]}>Name</Text>
-                            <Text style={[styles.tableHeader, { flex: 1 }]}>Out</Text>
-                            <Text style={[styles.tableHeader, { flex: 1 }]}>In</Text>
-                            <Text style={[styles.tableHeader, { flex: 1 }]}>Actions</Text>
-                        </View>
-                    )}
-
-                    {/* Staff List or Empty State */}
                     {bunksList.length === 0 ? (
                         <View style={styles.emptyState}>
                             <Text style={styles.emptyText}>
-                                No bunks configured. Click Manage Bunks to set up bunks and assign staff.
+                                No bunks configured. Use Manage Bunks to set up bunks and assign staff.
                             </Text>
                         </View>
                     ) : filteredStaff.length === 0 ? (
                         <View style={styles.emptyState}>
                             <Text style={styles.emptyText}>
-                                No staff members found {activeTab === 'OD' ? 'on duty' : 'off duty'} for this date.
+                                {activeTab === 'OD'
+                                    ? 'No staff on duty found.'
+                                    : activeTab === 'OFF'
+                                      ? 'No staff off today.'
+                                      : 'No staff scheduled for Free Play today.'}
                             </Text>
+                        </View>
+                    ) : activeTab === 'FREE_PLAY' ? (
+                        <View style={styles.staffList}>
+                            <View style={styles.tableHeaders}>
+                                <Text style={[styles.tableHeader, { flex: 1.4 }]}>Bunk</Text>
+                                <Text style={[styles.tableHeader, { flex: 1.8 }]}>Name</Text>
+                                <Text style={[styles.tableHeader, { flex: 1.2 }]}>Status</Text>
+                                <Text style={[styles.tableHeader, { flex: 1 }]}>Actions</Text>
+                            </View>
+                            {filteredStaff.map((staff) => (
+                                <View key={staff.id} style={styles.staffRow}>
+                                    <Text style={[styles.staffCell, { flex: 1.4 }]}>{staff.bunk}</Text>
+                                    <Text style={[styles.staffCell, { flex: 1.8 }]}>{staff.name}</Text>
+                                    <View style={{ flex: 1.2, justifyContent: 'center' }}>
+                                        <View style={styles.freePlayBadge}>
+                                            <Text style={styles.freePlayBadgeText}>Free Play</Text>
+                                        </View>
+                                    </View>
+                                    <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                        <TouchableOpacity
+                                            onPress={() => handleToggleDayOff(staff.staffId, 'is_sleeping_out')}
+                                            hitSlop={8}
+                                        >
+                                            <Text style={styles.removeLink}>Remove</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    ) : activeTab === 'OFF' ? (
+                        <View style={styles.staffList}>
+                            <View style={styles.tableHeaders}>
+                                <Text style={[styles.tableHeader, { flex: 1.5 }]}>Bunk</Text>
+                                <Text style={[styles.tableHeader, { flex: 2 }]}>Name</Text>
+                                <Text style={[styles.tableHeader, { flex: 1 }]}>Actions</Text>
+                            </View>
+                            {filteredStaff.map((staff) => (
+                                <View key={staff.id} style={styles.staffRow}>
+                                    <Text style={[styles.staffCell, { flex: 1.5 }]}>{staff.bunk}</Text>
+                                    <Text style={[styles.staffCell, { flex: 2 }]}>{staff.name}</Text>
+                                    <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                        <TouchableOpacity
+                                            onPress={() => handleToggleDayOff(staff.staffId, 'is_day_off')}
+                                            hitSlop={8}
+                                        >
+                                            <Text style={styles.removeLink}>Remove</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            ))}
                         </View>
                     ) : (
                         <View style={styles.staffList}>
+                            <View style={styles.tableHeaders}>
+                                <Text style={[styles.tableHeader, { flex: 1.5 }]}>Bunk</Text>
+                                <Text style={[styles.tableHeader, { flex: 2 }]}>Name</Text>
+                                <Text style={[styles.tableHeader, { flex: 1 }]}>Out</Text>
+                                <Text style={[styles.tableHeader, { flex: 1 }]}>In</Text>
+                                <Text style={[styles.tableHeader, { flex: 1 }]}>Actions</Text>
+                            </View>
                             {filteredStaff.map((staff) => (
                                 <View key={staff.id} style={styles.staffRow}>
                                     <Text style={[styles.staffCell, { flex: 1.5 }]}>{staff.bunk}</Text>
@@ -613,10 +728,10 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                     </View>
                                     <View style={{ flex: 1, alignItems: 'center' }}>
                                         <TouchableOpacity
-                                            style={[styles.newButton, { paddingVertical: 6, paddingHorizontal: 10 }]}
-                                            onPress={() => handleOutPress(staff)}
+                                            style={[styles.markOffPill, { backgroundColor: theme.colors.secondary }]}
+                                            onPress={() => handleToggleDayOff(staff.staffId, 'is_day_off')}
                                         >
-                                            <Text style={styles.newButtonText}>Mark Off</Text>
+                                            <Text style={styles.markOffPillText}>Mark Off</Text>
                                         </TouchableOpacity>
                                     </View>
                                 </View>
@@ -991,30 +1106,6 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
-            {/* Mode Modal */}
-            <Modal
-                visible={showModeModal}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowModeModal(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowModeModal(false)}>
-                    <Pressable style={styles.modal} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Scanner mode</Text>
-                            <TouchableOpacity onPress={() => setShowModeModal(false)}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <View style={styles.modalContent}>
-                            <Text style={styles.modalSubtitle}>
-                                When scanner mode is on, use the RFID input to check staff out or in for their day off. Tap "Scan Wristband" on the main screen to toggle scanner mode.
-                            </Text>
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
             <Modal
                 visible={isDeleteConfirmVisible}
                 transparent
@@ -1143,10 +1234,39 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: theme.colors.text,
     },
-    additionalActions: {
-        flexDirection: 'row',
-        gap: theme.spacing.sm,
+    genderFilterBlock: {
         marginBottom: theme.spacing.md,
+    },
+    genderFilterLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        marginBottom: 8,
+    },
+    genderFilterRow: {
+        flexDirection: 'row',
+        gap: 8,
+        flexWrap: 'wrap',
+    },
+    genderChip: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+    },
+    genderChipActive: {
+        borderColor: theme.colors.secondary,
+        backgroundColor: `${theme.colors.secondary}18`,
+    },
+    genderChipText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    genderChipTextActive: {
+        color: theme.colors.secondary,
     },
     newButton: {
         backgroundColor: theme.colors.secondary,
@@ -1159,20 +1279,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '700',
         color: 'white',
-    },
-    modeButton: {
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        paddingVertical: theme.spacing.sm,
-        paddingHorizontal: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-    },
-    modeButtonText: {
-        ...theme.typography.body,
-        fontSize: 14,
-        fontWeight: '700',
-        color: theme.colors.text,
     },
     tabsContainer: {
         flexDirection: 'row',
@@ -1192,6 +1298,11 @@ const styles = StyleSheet.create({
     tabActive: {
         backgroundColor: theme.colors.secondary,
     },
+    tabActiveFreePlay: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 2,
+        borderColor: '#16a34a',
+    },
     tabText: {
         ...theme.typography.body,
         fontSize: 14,
@@ -1201,11 +1312,57 @@ const styles = StyleSheet.create({
     tabTextActive: {
         color: 'white',
     },
+    tabTextActiveFreePlay: {
+        color: '#15803d',
+        fontWeight: '700',
+    },
+    freePlayBadge: {
+        alignSelf: 'flex-start',
+        backgroundColor: '#e5e7eb',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+    },
+    freePlayBadgeText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    removeLink: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.secondary,
+    },
+    markOffPill: {
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 8,
+    },
+    markOffPillText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '700',
+    },
     staffCard: {
         marginBottom: theme.spacing.md,
     },
     cardHeader: {
         marginBottom: theme.spacing.md,
+    },
+    cardTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+    },
+    cardAddEntryBtn: {
+        paddingVertical: 4,
+        paddingHorizontal: 4,
+    },
+    cardAddEntryText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.secondary,
     },
     cardTitle: {
         ...theme.typography.h2,
