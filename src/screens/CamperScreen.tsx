@@ -222,6 +222,16 @@ export const CamperScreen = ({ navigation }: any) => {
     const totalCampers = filteredCampers.length;
     const totalPages = Math.ceil(totalCampers / campersPerPage);
 
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, selectedDivisionId, sortBy, season]);
+
+    useEffect(() => {
+        if (totalPages > 0 && currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [totalPages, currentPage]);
+
     // Keep scanner input focused when in scanner mode (matches web Roster “tap if focus lost”)
     useEffect(() => {
         if (scannerMode && rfidInputRef.current) {
@@ -2798,9 +2808,10 @@ export const CamperScreen = ({ navigation }: any) => {
                                     <Text style={styles.divisionText}>Division: {camper.division?.name || "N/A"}</Text>
                                     {(() => {
                                         const raw = (camper as any)?.status;
-                                        const normalized = typeof raw === 'string' ? raw.toLowerCase() : 'active';
-                                        const label =
-                                            typeof raw === 'string' && raw.trim().length > 0 ? raw : 'Active';
+                                        const trimmed = typeof raw === 'string' ? raw.trim() : '';
+                                        const normalized =
+                                            trimmed.length === 0 ? 'active' : trimmed.toLowerCase();
+                                        const label = trimmed.length === 0 ? 'Active' : trimmed;
                                         const isActive = normalized === 'active';
 
                                         return (

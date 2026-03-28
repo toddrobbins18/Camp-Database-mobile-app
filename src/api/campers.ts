@@ -1,6 +1,56 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
+/** Matches web Roster / usePermissions: these roles see all divisions for roster queries. */
+const ROSTER_FULL_DIVISION_ACCESS_ROLES = [
+    'admin',
+    'super_admin',
+    'specialist',
+    'staff',
+    'health_center',
+] as const;
+
+/**
+ * Same rules as lovable-web-app usePermissions.getDivisionFilter — used so mobile roster
+ * matches web for division_leader / viewer (and does not show extra campers).
+ */
+export const useRosterDivisionFilter = (companyId: string | null) => {
+    return useQuery({
+        queryKey: ['roster_division_filter', companyId],
+        enabled: !!companyId,
+        queryFn: async (): Promise<string[] | null> => {
+            if (!companyId) return null;
+
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return null;
+
+            const { data: rolesRows, error: rolesError } = await supabase
+                .from('user_roles')
+                .select('role')
+                .eq('user_id', user.id)
+                .eq('company_id', companyId);
+
+            if (rolesError) throw rolesError;
+            const roles = (rolesRows || []).map((r) => r.role);
+
+            if (roles.some((r) => ROSTER_FULL_DIVISION_ACCESS_ROLES.includes(r as any))) {
+                return null;
+            }
+
+            const { data: divPerms, error: divError } = await supabase
+                .from('division_permissions')
+                .select('division_id')
+                .eq('user_id', user.id)
+                .eq('company_id', companyId)
+                .eq('can_access', true);
+
+            if (divError) throw divError;
+            const ids = [...new Set((divPerms || []).map((d) => d.division_id))];
+            return ids.length > 0 ? ids : [];
+        },
+    });
+};
+
 // Define the shape of camper (children table) data
 export interface Camper {
     id?: string;
@@ -41,25 +91,70 @@ export interface Camper {
     created_at?: string;
 }
 
-// Hook to fetch all campers
-export const useCampers = (companyId: string | null, season: string) => {
+const CAMPERS_PAGE_SIZE = 1000;
+
+function useCampersPaged(
+    companyId: string | null,
+    season: string,
+    divisionFilter: string[] | null | undefined,
+    options?: { enabled?: boolean }
+) {
+    const enabled = options?.enabled !== false;
+
     return useQuery({
-        queryKey: ['campers', companyId, season],
+        queryKey: ['campers', companyId, season, divisionFilter ?? null],
         queryFn: async () => {
             if (!companyId) return [];
 
-            const { data, error } = await supabase
-                .from('children')
-                .select('*, division:divisions(id, name, gender, sort_order)')
-                .eq('company_id', companyId)
-                .eq('season', season)
-                .order('name', { ascending: true });
+            const rows: Camper[] = [];
+            let from = 0;
 
-            if (error) throw error;
-            return data as Camper[];
+            for (;;) {
+                const to = from + CAMPERS_PAGE_SIZE - 1;
+                let q = supabase
+                    .from('children')
+                    .select('*, division:divisions(id, name, gender, sort_order)')
+                    .eq('company_id', companyId)
+                    .eq('season', season)
+                    .neq('status', 'inactive')
+                    .order('name', { ascending: true })
+                    .range(from, to);
+
+                if (divisionFilter != null && divisionFilter.length > 0) {
+                    q = q.in('division_id', divisionFilter);
+                }
+
+                const { data, error } = await q;
+                if (error) throw error;
+                const batch = (data ?? []) as Camper[];
+                rows.push(...batch);
+                if (batch.length < CAMPERS_PAGE_SIZE) break;
+                from += CAMPERS_PAGE_SIZE;
+            }
+
+            return rows;
         },
-        enabled: !!companyId && !!season,
+        enabled: !!companyId && !!season && enabled,
     });
+}
+
+/**
+ * Campers for the active company/season, aligned with web Roster:
+ * excludes inactive status, applies division_leader/viewer division filter, and pages past Supabase max_rows.
+ */
+export const useCampers = (companyId: string | null, season: string) => {
+    const divFilter = useRosterDivisionFilter(companyId);
+    const paged = useCampersPaged(companyId, season, divFilter.data ?? null, {
+        enabled: !!companyId && !!season && divFilter.isSuccess,
+    });
+
+    return {
+        ...paged,
+        isLoading:
+            (!!companyId && !!season && divFilter.isLoading) ||
+            (divFilter.isSuccess && paged.isLoading),
+        isError: divFilter.isError || paged.isError,
+    };
 };
 
 // Hook to add a camper
