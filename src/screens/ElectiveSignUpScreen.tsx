@@ -11,8 +11,10 @@ import {
     Alert,
     TextInput,
     Platform,
+    KeyboardAvoidingView,
+    Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { theme } from '../theme/theme';
@@ -23,6 +25,7 @@ import { MobileUserMenu } from '../components/MobileUserMenu';
 import { isTimberLakeCamp } from '../constants/camps';
 import { useRosterDivisionFilter } from '../api/campers';
 import { ensureTimberLakeElectives } from '../api/ensureTimberLakeElectives';
+import { confirmAppAlert, showAppAlert } from '../utils/showAppAlert';
 
 /** Matches lovable-web-app ElectiveSignUp.tsx */
 const PERIODS = [
@@ -52,6 +55,7 @@ function parseYmd(ymd: string): Date {
 type TabId = 'signup' | 'rosters' | 'analytics' | 'history' | 'settings';
 
 export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
+    const insets = useSafeAreaInsets();
     const { companyId, season, companySlug } = useCompany();
     const tlc = isTimberLakeCamp(companySlug);
     const rosterDivisionFilter = useRosterDivisionFilter(companyId);
@@ -344,18 +348,19 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
     };
 
     const handleDeleteElective = async (id: string) => {
-        Alert.alert('Remove elective', 'Deactivate this elective for the camp?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Remove',
-                style: 'destructive',
-                onPress: async () => {
-                    const { error } = await supabase.from('electives').update({ is_active: false }).eq('id', id);
-                    if (error) Alert.alert('Error', error.message);
-                    else fetchData();
-                },
-            },
-        ]);
+        const ok = await confirmAppAlert(
+            'Remove elective',
+            'Deactivate this elective for the camp?',
+            { confirmText: 'Remove', cancelText: 'Cancel', destructive: true }
+        );
+        if (!ok) return;
+        try {
+            const { error } = await supabase.from('electives').update({ is_active: false }).eq('id', id);
+            if (error) showAppAlert('Error', error.message);
+            else fetchData();
+        } catch (e: any) {
+            showAppAlert('Error', e?.message ?? 'Could not remove elective');
+        }
     };
 
     const fetchCamperHistory = async (childId: string) => {
@@ -770,54 +775,92 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                 </ScrollView>
             )}
 
-            {/* Add Elective — bottom sheet */}
+            {/* Add Elective — bottom sheet (scroll + keyboard + safe area; matches other app forms) */}
             <Modal visible={addElectiveOpen} transparent animationType="slide" onRequestClose={() => setAddElectiveOpen(false)}>
-                <Pressable style={styles.sheetOverlay} onPress={() => setAddElectiveOpen(false)}>
-                    <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.sheetHeader}>
-                            <Text style={styles.sheetTitle}>Add New Elective</Text>
-                            <TouchableOpacity onPress={() => setAddElectiveOpen(false)} hitSlop={12}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <Text style={styles.fieldLabel}>Elective name</Text>
-                        <TextInput
-                            style={styles.textIn}
-                            placeholder="e.g. Basketball, Arts & Crafts"
-                            placeholderTextColor={theme.colors.icon}
-                            value={newElectiveName}
-                            onChangeText={setNewElectiveName}
+                <KeyboardAvoidingView
+                    style={styles.addElectiveKbRoot}
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+                >
+                    {/* Backdrop and sheet are siblings so taps on inputs never hit the dismiss handler (web/native). */}
+                    <View style={styles.sheetOverlay}>
+                        <Pressable
+                            style={styles.sheetBackdrop}
+                            onPress={() => setAddElectiveOpen(false)}
+                            accessibilityLabel="Close modal"
                         />
-                        <Text style={styles.fieldLabel}>Capacity</Text>
-                        <TextInput
-                            style={styles.textIn}
-                            keyboardType="number-pad"
-                            value={newElectiveCapacity}
-                            onChangeText={setNewElectiveCapacity}
-                        />
-                        <TouchableOpacity
-                            style={[styles.primaryBtn, { backgroundColor: addBtnGreen }]}
-                            onPress={handleAddElective}
-                        >
-                            <Text style={styles.primaryBtnText}>Add Elective</Text>
-                        </TouchableOpacity>
-                        {electives.length > 0 ? (
-                            <>
-                                <Text style={styles.currentElectivesLabel}>Current electives</Text>
-                                <View style={styles.tagWrap}>
-                                    {electives.map((e) => (
-                                        <View key={e.id} style={styles.tag}>
-                                            <Text style={styles.tagText}>{e.name}</Text>
-                                            <TouchableOpacity onPress={() => handleDeleteElective(e.id)}>
-                                                <Ionicons name="close-circle" size={18} color="#fff" />
-                                            </TouchableOpacity>
-                                        </View>
-                                    ))}
+                        <View style={styles.addElectiveSheet}>
+                            <View style={styles.sheetHeader}>
+                                <Text style={styles.sheetTitle}>Add New Elective</Text>
+                                <TouchableOpacity onPress={() => setAddElectiveOpen(false)} hitSlop={12}>
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                            <ScrollView
+                                keyboardShouldPersistTaps="handled"
+                                showsVerticalScrollIndicator
+                                style={[
+                                    styles.addElectiveScroll,
+                                    { maxHeight: Math.min(Dimensions.get('window').height * 0.72, 560) },
+                                ]}
+                                contentContainerStyle={[
+                                    styles.addElectiveScrollContent,
+                                    { paddingBottom: Math.max(insets.bottom, 16) + 20 },
+                                ]}
+                            >
+                                <View style={styles.addElectiveFormCard}>
+                                    <View style={styles.addElectiveFieldGroup}>
+                                        <Text style={styles.fieldLabel}>Elective name</Text>
+                                        <TextInput
+                                            style={styles.addElectiveInput}
+                                            placeholder="e.g. Basketball, Arts & Crafts"
+                                            placeholderTextColor={theme.colors.icon}
+                                            value={newElectiveName}
+                                            onChangeText={setNewElectiveName}
+                                        />
+                                    </View>
+                                    <View style={[styles.addElectiveFieldGroup, styles.addElectiveFieldGroupLast]}>
+                                        <Text style={styles.fieldLabel}>Capacity</Text>
+                                        <TextInput
+                                            style={styles.addElectiveInput}
+                                            keyboardType="number-pad"
+                                            value={newElectiveCapacity}
+                                            onChangeText={setNewElectiveCapacity}
+                                        />
+                                    </View>
                                 </View>
-                            </>
-                        ) : null}
-                    </Pressable>
-                </Pressable>
+                                <TouchableOpacity
+                                    style={[styles.primaryBtn, styles.addElectiveSubmitBtn, { backgroundColor: addBtnGreen }]}
+                                    onPress={handleAddElective}
+                                    activeOpacity={0.85}
+                                >
+                                    <Text style={styles.primaryBtnText}>Add Elective</Text>
+                                </TouchableOpacity>
+                                {electives.length > 0 ? (
+                                    <View style={styles.currentElectivesCard}>
+                                        <Text style={styles.currentElectivesSectionTitle}>Current electives</Text>
+                                        <Text style={styles.currentElectivesHint}>
+                                            These activities appear in sign-up lists. Tap × to remove.
+                                        </Text>
+                                        <View style={styles.tagWrap}>
+                                            {electives.map((e) => (
+                                                <View key={e.id} style={styles.tag}>
+                                                    <Text style={styles.tagText}>{e.name}</Text>
+                                                    <TouchableOpacity
+                                                        onPress={() => handleDeleteElective(e.id)}
+                                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                    >
+                                                        <Ionicons name="close-circle" size={18} color="#fff" />
+                                                    </TouchableOpacity>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    </View>
+                                ) : null}
+                            </ScrollView>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             {/* Assign elective bottom sheet */}
@@ -1478,8 +1521,11 @@ const styles = StyleSheet.create({
     enrolledBadgeText: { color: '#fff', fontWeight: '700', fontSize: 13 },
     sheetOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end',
+    },
+    sheetBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.5)',
     },
     sheet: {
         backgroundColor: theme.colors.surface,
@@ -1487,6 +1533,79 @@ const styles = StyleSheet.create({
         borderTopRightRadius: theme.borderRadius.xl,
         paddingBottom: 32,
         maxHeight: '75%',
+    },
+    addElectiveKbRoot: {
+        flex: 1,
+    },
+    addElectiveSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        width: '100%',
+        maxHeight: '92%',
+        overflow: 'hidden',
+        zIndex: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+        elevation: 16,
+    },
+    addElectiveScroll: {},
+    addElectiveScrollContent: {
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: 18,
+    },
+    addElectiveFormCard: {
+        backgroundColor: theme.colors.background,
+        borderRadius: theme.borderRadius.lg,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: theme.colors.border,
+        padding: 16,
+        marginBottom: 20,
+    },
+    addElectiveFieldGroup: {
+        marginBottom: 18,
+    },
+    addElectiveFieldGroupLast: {
+        marginBottom: 0,
+    },
+    addElectiveInput: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: 14,
+        paddingHorizontal: 14,
+        fontSize: 16,
+        color: theme.colors.text,
+        backgroundColor: theme.colors.surface,
+        marginTop: 8,
+    },
+    addElectiveSubmitBtn: {
+        marginTop: 0,
+        marginBottom: 12,
+    },
+    currentElectivesCard: {
+        backgroundColor: theme.colors.background,
+        borderRadius: theme.borderRadius.lg,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: theme.colors.border,
+        padding: 16,
+        marginTop: 8,
+    },
+    currentElectivesSectionTitle: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: theme.colors.textSecondary,
+        letterSpacing: 0.6,
+        marginBottom: 6,
+        textTransform: 'uppercase',
+    },
+    currentElectivesHint: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        lineHeight: 17,
+        marginBottom: 14,
     },
     sheetHeader: {
         flexDirection: 'row',
@@ -1532,13 +1651,7 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.md,
     },
     primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-    currentElectivesLabel: {
-        fontSize: 11,
-        color: theme.colors.textSecondary,
-        marginBottom: 8,
-        textTransform: 'uppercase',
-    },
-    tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     tag: {
         flexDirection: 'row',
         alignItems: 'center',
