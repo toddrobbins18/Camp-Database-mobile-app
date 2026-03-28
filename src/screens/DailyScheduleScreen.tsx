@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
     View,
     Text,
@@ -6,15 +6,21 @@ import {
     StyleSheet,
     TouchableOpacity,
     ActivityIndicator,
+    Modal,
+    Pressable,
+    Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useQuery } from '@tanstack/react-query';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { MobileUserMenu } from '../components/MobileUserMenu';
+import { DivisionScheduleUploadTab } from '../components/DivisionScheduleUploadTab';
+import { useRosterDivisionFilter } from '../api/campers';
 
 type ScheduleSource = 'sports' | 'activities' | 'special_events' | 'master_calendar';
 
@@ -33,10 +39,36 @@ function formatYmd(d: Date): string {
     return d.toISOString().split('T')[0];
 }
 
+function formatDatePill(d: Date): string {
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatScheduleHeader(d: Date): string {
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+/** Prefer name (e.g. "Cub Boys") over DB gender when labels were inconsistent. */
+function formatDivisionPickerLine(d: { name: string; gender?: string | null }): string {
+    const nameLower = (d.name || '').toLowerCase();
+    let suffix: string;
+    if (/\bboys?\b/.test(nameLower)) suffix = 'Boys';
+    else if (/\bgirls?\b/.test(nameLower)) suffix = 'Girls';
+    else {
+        const g = (d.gender || '').toLowerCase();
+        suffix = g === 'male' || g === 'm' ? 'Boys' : 'Girls';
+    }
+    return `${d.name} (${suffix})`;
+}
+
 export const DailyScheduleScreen = ({ navigation }: { navigation: any }) => {
     const { companyId, season, isTimberLakeCamp } = useCompany();
+    const rosterDivisionFilter = useRosterDivisionFilter(companyId);
+
+    const [activeTab, setActiveTab] = useState<'schedule' | 'uploads'>('schedule');
     const [selectedDate, setSelectedDate] = useState(() => new Date());
     const [selectedDivision, setSelectedDivision] = useState<string>('all');
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showDivisionModal, setShowDivisionModal] = useState(false);
 
     const dateStr = formatYmd(selectedDate);
 
@@ -46,32 +78,36 @@ export const DailyScheduleScreen = ({ navigation }: { navigation: any }) => {
             if (!companyId) return [];
             const { data, error } = await supabase
                 .from('divisions')
-                .select('id, name, gender')
+                .select('id, name, gender, sort_order')
                 .eq('company_id', companyId)
                 .eq('is_active', true)
-                .order('sort_order');
+                .order('sort_order', { ascending: true });
             if (error) throw error;
-            return data || [];
+            const rows = data || [];
+            return [...rows].sort((a: { sort_order?: number }, b: { sort_order?: number }) => {
+                return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+            });
         },
         enabled: !!companyId,
     });
 
-    const { data: tigerTimes, isLoading: tigerLoading } = useQuery({
-        queryKey: ['dailyWolfContent', companyId, season, dateStr, isTimberLakeCamp],
-        queryFn: async () => {
-            if (!companyId || !season || !isTimberLakeCamp) return null;
-            const { data, error } = await supabase
-                .from('daily_wolf_content')
-                .select('*')
-                .eq('company_id', companyId)
-                .eq('date', dateStr)
-                .eq('season', season)
-                .maybeSingle();
-            if (error) throw error;
-            return data;
-        },
-        enabled: !!companyId && !!season && isTimberLakeCamp,
-    });
+    const divisionFilter = rosterDivisionFilter.data ?? null;
+    /** Same as web DailySchedule: only restrict when user has explicit division IDs assigned. */
+    const hasDivisionRestriction = divisionFilter !== null && divisionFilter.length > 0;
+
+    const accessibleDivisions = useMemo(() => {
+        if (!hasDivisionRestriction) return divisions;
+        return divisions.filter((d: { id: string }) => divisionFilter!.includes(d.id));
+    }, [divisions, divisionFilter, hasDivisionRestriction]);
+
+    useEffect(() => {
+        if (!rosterDivisionFilter.isSuccess || !divisions.length) return;
+        if (!hasDivisionRestriction) return;
+        const first = divisions.find((d: { id: string }) => divisionFilter!.includes(d.id));
+        if (first && selectedDivision === 'all') {
+            setSelectedDivision(first.id);
+        }
+    }, [rosterDivisionFilter.isSuccess, divisions, divisionFilter, hasDivisionRestriction, selectedDivision]);
 
     const fetchScheduleEvents = useCallback(async (): Promise<ScheduleEvent[]> => {
         if (!companyId || !season) return [];
@@ -194,15 +230,31 @@ export const DailyScheduleScreen = ({ navigation }: { navigation: any }) => {
     const { data: events = [], isLoading: eventsLoading } = useQuery({
         queryKey: ['dailyScheduleEvents', companyId, season, dateStr],
         queryFn: fetchScheduleEvents,
-        enabled: !!companyId && !!season,
+        enabled: !!companyId && !!season && rosterDivisionFilter.isFetched,
     });
 
     const filteredEvents = useMemo(() => {
-        if (selectedDivision === 'all') return events;
-        return events.filter(
-            (e) => e.divisions.length === 0 || e.divisions.includes(selectedDivision)
-        );
-    }, [events, selectedDivision]);
+        let filtered = events;
+
+        if (selectedDivision !== 'all') {
+            filtered = filtered.filter(
+                (e) => e.divisions.length === 0 || e.divisions.includes(selectedDivision)
+            );
+        }
+
+        if (hasDivisionRestriction && divisionFilter) {
+            filtered = filtered.filter(
+                (e) => e.divisions.length === 0 || e.divisions.some((d) => divisionFilter.includes(d))
+            );
+        }
+
+        return filtered;
+    }, [events, selectedDivision, hasDivisionRestriction, divisionFilter]);
+
+    const getDivisionNames = (divisionIds: string[]) => {
+        if (divisionIds.length === 0) return 'All Divisions';
+        return divisionIds.map((id) => divisions.find((d: any) => d.id === id)?.name || 'Unknown').join(', ');
+    };
 
     const sourceLabel = (s: ScheduleSource) => {
         switch (s) {
@@ -219,112 +271,315 @@ export const DailyScheduleScreen = ({ navigation }: { navigation: any }) => {
         }
     };
 
+    const sourceBadgeStyle = (s: ScheduleSource) => {
+        switch (s) {
+            case 'sports':
+                return styles.badgeSports;
+            case 'activities':
+                return styles.badgeActivities;
+            case 'special_events':
+                return styles.badgeSpecial;
+            case 'master_calendar':
+                return styles.badgeMaster;
+            default:
+                return styles.badgeMaster;
+        }
+    };
+
+    const sourceBadgeTextStyle = (s: ScheduleSource) => {
+        switch (s) {
+            case 'sports':
+                return styles.badgeTextSports;
+            case 'activities':
+                return styles.badgeTextActivities;
+            case 'special_events':
+                return styles.badgeTextSpecial;
+            case 'master_calendar':
+                return styles.badgeTextMaster;
+            default:
+                return styles.badgeTextMaster;
+        }
+    };
+
     const navigateDate = (dir: 'prev' | 'next') => {
         const d = new Date(selectedDate);
         d.setDate(d.getDate() + (dir === 'next' ? 1 : -1));
         setSelectedDate(d);
     };
 
+    const goToday = () => setSelectedDate(new Date());
+
+    const divisionLabel =
+        selectedDivision === 'all'
+            ? 'All Divisions'
+            : accessibleDivisions.find((d: any) => d.id === selectedDivision)?.name ?? 'Division';
+
+    const selectedDivisionName =
+        selectedDivision !== 'all'
+            ? accessibleDivisions.find((d: any) => d.id === selectedDivision)?.name
+            : null;
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.openDrawer()}>
+                <TouchableOpacity onPress={() => navigation.openDrawer()} hitSlop={12}>
                     <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Daily Schedule</Text>
+                <View style={styles.headerCenter}>
+                    <Text style={styles.pageTitle}>Daily Schedule</Text>
+                    <Text style={styles.pageSubtitle}>{"View the day's schedule by division"}</Text>
+                </View>
                 <MobileUserMenu navigation={navigation} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scroll}>
-                <View style={styles.dateRow}>
-                    <TouchableOpacity onPress={() => navigateDate('prev')} style={styles.dateBtn}>
-                        <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
-                    </TouchableOpacity>
-                    <Text style={styles.dateText}>{dateStr}</Text>
-                    <TouchableOpacity onPress={() => navigateDate('next')} style={styles.dateBtn}>
-                        <Ionicons name="chevron-forward" size={22} color={theme.colors.text} />
-                    </TouchableOpacity>
-                </View>
+            <View style={styles.tabRow}>
+                <TouchableOpacity
+                    style={[styles.tab, activeTab === 'schedule' && styles.tabActive]}
+                    onPress={() => setActiveTab('schedule')}
+                    activeOpacity={0.85}
+                >
+                    <Ionicons
+                        name="calendar-outline"
+                        size={18}
+                        color={activeTab === 'schedule' ? theme.colors.text : theme.colors.textSecondary}
+                    />
+                    <Text style={[styles.tabText, activeTab === 'schedule' && styles.tabTextActive]}>Schedule View</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.tab, activeTab === 'uploads' && styles.tabActive]}
+                    onPress={() => setActiveTab('uploads')}
+                    activeOpacity={0.85}
+                >
+                    <Ionicons
+                        name="document-text-outline"
+                        size={18}
+                        color={activeTab === 'uploads' ? theme.colors.text : theme.colors.textSecondary}
+                    />
+                    <Text style={[styles.tabText, activeTab === 'uploads' && styles.tabTextActive]}>Upload Schedules</Text>
+                </TouchableOpacity>
+            </View>
 
-                <Text style={styles.sectionLabel}>Division</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-                    <TouchableOpacity
-                        style={[styles.chip, selectedDivision === 'all' && styles.chipActive]}
-                        onPress={() => setSelectedDivision('all')}
-                    >
-                        <Text style={[styles.chipText, selectedDivision === 'all' && styles.chipTextActive]}>All</Text>
-                    </TouchableOpacity>
-                    {divisions.map((d: any) => (
-                        <TouchableOpacity
-                            key={d.id}
-                            style={[styles.chip, selectedDivision === d.id && styles.chipActive]}
-                            onPress={() => setSelectedDivision(d.id)}
-                        >
-                            <Text
-                                style={[styles.chipText, selectedDivision === d.id && styles.chipTextActive]}
-                                numberOfLines={1}
-                            >
-                                {d.name}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-
-                {isTimberLakeCamp && (
-                    <StyledCard style={styles.card}>
-                        <Text style={styles.cardTitle}>Tiger Times (today)</Text>
-                        {tigerLoading ? (
-                            <ActivityIndicator color={theme.colors.secondary} />
-                        ) : tigerTimes ? (
-                            <>
-                                {[
-                                    ['Laundry', tigerTimes.laundry_info],
-                                    ['Phone calls', tigerTimes.phone_calls_info],
-                                    ['Outside events', tigerTimes.outside_event],
-                                    ['Staff days off', tigerTimes.staff_days_off],
-                                    ['OD notes', tigerTimes.od_notes],
-                                ].map(
-                                    ([label, val]) =>
-                                        val ? (
-                                            <View key={label as string} style={styles.ttRow}>
-                                                <Text style={styles.ttLabel}>{label}</Text>
-                                                <Text style={styles.ttVal}>{String(val)}</Text>
-                                            </View>
-                                        ) : null
-                                )}
-                                {!tigerTimes.laundry_info &&
-                                    !tigerTimes.phone_calls_info &&
-                                    !tigerTimes.outside_event &&
-                                    !tigerTimes.staff_days_off &&
-                                    !tigerTimes.od_notes && (
-                                        <Text style={styles.muted}>No Tiger Times content for this date.</Text>
-                                    )}
-                            </>
-                        ) : (
-                            <Text style={styles.muted}>No Tiger Times content for this date.</Text>
-                        )}
-                    </StyledCard>
-                )}
-
-                <Text style={styles.sectionLabel}>Events</Text>
-                {eventsLoading ? (
-                    <ActivityIndicator style={{ marginTop: 16 }} color={theme.colors.secondary} />
-                ) : filteredEvents.length === 0 ? (
-                    <Text style={styles.muted}>No events for this day.</Text>
+            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                {activeTab === 'uploads' ? (
+                    <DivisionScheduleUploadTab companyId={companyId} season={season} />
+                ) : !companyId ? (
+                    <Text style={styles.mutedCenter}>Select a camp to view the schedule.</Text>
+                ) : !rosterDivisionFilter.isFetched ? (
+                    <ActivityIndicator style={{ marginTop: 40 }} color={theme.colors.secondary} />
                 ) : (
-                    filteredEvents.map((e) => (
-                        <StyledCard key={`${e.source}-${e.id}`} style={styles.eventCard}>
-                            <View style={styles.eventHeader}>
-                                <Text style={styles.eventTitle}>{e.title}</Text>
-                                <Text style={styles.badge}>{sourceLabel(e.source)}</Text>
+                    <>
+                        <StyledCard style={styles.controlsCard}>
+                            <View style={styles.dateNavRow}>
+                                <TouchableOpacity onPress={() => navigateDate('prev')} style={styles.iconBtn}>
+                                    <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.datePill} onPress={() => setShowDatePicker(true)}>
+                                    <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
+                                    <Text style={styles.datePillText}>{formatDatePill(selectedDate)}</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => navigateDate('next')} style={styles.iconBtn}>
+                                    <Ionicons name="chevron-forward" size={22} color={theme.colors.text} />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={goToday} style={styles.todayBtn}>
+                                    <Text style={styles.todayText}>Today</Text>
+                                </TouchableOpacity>
                             </View>
-                            {e.time ? <Text style={styles.eventMeta}>{e.time}</Text> : null}
-                            {e.location ? <Text style={styles.eventMeta}>{e.location}</Text> : null}
-                            {e.description ? <Text style={styles.eventDesc}>{e.description}</Text> : null}
+                            <View style={styles.divisionRow}>
+                                <Ionicons name="funnel-outline" size={18} color={theme.colors.textSecondary} />
+                                <TouchableOpacity style={styles.divisionSelect} onPress={() => setShowDivisionModal(true)}>
+                                    <Text style={styles.divisionSelectText} numberOfLines={1}>
+                                        {divisionLabel}
+                                    </Text>
+                                    <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
                         </StyledCard>
-                    ))
+
+                        <StyledCard style={styles.scheduleCard}>
+                            <View style={styles.scheduleCardHeader}>
+                                <View style={styles.scheduleTitleRow}>
+                                    <Ionicons name="calendar-outline" size={22} color={theme.colors.text} />
+                                    <Text style={styles.scheduleCardTitle}>Schedule for {formatScheduleHeader(selectedDate)}</Text>
+                                </View>
+                                <Text style={styles.scheduleCardMeta}>
+                                    {filteredEvents.length} event{filteredEvents.length !== 1 ? 's' : ''} scheduled
+                                    {selectedDivisionName ? ` for ${selectedDivisionName}` : ''}
+                                </Text>
+                            </View>
+
+                            {eventsLoading ? (
+                                <View style={styles.loadingBox}>
+                                    <ActivityIndicator size="large" color={theme.colors.textSecondary} />
+                                </View>
+                            ) : filteredEvents.length === 0 ? (
+                                <View style={styles.emptyState}>
+                                    <Ionicons name="calendar-outline" size={56} color={theme.colors.border} />
+                                    <Text style={styles.emptyTitle}>No events scheduled</Text>
+                                    <Text style={styles.emptySub}>There are no events for this date and division.</Text>
+                                </View>
+                            ) : (
+                                <View style={styles.eventList}>
+                                    {filteredEvents.map((e, index) => (
+                                        <View
+                                            key={`${e.source}-${e.id}`}
+                                            style={[styles.eventRow, index > 0 && styles.eventRowBorder]}
+                                        >
+                                            <View style={styles.eventColTime}>
+                                                {e.time ? (
+                                                    <View style={styles.timeRow}>
+                                                        <Ionicons name="time-outline" size={14} color={theme.colors.textSecondary} />
+                                                        <Text style={styles.timeText}>{e.time}</Text>
+                                                    </View>
+                                                ) : (
+                                                    <Text style={styles.allDay}>All day</Text>
+                                                )}
+                                            </View>
+                                            <View style={styles.eventColMain}>
+                                                <Text style={styles.eventTitle}>{e.title}</Text>
+                                                {e.description ? (
+                                                    <Text style={styles.eventDesc} numberOfLines={2}>
+                                                        {e.description}
+                                                    </Text>
+                                                ) : null}
+                                                <View style={styles.eventMetaRow}>
+                                                    <View style={[styles.typeBadge, styles.typeBadgeOutline]}>
+                                                        <Text style={styles.typeBadgeOutlineText}>{e.type}</Text>
+                                                    </View>
+                                                    {e.location ? (
+                                                        <View style={styles.locRow}>
+                                                            <Ionicons name="location-outline" size={14} color={theme.colors.textSecondary} />
+                                                            <Text style={styles.locText}>{e.location}</Text>
+                                                        </View>
+                                                    ) : null}
+                                                </View>
+                                                <View style={styles.divRow}>
+                                                    <Ionicons name="people-outline" size={14} color={theme.colors.textSecondary} />
+                                                    <Text style={styles.divText}>{getDivisionNames(e.divisions)}</Text>
+                                                </View>
+                                                <View style={[styles.sourceBadge, sourceBadgeStyle(e.source)]}>
+                                                    <Text style={[styles.sourceBadgeText, sourceBadgeTextStyle(e.source)]}>
+                                                        {sourceLabel(e.source)}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+                        </StyledCard>
+                    </>
                 )}
             </ScrollView>
+
+            <TouchableOpacity
+                style={[styles.fab, isTimberLakeCamp && styles.fabTimberLake]}
+                activeOpacity={0.9}
+            >
+                <Ionicons name="chatbubble-ellipses" size={22} color="white" />
+            </TouchableOpacity>
+
+            <Modal
+                visible={showDivisionModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowDivisionModal(false)}
+            >
+                <Pressable style={styles.divisionSheetOverlay} onPress={() => setShowDivisionModal(false)}>
+                    <Pressable style={styles.divisionSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.divisionSheetHeader}>
+                            <Text style={styles.divisionSheetTitle}>Select Division</Text>
+                            <TouchableOpacity onPress={() => setShowDivisionModal(false)} hitSlop={12}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView
+                            style={styles.divisionSheetScroll}
+                            nestedScrollEnabled
+                            showsVerticalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                        >
+                            {!hasDivisionRestriction && (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.divisionOption,
+                                        selectedDivision === 'all' && styles.divisionOptionActive,
+                                    ]}
+                                    onPress={() => {
+                                        setSelectedDivision('all');
+                                        setShowDivisionModal(false);
+                                    }}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.divisionOptionText,
+                                            selectedDivision === 'all' && styles.divisionOptionTextActive,
+                                        ]}
+                                    >
+                                        All Divisions
+                                    </Text>
+                                    {selectedDivision === 'all' ? (
+                                        <Ionicons name="checkmark-circle" size={22} color={theme.colors.secondary} />
+                                    ) : null}
+                                </TouchableOpacity>
+                            )}
+                            {accessibleDivisions.map((d: any) => {
+                                const selected = selectedDivision === d.id;
+                                return (
+                                    <TouchableOpacity
+                                        key={d.id}
+                                        style={[styles.divisionOption, selected && styles.divisionOptionActive]}
+                                        onPress={() => {
+                                            setSelectedDivision(d.id);
+                                            setShowDivisionModal(false);
+                                        }}
+                                    >
+                                        <Text
+                                            style={[styles.divisionOptionText, selected && styles.divisionOptionTextActive]}
+                                        >
+                                            {formatDivisionPickerLine(d)}
+                                        </Text>
+                                        {selected ? (
+                                            <Ionicons name="checkmark-circle" size={22} color={theme.colors.secondary} />
+                                        ) : null}
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {showDatePicker && Platform.OS === 'android' && (
+                <DateTimePicker
+                    value={selectedDate}
+                    mode="date"
+                    display="default"
+                    onChange={(ev, d) => {
+                        setShowDatePicker(false);
+                        if (ev.type === 'dismissed') return;
+                        if (d) setSelectedDate(d);
+                    }}
+                />
+            )}
+            {showDatePicker && Platform.OS === 'ios' && (
+                <Modal transparent visible={showDatePicker} animationType="slide">
+                    <View style={styles.iosPickerWrap}>
+                        <Pressable style={{ flex: 1 }} onPress={() => setShowDatePicker(false)} />
+                        <View style={styles.iosPickerInner}>
+                            <DateTimePicker
+                                value={selectedDate}
+                                mode="date"
+                                display="spinner"
+                                themeVariant="light"
+                                onChange={(_, d) => d && setSelectedDate(d)}
+                            />
+                            <TouchableOpacity style={styles.doneBtn} onPress={() => setShowDatePicker(false)}>
+                                <Text style={styles.doneBtnText}>Done</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </Modal>
+            )}
         </SafeAreaView>
     );
 };
@@ -333,64 +588,225 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.background },
     header: {
         flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        alignItems: 'flex-start',
         paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
+        paddingBottom: theme.spacing.sm,
+        gap: 8,
     },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
-    scroll: { padding: theme.spacing.md, paddingBottom: 48 },
-    dateRow: {
+    headerCenter: { flex: 1, minWidth: 0 },
+    pageTitle: { fontSize: 26, fontWeight: '700', color: theme.colors.text, letterSpacing: -0.3 },
+    pageSubtitle: { fontSize: 14, color: theme.colors.textSecondary, marginTop: 4 },
+    tabRow: {
+        flexDirection: 'row',
+        paddingHorizontal: theme.spacing.md,
+        gap: 10,
+        marginBottom: theme.spacing.md,
+    },
+    tab: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: theme.spacing.md,
-        gap: 16,
-    },
-    dateBtn: { padding: 8 },
-    dateText: { fontSize: 16, fontWeight: '600', color: theme.colors.text },
-    sectionLabel: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-        marginBottom: 8,
-        textTransform: 'uppercase',
-    },
-    chipRow: { flexDirection: 'row', marginBottom: theme.spacing.md },
-    chip: {
+        gap: 8,
+        paddingVertical: 10,
         paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
+        borderRadius: theme.borderRadius.lg,
+        backgroundColor: '#e5e7eb',
+    },
+    tabActive: {
         backgroundColor: theme.colors.surface,
-        marginRight: 8,
         borderWidth: 1,
         borderColor: theme.colors.border,
+        ...theme.shadows.card,
     },
-    chipActive: {
+    tabText: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary },
+    tabTextActive: { color: theme.colors.text },
+    scroll: { paddingHorizontal: theme.spacing.md, paddingBottom: 100 },
+    controlsCard: {
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    dateNavRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    iconBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    datePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flex: 1,
+        minWidth: 160,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+    },
+    datePillText: { fontSize: 14, fontWeight: '500', color: theme.colors.text, flex: 1 },
+    todayBtn: { paddingVertical: 8, paddingHorizontal: 10 },
+    todayText: { fontSize: 15, fontWeight: '600', color: theme.colors.secondary },
+    divisionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginTop: theme.spacing.md,
+    },
+    divisionSelect: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        backgroundColor: theme.colors.surface,
+    },
+    divisionSelectText: { fontSize: 14, color: theme.colors.text, flex: 1, marginRight: 8 },
+    scheduleCard: { padding: 0, overflow: 'hidden' },
+    scheduleCardHeader: {
+        padding: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    scheduleTitleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+    scheduleCardTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: theme.colors.text, lineHeight: 24 },
+    scheduleCardMeta: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 8 },
+    loadingBox: { paddingVertical: 48, alignItems: 'center' },
+    emptyState: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: theme.spacing.md },
+    emptyTitle: { fontSize: 17, fontWeight: '600', color: theme.colors.text, marginTop: 12 },
+    emptySub: { fontSize: 14, color: theme.colors.textSecondary, marginTop: 6, textAlign: 'center' },
+    eventList: { padding: theme.spacing.md, gap: 0 },
+    eventRow: {
+        flexDirection: 'row',
+        paddingTop: 14,
+        paddingBottom: 14,
+        gap: 12,
+    },
+    eventRowBorder: {
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    eventColTime: { width: 88 },
+    eventColMain: { flex: 1, minWidth: 0 },
+    timeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    timeText: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
+    allDay: { fontSize: 13, color: theme.colors.textSecondary },
+    eventTitle: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
+    eventDesc: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4 },
+    eventMetaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 },
+    typeBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+    typeBadgeOutline: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+    },
+    typeBadgeOutlineText: { fontSize: 12, color: theme.colors.text },
+    locRow: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
+    locText: { fontSize: 12, color: theme.colors.textSecondary, flex: 1 },
+    divRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+    divText: { fontSize: 12, color: theme.colors.textSecondary, flex: 1 },
+    sourceBadge: { alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+    sourceBadgeText: { fontSize: 11, fontWeight: '700' },
+    badgeSports: { backgroundColor: '#dcfce7' },
+    badgeActivities: { backgroundColor: '#dbeafe' },
+    badgeSpecial: { backgroundColor: '#f3e8ff' },
+    badgeMaster: { backgroundColor: '#ffedd5' },
+    badgeTextSports: { color: '#166534' },
+    badgeTextActivities: { color: '#1e40af' },
+    badgeTextSpecial: { color: '#6b21a8' },
+    badgeTextMaster: { color: '#9a3412' },
+    mutedCenter: { textAlign: 'center', marginTop: 32, color: theme.colors.textSecondary, fontSize: 15 },
+    fab: {
+        position: 'absolute',
+        right: 20,
+        bottom: 28,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
         backgroundColor: theme.colors.secondary,
-        borderColor: theme.colors.secondary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
     },
-    chipText: { color: theme.colors.text, fontSize: 13 },
-    chipTextActive: { color: '#fff', fontWeight: '600' },
-    card: { marginBottom: theme.spacing.md, padding: theme.spacing.md },
-    cardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12, color: theme.colors.text },
-    ttRow: { marginBottom: 10 },
-    ttLabel: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
-    ttVal: { fontSize: 14, color: theme.colors.text, marginTop: 2 },
-    muted: { color: theme.colors.textSecondary, fontStyle: 'italic' },
-    eventCard: { marginBottom: theme.spacing.sm, padding: theme.spacing.md },
-    eventHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
-    eventTitle: { flex: 1, fontSize: 16, fontWeight: '600', color: theme.colors.text },
-    badge: {
-        fontSize: 11,
-        fontWeight: '600',
+    fabTimberLake: { backgroundColor: '#286422' },
+    divisionSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    divisionSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '65%',
+        paddingBottom: theme.spacing.xl,
+    },
+    divisionSheetHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.md,
+        paddingHorizontal: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    divisionSheetTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    divisionSheetScroll: {
+        maxHeight: 420,
+    },
+    divisionOption: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    divisionOptionActive: {
+        backgroundColor: theme.colors.background,
+    },
+    divisionOptionText: {
+        flex: 1,
+        fontSize: 16,
+        color: theme.colors.text,
+        paddingRight: 8,
+    },
+    divisionOptionTextActive: {
         color: theme.colors.secondary,
-        backgroundColor: `${theme.colors.secondary}22`,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-        overflow: 'hidden',
+        fontWeight: '600',
     },
-    eventMeta: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4 },
-    eventDesc: { fontSize: 14, color: theme.colors.text, marginTop: 8 },
+    iosPickerWrap: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+    iosPickerInner: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 14,
+        borderTopRightRadius: 14,
+        paddingBottom: 16,
+    },
+    doneBtn: { paddingVertical: 14, alignItems: 'center' },
+    doneBtnText: { fontWeight: '600', fontSize: 16, color: theme.colors.secondary },
 });
