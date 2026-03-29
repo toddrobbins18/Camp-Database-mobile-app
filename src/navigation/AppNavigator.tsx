@@ -48,60 +48,16 @@ import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { useRole } from '../hooks/useRole';
 import { supabase } from '../lib/supabase';
 import { theme } from '../theme/theme';
+import { getMenuDrawerTheme } from '../theme/menuDrawerTheme';
 
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
-
-const hexToHsl = (hex: string) => {
-    const cleaned = hex.replace('#', '');
-    if (cleaned.length !== 6) return null;
-
-    const r = parseInt(cleaned.substring(0, 2), 16) / 255;
-    const g = parseInt(cleaned.substring(2, 4), 16) / 255;
-    const b = parseInt(cleaned.substring(4, 6), 16) / 255;
-    if ([r, g, b].some((v) => Number.isNaN(v))) return null;
-
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    let h = 0;
-    let s = 0;
-    const l = (max + min) / 2;
-
-    if (max !== min) {
-        const d = max - min;
-        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        switch (max) {
-            case r:
-                h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-                break;
-            case g:
-                h = ((b - r) / d + 2) / 6;
-                break;
-            default:
-                h = ((r - g) / d + 4) / 6;
-                break;
-        }
-    }
-
-    return {
-        h: Math.round(h * 360),
-        s: Math.round(s * 100),
-        l: Math.round(l * 100),
-    };
-};
-
-const darkenHexForSidebar = (hex: string, amount = 40) => {
-    const hsl = hexToHsl(hex);
-    if (!hsl) return theme.colors.primary;
-    const nextL = Math.max(0, hsl.l - amount);
-    return `hsl(${hsl.h}, ${hsl.s}%, ${nextL}%)`;
-};
 
 // Custom Drawer Content with Role-Based Visibility
 const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const { data: roleData } = useRole();
-    const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp } = useCompany();
+    const { availableCompanies, switchCompany, companyId, companySlug, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp } = useCompany();
     const [showCampPicker, setShowCampPicker] = useState(false);
     const [showYearPicker, setShowYearPicker] = useState(false);
 
@@ -116,19 +72,27 @@ const CustomDrawerContent = (props: any) => {
     const canSeeAdminScreens = isAdmin || !isRoleLoaded;             // admin+ or loading
     const canSeeSuperAdminOnly = isSuperAdmin;                       // super_admin only
 
+    const menuTheme = getMenuDrawerTheme(companySlug);
+
     const drawerItemProps = {
         labelStyle: styles.drawerLabel,
-        inactiveTintColor: '#94a3b8',
+        inactiveTintColor: menuTheme.menuItemInactive,
+        activeTintColor: menuTheme.menuActiveTint,
+        activeBackgroundColor: menuTheme.menuActiveBackground,
     };
 
     const currentCompanyName = availableCompanies.find(c => c.id === companyId)?.name || 'Select Camp';
 
-    const drawerBgColor = companyThemeColor
-        ? darkenHexForSidebar(companyThemeColor, 40)
-        : theme.colors.primary;
+    const campSwitcherStyle = [
+        styles.campSwitcher,
+        menuTheme.campSwitcherBorderWidth > 0 && {
+            borderWidth: menuTheme.campSwitcherBorderWidth,
+            borderColor: menuTheme.campSwitcherBorderColor,
+        },
+    ];
 
     return (
-        <View style={{ flex: 1, backgroundColor: drawerBgColor }}>
+        <View style={{ flex: 1, backgroundColor: menuTheme.drawerBackground }}>
             {loadError ? (
                 <View style={styles.loadErrorBanner}>
                     <Text style={styles.loadErrorText} numberOfLines={2}>{loadError}</Text>
@@ -158,7 +122,7 @@ const CustomDrawerContent = (props: any) => {
                 {/* Year / Season Selector */}
                 <View style={styles.campSwitcherWrap}>
                     <TouchableOpacity
-                        style={styles.campSwitcher}
+                        style={campSwitcherStyle}
                         onPress={() => { setShowYearPicker((prev) => !prev); setShowCampPicker(false); }}
                         activeOpacity={0.85}
                     >
@@ -177,6 +141,7 @@ const CustomDrawerContent = (props: any) => {
                                         style={[
                                             styles.campDropdownItem,
                                             isActive && styles.campDropdownItemActive,
+                                            isActive && { backgroundColor: menuTheme.dropdownSelectionBg },
                                         ]}
                                         onPress={() => {
                                             setSeason(yr);
@@ -206,7 +171,7 @@ const CustomDrawerContent = (props: any) => {
                 {(isSuperAdmin || isSuperAdminCompany) && availableCompanies.length > 1 && (
                     <View style={styles.campSwitcherWrap}>
                         <TouchableOpacity
-                            style={styles.campSwitcher}
+                            style={campSwitcherStyle}
                             onPress={() => { setShowCampPicker((prev) => !prev); setShowYearPicker(false); }}
                             activeOpacity={0.85}
                         >
@@ -225,6 +190,7 @@ const CustomDrawerContent = (props: any) => {
                                             style={[
                                                 styles.campDropdownItem,
                                                 isActive && styles.campDropdownItemActive,
+                                                isActive && { backgroundColor: menuTheme.dropdownSelectionBg },
                                             ]}
                                             onPress={() => {
                                                 switchCompany(company.id);
@@ -233,7 +199,7 @@ const CustomDrawerContent = (props: any) => {
                                             activeOpacity={0.8}
                                         >
                                             {isActive && (
-                                                <Ionicons name="checkmark" size={16} color={theme.colors.text} style={{ marginRight: 6 }} />
+                                                <Ionicons name="checkmark" size={16} color="#fff" style={{ marginRight: 6 }} />
                                             )}
                                             <Text
                                                 style={[
@@ -252,7 +218,7 @@ const CustomDrawerContent = (props: any) => {
                     </View>
                 )}
 
-                <Text style={styles.sectionHeader}>Main Menu</Text>
+                <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Main Menu</Text>
 
                 {/* ── Everyone (all roles) ── */}
                 <DrawerItem
@@ -300,16 +266,12 @@ const CustomDrawerContent = (props: any) => {
                             icon={({ color }) => <Ionicons name="leaf-outline" size={22} color={color} />}
                             onPress={() => props.navigation.navigate('ActivitiesFieldTrips')}
                             {...drawerItemProps}
-                            activeTintColor={theme.colors.surface}
-                            activeBackgroundColor={theme.colors.sidebarActiveBg}
                         />
                         <DrawerItem
                             label="Appointments"
                             icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
                             onPress={() => props.navigation.navigate('Appointments')}
                             {...drawerItemProps}
-                            activeTintColor={theme.colors.surface}
-                            activeBackgroundColor={theme.colors.sidebarActiveBg}
                         />
                         <DrawerItem
                             label="Nurse"
@@ -402,8 +364,6 @@ const CustomDrawerContent = (props: any) => {
                             icon={({ color }) => <Ionicons name="ribbon-outline" size={22} color={color} />}
                             onPress={() => props.navigation.navigate('Awards')}
                             {...drawerItemProps}
-                            activeTintColor={theme.colors.surface}
-                            activeBackgroundColor={theme.colors.sidebarActiveBg}
                         />
                         {companySlug !== 'timber-lake-camp' && (
                             <DrawerItem
@@ -411,8 +371,6 @@ const CustomDrawerContent = (props: any) => {
                                 icon={({ color }) => <Ionicons name="document-text-outline" size={22} color={color} />}
                                 onPress={() => props.navigation.navigate('DailyNews')}
                                 {...drawerItemProps}
-                                activeTintColor={theme.colors.surface}
-                                activeBackgroundColor={theme.colors.sidebarActiveBg}
                             />
                         )}
                         <DrawerItem
@@ -451,7 +409,7 @@ const CustomDrawerContent = (props: any) => {
                 {/* ── Administration Section (Admin+) ── */}
                 {canSeeAdminScreens && (
                     <>
-                        <Text style={styles.sectionHeader}>Administration</Text>
+                        <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Administration</Text>
                         <DrawerItem
                             label="Admin Panel"
                             icon={({ color }) => <Ionicons name="shield-outline" size={22} color={color} />}
@@ -509,7 +467,7 @@ const CustomDrawerContent = (props: any) => {
                         props.navigation.getParent()?.navigate('Login');
                     }}
                     labelStyle={styles.drawerLabel}
-                    inactiveTintColor="#94a3b8"
+                    inactiveTintColor={menuTheme.menuItemInactive}
                 />
             </View>
         </View>
@@ -728,7 +686,6 @@ const styles = StyleSheet.create({
         marginHorizontal: 4,
     },
     campDropdownItemActive: {
-        backgroundColor: '#f97316',
         borderRadius: theme.borderRadius.md,
     },
     campDropdownItemText: {

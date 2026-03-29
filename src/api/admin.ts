@@ -78,17 +78,15 @@ export const useAdminUsers = (companyId: string | null) => {
                 effectiveCompanyId = myProfile?.company_id ?? null;
             }
 
-            if (!isSuperAdminUser && !effectiveCompanyId) return [] as AdminUser[];
+            // Web UserRoleManagement always scopes to currentCompany — super admins still switch camp, not "all users".
+            if (!effectiveCompanyId) return [] as AdminUser[];
 
-            // Mirror web admin: it lists profiles by company_id (no `approved` filter).
+            // Mirror web: list profiles for the selected company only.
             let profilesQuery = supabase
                 .from('profiles')
                 // `profiles` does not have a `tags` column. Tags are handled separately in the web app.
-                .select('id, email, full_name, company_id');
-
-            if (!isSuperAdminUser) {
-                profilesQuery = profilesQuery.eq('company_id', effectiveCompanyId);
-            }
+                .select('id, email, full_name, company_id')
+                .eq('company_id', effectiveCompanyId);
 
             const { data: profiles, error: profilesErr } = await profilesQuery;
             if (profilesErr) throw profilesErr;
