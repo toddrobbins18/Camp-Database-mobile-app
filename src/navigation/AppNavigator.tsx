@@ -35,6 +35,8 @@ import { ActivitiesFieldTripsScreen } from '../screens/ActivitiesFieldTripsScree
 import { AppointmentsScreen } from '../screens/AppointmentsScreen';
 import { AwardsScreen } from '../screens/AwardsScreen';
 import { DailyNewsScreen } from '../screens/DailyNewsScreen';
+import { DailyWolfManagementScreen } from '../screens/DailyWolfManagementScreen';
+import { DailyWolfPrintableScreen } from '../screens/DailyWolfPrintableScreen';
 import { UserApprovalsScreen } from '../screens/UserApprovalsScreen';
 import { AccessDeniedScreen } from '../screens/AccessDeniedScreen';
 import { SpecialistSportAssignmentsScreen } from '../screens/SpecialistSportAssignmentsScreen';
@@ -373,6 +375,22 @@ const CustomDrawerContent = (props: any) => {
                                 {...drawerItemProps}
                             />
                         )}
+                        {companySlug === 'timber-lake-west' && (
+                            <>
+                                <DrawerItem
+                                    label="Daily Wolf Management"
+                                    icon={({ color }) => <Ionicons name="newspaper-outline" size={22} color={color} />}
+                                    onPress={() => props.navigation.navigate('DailyWolfManagement')}
+                                    {...drawerItemProps}
+                                />
+                                <DrawerItem
+                                    label="Daily Wolf Printable"
+                                    icon={({ color }) => <Ionicons name="document-text-outline" size={22} color={color} />}
+                                    onPress={() => props.navigation.navigate('DailyWolfPrintable')}
+                                    {...drawerItemProps}
+                                />
+                            </>
+                        )}
                         <DrawerItem
                             label="Incident Reports"
                             icon={({ color }) => <Ionicons name="warning-outline" size={22} color={color} />}
@@ -540,6 +558,8 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Appointments" component={AppointmentsScreen} />
             <Drawer.Screen name="Awards" component={AwardsScreen} />
             <Drawer.Screen name="DailyNews" component={DailyNewsScreen} />
+            <Drawer.Screen name="DailyWolfManagement" component={DailyWolfManagementScreen} />
+            <Drawer.Screen name="DailyWolfPrintable" component={DailyWolfPrintableScreen} />
             <Drawer.Screen name="UserApprovals" component={UserApprovalsScreen} />
             <Drawer.Screen name="NotificationPreferences" component={NotificationPreferencesScreen} />
             <Drawer.Screen name="AccessDenied" component={AccessDeniedScreen} />
