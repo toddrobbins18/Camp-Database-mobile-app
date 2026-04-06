@@ -35,6 +35,8 @@ interface ScheduleEvent {
     divisions: string[];
 }
 
+const EMPTY_SCHEDULE_EVENTS: ScheduleEvent[] = [];
+
 function formatYmd(d: Date): string {
     return d.toISOString().split('T')[0];
 }
@@ -46,6 +48,9 @@ function formatDatePill(d: Date): string {
 function formatScheduleHeader(d: Date): string {
     return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 }
+
+/** Stable fallback so `useQuery` default `[]` is not a new array every render. */
+const EMPTY_DIVISIONS: Array<{ id: string; name: string; gender?: string | null; sort_order?: number }> = [];
 
 /** Prefer name (e.g. "Cub Boys") over DB gender when labels were inconsistent. */
 function formatDivisionPickerLine(d: { name: string; gender?: string | null }): string {
@@ -72,7 +77,7 @@ export const DailyScheduleScreen = ({ navigation }: { navigation: any }) => {
 
     const dateStr = formatYmd(selectedDate);
 
-    const { data: divisions = [] } = useQuery({
+    const { data: divisionsData } = useQuery({
         queryKey: ['dailyScheduleDivisions', companyId],
         queryFn: async () => {
             if (!companyId) return [];
@@ -90,8 +95,10 @@ export const DailyScheduleScreen = ({ navigation }: { navigation: any }) => {
         },
         enabled: !!companyId,
     });
+    const divisions = divisionsData ?? EMPTY_DIVISIONS;
 
     const divisionFilter = rosterDivisionFilter.data ?? null;
+    const divisionFilterKey = useMemo(() => JSON.stringify(divisionFilter ?? null), [divisionFilter]);
     /** Same as web DailySchedule: only restrict when user has explicit division IDs assigned. */
     const hasDivisionRestriction = divisionFilter !== null && divisionFilter.length > 0;
 
@@ -107,7 +114,7 @@ export const DailyScheduleScreen = ({ navigation }: { navigation: any }) => {
         if (first && selectedDivision === 'all') {
             setSelectedDivision(first.id);
         }
-    }, [rosterDivisionFilter.isSuccess, divisions, divisionFilter, hasDivisionRestriction, selectedDivision]);
+    }, [rosterDivisionFilter.isSuccess, divisions, divisionFilterKey, hasDivisionRestriction, selectedDivision]);
 
     const fetchScheduleEvents = useCallback(async (): Promise<ScheduleEvent[]> => {
         if (!companyId || !season) return [];
@@ -227,11 +234,12 @@ export const DailyScheduleScreen = ({ navigation }: { navigation: any }) => {
         return allEvents;
     }, [companyId, season, dateStr]);
 
-    const { data: events = [], isLoading: eventsLoading } = useQuery({
+    const { data: eventsData, isLoading: eventsLoading } = useQuery({
         queryKey: ['dailyScheduleEvents', companyId, season, dateStr],
         queryFn: fetchScheduleEvents,
         enabled: !!companyId && !!season && rosterDivisionFilter.isFetched,
     });
+    const events = eventsData ?? EMPTY_SCHEDULE_EVENTS;
 
     const filteredEvents = useMemo(() => {
         let filtered = events;

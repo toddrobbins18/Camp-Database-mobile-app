@@ -119,6 +119,11 @@ export function StaffLeaderAssignmentModal({ visible, onClose, companyId, season
             .sort((a, b) => a.name.localeCompare(b.name));
     }, [allStaff, assignments]);
 
+    const assignmentsKey = useMemo(
+        () => assignments.map((a) => `${a.staff_id}:${a.leader_id}`).sort().join('|'),
+        [assignments]
+    );
+
     const divisionStats = useMemo(() => {
         return divisions.map((div) => {
             const staffInDiv = allStaff.filter((s) => s.division_id === div.id);
@@ -139,11 +144,15 @@ export function StaffLeaderAssignmentModal({ visible, onClose, companyId, season
 
     useEffect(() => {
         if (selectedLeader) {
-            setSelectedStaffIds(new Set(getStaffIdsForLeader(selectedLeader)));
+            const ids = getStaffIdsForLeader(selectedLeader);
+            setSelectedStaffIds((prev) => {
+                if (prev.size === ids.length && ids.every((id) => prev.has(id))) return prev;
+                return new Set(ids);
+            });
         } else {
-            setSelectedStaffIds(new Set());
+            setSelectedStaffIds((prev) => (prev.size === 0 ? prev : new Set()));
         }
-    }, [selectedLeader, assignments]);
+    }, [selectedLeader, assignmentsKey]);
 
     const getDivisionName = (divisionId: string | null) => {
         if (!divisionId) return '—';

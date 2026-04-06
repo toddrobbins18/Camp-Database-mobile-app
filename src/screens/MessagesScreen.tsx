@@ -1,6 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, ScrollView, ActivityIndicator, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+    View,
+    Text,
+    StyleSheet,
+    TouchableOpacity,
+    Modal,
+    Pressable,
+    TextInput,
+    ScrollView,
+    ActivityIndicator,
+    Alert,
+    Platform,
+    StatusBar,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -12,6 +25,14 @@ import { MobileUserMenu } from '../components/MobileUserMenu';
 import { useQuery } from '@tanstack/react-query';
 
 export const MessagesScreen = ({ navigation }: any) => {
+    const insets = useSafeAreaInsets();
+    /** Modal sometimes reports 0 top inset; use OS fallbacks so content clears the notch / Dynamic Island. */
+    const modalTopInset =
+        insets.top > 0
+            ? insets.top
+            : Platform.OS === 'ios'
+              ? 47
+              : StatusBar.currentHeight ?? 0;
     const [activeView, setActiveView] = useState('inbox');
     const [showComposeModal, setShowComposeModal] = useState(false);
     const [deliveryMethod, setDeliveryMethod] = useState('in-app');
@@ -231,23 +252,48 @@ export const MessagesScreen = ({ navigation }: any) => {
                 visible={showComposeModal}
                 transparent={false}
                 animationType="slide"
+                presentationStyle="fullScreen"
                 onRequestClose={handleCloseCompose}
             >
-                <SafeAreaView style={styles.modalContainer}>
+                <View
+                    style={[
+                        styles.modalContainer,
+                        {
+                            paddingTop: modalTopInset,
+                            paddingBottom: insets.bottom,
+                            paddingLeft: insets.left,
+                            paddingRight: insets.right,
+                        },
+                    ]}
+                >
                     <KeyboardAwareScrollView
-                        contentContainerStyle={styles.modalScrollContent}
+                        contentContainerStyle={[
+                            styles.modalScrollContent,
+                            { paddingBottom: 100 + Math.max(insets.bottom, 8) },
+                        ]}
                         showsVerticalScrollIndicator={false}
                         enableOnAndroid={true}
-                        extraScrollHeight={20}
+                        extraScrollHeight={24}
                         keyboardShouldPersistTaps="handled"
+                        keyboardOpeningTime={0}
                     >
-                        {/* Modal Header */}
+                        {/* Modal Header — title beside back avoids Dynamic Island overlap */}
                         <View style={styles.modalHeader}>
-                            <TouchableOpacity onPress={handleCloseCompose}>
+                            <Pressable
+                                onPress={handleCloseCompose}
+                                hitSlop={{ top: 12, bottom: 12, left: 8, right: 12 }}
+                                style={({ pressed }) => [
+                                    styles.modalBackBtn,
+                                    pressed && styles.modalBackBtnPressed,
+                                ]}
+                                accessibilityRole="button"
+                                accessibilityLabel="Close compose notification"
+                            >
                                 <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                            <Text style={styles.modalTitle}>Compose Notification</Text>
-                            <View style={{ width: 24 }} />
+                            </Pressable>
+                            <Text style={styles.modalTitle} numberOfLines={1}>
+                                Compose Notification
+                            </Text>
                         </View>
 
                         {/* Multi-Channel Notifications Card */}
@@ -460,7 +506,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                             </View>
                         </View>
                     </KeyboardAwareScrollView>
-                </SafeAreaView>
+                </View>
             </Modal>
         </SafeAreaView>
     );
@@ -666,17 +712,28 @@ const styles = StyleSheet.create({
     },
     modalScrollContent: {
         padding: theme.spacing.md,
-        paddingBottom: 100,
+        flexGrow: 1,
     },
     modalHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: theme.spacing.lg,
-        paddingTop: theme.spacing.sm,
+        gap: theme.spacing.sm,
+        minHeight: 44,
+    },
+    modalBackBtn: {
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 22,
+    },
+    modalBackBtnPressed: {
+        opacity: 0.65,
     },
     modalTitle: {
         ...theme.typography.h2,
+        flex: 1,
         fontSize: 20,
         fontWeight: '700',
         color: theme.colors.text,

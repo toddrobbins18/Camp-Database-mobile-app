@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { isTimberLakeCamp, isTimberLakeWest, isTylerHillCamp } from '../constants/camps';
@@ -85,8 +85,8 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
 
-    const switchCompany = (newCompanyId: string) => {
-        const company = availableCompanies.find(c => c.id === newCompanyId);
+    const switchCompany = useCallback((newCompanyId: string) => {
+        const company = availableCompanies.find((c) => c.id === newCompanyId);
         if (company) {
             setCompanyId(newCompanyId);
             setCompanySlug(company.slug);
@@ -96,7 +96,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
             setIsTimberLakeWestState(isTimberLakeWest(company.slug));
             void AsyncStorage.setItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY, newCompanyId);
         }
-    };
+    }, [availableCompanies]);
 
     useEffect(() => {
         const applyCompanyMeta = (
@@ -262,33 +262,53 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
         };
     }, []);
 
-    const retryLoad = () => {
+    const retryLoad = useCallback(() => {
         setLoadError(null);
         setIsLoading(true);
         void fetchCompanyDataRef.current?.();
-    };
+    }, []);
+
+    const contextValue = useMemo(
+        () => ({
+            companyId,
+            companySlug,
+            companyThemeColor,
+            season,
+            setSeason,
+            availableSeasons,
+            isTylerHill,
+            isTimberLakeCamp: isTimberLakeCampState,
+            isTimberLakeWest: isTimberLakeWestState,
+            isLoading,
+            profile,
+            availableCompanies,
+            switchCompany,
+            isSuperAdmin,
+            loadError,
+            retryLoad,
+        }),
+        [
+            companyId,
+            companySlug,
+            companyThemeColor,
+            season,
+            setSeason,
+            availableSeasons,
+            isTylerHill,
+            isTimberLakeCampState,
+            isTimberLakeWestState,
+            isLoading,
+            profile,
+            availableCompanies,
+            switchCompany,
+            isSuperAdmin,
+            loadError,
+            retryLoad,
+        ]
+    );
 
     return (
-        <CompanyContext.Provider
-            value={{
-                companyId,
-                companySlug,
-                companyThemeColor,
-                season,
-                setSeason,
-                availableSeasons,
-                isTylerHill,
-                isTimberLakeCamp: isTimberLakeCampState,
-                isTimberLakeWest: isTimberLakeWestState,
-                isLoading,
-                profile,
-                availableCompanies,
-                switchCompany,
-                isSuperAdmin,
-                loadError,
-                retryLoad,
-            }}
-        >
+        <CompanyContext.Provider value={contextValue}>
             {children}
         </CompanyContext.Provider>
     );

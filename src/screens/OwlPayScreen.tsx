@@ -146,7 +146,11 @@ export const OwlPayScreen = ({ navigation }: any) => {
         setLowBalanceAlertsEnabled(settings.low_balance_alerts_enabled);
         setStaffReportsEnabled(settings.staff_purchase_reports_enabled);
         setStaffReportFrequency(settings.staff_report_frequency || 'daily');
-    }, [settings]);
+    }, [
+        settings?.low_balance_alerts_enabled,
+        settings?.staff_purchase_reports_enabled,
+        settings?.staff_report_frequency,
+    ]);
 
     const saveSettings = () => {
         if (!companyId) return;

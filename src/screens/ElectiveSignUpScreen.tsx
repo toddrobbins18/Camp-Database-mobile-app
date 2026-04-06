@@ -96,11 +96,16 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
     const [showHistoryDivSheet, setShowHistoryDivSheet] = useState(false);
     const [showWeekDatePicker, setShowWeekDatePicker] = useState(false);
 
-    const divisionFilterIds = rosterDivisionFilter.data ?? null;
-    const hasDivisionRestriction = divisionFilterIds !== null && divisionFilterIds.length > 0;
+    /** Stable dep: roster filter array identity can change without content changing. */
+    const rosterDivisionDataKey = useMemo(
+        () => JSON.stringify(rosterDivisionFilter.data ?? null),
+        [rosterDivisionFilter.data]
+    );
 
     const fetchData = useCallback(async () => {
         if (!companyId || !season || !rosterDivisionFilter.isFetched) return;
+        const filterIds = rosterDivisionFilter.data ?? null;
+        const hasRestriction = filterIds !== null && filterIds.length > 0;
         setLoading(true);
         try {
             if (tlc) {
@@ -113,8 +118,8 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                 .eq('company_id', companyId)
                 .eq('is_active', true)
                 .order('sort_order', { ascending: true });
-            if (hasDivisionRestriction && divisionFilterIds) {
-                divQ = divQ.in('id', divisionFilterIds);
+            if (hasRestriction && filterIds) {
+                divQ = divQ.in('id', filterIds);
             }
 
             const [divRes, electivesRes, signupsRes, allChildrenRes] = await Promise.all([
@@ -156,8 +161,7 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
         selectedDay,
         selectedPeriod,
         rosterDivisionFilter.isFetched,
-        hasDivisionRestriction,
-        divisionFilterIds,
+        rosterDivisionDataKey,
         tlc,
     ]);
 

@@ -20,6 +20,9 @@ interface EvaluationQuestion {
     ratingOptions: number;
 }
 
+/** Stable fallback — `data ?? []` in useQuery destructuring is a new [] every render and breaks [dbQuestions] effects. */
+const EMPTY_DB_QUESTIONS: unknown[] = [];
+
 export const EvaluationQuestionsScreen = ({ navigation }: any) => {
     const [questionText, setQuestionText] = useState('');
     const [questionType, setQuestionType] = useState('Multiple Choice');
@@ -39,7 +42,8 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
     const { companyId } = useCompany();
 
     // Fetch evaluation questions from Supabase
-    const { data: dbQuestions = [], isLoading: questionsLoading } = useEvaluationQuestions(companyId);
+    const { data: dbQuestionsData, isLoading: questionsLoading } = useEvaluationQuestions(companyId);
+    const dbQuestions = dbQuestionsData ?? EMPTY_DB_QUESTIONS;
     const addQuestionMutation = useAddEvaluationQuestion();
     const deleteQuestionMutation = useDeleteEvaluationQuestion();
 
@@ -55,6 +59,8 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
     const [questions, setQuestions] = useState<EvaluationQuestion[]>(defaultQuestions);
 
     useEffect(() => {
+        if (questionsLoading) return;
+
         const mapQuestionType = (qt: string) => {
             const t = String(qt || '').toLowerCase();
             if (t === 'rating') return 'Rating Scale';
@@ -92,7 +98,7 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
                 } as EvaluationQuestion;
             })
         );
-    }, [dbQuestions]);
+    }, [dbQuestions, questionsLoading]);
 
     const handleAddQuestion = () => {
         if (addQuestionMutation.isPending) return;
