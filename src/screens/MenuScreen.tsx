@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,12 +35,17 @@ export const MenuScreen = ({ navigation }: any) => {
     const [showDatePicker, setShowDatePicker] = useState(false);
 
     const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+    const closeAddMenuTransientUi = () => {
+        setShowDatePicker(false);
+        setShowMealTypePicker(false);
+    };
 
     const handleUploadCSV = () => {
         setShowSelectFileModal(true);
     };
 
     const handleAddMenuItem = () => {
+        closeAddMenuTransientUi();
         setShowAddMenuItemModal(true);
     };
 
@@ -58,6 +63,7 @@ export const MenuScreen = ({ navigation }: any) => {
     };
 
     const handleCloseAddMenuItem = () => {
+        closeAddMenuTransientUi();
         setShowAddMenuItemModal(false);
         // Reset form
         setMenuDate(new Date(2026, 0, 22));
@@ -495,151 +501,140 @@ export const MenuScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
-            {/* Date Picker Modal */}
-            <Modal
-                visible={showDatePicker}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowDatePicker(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
-                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.pickerHeader}>
-                            <Text style={styles.pickerTitle}>Select Date</Text>
-                            <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <ScrollView style={styles.datePickerContainer}>
-                            {/* Month Selection */}
-                            <View style={styles.dateSection}>
-                                <Text style={styles.dateSectionTitle}>Month</Text>
-                                <View style={styles.dateOptionsRow}>
-                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => (
-                                        <TouchableOpacity
-                                            key={month}
-                                            style={[
-                                                styles.dateOption,
-                                                menuDate.getMonth() + 1 === month && styles.dateOptionSelected
-                                            ]}
-                                            onPress={() => {
-                                                const newDate = new Date(menuDate);
-                                                newDate.setMonth(month - 1);
-                                                setMenuDate(newDate);
-                                            }}
-                                        >
-                                            <Text style={[
-                                                styles.dateOptionText,
-                                                menuDate.getMonth() + 1 === month && styles.dateOptionTextSelected
-                                            ]}>
-                                                {month}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
-
-                            {/* Day Selection */}
-                            <View style={styles.dateSection}>
-                                <Text style={styles.dateSectionTitle}>Day</Text>
-                                <View style={styles.dateOptionsRow}>
-                                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                                        <TouchableOpacity
-                                            key={day}
-                                            style={[
-                                                styles.dateOption,
-                                                menuDate.getDate() === day && styles.dateOptionSelected
-                                            ]}
-                                            onPress={() => {
-                                                const newDate = new Date(menuDate);
-                                                newDate.setDate(day);
-                                                setMenuDate(newDate);
-                                            }}
-                                        >
-                                            <Text style={[
-                                                styles.dateOptionText,
-                                                menuDate.getDate() === day && styles.dateOptionTextSelected
-                                            ]}>
-                                                {day}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
-
-                            {/* Year Selection */}
-                            <View style={styles.dateSection}>
-                                <Text style={styles.dateSectionTitle}>Year</Text>
-                                <View style={styles.dateOptionsRow}>
-                                    {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => (
-                                        <TouchableOpacity
-                                            key={year}
-                                            style={[
-                                                styles.dateOption,
-                                                menuDate.getFullYear() === year && styles.dateOptionSelected
-                                            ]}
-                                            onPress={() => {
-                                                const newDate = new Date(menuDate);
-                                                newDate.setFullYear(year);
-                                                setMenuDate(newDate);
-                                            }}
-                                        >
-                                            <Text style={[
-                                                styles.dateOptionText,
-                                                menuDate.getFullYear() === year && styles.dateOptionTextSelected
-                                            ]}>
-                                                {year}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
-                        </ScrollView>
-                        <TouchableOpacity
-                            style={styles.pickerConfirmBtn}
-                            onPress={() => setShowDatePicker(false)}
-                        >
-                            <Text style={styles.pickerConfirmBtnText}>Confirm</Text>
-                        </TouchableOpacity>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Meal Type Picker Modal */}
-            <Modal
-                visible={showMealTypePicker}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowMealTypePicker(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowMealTypePicker(false)}>
-                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.pickerHeader}>
-                            <Text style={styles.pickerTitle}>Select Meal Type</Text>
-                            <TouchableOpacity onPress={() => setShowMealTypePicker(false)}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <View style={styles.pickerContent}>
-                            {mealTypes.map((type) => (
-                                <TouchableOpacity
-                                    key={type}
-                                    style={styles.pickerOption}
-                                    onPress={() => {
-                                        setMealType(type);
-                                        setShowMealTypePicker(false);
-                                    }}
-                                >
-                                    <Text style={styles.pickerOptionText}>{type}</Text>
-                                    {mealType === type && (
-                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                    )}
+            {/* Date Picker Overlay (inline to avoid nested modal issues on iOS) */}
+            {showDatePicker && (
+                <View style={styles.modalAbsoluteOverlay} pointerEvents="box-none">
+                    <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
+                        <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                            <View style={styles.pickerHeader}>
+                                <Text style={styles.pickerTitle}>Select Date</Text>
+                                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
                                 </TouchableOpacity>
-                            ))}
-                        </View>
+                            </View>
+                            <ScrollView style={styles.datePickerContainer}>
+                                <View style={styles.dateSection}>
+                                    <Text style={styles.dateSectionTitle}>Month</Text>
+                                    <View style={styles.dateOptionsRow}>
+                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => (
+                                            <TouchableOpacity
+                                                key={month}
+                                                style={[
+                                                    styles.dateOption,
+                                                    menuDate.getMonth() + 1 === month && styles.dateOptionSelected
+                                                ]}
+                                                onPress={() => {
+                                                    const newDate = new Date(menuDate);
+                                                    newDate.setMonth(month - 1);
+                                                    setMenuDate(newDate);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.dateOptionText,
+                                                    menuDate.getMonth() + 1 === month && styles.dateOptionTextSelected
+                                                ]}>
+                                                    {month}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+                                <View style={styles.dateSection}>
+                                    <Text style={styles.dateSectionTitle}>Day</Text>
+                                    <View style={styles.dateOptionsRow}>
+                                        {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                                            <TouchableOpacity
+                                                key={day}
+                                                style={[
+                                                    styles.dateOption,
+                                                    menuDate.getDate() === day && styles.dateOptionSelected
+                                                ]}
+                                                onPress={() => {
+                                                    const newDate = new Date(menuDate);
+                                                    newDate.setDate(day);
+                                                    setMenuDate(newDate);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.dateOptionText,
+                                                    menuDate.getDate() === day && styles.dateOptionTextSelected
+                                                ]}>
+                                                    {day}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+                                <View style={styles.dateSection}>
+                                    <Text style={styles.dateSectionTitle}>Year</Text>
+                                    <View style={styles.dateOptionsRow}>
+                                        {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => (
+                                            <TouchableOpacity
+                                                key={year}
+                                                style={[
+                                                    styles.dateOption,
+                                                    menuDate.getFullYear() === year && styles.dateOptionSelected
+                                                ]}
+                                                onPress={() => {
+                                                    const newDate = new Date(menuDate);
+                                                    newDate.setFullYear(year);
+                                                    setMenuDate(newDate);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.dateOptionText,
+                                                    menuDate.getFullYear() === year && styles.dateOptionTextSelected
+                                                ]}>
+                                                    {year}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+                            </ScrollView>
+                            <TouchableOpacity
+                                style={styles.pickerConfirmBtn}
+                                onPress={() => setShowDatePicker(false)}
+                            >
+                                <Text style={styles.pickerConfirmBtnText}>Confirm</Text>
+                            </TouchableOpacity>
+                        </Pressable>
                     </Pressable>
-                </Pressable>
-            </Modal>
+                </View>
+            )}
+
+            {/* Meal Type Picker Overlay (inline to avoid nested modal issues on iOS) */}
+            {showMealTypePicker && (
+                <View style={styles.modalAbsoluteOverlay} pointerEvents="box-none">
+                    <Pressable style={styles.modalOverlay} onPress={() => setShowMealTypePicker(false)}>
+                        <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                            <View style={styles.pickerHeader}>
+                                <Text style={styles.pickerTitle}>Select Meal Type</Text>
+                                <TouchableOpacity onPress={() => setShowMealTypePicker(false)}>
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                            <View style={styles.pickerContent}>
+                                {mealTypes.map((type) => (
+                                    <TouchableOpacity
+                                        key={type}
+                                        style={styles.pickerOption}
+                                        onPress={() => {
+                                            setMealType(type);
+                                            setShowMealTypePicker(false);
+                                        }}
+                                    >
+                                        <Text style={styles.pickerOptionText}>{type}</Text>
+                                        {mealType === type && (
+                                            <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </Pressable>
+                    </Pressable>
+                </View>
+            )}
 
             <Modal visible={isDeleteConfirmVisible} transparent animationType="fade" onRequestClose={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
                 <Pressable style={styles.deleteModalOverlay} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
@@ -844,6 +839,11 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     // Modal Styles
+    modalAbsoluteOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 2000,
+        elevation: 24,
+    },
     modalOverlay: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',

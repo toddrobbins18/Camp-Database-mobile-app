@@ -7,7 +7,13 @@ import { StyledCard } from '../components/StyledCard';
 import { supabase } from '../lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
-import { useTodayBirthdays, useDailyNewsSchedule } from '../api/dashboard';
+import {
+    useTodayBirthdays,
+    useDailyNewsSchedule,
+    useTodaySportsCalendar,
+    useTodaySpecialEventsActivities,
+    useDailyWolfContentRow,
+} from '../api/dashboard';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadDailyWolfDocument, pathFromFileUrl, getSignedUrl } from '../api/storage';
 import { Linking } from 'react-native';
@@ -16,7 +22,7 @@ const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
 
 export const DailyNewsScreen = ({ navigation }: any) => {
-    const { companyId, season } = useCompany();
+    const { companyId, season, isTimberLakeWest } = useCompany();
     const queryClient = useQueryClient();
     const [showDailyWolfUpload, setShowDailyWolfUpload] = useState(false);
     const [dailyWolfDate, setDailyWolfDate] = useState(new Date().toISOString().split('T')[0]);
@@ -42,6 +48,24 @@ export const DailyNewsScreen = ({ navigation }: any) => {
 
     // Today's schedule: same as main app Daily Notes – sports_calendar + activities_field_trips + special_events_activities by event_date & season
     const { data: scheduleEvents = [] } = useDailyNewsSchedule(companyId, todayString, season ?? null);
+    const { data: sportsToday = [] } = useTodaySportsCalendar(
+        companyId,
+        todayString,
+        season ?? null,
+        isTimberLakeWest,
+    );
+    const { data: specialActivitiesToday = [] } = useTodaySpecialEventsActivities(
+        companyId,
+        todayString,
+        season ?? null,
+        isTimberLakeWest,
+    );
+    const { data: dailyWolfRow } = useDailyWolfContentRow(
+        companyId,
+        todayString,
+        season ?? null,
+        isTimberLakeWest,
+    );
 
     // Today's menu from menu_items (same schema as web, with season filter like main app)
     const { data: meals = null } = useQuery({
@@ -167,7 +191,9 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                     <Ionicons name="menu" size={28} color={theme.colors.primary} />
                 </TouchableOpacity>
                 <View style={styles.headerTitleContainer}>
-                    <Text style={styles.headerTitle}>Tyler Hill Daily News</Text>
+                    <Text style={styles.headerTitle}>
+                        {isTimberLakeWest ? 'Daily Wolf' : 'Tyler Hill Daily News'}
+                    </Text>
                 </View>
                 <TouchableOpacity
                     style={styles.printButton}
@@ -187,8 +213,12 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                 <StyledCard style={styles.newsCard}>
                     {/* Header Section */}
                     <View style={styles.newsHeader}>
-                        <Text style={styles.newsTitle}>TYLER HILL DAILY NEWS</Text>
-                        <Text style={styles.newsSubtitle}>HOME OF THE BEARS</Text>
+                        <Text style={styles.newsTitle}>
+                            {isTimberLakeWest ? 'THE DAILY WOLF' : 'TYLER HILL DAILY NEWS'}
+                        </Text>
+                        <Text style={styles.newsSubtitle}>
+                            {isTimberLakeWest ? 'TIMBER LAKE WEST' : 'HOME OF THE BEARS'}
+                        </Text>
                         <Text style={styles.newsDate}>{formattedDate}</Text>
                     </View>
 
@@ -249,6 +279,87 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                             </View>
                         </View>
                     </View>
+
+                    {/* Timber Lake West additions (match Daily Wolf printable/main dashboard content) */}
+                    {isTimberLakeWest && (
+                        <>
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>Athletics</Text>
+                                {sportsToday.length === 0 ? (
+                                    <Text style={styles.emptyMessage}>No athletic events scheduled</Text>
+                                ) : (
+                                    sportsToday.map((evt: any) => (
+                                        <View key={`dw-ath-${evt.id}`} style={styles.scheduleItem}>
+                                            <Text style={styles.menuLabel}>{evt.time || '—'}</Text>
+                                            <View style={styles.scheduleEventContent}>
+                                                <Text style={styles.menuValue}>{evt.title || 'Untitled event'}</Text>
+                                                <Text style={styles.eventType}>
+                                                    {evt.location || 'TBD'}
+                                                    {evt.sport_type ? ` • ${evt.sport_type}` : ''}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    ))
+                                )}
+                            </View>
+
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>Quote of the Day</Text>
+                                <Text style={styles.emptyMessage}>
+                                    {dailyWolfRow?.quote_of_the_day?.trim()
+                                        ? `"${dailyWolfRow.quote_of_the_day.trim()}"`
+                                        : 'No quote set'}
+                                </Text>
+                            </View>
+
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>OD</Text>
+                                <Text style={styles.birthdayNames}>
+                                    {dailyWolfRow?.officer_of_day?.trim() || 'TBD'}
+                                </Text>
+                            </View>
+
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>Laundry</Text>
+                                <Text style={styles.birthdayNames}>
+                                    {dailyWolfRow?.laundry_info?.trim() || 'TBD'}
+                                </Text>
+                            </View>
+
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>Phone Calls</Text>
+                                <Text style={styles.birthdayNames}>
+                                    {dailyWolfRow?.phone_calls_info?.trim() || 'TBD'}
+                                </Text>
+                            </View>
+
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>Evening Activities</Text>
+                                {specialActivitiesToday.filter((e: any) => e.event_type === 'evening-activity').length === 0 ? (
+                                    <Text style={styles.emptyMessage}>No evening activities scheduled</Text>
+                                ) : (
+                                    specialActivitiesToday
+                                        .filter((e: any) => e.event_type === 'evening-activity')
+                                        .map((evt: any) => (
+                                            <View key={`dw-evening-${evt.id}`} style={styles.scheduleItem}>
+                                                <Text style={styles.menuLabel}>{evt.time_slot || '—'}</Text>
+                                                <View style={styles.scheduleEventContent}>
+                                                    <Text style={styles.menuValue}>{evt.title || 'Untitled event'}</Text>
+                                                    <Text style={styles.eventType}>{evt.location || 'TBD'}</Text>
+                                                </View>
+                                            </View>
+                                        ))
+                                )}
+                            </View>
+
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>Notes</Text>
+                                <Text style={styles.birthdayNames}>
+                                    {dailyWolfRow?.notes?.trim() || 'No notes added'}
+                                </Text>
+                            </View>
+                        </>
+                    )}
                 </StyledCard>
 
                 {/* The Bear PDFs (Tyler Hill branding; storage/table keys remain daily_wolf_*) */}

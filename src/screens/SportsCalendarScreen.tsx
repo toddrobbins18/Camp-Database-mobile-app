@@ -1247,9 +1247,11 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.openDrawer()}>
-                        <Ionicons name="menu" size={28} color={theme.colors.primary} />
-                    </TouchableOpacity>
+                    <View style={styles.headerLeftActions}>
+                        <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.headerActionButton}>
+                            <Ionicons name="menu" size={24} color={theme.colors.primary} />
+                        </TouchableOpacity>
+                    </View>
                     <TouchableOpacity>
                         <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
                     </TouchableOpacity>
@@ -1830,13 +1832,16 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 animationType="slide"
                 onRequestClose={() => setShowListViewModal(false)}
             >
-                <SafeAreaView style={styles.listViewModal}>
+                <SafeAreaView style={styles.listViewModal} edges={['top']}>
                     <View style={styles.listModalHeader}>
-                        <Text style={styles.listModalTitle}>
+                        <TouchableOpacity style={styles.listModalIconButton} onPress={() => setShowListViewModal(false)}>
+                            <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
+                        </TouchableOpacity>
+                        <Text style={styles.listModalTitle} numberOfLines={1}>
                             {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                         </Text>
-                        <TouchableOpacity onPress={() => setShowListViewModal(false)}>
-                            <Ionicons name="close" size={24} color={theme.colors.text} />
+                        <TouchableOpacity style={styles.listModalIconButton} onPress={() => setShowListViewModal(false)}>
+                            <Ionicons name="close" size={22} color={theme.colors.text} />
                         </TouchableOpacity>
                     </View>
 
@@ -1856,33 +1861,33 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     <View style={styles.filterContainer}>
                         <View style={styles.filterRow}>
                             <TouchableOpacity style={styles.filterButton} onPress={() => setShowDivisionFilter(true)}>
-                                <Text style={styles.filterButtonText}>
+                                <Text style={styles.filterButtonText} numberOfLines={1}>
                                     {selectedDivisions.length > 0 ? `Divisions (${selectedDivisions.length})` : 'Divisions'}
                                 </Text>
                                 <Ionicons name="chevron-down" size={16} color={theme.colors.text} />
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.filterButton} onPress={() => setShowGenderFilter(true)}>
-                                <Text style={styles.filterButtonText}>{selectedGender}</Text>
+                                <Text style={styles.filterButtonText} numberOfLines={1}>{selectedGender}</Text>
                                 <Ionicons name="chevron-down" size={16} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
                         <View style={styles.filterRow}>
                             <TouchableOpacity style={styles.filterButton} onPress={() => setShowSportFilter(true)}>
-                                <Text style={styles.filterButtonText}>{selectedSport}</Text>
+                                <Text style={styles.filterButtonText} numberOfLines={1}>{selectedSport}</Text>
                                 <Ionicons name="chevron-down" size={16} color={theme.colors.text} />
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.filterButton} onPress={() => setShowEventTypeFilter(true)}>
-                                <Text style={styles.filterButtonText}>{selectedEventType}</Text>
+                                <Text style={styles.filterButtonText} numberOfLines={1}>{selectedEventType}</Text>
                                 <Ionicons name="chevron-down" size={16} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
                         <View style={styles.filterRow}>
                             <TouchableOpacity style={styles.filterButton} onPress={() => setShowLocationFilter(true)}>
-                                <Text style={styles.filterButtonText}>{selectedLocation}</Text>
+                                <Text style={styles.filterButtonText} numberOfLines={1}>{selectedLocation}</Text>
                                 <Ionicons name="chevron-down" size={16} color={theme.colors.text} />
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.filterButton} onPress={() => setShowSortFilter(true)}>
-                                <Text style={styles.filterButtonText}>{selectedSort}</Text>
+                                <Text style={styles.filterButtonText} numberOfLines={1}>{selectedSort}</Text>
                                 <Ionicons name="chevron-down" size={16} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
@@ -3023,6 +3028,18 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: theme.spacing.lg,
     },
+    headerLeftActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+    },
+    headerActionButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     titleSection: {
         marginBottom: theme.spacing.lg,
     },
@@ -3495,17 +3512,27 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingTop: theme.spacing.lg,
+        paddingTop: theme.spacing.sm,
         paddingBottom: theme.spacing.md,
         paddingHorizontal: theme.spacing.md,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
+        gap: theme.spacing.sm,
+    },
+    listModalIconButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     listModalTitle: {
         ...theme.typography.h2,
         fontSize: 20,
         fontWeight: '700',
         color: theme.colors.text,
+        flex: 1,
+        textAlign: 'center',
     },
     searchContainer: {
         flexDirection: 'row',

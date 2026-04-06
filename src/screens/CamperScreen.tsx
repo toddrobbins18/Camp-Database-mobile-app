@@ -1526,14 +1526,9 @@ export const CamperScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Modal>
 
-                {/* Gender Dropdown Modal for Add Child */}
-                <Modal
-                    visible={showAddGenderDropdown}
-                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
-                    transparent={true}
-                    animationType="slide"
-                    onRequestClose={() => setShowAddGenderDropdown(false)}
-                >
+                {/* Gender Dropdown Overlay for Add Child (inline to avoid nested modal issues on iOS) */}
+                {showAddGenderDropdown && (
+                    <View style={styles.modalAbsoluteOverlay} pointerEvents="box-none">
                     <Pressable
                         style={styles.bottomSheetOverlay}
                         onPress={() => setShowAddGenderDropdown(false)}
@@ -1576,16 +1571,12 @@ export const CamperScreen = ({ navigation }: any) => {
                             </ScrollView>
                         </Pressable>
                     </Pressable>
-                </Modal>
+                    </View>
+                )}
 
-                {/* Division Dropdown Modal for Add Child */}
-                <Modal
-                    visible={showAddDivisionDropdown}
-                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
-                    transparent={true}
-                    animationType="slide"
-                    onRequestClose={() => setShowAddDivisionDropdown(false)}
-                >
+                {/* Division Dropdown Overlay for Add Child (inline to avoid nested modal issues on iOS) */}
+                {showAddDivisionDropdown && (
+                    <View style={styles.modalAbsoluteOverlay} pointerEvents="box-none">
                     <Pressable
                         style={styles.bottomSheetOverlay}
                         onPress={() => setShowAddDivisionDropdown(false)}
@@ -1628,16 +1619,12 @@ export const CamperScreen = ({ navigation }: any) => {
                             </ScrollView>
                         </Pressable>
                     </Pressable>
-                </Modal>
+                    </View>
+                )}
 
-                {/* Assigned Leader Dropdown Modal for Add Child */}
-                <Modal
-                    visible={showAddLeaderDropdown}
-                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
-                    transparent={true}
-                    animationType="slide"
-                    onRequestClose={() => setShowAddLeaderDropdown(false)}
-                >
+                {/* Assigned Leader Dropdown Overlay for Add Child (inline to avoid nested modal issues on iOS) */}
+                {showAddLeaderDropdown && (
+                    <View style={styles.modalAbsoluteOverlay} pointerEvents="box-none">
                     <Pressable
                         style={styles.bottomSheetOverlay}
                         onPress={() => setShowAddLeaderDropdown(false)}
@@ -1692,7 +1679,8 @@ export const CamperScreen = ({ navigation }: any) => {
                             </ScrollView>
                         </Pressable>
                     </Pressable>
-                </Modal>
+                    </View>
+                )}
 
                 {/* Delete Confirmation Modal */}
                 <Modal
@@ -3248,6 +3236,11 @@ const styles = StyleSheet.create({
     },
 
     // Bottom Sheet Styles
+    modalAbsoluteOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 2000,
+        elevation: 24,
+    },
     bottomSheetOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
