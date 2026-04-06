@@ -22,13 +22,16 @@ interface UserDivisionPermissions {
     };
 }
 
+const EMPTY_ROWS: unknown[] = [];
+
 export const DivisionPermissionsScreen = ({ navigation }: any) => {
     const { companyId } = useCompany();
-    const { data: dbDivisions = [], isLoading: divLoading } = useDivisionsLookup(companyId);
+    const { data: dbDivisionsData, isLoading: divLoading } = useDivisionsLookup(companyId);
+    const dbDivisions = dbDivisionsData ?? EMPTY_ROWS;
     const divisions = useMemo(() => dbDivisions.map((d: any) => ({ id: d.id, name: d.name })), [dbDivisions]);
 
     // Fetch approved users in current company (match Lovable), then their roles from user_roles
-    const { data: users = [], isLoading: usersLoading } = useQuery({
+    const { data: usersData, isLoading: usersLoading } = useQuery({
         queryKey: ['profiles_division_perms', companyId],
         queryFn: async () => {
             if (!companyId) return [];
@@ -67,9 +70,11 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
         },
         enabled: !!companyId,
     });
+    const users = usersData ?? EMPTY_ROWS;
 
     // Fetch existing division permissions from Supabase
-    const { data: dbPerms = [], isLoading: permsLoading } = useDivisionPermissions(companyId);
+    const { data: dbPermsData, isLoading: permsLoading } = useDivisionPermissions(companyId);
+    const dbPerms = dbPermsData ?? EMPTY_ROWS;
     const updateDivPermMutation = useUpdateDivisionPermission();
 
     const [userDivisionPermissions, setUserDivisionPermissions] = useState<UserDivisionPermissions>({});
@@ -77,6 +82,7 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
     // Hydrate local state from Supabase division permissions
     useEffect(() => {
         if (!companyId) return;
+        if (divLoading || usersLoading || permsLoading) return;
 
         const perms: UserDivisionPermissions = {};
         users.forEach((u: any) => {
@@ -93,7 +99,7 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
         });
 
         setUserDivisionPermissions(perms);
-    }, [companyId, dbPerms, users, divisions]);
+    }, [companyId, dbPerms, users, divisions, divLoading, usersLoading, permsLoading]);
 
     const handleToggleDivision = async (userId: string, divisionId: string) => {
         if (!companyId) return;
