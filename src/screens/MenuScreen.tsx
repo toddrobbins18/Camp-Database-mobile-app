@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, ActivityIndicator, Alert } from 'react-native';
+import {
+    View,
+    Text,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    Modal,
+    Pressable,
+    TextInput,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+} from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -414,8 +428,23 @@ export const MenuScreen = ({ navigation }: any) => {
                 onRequestClose={handleCloseAddMenuItem}
             >
                 <Pressable style={styles.centerModalOverlay} onPress={handleCloseAddMenuItem}>
-                    <Pressable style={styles.addMenuItemModal} onPress={(e) => e.stopPropagation()}>
-                        <ScrollView style={styles.addMenuItemScroll} showsVerticalScrollIndicator={false}>
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        style={styles.addMenuItemKeyboardRoot}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+                    >
+                        <Pressable style={styles.addMenuItemModal} onPress={(e) => e.stopPropagation()}>
+                        <KeyboardAwareScrollView
+                            style={styles.addMenuItemScroll}
+                            contentContainerStyle={styles.addMenuItemScrollContent}
+                            enableOnAndroid
+                            enableAutomaticScroll
+                            extraScrollHeight={Platform.OS === 'ios' ? 160 : 200}
+                            extraHeight={32}
+                            showsVerticalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode="on-drag"
+                        >
                             {/* Modal Header */}
                             <View style={styles.addMenuItemHeader}>
                                 <View>
@@ -475,6 +504,7 @@ export const MenuScreen = ({ navigation }: any) => {
                                     textAlignVertical="top"
                                     value={menuItemsText}
                                     onChangeText={setMenuItemsText}
+                                    scrollEnabled
                                 />
                             </View>
 
@@ -496,16 +526,21 @@ export const MenuScreen = ({ navigation }: any) => {
                                     <Text style={styles.addMenuItemBtnText}>Add Menu Item</Text>
                                 </TouchableOpacity>
                             </View>
-                        </ScrollView>
-                    </Pressable>
+                        </KeyboardAwareScrollView>
+                        </Pressable>
+                    </KeyboardAvoidingView>
                 </Pressable>
             </Modal>
 
-            {/* Date Picker Overlay (inline to avoid nested modal issues on iOS) */}
-            {showDatePicker && (
-                <View style={styles.modalAbsoluteOverlay} pointerEvents="box-none">
-                    <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
-                        <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+            {/* Date picker: must use Modal so it stacks above the Add Menu Item modal (web + native portals) */}
+            <Modal
+                visible={showDatePicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowDatePicker(false)}
+            >
+                <Pressable style={styles.pickerRootOverlay} onPress={() => setShowDatePicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
                             <View style={styles.pickerHeader}>
                                 <Text style={styles.pickerTitle}>Select Date</Text>
                                 <TouchableOpacity onPress={() => setShowDatePicker(false)}>
@@ -599,15 +634,18 @@ export const MenuScreen = ({ navigation }: any) => {
                                 <Text style={styles.pickerConfirmBtnText}>Confirm</Text>
                             </TouchableOpacity>
                         </Pressable>
-                    </Pressable>
-                </View>
-            )}
+                </Pressable>
+            </Modal>
 
-            {/* Meal Type Picker Overlay (inline to avoid nested modal issues on iOS) */}
-            {showMealTypePicker && (
-                <View style={styles.modalAbsoluteOverlay} pointerEvents="box-none">
-                    <Pressable style={styles.modalOverlay} onPress={() => setShowMealTypePicker(false)}>
-                        <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+            {/* Meal type picker: same stacking fix as date picker */}
+            <Modal
+                visible={showMealTypePicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowMealTypePicker(false)}
+            >
+                <Pressable style={styles.pickerRootOverlay} onPress={() => setShowMealTypePicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
                             <View style={styles.pickerHeader}>
                                 <Text style={styles.pickerTitle}>Select Meal Type</Text>
                                 <TouchableOpacity onPress={() => setShowMealTypePicker(false)}>
@@ -632,9 +670,8 @@ export const MenuScreen = ({ navigation }: any) => {
                                 ))}
                             </View>
                         </Pressable>
-                    </Pressable>
-                </View>
-            )}
+                </Pressable>
+            </Modal>
 
             <Modal visible={isDeleteConfirmVisible} transparent animationType="fade" onRequestClose={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
                 <Pressable style={styles.deleteModalOverlay} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
@@ -839,10 +876,11 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     // Modal Styles
-    modalAbsoluteOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        zIndex: 2000,
-        elevation: 24,
+    /** Full-screen dim behind bottom-sheet pickers; use inside RN Modal so it stacks above other modals (web). */
+    pickerRootOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
     },
     modalOverlay: {
         ...StyleSheet.absoluteFillObject,
@@ -1024,15 +1062,25 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
     },
     // Add Menu Item Modal Styles
+    addMenuItemKeyboardRoot: {
+        width: '90%',
+        maxHeight: '90%',
+    },
     addMenuItemModal: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.xl,
-        height: '80%',
-        width: '90%',
-        paddingBottom: theme.spacing.xl,
+        maxHeight: '85%',
+        width: '100%',
+        paddingBottom: theme.spacing.md,
+        overflow: 'hidden',
     },
     addMenuItemScroll: {
+        flexGrow: 1,
         paddingHorizontal: theme.spacing.md,
+    },
+    addMenuItemScrollContent: {
+        flexGrow: 1,
+        paddingBottom: theme.spacing.xl,
     },
     addMenuItemHeader: {
         flexDirection: 'row',

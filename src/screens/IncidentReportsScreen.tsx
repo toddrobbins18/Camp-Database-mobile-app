@@ -10,6 +10,8 @@ import { useCampers } from '../api/campers';
 import { useIncidentReports, useAddIncidentReport, useUpdateIncidentReport } from '../api/incidents_approvals';
 import { supabase } from '../lib/supabase';
 
+const INCIDENT_ACCENT = '#ef4444';
+
 export const IncidentReportsScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const { companyId, season } = useCompany();
@@ -51,6 +53,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     const [reportedBy, setReportedBy] = useState<string>('');
     const [status, setStatus] = useState<string>('Open');
     const [showStatusPicker, setShowStatusPicker] = useState(false);
+    const [focusedField, setFocusedField] = useState<string | null>(null);
 
     // Options
     const incidentTypes = ['Accident', 'Behavior', 'Medical', 'Injury', 'Other'];
@@ -136,7 +139,11 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
         setReportedBy('');
         setTags([]);
         setTagInput('');
+        setFocusedField(null);
     };
+
+    const getFieldBorderColor = (field: string) =>
+        focusedField === field ? INCIDENT_ACCENT : theme.colors.border;
 
     // Display helpers: normalize type/status so they never concatenate (e.g. "Behavioral", "Open")
     const formatLabel = (s: string | null | undefined) =>
@@ -483,12 +490,14 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             {/* Children Involved Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Children Involved *</Text>
-                                <View style={styles.searchContainer}>
+                                <View style={[styles.searchContainer, { borderColor: getFieldBorderColor('childrenSearch') }]}>
                                     <Ionicons name="search" size={20} color={theme.colors.textSecondary} />
                                     <TextInput
                                         style={styles.searchInput}
                                         placeholder="Search children..."
                                         placeholderTextColor={theme.colors.textSecondary}
+                                        onFocus={() => setFocusedField('childrenSearch')}
+                                        onBlur={() => setFocusedField((prev) => (prev === 'childrenSearch' ? null : prev))}
                                     />
                                 </View>
                                 <ScrollView
@@ -517,8 +526,11 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Date</Text>
                                 <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    onPress={() => setShowDatePicker(true)}
+                                    style={[styles.inputContainer, { borderColor: getFieldBorderColor('date') }]}
+                                    onPress={() => {
+                                        setFocusedField('date');
+                                        setShowDatePicker(true);
+                                    }}
                                 >
                                     <TextInput
                                         style={styles.inputField}
@@ -534,8 +546,11 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Type</Text>
                                 <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    onPress={() => setShowTypePicker(true)}
+                                    style={[styles.inputContainer, { borderColor: getFieldBorderColor('type') }]}
+                                    onPress={() => {
+                                        setFocusedField('type');
+                                        setShowTypePicker(true);
+                                    }}
                                 >
                                     <TextInput
                                         style={styles.inputField}
@@ -553,8 +568,11 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Severity</Text>
                                 <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    onPress={() => setShowSeverityPicker(true)}
+                                    style={[styles.inputContainer, { borderColor: getFieldBorderColor('severity') }]}
+                                    onPress={() => {
+                                        setFocusedField('severity');
+                                        setShowSeverityPicker(true);
+                                    }}
                                 >
                                     <TextInput
                                         style={styles.inputField}
@@ -572,7 +590,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Description</Text>
                                 <TextInput
-                                    style={styles.textArea}
+                                    style={[styles.textArea, { borderColor: getFieldBorderColor('description') }]}
                                     placeholder="Describe the Incident..."
                                     placeholderTextColor={theme.colors.textSecondary}
                                     multiline
@@ -580,6 +598,8 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     textAlignVertical="top"
                                     value={description}
                                     onChangeText={setDescription}
+                                    onFocus={() => setFocusedField('description')}
+                                    onBlur={() => setFocusedField((prev) => (prev === 'description' ? null : prev))}
                                 />
                             </View>
 
@@ -588,11 +608,13 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                 <Text style={styles.formLabel}>Tags (Optional)</Text>
                                 <View style={styles.tagInputContainer}>
                                     <TextInput
-                                        style={styles.tagInput}
+                                        style={[styles.tagInput, { borderColor: getFieldBorderColor('tags') }]}
                                         placeholder="Add tag (e.g., Verbal, Physical, Friendship)"
                                         placeholderTextColor={theme.colors.textSecondary}
                                         value={tagInput}
                                         onChangeText={setTagInput}
+                                        onFocus={() => setFocusedField('tags')}
+                                        onBlur={() => setFocusedField((prev) => (prev === 'tags' ? null : prev))}
                                     />
                                     <TouchableOpacity style={styles.addTagBtn} onPress={handleAddTag}>
                                         <Text style={styles.addTagBtnText}>Add</Text>
@@ -612,13 +634,15 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             {/* Reported By Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Reported By</Text>
-                                <View style={styles.inputContainer}>
+                                <View style={[styles.inputContainer, { borderColor: getFieldBorderColor('reportedBy') }]}>
                                     <TextInput
                                         style={styles.inputField}
                                         placeholder="Enter reporter name"
                                         placeholderTextColor={theme.colors.textSecondary}
                                         value={reportedBy}
                                         onChangeText={setReportedBy}
+                                        onFocus={() => setFocusedField('reportedBy')}
+                                        onBlur={() => setFocusedField((prev) => (prev === 'reportedBy' ? null : prev))}
                                     />
                                 </View>
                             </View>
@@ -627,8 +651,11 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Status</Text>
                                 <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    onPress={() => setShowStatusPicker(true)}
+                                    style={[styles.inputContainer, { borderColor: getFieldBorderColor('status') }]}
+                                    onPress={() => {
+                                        setFocusedField('status');
+                                        setShowStatusPicker(true);
+                                    }}
                                 >
                                     <TextInput
                                         style={styles.inputField}
@@ -1092,7 +1119,7 @@ const styles = StyleSheet.create({
     addBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.secondary,
+        backgroundColor: INCIDENT_ACCENT,
         paddingVertical: 8,
         paddingHorizontal: 12,
         borderRadius: theme.borderRadius.md,
