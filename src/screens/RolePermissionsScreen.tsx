@@ -20,6 +20,9 @@ interface RolePermissions {
     };
 }
 
+/** Stable fallback — default `[]` from `data ??` is a new array each render and breaks useEffect deps. */
+const EMPTY_DB_PERMISSIONS: unknown[] = [];
+
 const getCompanyMenuItems = (companySlug?: string | null): Permission[] => {
     // NOTE: These IDs MUST match the `menu_item` values stored in `public.role_permissions`
     // and used by the web app role-permissions page.
@@ -368,7 +371,8 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
     ];
 
     // Fetch role permissions from Supabase (company-scoped, like web)
-    const { data: dbPermissions = [], isLoading: permLoading } = useRolePermissions(companyId);
+    const { data: dbPermissionsData, isLoading: permLoading } = useRolePermissions(companyId);
+    const dbPermissions = dbPermissionsData ?? EMPTY_DB_PERMISSIONS;
     const updatePermMutation = useUpdateRolePermission();
 
     const [rolePermissions, setRolePermissions] = useState<RolePermissions>(() => {
@@ -380,6 +384,8 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
 
     // Hydrate local state from Supabase data (company + role + menu_item)
     useEffect(() => {
+        if (permLoading) return;
+
         const next = roleDefs.reduce((acc, role) => {
             acc[role.id] = {};
             return acc;
@@ -393,7 +399,7 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
         });
 
         setRolePermissions(next);
-    }, [dbPermissions, companyId, roleDefs]);
+    }, [dbPermissions, companyId, roleDefs, permLoading]);
 
     const handleTogglePermission = async (roleId: AppRole, menuItemId: string) => {
         if (!companyId) return;
