@@ -72,6 +72,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['activities'] });
             Alert.alert('Success', 'Activity added successfully');
+            closeActivityTransientUi();
             setIsAddActivityModalOpen(false);
             resetFormData();
         },
@@ -115,6 +116,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['activities'] });
             Alert.alert('Success', 'Activity updated successfully');
+            closeActivityTransientUi();
             setIsEditModalOpen(false);
             setEditingActivity(null);
         },
@@ -242,6 +244,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
     const [datePickerField, setDatePickerField] = useState<'event_date' | 'end_date' | null>(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const closeActivityTransientUi = () => {
+        setIsActivityTypeDropdownOpen(false);
+        setIsLocationTypeDropdownOpen(false);
+        setIsDatePickerOpen(false);
+        setDatePickerField(null);
+        setIsTimePickerOpen(false);
+        setTimePickerField(null);
+    };
     const [formData, setFormData] = useState({
         event_date: '',
         end_date: '',
@@ -494,6 +504,10 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
     // Open time picker
     const openTimePicker = (field: 'depart_from_camp' | 'depart_from_activity') => {
+        setIsActivityTypeDropdownOpen(false);
+        setIsLocationTypeDropdownOpen(false);
+        setIsDatePickerOpen(false);
+        setDatePickerField(null);
         setTimePickerField(field);
         // Parse existing time if available
         const currentTime = formData[field];
@@ -1052,12 +1066,19 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                 visible={isAddActivityModalOpen}
                 transparent={true}
                 animationType="fade"
-                onRequestClose={() => setIsAddActivityModalOpen(false)}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
+                onRequestClose={() => {
+                    closeActivityTransientUi();
+                    setIsAddActivityModalOpen(false);
+                }}
             >
                 <View style={{ flex: 1 }}>
                 <Pressable
                     style={styles.centeredOverlay}
-                    onPress={() => setIsAddActivityModalOpen(false)}
+                    onPress={() => {
+                        closeActivityTransientUi();
+                        setIsAddActivityModalOpen(false);
+                    }}
                 >
                     <Pressable
                         style={styles.centeredModal}
@@ -1072,7 +1093,10 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             <View style={styles.addActivityBottomSheetHeader}>
                                 <Text style={styles.addActivityBottomSheetTitle}>Add Activity/Field Trip</Text>
                                 <TouchableOpacity
-                                    onPress={() => setIsAddActivityModalOpen(false)}
+                                    onPress={() => {
+                                        closeActivityTransientUi();
+                                        setIsAddActivityModalOpen(false);
+                                    }}
                                 >
                                     <Ionicons name="close" size={24} color={theme.colors.text} />
                                 </TouchableOpacity>
@@ -1395,7 +1419,10 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 <View style={styles.addActivityBottomSheetActions}>
                                     <TouchableOpacity
                                         style={styles.addActivityCancelButton}
-                                        onPress={() => setIsAddActivityModalOpen(false)}
+                                        onPress={() => {
+                                            closeActivityTransientUi();
+                                            setIsAddActivityModalOpen(false);
+                                        }}
                                     >
                                         <Text style={styles.addActivityCancelButtonText}>Cancel</Text>
                                     </TouchableOpacity>
@@ -1435,21 +1462,20 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                 visible={isEditModalOpen}
                 transparent={true}
                 animationType="fade"
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 onRequestClose={() => {
+                    closeActivityTransientUi();
                     setIsEditModalOpen(false);
                     setEditingActivity(null);
-                    setIsActivityTypeDropdownOpen(false);
-                    setIsLocationTypeDropdownOpen(false);
                 }}
             >
                 <View style={{ flex: 1 }}>
                 <Pressable
                     style={styles.centeredOverlay}
                     onPress={() => {
+                        closeActivityTransientUi();
                         setIsEditModalOpen(false);
                         setEditingActivity(null);
-                        setIsActivityTypeDropdownOpen(false);
-                        setIsLocationTypeDropdownOpen(false);
                     }}
                 >
                     <Pressable
@@ -1468,6 +1494,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 </Text>
                                 <TouchableOpacity
                                     onPress={() => {
+                                        closeActivityTransientUi();
                                         setIsEditModalOpen(false);
                                         setEditingActivity(null);
                                     }}
@@ -1911,6 +1938,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             {/* Date Picker Modal */}
             <Modal
                 visible={isDatePickerOpen}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="fade"
                 onRequestClose={() => {
@@ -2376,6 +2404,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             {/* Time Picker Modal */}
             <Modal
                 visible={isTimePickerOpen}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => {

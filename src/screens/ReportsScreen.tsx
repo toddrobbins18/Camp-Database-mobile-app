@@ -851,7 +851,7 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
             {renderDatePicker('start', showStartDatePicker, () => setShowStartDatePicker(false))}
             {renderDatePicker('end', showEndDatePicker, () => setShowEndDatePicker(false))}
 
-            <Modal visible={showReportTypeDropdown} transparent animationType="slide" onRequestClose={() => setShowReportTypeDropdown(false)}>
+            <Modal visible={showReportTypeDropdown} presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined} transparent animationType="slide" onRequestClose={() => setShowReportTypeDropdown(false)}>
                 <Pressable style={styles.modalOverlay} onPress={() => setShowReportTypeDropdown(false)}>
                     <Pressable style={styles.bottomSheetContainer} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.dragger} />
@@ -878,7 +878,7 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                 </Pressable>
             </Modal>
 
-            <Modal visible={showDivisionDropdown} transparent animationType="slide" onRequestClose={() => setShowDivisionDropdown(false)}>
+            <Modal visible={showDivisionDropdown} presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined} transparent animationType="slide" onRequestClose={() => setShowDivisionDropdown(false)}>
                 <Pressable style={styles.modalOverlay} onPress={() => setShowDivisionDropdown(false)}>
                     <Pressable style={styles.bottomSheetContainer} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.dragger} />

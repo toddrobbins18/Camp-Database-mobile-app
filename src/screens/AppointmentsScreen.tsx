@@ -91,44 +91,83 @@ export const AppointmentsScreen = ({ navigation }: any) => {
         enabled: !!companyId,
     });
 
-    // Fetch campers (children) for dropdown - children table has "name", filter by season
+    // Fetch campers for dropdown. Keep web-like season filter first, then fallback for camps where rows omit season.
     const { data: campers = [] } = useQuery({
         queryKey: ['children', companyId, season],
         queryFn: async () => {
-            if (!companyId || !season) return [];
-            const { data, error } = await supabase
+            if (!companyId) return [];
+            let query = supabase
                 .from('children')
                 .select('id, name')
                 .eq('company_id', companyId)
-                .eq('season', season)
                 .order('name', { ascending: true });
+
+            if (season) {
+                query = query.eq('season', season);
+            }
+
+            const { data, error } = await query;
             if (error) throw error;
+
+            // Fallback: if season-filtered result is empty, retry camp-wide for this company.
+            if (season && (!data || data.length === 0)) {
+                const { data: fallback, error: fallbackError } = await supabase
+                    .from('children')
+                    .select('id, name')
+                    .eq('company_id', companyId)
+                    .order('name', { ascending: true });
+                if (fallbackError) throw fallbackError;
+                return (fallback || []).map((c: any) => ({
+                    id: c.id,
+                    name: (c.name || '').trim() || 'Unnamed',
+                }));
+            }
+
             return (data || []).map((c: any) => ({
                 id: c.id,
                 name: (c.name || '').trim() || 'Unnamed',
             }));
         },
-        enabled: !!companyId && !!season,
+        enabled: !!companyId,
     });
 
-    // Fetch staff for dropdown - appointments.staff_id references staff(id)
+    // Fetch staff for dropdown with same season-first fallback strategy as web parity fix.
     const { data: staffMembers = [] } = useQuery({
         queryKey: ['staff', companyId, season],
         queryFn: async () => {
-            if (!companyId || !season) return [];
-            const { data, error } = await supabase
+            if (!companyId) return [];
+            let query = supabase
                 .from('staff')
                 .select('id, name')
                 .eq('company_id', companyId)
-                .eq('season', season)
                 .order('name', { ascending: true });
+
+            if (season) {
+                query = query.eq('season', season);
+            }
+
+            const { data, error } = await query;
             if (error) throw error;
+
+            if (season && (!data || data.length === 0)) {
+                const { data: fallback, error: fallbackError } = await supabase
+                    .from('staff')
+                    .select('id, name')
+                    .eq('company_id', companyId)
+                    .order('name', { ascending: true });
+                if (fallbackError) throw fallbackError;
+                return (fallback || []).map((s: any) => ({
+                    id: s.id,
+                    name: (s.name || '').trim() || 'Unnamed',
+                }));
+            }
+
             return (data || []).map((s: any) => ({
                 id: s.id,
                 name: (s.name || '').trim() || 'Unnamed',
             }));
         },
-        enabled: !!companyId && !!season,
+        enabled: !!companyId,
     });
 
     // Add appointment mutation
@@ -355,6 +394,8 @@ export const AppointmentsScreen = ({ navigation }: any) => {
     };
 
     const handleAddAppointment = () => {
+        closeFormPickers();
+        setPersonSearchText('');
         setFormData({
             date: '',
             time: '',
@@ -373,6 +414,8 @@ export const AppointmentsScreen = ({ navigation }: any) => {
     };
 
     const handleEditAppointment = (appointment: any) => {
+        closeFormPickers();
+        setPersonSearchText('');
         setFormData({
             date: appointment.date || '',
             time: appointment.time || '',
@@ -388,6 +431,18 @@ export const AppointmentsScreen = ({ navigation }: any) => {
         setEditingAppointment(appointment);
         setIsEditModalOpen(true);
     };
+
+    const closeFormPickers = () => {
+        setIsFormTypeDropdownOpen(false);
+        setIsFormStatusDropdownOpen(false);
+        setIsPersonDropdownOpen(false);
+        setIsDatePickerOpen(false);
+        setIsTimePickerOpen(false);
+    };
+
+    const filteredPeople = (appointmentFor === 'Camper' ? campers : staffMembers).filter((person) =>
+        person.name.toLowerCase().includes(personSearchText.toLowerCase()),
+    );
 
     return (
         <SafeAreaView style={styles.container}>
@@ -488,6 +543,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                 {/* Type Dropdown Modal - Bottom Sheet */}
                 <Modal
                     visible={isTypeDropdownOpen}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setIsTypeDropdownOpen(false)}
@@ -539,6 +595,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                 {/* Status Dropdown Modal - Bottom Sheet */}
                 <Modal
                     visible={isStatusDropdownOpen}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setIsStatusDropdownOpen(false)}
@@ -684,20 +741,12 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                 </View>
             </ScrollView>
 
-            {/* Add/Edit Appointment Modal - Centered Popup */}
-            <Modal
-                visible={isAddModalOpen || isEditModalOpen}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => {
-                    setIsAddModalOpen(false);
-                    setIsEditModalOpen(false);
-                    setEditingAppointment(null);
-                }}
-            >
+            {/* Add/Edit Appointment overlay (non-Modal to avoid iOS nested-modal dropdown freezes) */}
+            {(isAddModalOpen || isEditModalOpen) && (
                 <Pressable
                     style={styles.centeredOverlay}
                     onPress={() => {
+                        closeFormPickers();
                         setIsAddModalOpen(false);
                         setIsEditModalOpen(false);
                         setEditingAppointment(null);
@@ -711,6 +760,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                             style={styles.addAppointmentBottomSheetScroll}
                             contentContainerStyle={styles.addAppointmentBottomSheetContent}
                             showsVerticalScrollIndicator={false}
+                            keyboardShouldPersistTaps="always"
                         >
                             {/* Modal Header */}
                             <View style={styles.editModalHeader}>
@@ -724,6 +774,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                 </View>
                                 <TouchableOpacity
                                     onPress={() => {
+                                        closeFormPickers();
                                         setIsAddModalOpen(false);
                                         setIsEditModalOpen(false);
                                         setEditingAppointment(null);
@@ -918,6 +969,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                         pressed && styles.cancelButtonPressed
                                     ]}
                                     onPress={() => {
+                                        closeFormPickers();
                                         setIsAddModalOpen(false);
                                         setIsEditModalOpen(false);
                                         setEditingAppointment(null);
@@ -954,11 +1006,12 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                         </ScrollView>
                     </Pressable>
                 </Pressable>
-            </Modal>
+            )}
 
             {/* Type Dropdown Modal */}
             <Modal
                 visible={isFormTypeDropdownOpen}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setIsFormTypeDropdownOpen(false)}
@@ -1008,6 +1061,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
             {/* Status Dropdown Modal */}
             <Modal
                 visible={isFormStatusDropdownOpen}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setIsFormStatusDropdownOpen(false)}
@@ -1057,6 +1111,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
             {/* Person Dropdown Modal */}
             <Modal
                 visible={isPersonDropdownOpen}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => {
@@ -1130,6 +1185,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
             {/* Date Picker Modal */}
             <Modal
                 visible={isDatePickerOpen}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setIsDatePickerOpen(false)}
@@ -1261,6 +1317,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
             {/* Time Picker Modal */}
             <Modal
                 visible={isTimePickerOpen}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setIsTimePickerOpen(false)}

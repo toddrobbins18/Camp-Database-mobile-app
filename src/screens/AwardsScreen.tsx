@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput, Pressable, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -797,6 +797,7 @@ export const AwardsScreen = ({ navigation }: any) => {
             {/* Child Selection Bottom Sheet */}
             <Modal
                 visible={showChildDropdown}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowChildDropdown(false)}
@@ -861,6 +862,7 @@ export const AwardsScreen = ({ navigation }: any) => {
             {/* Weekly Camper Award Bottom Sheet */}
             <Modal
                 visible={showWeeklyCamperDropdown}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowWeeklyCamperDropdown(false)}
@@ -915,6 +917,7 @@ export const AwardsScreen = ({ navigation }: any) => {
             {/* Year End Award Bottom Sheet */}
             <Modal
                 visible={showYearEndDropdown}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowYearEndDropdown(false)}

@@ -11,6 +11,7 @@ import {
     Modal,
     FlatList,
     Pressable,
+    Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -1141,6 +1142,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
             {/* Division Filter Modal */}
             <Modal
                 visible={showDivisionDropdown}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowDivisionDropdown(false)}
@@ -1337,6 +1339,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
             {/* Event Type Bottom Sheet Modal */}
             <Modal
                 visible={showEventTypeDropdown}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowEventTypeDropdown(false)}

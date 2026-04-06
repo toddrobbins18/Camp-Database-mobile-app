@@ -10,6 +10,7 @@ import {
     FlatList,
     Alert,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -528,6 +529,7 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                             {/* Meal Type Modal */}
                             <Modal
                                 visible={showMealTypeDropdown}
+                                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                                 transparent
                                 animationType="slide"
                                 onRequestClose={() => setShowMealTypeDropdown(false)}

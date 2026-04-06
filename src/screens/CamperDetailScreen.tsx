@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Pressable, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -1459,6 +1459,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             {/* Gender Dropdown Modal */}
             <Modal
                 visible={showGenderDropdown}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowGenderDropdown(false)}
@@ -1509,6 +1510,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             {/* Division Dropdown Modal */}
             <Modal
                 visible={showDivisionDropdown}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowDivisionDropdown(false)}
@@ -1559,6 +1561,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             {/* Bunk Dropdown Modal */}
             <Modal
                 visible={showBunkDropdown}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowBunkDropdown(false)}
@@ -1637,6 +1640,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             {/* T-Shirt Size Dropdown Modal */}
             <Modal
                 visible={showTshirtSizeDropdown}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowTshirtSizeDropdown(false)}
@@ -1692,6 +1696,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             {/* Assigned Leader Dropdown Modal */}
             < Modal
                 visible={showLeaderDropdown}
+                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={() => setShowLeaderDropdown(false)}

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Dimensions, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Dimensions, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -146,6 +146,19 @@ export const CamperScreen = ({ navigation }: any) => {
     const [editLeaderButtonLayout, setEditLeaderButtonLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const leaderButtonRef = useRef<any>(null);
     const [showEditTshirtSizeDropdown, setShowEditTshirtSizeDropdown] = useState(false);
+    const closeAddChildTransientUi = () => {
+        setShowAddGenderDropdown(false);
+        setShowAddDivisionDropdown(false);
+        setShowAddLeaderDropdown(false);
+    };
+    const closeEditChildTransientUi = () => {
+        setShowEditGenderDropdown(false);
+        setShowEditBunkDropdown(false);
+        setShowEditDivisionDropdown(false);
+        setShowEditLeaderDropdown(false);
+        setShowEditTshirtSizeDropdown(false);
+        setIsDatePickerVisible(false);
+    };
     const [formData, setFormData] = useState({
         name: '',
         person_id: '',
@@ -205,17 +218,17 @@ export const CamperScreen = ({ navigation }: any) => {
     const filteredCampers = useMemo(() => {
         const q = (searchQuery || '').trim().toLowerCase();
         return campersData.filter(camper => {
-            if (selectedDivisionId !== 'all' && String(camper.division_id) !== String(selectedDivisionId)) return false;
+            if (selectedDivisionId !== 'all' && String((camper as any).division_id ?? (camper as any).division?.id ?? '') !== String(selectedDivisionId)) return false;
             if (q) {
                 const name = (camper.name || '').toLowerCase();
-                const grade = (camper.grade ?? '').toString().toLowerCase();
-                const divName = (camper.division?.name ?? '').toLowerCase();
+                const grade = ((camper as any).grade ?? '').toString().toLowerCase();
+                const divName = (((camper as any).division?.name ?? '') as string).toLowerCase();
                 if (!name.includes(q) && !grade.includes(q) && !divName.includes(q)) return false;
             }
             return true;
         }).sort((a, b) => {
             if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
-            return (a.division?.name || '').localeCompare(b.division?.name || '');
+            return (((a as any).division?.name || '') as string).localeCompare(((b as any).division?.name || '') as string);
         });
     }, [campersData, selectedDivisionId, sortBy, searchQuery]);
 
@@ -367,8 +380,8 @@ export const CamperScreen = ({ navigation }: any) => {
                         id: c.id,
                         name: c.name,
                         rfid: (c as any).rfid ?? null,
-                        division_id: c.division_id,
-                        company_id: c.company_id,
+                        division_id: (c as any).division_id ?? (c as any).division?.id ?? null,
+                        company_id: (c as any).company_id,
                         division: (c as any).division,
                     });
                     seen.add(c.id);
@@ -669,7 +682,10 @@ export const CamperScreen = ({ navigation }: any) => {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.addChildButton}
-                            onPress={() => setShowAddChildModal(true)}
+                            onPress={() => {
+                                closeAddChildTransientUi();
+                                setShowAddChildModal(true);
+                            }}
                         >
                             <Ionicons name="add" size={20} color={theme.colors.surface} />
                             <Text style={styles.addChildButtonText}>Add Child</Text>
@@ -775,6 +791,7 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* Division Dropdown Modal */}
                 <Modal
                     visible={showDivisionDropdown}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setShowDivisionDropdown(false)}
@@ -1110,13 +1127,20 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* Add Child Modal */}
                 <Modal
                     visible={showAddChildModal}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="fade"
-                    onRequestClose={() => setShowAddChildModal(false)}
+                    onRequestClose={() => {
+                        closeAddChildTransientUi();
+                        setShowAddChildModal(false);
+                    }}
                 >
                     <Pressable
                         style={styles.centeredOverlay}
-                        onPress={() => setShowAddChildModal(false)}
+                        onPress={() => {
+                            closeAddChildTransientUi();
+                            setShowAddChildModal(false);
+                        }}
                     >
                         <Pressable
                             style={styles.addChildModal}
@@ -1126,11 +1150,15 @@ export const CamperScreen = ({ navigation }: any) => {
                                 style={styles.addChildModalScroll}
                                 showsVerticalScrollIndicator={true}
                                 nestedScrollEnabled={true}
+                                keyboardShouldPersistTaps="always"
                             >
                                 {/* Modal Header */}
                                 <View style={styles.addChildModalHeader}>
                                     <Text style={styles.addChildModalTitle}>Add New Child</Text>
-                                    <TouchableOpacity onPress={() => setShowAddChildModal(false)}>
+                                    <TouchableOpacity onPress={() => {
+                                        closeAddChildTransientUi();
+                                        setShowAddChildModal(false);
+                                    }}>
                                         <Ionicons name="close" size={24} color={theme.colors.text} />
                                     </TouchableOpacity>
                                 </View>
@@ -1198,13 +1226,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     }
                                                 }}
                                                 onPress={() => {
-                                                    // Re-measure on press to get current position
-                                                    if (addGenderButtonRef.current) {
-                                                        (addGenderButtonRef.current as any).measureInWindow((fx: number, fy: number, fwidth: number, fheight: number) => {
-                                                            setAddGenderButtonLayout({ x: fx, y: fy, width: fwidth, height: fheight });
-                                                            setShowAddGenderDropdown(true);
-                                                        });
-                                                    }
+                                                    setShowAddGenderDropdown(true);
                                                 }}
                                             >
                                                 <Text style={[styles.formSelectText, !formData.gender && styles.formSelectPlaceholder]}>
@@ -1232,13 +1254,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     }
                                                 }}
                                                 onPress={() => {
-                                                    // Re-measure on press to get current position
-                                                    if (addDivisionButtonRef.current) {
-                                                        (addDivisionButtonRef.current as any).measureInWindow((fx: number, fy: number, fwidth: number, fheight: number) => {
-                                                            setAddDivisionButtonLayout({ x: fx, y: fy, width: fwidth, height: fheight });
-                                                            setShowAddDivisionDropdown(true);
-                                                        });
-                                                    }
+                                                    setShowAddDivisionDropdown(true);
                                                 }}
                                             >
                                                 <Text style={[styles.formSelectText, !formData.division && styles.formSelectPlaceholder]}>
@@ -1301,13 +1317,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     }
                                                 }}
                                                 onPress={() => {
-                                                    // Re-measure on press to get current position
-                                                    if (addLeaderButtonRef.current) {
-                                                        (addLeaderButtonRef.current as any).measureInWindow((fx: number, fy: number, fwidth: number, fheight: number) => {
-                                                            setAddLeaderButtonLayout({ x: fx, y: fy, width: fwidth, height: fheight });
-                                                            setShowAddLeaderDropdown(true);
-                                                        });
-                                                    }
+                                                    setShowAddLeaderDropdown(true);
                                                 }}
                                             >
                                                 <Text style={[styles.formSelectText, !formData.assignedLeader && styles.formSelectPlaceholder]}>
@@ -1418,6 +1428,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                         <TouchableOpacity
                                             style={styles.cancelButton}
                                             onPress={() => {
+                                                closeAddChildTransientUi();
                                                 setShowAddChildModal(false);
                                                 setFormData({
                                                     name: '',
@@ -1429,6 +1440,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     group: '',
                                                     season: '2026',
                                                     assignedLeader: '',
+                                                    assignedLeaderId: '',
                                                     guardianEmail: '',
                                                     guardianPhone: '',
                                                     emergencyContact: '',
@@ -1478,6 +1490,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     await addCamperMutation.mutateAsync(payload as any);
 
                                                     showAppAlert('Child created', 'The camper has been added successfully.');
+                                                    closeAddChildTransientUi();
                                                     setShowAddChildModal(false);
                                                     setFormData({
                                                         name: '',
@@ -1516,6 +1529,7 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* Gender Dropdown Modal for Add Child */}
                 <Modal
                     visible={showAddGenderDropdown}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setShowAddGenderDropdown(false)}
@@ -1567,6 +1581,7 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* Division Dropdown Modal for Add Child */}
                 <Modal
                     visible={showAddDivisionDropdown}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setShowAddDivisionDropdown(false)}
@@ -1618,6 +1633,7 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* Assigned Leader Dropdown Modal for Add Child */}
                 <Modal
                     visible={showAddLeaderDropdown}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setShowAddLeaderDropdown(false)}
@@ -1734,9 +1750,11 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* Edit Child Modal */}
                 <Modal
                     visible={showEditChildModal}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="fade"
                     onRequestClose={() => {
+                        closeEditChildTransientUi();
                         setShowEditChildModal(false);
                         setCamperToEdit(null);
                     }}
@@ -1744,6 +1762,7 @@ export const CamperScreen = ({ navigation }: any) => {
                     <Pressable
                         style={styles.centeredOverlay}
                         onPress={() => {
+                            closeEditChildTransientUi();
                             setShowEditChildModal(false);
                             setCamperToEdit(null);
                         }}
@@ -1756,11 +1775,13 @@ export const CamperScreen = ({ navigation }: any) => {
                                 style={styles.addChildModalScroll}
                                 showsVerticalScrollIndicator={true}
                                 nestedScrollEnabled={true}
+                                keyboardShouldPersistTaps="always"
                             >
                                 {/* Modal Header */}
                                 <View style={styles.addChildModalHeader}>
                                     <Text style={styles.addChildModalTitle}>Edit Child</Text>
                                     <TouchableOpacity onPress={() => {
+                                        closeEditChildTransientUi();
                                         setShowEditChildModal(false);
                                         setCamperToEdit(null);
                                     }}>
@@ -2306,6 +2327,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                         <TouchableOpacity
                                             style={styles.cancelButton}
                                             onPress={() => {
+                                                closeEditChildTransientUi();
                                                 setShowEditChildModal(false);
                                                 setCamperToEdit(null);
                                             }}
@@ -2352,8 +2374,9 @@ export const CamperScreen = ({ navigation }: any) => {
                                                                 : null,
                                                         birthday_cake_message: editFormData.birthdayCakeMessage || null,
                                                         date_of_birth: editFormData.dateOfBirth
-                                                    });
+                                                    } as any);
                                                 }
+                                                closeEditChildTransientUi();
                                                 setShowEditChildModal(false);
                                                 setCamperToEdit(null);
                                             }}
@@ -2455,6 +2478,7 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* Gender Dropdown Modal for Edit Child */}
                 <Modal
                     visible={showEditGenderDropdown}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setShowEditGenderDropdown(false)}
@@ -2506,6 +2530,7 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* Bunk Dropdown Modal for Edit Child */}
                 <Modal
                     visible={showEditBunkDropdown}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setShowEditBunkDropdown(false)}
@@ -2554,6 +2579,7 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* Division Dropdown Modal for Edit Child */}
                 <Modal
                     visible={showEditDivisionDropdown}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setShowEditDivisionDropdown(false)}
@@ -2605,6 +2631,7 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* Assigned Leader Dropdown Modal for Edit Child */}
                 <Modal
                     visible={showEditLeaderDropdown}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setShowEditLeaderDropdown(false)}
@@ -2668,6 +2695,7 @@ export const CamperScreen = ({ navigation }: any) => {
                 {/* T-Shirt Size Dropdown Modal for Edit Child */}
                 <Modal
                     visible={showEditTshirtSizeDropdown}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setShowEditTshirtSizeDropdown(false)}
@@ -2744,7 +2772,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 <View style={styles.cardTop}>
                                     <View style={styles.cardTopLeft}>
                                         <Text style={styles.camperName} numberOfLines={1} ellipsizeMode="tail">{camper.name}</Text>
-                                        <Text style={styles.camperGrade}>{camper.division?.name || "N/A"}</Text>
+                                        <Text style={styles.camperGrade}>{(camper as any).division?.name || "N/A"}</Text>
                                     </View>
                                     <View style={styles.cardTopRight}>
                                         <TouchableOpacity
@@ -2763,7 +2791,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     age: camperAny.age !== undefined && camperAny.age !== null ? String(camperAny.age) : '',
                                                     dateOfBirth: camperAny.date_of_birth || camperAny.dateOfBirth || '',
                                                     gender: camperAny.gender || '',
-                                                    division: camper.division_id || camperAny.division?.id || '',
+                                                    division: camperAny.division_id || camperAny.division?.id || '',
                                                     bunk: camperAny.bunk_id || camperAny.bunk || '',
                                                     grade: camperAny.grade || '',
                                                     group: camperAny.group || '',
@@ -2786,6 +2814,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     allergies: camperAny.allergies || '',
                                                     medicalNotes: camperAny.medical_notes || '',
                                                 });
+                                                closeEditChildTransientUi();
                                                 setShowEditChildModal(true);
                                             }}
                                         >
@@ -2805,7 +2834,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 </View>
 
                                 <View style={styles.cardFooter}>
-                                    <Text style={styles.divisionText}>Division: {camper.division?.name || "N/A"}</Text>
+                                    <Text style={styles.divisionText}>Division: {(camper as any).division?.name || "N/A"}</Text>
                                     {(() => {
                                         const raw = (camper as any)?.status;
                                         const trimmed = typeof raw === 'string' ? raw.trim() : '';
@@ -3724,8 +3753,10 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.md,
     },
     formFieldHalf: {
-        flex: 1,
-        minWidth: isSmallScreen ? '100%' : '45%',
+        flexBasis: isSmallScreen ? '100%' : '48%',
+        maxWidth: isSmallScreen ? '100%' : '48%',
+        flexGrow: 0,
+        flexShrink: 1,
     },
     formFieldFull: {
         width: '100%',
