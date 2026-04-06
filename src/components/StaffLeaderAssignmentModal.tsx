@@ -294,6 +294,7 @@ export function StaffLeaderAssignmentModal({ visible, onClose, companyId, season
 
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+            <View style={{ flex: 1 }}>
             <Pressable style={styles.overlay} onPress={onClose}>
                 <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
                     <View style={styles.header}>
@@ -554,36 +555,41 @@ export function StaffLeaderAssignmentModal({ visible, onClose, companyId, season
                             </View>
                         </View>
                     )}
-
-                    <Modal visible={leaderPickerOpen} transparent animationType="fade">
-                        <Pressable style={styles.pickerOverlay} onPress={() => setLeaderPickerOpen(false)}>
-                            <View style={styles.pickerSheet}>
-                                <Text style={styles.pickerTitle}>Choose leader</Text>
-                                <FlatList
-                                    data={potentialLeaders}
-                                    keyExtractor={(item) => item.id}
-                                    style={{ maxHeight: 360 }}
-                                    renderItem={({ item }) => (
-                                        <TouchableOpacity
-                                            style={styles.pickerRow}
-                                            onPress={() => {
-                                                setSelectedLeader(item.id);
-                                                setLeaderPickerOpen(false);
-                                            }}
-                                        >
-                                            <Text style={styles.pickerRowTitle}>{item.name}</Text>
-                                            <Text style={styles.pickerRowSub}>{item.role || 'No role'}</Text>
-                                        </TouchableOpacity>
-                                    )}
-                                    ListEmptyComponent={
-                                        <Text style={styles.emptyText}>No leader candidates found.</Text>
-                                    }
-                                />
-                            </View>
-                        </Pressable>
-                    </Modal>
                 </Pressable>
             </Pressable>
+            {leaderPickerOpen ? (
+                <View
+                    style={[StyleSheet.absoluteFillObject, { zIndex: 10000, elevation: 10000 }]}
+                    pointerEvents="box-none"
+                >
+                    <Pressable style={styles.pickerOverlay} onPress={() => setLeaderPickerOpen(false)}>
+                        <View style={styles.pickerSheet}>
+                            <Text style={styles.pickerTitle}>Choose leader</Text>
+                            <FlatList
+                                data={potentialLeaders}
+                                keyExtractor={(item) => item.id}
+                                style={{ maxHeight: 360 }}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity
+                                        style={styles.pickerRow}
+                                        onPress={() => {
+                                            setSelectedLeader(item.id);
+                                            setLeaderPickerOpen(false);
+                                        }}
+                                    >
+                                        <Text style={styles.pickerRowTitle}>{item.name}</Text>
+                                        <Text style={styles.pickerRowSub}>{item.role || 'No role'}</Text>
+                                    </TouchableOpacity>
+                                )}
+                                ListEmptyComponent={
+                                    <Text style={styles.emptyText}>No leader candidates found.</Text>
+                                }
+                            />
+                        </View>
+                    </Pressable>
+                </View>
+            ) : null}
+            </View>
         </Modal>
     );
 }

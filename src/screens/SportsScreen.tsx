@@ -273,8 +273,13 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
             monthDates.push(new Date(currentYear, currentMonth, i));
         }
 
+        if (!visible) return null;
+
         return (
-            <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+            <View
+                style={[StyleSheet.absoluteFillObject, { zIndex: 10000, elevation: 10000 }]}
+                pointerEvents="box-none"
+            >
                 <TouchableOpacity
                     style={styles.modalOverlay}
                     activeOpacity={1}
@@ -385,7 +390,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         </View>
                     </View>
                 </TouchableOpacity>
-            </Modal>
+            </View>
         );
     };
 
@@ -983,6 +988,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                 animationType="slide"
                 onRequestClose={handleCloseAddEnrollmentModal}
             >
+                <View style={{ flex: 1 }}>
                 <View style={styles.centeredModalOverlay}>
                     <View style={styles.addEnrollmentModalContainer}>
                         {/* Modal Header */}
@@ -1000,6 +1006,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                             style={styles.modalContent}
                             contentContainerStyle={styles.modalScrollContent}
                             showsVerticalScrollIndicator={true}
+                            keyboardShouldPersistTaps="always"
                         >
                             {/* Camper */}
                             <View style={styles.formSection}>
@@ -1026,63 +1033,6 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                     />
                                 </TouchableOpacity>
                             </View>
-
-                            {/* Camper Selection Modal */}
-                            <Modal
-                                visible={showCamperDropdown}
-                                transparent
-                                animationType="slide"
-                                onRequestClose={() => setShowCamperDropdown(false)}
-                            >
-                                <TouchableOpacity
-                                    style={styles.modalOverlay}
-                                    activeOpacity={1}
-                                    onPress={() => setShowCamperDropdown(false)}
-                                >
-                                    <View
-                                        style={styles.sportNameModalContainer}
-                                        onStartShouldSetResponder={() => true}
-                                    >
-                                        <View style={styles.sportNameModalHeader}>
-                                            <Text style={styles.sportNameModalTitle}>Select Camper</Text>
-                                            <TouchableOpacity
-                                                onPress={() => setShowCamperDropdown(false)}
-                                                style={styles.closeButton}
-                                            >
-                                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                                            </TouchableOpacity>
-                                        </View>
-                                        <FlatList
-                                            data={campersData}
-                                            keyExtractor={(item) => item.id || Math.random().toString()}
-                                            renderItem={({ item }) => (
-                                                <TouchableOpacity
-                                                    style={[
-                                                        styles.sportNameModalItem,
-                                                        selectedChildId === item.id && styles.sportNameModalItemSelected,
-                                                    ]}
-                                                    onPress={() => {
-                                                        if (item.id) setSelectedChildId(item.id);
-                                                        setShowCamperDropdown(false);
-                                                    }}
-                                                >
-                                                    <Text
-                                                        style={[
-                                                            styles.sportNameModalItemText,
-                                                            selectedChildId === item.id && styles.sportNameModalItemTextSelected,
-                                                        ]}
-                                                    >
-                                                        {item.name}
-                                                    </Text>
-                                                    {selectedChildId === item.id && (
-                                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                                    )}
-                                                </TouchableOpacity>
-                                            )}
-                                        />
-                                    </View>
-                                </TouchableOpacity>
-                            </Modal>
 
                             {/* Sport Name */}
                             <View style={styles.formSection}>
@@ -1111,71 +1061,8 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </TouchableOpacity>
                             </View>
 
-                            {/* Sport Name Modal */}
-                            <Modal
-                                visible={showSportNameDropdown}
-                                transparent
-                                animationType="slide"
-                                onRequestClose={() => setShowSportNameDropdown(false)}
-                            >
-                                <TouchableOpacity
-                                    style={styles.modalOverlay}
-                                    activeOpacity={1}
-                                    onPress={() => setShowSportNameDropdown(false)}
-                                >
-                                    <View
-                                        style={styles.sportNameModalContainer}
-                                        onStartShouldSetResponder={() => true}
-                                    >
-                                        <View style={styles.sportNameModalHeader}>
-                                            <Text style={styles.sportNameModalTitle}>Select Sport</Text>
-                                            <TouchableOpacity
-                                                onPress={() => setShowSportNameDropdown(false)}
-                                                style={styles.closeButton}
-                                            >
-                                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                                            </TouchableOpacity>
-                                        </View>
-                                        <FlatList
-                                            data={ENROLLMENT_SPORTS}
-                                            keyExtractor={(item) => item}
-                                            renderItem={({ item }) => (
-                                                <TouchableOpacity
-                                                    style={[
-                                                        styles.sportNameModalItem,
-                                                        sportName === item &&
-                                                        styles.sportNameModalItemSelected,
-                                                    ]}
-                                                    onPress={() => {
-                                                        setSportName(item);
-                                                        setShowSportNameDropdown(false);
-                                                    }}
-                                                >
-                                                    <Text
-                                                        style={[
-                                                            styles.sportNameModalItemText,
-                                                            sportName === item &&
-                                                            styles.sportNameModalItemTextSelected,
-                                                        ]}
-                                                    >
-                                                        {item}
-                                                    </Text>
-                                                    {sportName === item && (
-                                                        <Ionicons
-                                                            name="checkmark"
-                                                            size={20}
-                                                            color={theme.colors.secondary}
-                                                        />
-                                                    )}
-                                                </TouchableOpacity>
-                                            )}
-                                        />
-                                    </View>
-                                </TouchableOpacity>
-                            </Modal>
-
                             {/* Instructor */}
-                            <View style={[styles.formSection, showSportNameDropdown && styles.formSectionWithDropdown]}>
+                            <View style={styles.formSection}>
                                 <Text style={styles.label}>Instructor</Text>
                                 <TextInput
                                     style={styles.textInput}
@@ -1239,11 +1126,6 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                             color={theme.colors.textSecondary}
                                         />
                                     </TouchableOpacity>
-                                    {renderEnrollmentDatePicker(
-                                        'start',
-                                        showStartDatePicker,
-                                        () => setShowStartDatePicker(false)
-                                    )}
                                 </View>
                                 <View style={styles.dateField}>
                                     <Text style={styles.label}>End Date</Text>
@@ -1265,11 +1147,6 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                             color={theme.colors.textSecondary}
                                         />
                                     </TouchableOpacity>
-                                    {renderEnrollmentDatePicker(
-                                        'end',
-                                        showEndDatePicker,
-                                        () => setShowEndDatePicker(false)
-                                    )}
                                 </View>
                             </View>
 
@@ -1309,6 +1186,131 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                             </TouchableOpacity>
                         </View>
                     </View>
+                </View>
+                {renderEnrollmentDatePicker(
+                    'start',
+                    showStartDatePicker,
+                    () => setShowStartDatePicker(false)
+                )}
+                {renderEnrollmentDatePicker(
+                    'end',
+                    showEndDatePicker,
+                    () => setShowEndDatePicker(false)
+                )}
+                {showCamperDropdown ? (
+                    <View
+                        style={[StyleSheet.absoluteFillObject, { zIndex: 10000, elevation: 10000 }]}
+                        pointerEvents="box-none"
+                    >
+                        <TouchableOpacity
+                            style={styles.modalOverlay}
+                            activeOpacity={1}
+                            onPress={() => setShowCamperDropdown(false)}
+                        >
+                            <View
+                                style={styles.sportNameModalContainer}
+                                onStartShouldSetResponder={() => true}
+                            >
+                                <View style={styles.sportNameModalHeader}>
+                                    <Text style={styles.sportNameModalTitle}>Select Camper</Text>
+                                    <TouchableOpacity
+                                        onPress={() => setShowCamperDropdown(false)}
+                                        style={styles.closeButton}
+                                    >
+                                        <Ionicons name="close" size={24} color={theme.colors.text} />
+                                    </TouchableOpacity>
+                                </View>
+                                <FlatList
+                                    data={campersData}
+                                    keyExtractor={(item) => item.id || Math.random().toString()}
+                                    renderItem={({ item }) => (
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.sportNameModalItem,
+                                                selectedChildId === item.id && styles.sportNameModalItemSelected,
+                                            ]}
+                                            onPress={() => {
+                                                if (item.id) setSelectedChildId(item.id);
+                                                setShowCamperDropdown(false);
+                                            }}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.sportNameModalItemText,
+                                                    selectedChildId === item.id && styles.sportNameModalItemTextSelected,
+                                                ]}
+                                            >
+                                                {item.name}
+                                            </Text>
+                                            {selectedChildId === item.id && (
+                                                <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    )}
+                                />
+                            </View>
+                        </TouchableOpacity>
+                    </View>
+                ) : null}
+                {showSportNameDropdown ? (
+                    <View
+                        style={[StyleSheet.absoluteFillObject, { zIndex: 10000, elevation: 10000 }]}
+                        pointerEvents="box-none"
+                    >
+                        <TouchableOpacity
+                            style={styles.modalOverlay}
+                            activeOpacity={1}
+                            onPress={() => setShowSportNameDropdown(false)}
+                        >
+                            <View
+                                style={styles.sportNameModalContainer}
+                                onStartShouldSetResponder={() => true}
+                            >
+                                <View style={styles.sportNameModalHeader}>
+                                    <Text style={styles.sportNameModalTitle}>Select Sport</Text>
+                                    <TouchableOpacity
+                                        onPress={() => setShowSportNameDropdown(false)}
+                                        style={styles.closeButton}
+                                    >
+                                        <Ionicons name="close" size={24} color={theme.colors.text} />
+                                    </TouchableOpacity>
+                                </View>
+                                <FlatList
+                                    data={ENROLLMENT_SPORTS}
+                                    keyExtractor={(item) => item}
+                                    renderItem={({ item }) => (
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.sportNameModalItem,
+                                                sportName === item && styles.sportNameModalItemSelected,
+                                            ]}
+                                            onPress={() => {
+                                                setSportName(item);
+                                                setShowSportNameDropdown(false);
+                                            }}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.sportNameModalItemText,
+                                                    sportName === item && styles.sportNameModalItemTextSelected,
+                                                ]}
+                                            >
+                                                {item}
+                                            </Text>
+                                            {sportName === item && (
+                                                <Ionicons
+                                                    name="checkmark"
+                                                    size={20}
+                                                    color={theme.colors.secondary}
+                                                />
+                                            )}
+                                        </TouchableOpacity>
+                                    )}
+                                />
+                            </View>
+                        </TouchableOpacity>
+                    </View>
+                ) : null}
                 </View>
             </Modal>
 

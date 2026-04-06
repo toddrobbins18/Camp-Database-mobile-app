@@ -238,3 +238,79 @@ export const useTodayMeals = (companyId: string | null, todayString: string) => 
         enabled: !!companyId,
     });
 };
+
+/** Today's sports calendar rows (matches web Dashboard for Athletics). */
+export const useTodaySportsCalendar = (
+    companyId: string | null,
+    todayString: string,
+    season: string | null,
+    enabled: boolean,
+) => {
+    return useQuery({
+        queryKey: ['dashboard_sports_calendar', companyId, todayString, season],
+        queryFn: async () => {
+            if (!companyId || !season) return [];
+            const { data, error } = await supabase
+                .from('sports_calendar')
+                .select('id, title, time, location, sport_type, event_date')
+                .eq('company_id', companyId)
+                .eq('event_date', todayString)
+                .eq('season', season)
+                .order('time');
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId && !!season && enabled,
+    });
+};
+
+/** Today's special events / evening activities (matches web `special_events_activities`). */
+export const useTodaySpecialEventsActivities = (
+    companyId: string | null,
+    todayString: string,
+    season: string | null,
+    enabled: boolean,
+) => {
+    return useQuery({
+        queryKey: ['dashboard_special_events_activities', companyId, todayString, season],
+        queryFn: async () => {
+            if (!companyId || !season) return [];
+            const { data, error } = await supabase
+                .from('special_events_activities')
+                .select('id, title, time_slot, location, description, event_type')
+                .eq('company_id', companyId)
+                .eq('event_date', todayString)
+                .eq('season', season);
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId && !!season && enabled,
+    });
+};
+
+/** Single row from `daily_wolf_content` for Timber Lake West / Daily Wolf strip. */
+export const useDailyWolfContentRow = (
+    companyId: string | null,
+    todayString: string,
+    season: string | null,
+    enabled: boolean,
+) => {
+    return useQuery({
+        queryKey: ['daily_wolf_content_dashboard', companyId, todayString, season],
+        queryFn: async () => {
+            if (!companyId || !season) return null;
+            const { data, error } = await supabase
+                .from('daily_wolf_content')
+                .select(
+                    'officer_of_day, laundry_info, phone_calls_info, quote_of_the_day, notes',
+                )
+                .eq('company_id', companyId)
+                .eq('date', todayString)
+                .eq('season', season)
+                .maybeSingle();
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!companyId && !!season && enabled,
+    });
+};

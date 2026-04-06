@@ -563,7 +563,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
     const groupedActivities = groupActivitiesByMonth();
 
-    const renderActionSheetModal = () => {
+    /** Inline overlay (not a second Modal) — nested Modals do not show or receive touches reliably on iOS. */
+    const renderActivitySelectOverlay = () => {
         const isVisible = isActivityTypeDropdownOpen || isLocationTypeDropdownOpen;
         const title = isActivityTypeDropdownOpen ? 'Select Activity Type' : 'Select Location Type';
 
@@ -593,15 +594,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             onSelect = (val) => setFormData({ ...formData, home_away: val });
         }
 
+        if (!isVisible) return null;
+
         return (
-            <Modal
-                visible={isVisible}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => {
-                    setIsActivityTypeDropdownOpen(false);
-                    setIsLocationTypeDropdownOpen(false);
-                }}
+            <View
+                style={[StyleSheet.absoluteFillObject, { zIndex: 10000, elevation: 10000 }]}
+                pointerEvents="box-none"
             >
                 <Pressable
                     style={styles.bottomSheetOverlay}
@@ -617,7 +615,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         <View style={styles.bottomSheetHeader}>
                             <Text style={styles.bottomSheetTitle}>{title}</Text>
                         </View>
-                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={{ maxHeight: 300 }}>
+                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="always" style={{ maxHeight: 300 }}>
                             {options.map((option) => (
                                 <TouchableOpacity
                                     key={option.label}
@@ -660,7 +658,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         </TouchableOpacity>
                     </Pressable>
                 </Pressable>
-            </Modal>
+            </View>
         );
     };
 
@@ -1056,6 +1054,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                 animationType="fade"
                 onRequestClose={() => setIsAddActivityModalOpen(false)}
             >
+                <View style={{ flex: 1 }}>
                 <Pressable
                     style={styles.centeredOverlay}
                     onPress={() => setIsAddActivityModalOpen(false)}
@@ -1064,7 +1063,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         style={styles.centeredModal}
                         onPress={(e) => e.stopPropagation()}
                     >
-                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled"
+                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="always"
                             style={styles.addActivityBottomSheetScroll}
                             contentContainerStyle={styles.addActivityBottomSheetContent}
                             showsVerticalScrollIndicator={false}
@@ -1427,6 +1426,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         </KeyboardAwareScrollView>
                     </Pressable>
                 </Pressable>
+                {renderActivitySelectOverlay()}
+                </View>
             </Modal>
 
             {/* Edit Activity Modal - Bottom Sheet */}
@@ -1441,6 +1442,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     setIsLocationTypeDropdownOpen(false);
                 }}
             >
+                <View style={{ flex: 1 }}>
                 <Pressable
                     style={styles.centeredOverlay}
                     onPress={() => {
@@ -1454,7 +1456,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         style={styles.centeredModal}
                         onPress={(e) => e.stopPropagation()}
                     >
-                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled"
+                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="always"
                             style={styles.editActivityBottomSheetScroll}
                             contentContainerStyle={styles.editActivityBottomSheetContent}
                             showsVerticalScrollIndicator={false}
@@ -1845,6 +1847,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         </KeyboardAwareScrollView>
                     </Pressable>
                 </Pressable>
+                {renderActivitySelectOverlay()}
+                </View>
             </Modal>
 
             {/* Delete Confirmation Modal */}
@@ -2504,7 +2508,6 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
-            {renderActionSheetModal()}
         </SafeAreaView >
     );
 };

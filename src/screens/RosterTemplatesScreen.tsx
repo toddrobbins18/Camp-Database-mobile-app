@@ -337,6 +337,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                 animationType="slide"
                 onRequestClose={handleCloseModal}
             >
+                <View style={{ flex: 1 }}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContainer}>
                         {/* Modal Header */}
@@ -435,65 +436,6 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                     </TouchableOpacity>
                                 </View>
 
-                                {/* Division Picker Modal */}
-                                <Modal
-                                    visible={showDivisionDropdown}
-                                    transparent
-                                    animationType="slide"
-                                    onRequestClose={() => setShowDivisionDropdown(false)}
-                                >
-                                    <TouchableOpacity
-                                        style={styles.bottomSheetOverlay}
-                                        activeOpacity={1}
-                                        onPress={() => setShowDivisionDropdown(false)}
-                                    >
-                                        <TouchableOpacity
-                                            activeOpacity={1}
-                                            style={[styles.bottomSheetContainer, { maxHeight: '80%' }]}
-                                            onPress={(e) => e.stopPropagation()}
-                                        >
-                                            <View style={[styles.modalScrollContent, { flexShrink: 1 }]}>
-                                                <View style={styles.bottomSheetHeader}>
-                                                    <Text style={styles.bottomSheetTitle}>Select Division</Text>
-                                                    <TouchableOpacity onPress={() => setShowDivisionDropdown(false)}>
-                                                        <Ionicons name="close" size={24} color={theme.colors.text} />
-                                                    </TouchableOpacity>
-                                                </View>
-                                                <FlatList
-                                                    data={divisions}
-                                                    keyExtractor={(item: any) => item.id}
-                                                    renderItem={({ item }) => (
-                                                        <TouchableOpacity
-                                                            style={styles.bottomSheetItem}
-                                                            onPress={() => {
-                                                                setSelectedDivision(item.id);
-                                                                setShowDivisionDropdown(false);
-                                                            }}
-                                                        >
-                                                            <Text
-                                                                style={[
-                                                                    styles.bottomSheetItemText,
-                                                                    selectedDivision === item.id &&
-                                                                    styles.bottomSheetItemTextSelected,
-                                                                ]}
-                                                            >
-                                                                {item.name}
-                                                            </Text>
-                                                            {selectedDivision === item.id && (
-                                                                <Ionicons
-                                                                    name="checkmark"
-                                                                    size={20}
-                                                                    color={theme.colors.secondary}
-                                                                />
-                                                            )}
-                                                        </TouchableOpacity>
-                                                    )}
-                                                />
-                                            </View>
-                                        </TouchableOpacity>
-                                    </TouchableOpacity>
-                                </Modal>
-
                                 {/* Campers List */}
                                 <View style={[styles.campersListContainer, showDivisionDropdown && styles.campersListSectionWithDropdown]}>
                                     <FlatList
@@ -562,6 +504,64 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                             </TouchableOpacity>
                         </View>
                     </View>
+                </View>
+                {showDivisionDropdown ? (
+                    <View
+                        style={[StyleSheet.absoluteFillObject, { zIndex: 10000, elevation: 10000 }]}
+                        pointerEvents="box-none"
+                    >
+                        <TouchableOpacity
+                            style={styles.bottomSheetOverlay}
+                            activeOpacity={1}
+                            onPress={() => setShowDivisionDropdown(false)}
+                        >
+                            <TouchableOpacity
+                                activeOpacity={1}
+                                style={[styles.bottomSheetContainer, { maxHeight: '80%' }]}
+                                onPress={(e) => e.stopPropagation()}
+                            >
+                                <View style={[styles.modalScrollContent, { flexShrink: 1 }]}>
+                                    <View style={styles.bottomSheetHeader}>
+                                        <Text style={styles.bottomSheetTitle}>Select Division</Text>
+                                        <TouchableOpacity onPress={() => setShowDivisionDropdown(false)}>
+                                            <Ionicons name="close" size={24} color={theme.colors.text} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <FlatList
+                                        data={divisions}
+                                        keyExtractor={(item: any) => item.id}
+                                        renderItem={({ item }) => (
+                                            <TouchableOpacity
+                                                style={styles.bottomSheetItem}
+                                                onPress={() => {
+                                                    setSelectedDivision(item.id);
+                                                    setShowDivisionDropdown(false);
+                                                }}
+                                            >
+                                                <Text
+                                                    style={[
+                                                        styles.bottomSheetItemText,
+                                                        selectedDivision === item.id &&
+                                                        styles.bottomSheetItemTextSelected,
+                                                    ]}
+                                                >
+                                                    {item.name}
+                                                </Text>
+                                                {selectedDivision === item.id && (
+                                                    <Ionicons
+                                                        name="checkmark"
+                                                        size={20}
+                                                        color={theme.colors.secondary}
+                                                    />
+                                                )}
+                                            </TouchableOpacity>
+                                        )}
+                                    />
+                                </View>
+                            </TouchableOpacity>
+                        </TouchableOpacity>
+                    </View>
+                ) : null}
                 </View>
             </Modal>
         </SafeAreaView>
