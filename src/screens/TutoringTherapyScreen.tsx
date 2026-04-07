@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import {
@@ -239,61 +240,44 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
         title?: string
     ) => {
         return (
-            <Modal
+            <ModalPickerOverlay
                 visible={visible}
-                transparent
-                animationType="slide"
-                onRequestClose={onClose}
+                onClose={onClose}
+                title={title || 'Select Option'}
             >
-                <TouchableOpacity
-                    style={styles.bottomSheetOverlay}
-                    activeOpacity={1}
-                    onPress={onClose}
-                >
-                    <View style={styles.bottomSheetContainer} onStartShouldSetResponder={() => true}>
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>{title || 'Select Option'}</Text>
-                            <TouchableOpacity onPress={onClose}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <FlatList
-                            data={options}
-                            keyExtractor={(item) => item.value}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={[
-                                        styles.bottomSheetItem,
-                                        selectedValue === item.value && styles.bottomSheetItemSelected,
-                                    ]}
-                                    onPress={() => {
-                                        onSelect(item.value);
-                                        onClose();
-                                    }}
-                                >
-                                    {selectedValue === item.value && (
-                                        <Ionicons
-                                            name="checkmark"
-                                            size={20}
-                                            color={theme.colors.secondary}
-                                            style={styles.checkIcon}
-                                        />
-                                    )}
-                                    <Text
-                                        style={[
-                                            styles.bottomSheetItemText,
-                                            selectedValue === item.value && styles.bottomSheetItemTextSelected,
-                                        ]}
-                                    >
-                                        {item.label}
-                                    </Text>
-                                </TouchableOpacity>
+                <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+                    {options.map((item) => (
+                        <TouchableOpacity
+                            key={item.value}
+                            style={[
+                                styles.bottomSheetItem,
+                                selectedValue === item.value && styles.bottomSheetItemSelected,
+                            ]}
+                            onPress={() => {
+                                onSelect(item.value);
+                                onClose();
+                            }}
+                        >
+                            {selectedValue === item.value && (
+                                <Ionicons
+                                    name="checkmark"
+                                    size={20}
+                                    color={theme.colors.secondary}
+                                    style={styles.checkIcon}
+                                />
                             )}
-                            nestedScrollEnabled={true}
-                        />
-                    </View>
-                </TouchableOpacity>
-            </Modal>
+                            <Text
+                                style={[
+                                    styles.bottomSheetItemText,
+                                    selectedValue === item.value && styles.bottomSheetItemTextSelected,
+                                ]}
+                            >
+                                {item.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </ModalPickerOverlay>
         );
     };
 
@@ -313,114 +297,97 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
         }
 
         return (
-            <Modal
-                visible={visible}
-                transparent
-                animationType="slide"
-                onRequestClose={onClose}
-            >
-                <TouchableOpacity
-                    style={styles.bottomSheetOverlay}
-                    activeOpacity={1}
-                    onPress={onClose}
-                >
-                    <View style={styles.datePickerBottomSheet} onStartShouldSetResponder={() => true}>
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select Date</Text>
-                            <TouchableOpacity onPress={onClose}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <View style={styles.datePickerHeader}>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (month === 0) {
-                                        setMonth(11);
-                                        setYear(year - 1);
-                                    } else {
-                                        setMonth(month - 1);
-                                    }
-                                }}
-                            >
-                                <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
-                            </TouchableOpacity>
-                            <Text style={styles.datePickerMonth}>
-                                {monthNames[month]} {year}
-                            </Text>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (month === 11) {
-                                        setMonth(0);
-                                        setYear(year + 1);
-                                    } else {
-                                        setMonth(month + 1);
-                                    }
-                                }}
-                            >
-                                <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <View style={styles.datePickerWeekdays}>
-                            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-                                <Text key={day} style={styles.weekdayText}>
-                                    {day}
-                                </Text>
-                            ))}
-                        </View>
-                        <View style={styles.datePickerGrid}>
-                            {monthDates.map((d, index) => {
-                                if (!d) {
-                                    return <View key={index} style={styles.dateCell} />;
+            <ModalPickerOverlay visible={visible} onClose={onClose} title="Select Date">
+                <View style={styles.datePickerBottomSheet}>
+                    <View style={styles.datePickerHeader}>
+                        <TouchableOpacity
+                            onPress={() => {
+                                if (month === 0) {
+                                    setMonth(11);
+                                    setYear(year - 1);
+                                } else {
+                                    setMonth(month - 1);
                                 }
-                                const dateStr = formatDate(d);
-                                const isToday = formatDate(d) === formatDate(today);
-                                const isSelected = date && formatDate(d) === date;
-                                return (
-                                    <TouchableOpacity
-                                        key={index}
-                                        style={[
-                                            styles.dateCell,
-                                            isToday && styles.todayCell,
-                                            isSelected && styles.selectedDateCell,
-                                        ]}
-                                        onPress={() => {
-                                            onSelect(dateStr);
-                                            onClose();
-                                        }}
-                                    >
-                                        <Text
-                                            style={[
-                                                styles.dateCellText,
-                                                isSelected && styles.selectedDateText,
-                                            ]}
-                                        >
-                                            {d.getDate()}
-                                        </Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
-                        <View style={styles.datePickerActions}>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    onSelect('');
-                                    onClose();
-                                }}
-                            >
-                                <Text style={styles.datePickerActionText}>Clear</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    onSelect(formatDate(today));
-                                    onClose();
-                                }}
-                            >
-                                <Text style={styles.datePickerActionText}>Today</Text>
-                            </TouchableOpacity>
-                        </View>
+                            }}
+                        >
+                            <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
+                        </TouchableOpacity>
+                        <Text style={styles.datePickerMonth}>
+                            {monthNames[month]} {year}
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => {
+                                if (month === 11) {
+                                    setMonth(0);
+                                    setYear(year + 1);
+                                } else {
+                                    setMonth(month + 1);
+                                }
+                            }}
+                        >
+                            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+                        </TouchableOpacity>
                     </View>
-                </TouchableOpacity>
-            </Modal>
+                    <View style={styles.datePickerWeekdays}>
+                        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
+                            <Text key={day} style={styles.weekdayText}>
+                                {day}
+                            </Text>
+                        ))}
+                    </View>
+                    <View style={styles.datePickerGrid}>
+                        {monthDates.map((d, index) => {
+                            if (!d) {
+                                return <View key={index} style={styles.dateCell} />;
+                            }
+                            const dateStr = formatDate(d);
+                            const isToday = formatDate(d) === formatDate(today);
+                            const isSelected = date && formatDate(d) === date;
+                            return (
+                                <TouchableOpacity
+                                    key={index}
+                                    style={[
+                                        styles.dateCell,
+                                        isToday && styles.todayCell,
+                                        isSelected && styles.selectedDateCell,
+                                    ]}
+                                    onPress={() => {
+                                        onSelect(dateStr);
+                                        onClose();
+                                    }}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.dateCellText,
+                                            isSelected && styles.selectedDateText,
+                                        ]}
+                                    >
+                                        {d.getDate()}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                    <View style={styles.datePickerActions}>
+                        <TouchableOpacity
+                            onPress={() => {
+                                onSelect('');
+                                onClose();
+                            }}
+                        >
+                            <Text style={styles.datePickerActionText}>Clear</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => {
+                                onSelect(formatDate(today));
+                                onClose();
+                            }}
+                        >
+                            <Text style={styles.datePickerActionText}>Today</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </ModalPickerOverlay>
         );
     };
 
@@ -547,7 +514,7 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                         <Text style={styles.emptyStateText}>No enrollments found</Text>
                     ) : (
                         filteredEnrollments.map((entry) => (
-                            <StyledCard key={entry.id} style={{ marginBottom: 8, padding: 12 }}>
+                            <StyledCard key={entry.id} style={styles.enrollmentCard}>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                     <View style={{ flex: 1, paddingRight: 8 }}>
                                         <Text style={{ fontWeight: '600', color: theme.colors.text }}>
@@ -847,48 +814,44 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                             </TouchableOpacity>
                         </View>
                     </View>
+                    {renderBottomSheetDropdown(
+                        showCamperDropdown,
+                        () => setShowCamperDropdown(false),
+                        camperOptions,
+                        selectedCamperId,
+                        setSelectedCamperId,
+                        'Select Camper'
+                    )}
+                    {renderBottomSheetDropdown(
+                        showServiceTypeDropdown,
+                        () => setShowServiceTypeDropdown(false),
+                        SERVICES.filter((s) => s !== 'All Services').map((s) => ({ value: s, label: s })),
+                        selectedServiceType,
+                        setSelectedServiceType,
+                        'Select Service Type'
+                    )}
+                    {renderDatePicker(
+                        showStartDatePicker,
+                        () => setShowStartDatePicker(false),
+                        startDate,
+                        setStartDate,
+                        startDatePickerMonth,
+                        startDatePickerYear,
+                        setStartDatePickerMonth,
+                        setStartDatePickerYear
+                    )}
+                    {renderDatePicker(
+                        showEndDatePicker,
+                        () => setShowEndDatePicker(false),
+                        endDate,
+                        setEndDate,
+                        endDatePickerMonth,
+                        endDatePickerYear,
+                        setEndDatePickerMonth,
+                        setEndDatePickerYear
+                    )}
                 </View>
             </Modal>
-
-            {/* Modal Bottom Sheet Dropdowns */}
-            {renderBottomSheetDropdown(
-                showCamperDropdown,
-                () => setShowCamperDropdown(false),
-                camperOptions,
-                selectedCamperId,
-                setSelectedCamperId,
-                'Select Camper'
-            )}
-            {renderBottomSheetDropdown(
-                showServiceTypeDropdown,
-                () => setShowServiceTypeDropdown(false),
-                SERVICES.filter((s) => s !== 'All Services').map((s) => ({ value: s, label: s })),
-                selectedServiceType,
-                setSelectedServiceType,
-                'Select Service Type'
-            )}
-
-            {/* Date Pickers */}
-            {renderDatePicker(
-                showStartDatePicker,
-                () => setShowStartDatePicker(false),
-                startDate,
-                setStartDate,
-                startDatePickerMonth,
-                startDatePickerYear,
-                setStartDatePickerMonth,
-                setStartDatePickerYear
-            )}
-            {renderDatePicker(
-                showEndDatePicker,
-                () => setShowEndDatePicker(false),
-                endDate,
-                setEndDate,
-                endDatePickerMonth,
-                endDatePickerYear,
-                setEndDatePickerMonth,
-                setEndDatePickerYear
-            )}
 
             <Modal visible={isDeleteConfirmVisible} transparent animationType="fade" onRequestClose={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
                 <Pressable style={styles.deleteModalOverlay} onPress={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
@@ -1017,8 +980,13 @@ const styles = StyleSheet.create({
     },
     contentArea: {
         minHeight: 200,
-        alignItems: 'center',
-        justifyContent: 'center',
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
+    },
+    enrollmentCard: {
+        marginBottom: 8,
+        padding: 12,
+        width: '100%',
     },
     emptyStateText: {
         color: theme.colors.textSecondary,

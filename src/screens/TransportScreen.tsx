@@ -1205,6 +1205,7 @@ export const TransportScreen = ({ navigation }: any) => {
             const typeOptions = [
                 { label: 'Field Trip', value: 'field_trip' },
                 { label: 'Sporting Event', value: 'sporting_event' },
+                { label: 'Staff Bus', value: 'staff_bus' },
                 { label: 'Other', value: 'other' }
             ];
             return renderActionSheet(
