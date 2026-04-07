@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -25,12 +25,13 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useMenuItems, useAddMenuItem, MenuItem } from '../api/menu';
 import { supabase } from '../lib/supabase';
 import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
+import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
 
 type AddMenuSubsheet = 'date' | 'mealType' | null;
 
 export const MenuScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
-    const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
+    const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [showGuideModal, setShowGuideModal] = useState(false);
     const [showSelectFileModal, setShowSelectFileModal] = useState(false);
     const [showAddMenuItemModal, setShowAddMenuItemModal] = useState(false);
@@ -49,6 +50,8 @@ export const MenuScreen = ({ navigation }: any) => {
     const [menuItemsText, setMenuItemsText] = useState('');
     const [allergens, setAllergens] = useState('');
     const [addMenuSubsheet, setAddMenuSubsheet] = useState<AddMenuSubsheet>(null);
+    const [calendarCurrentDate, setCalendarCurrentDate] = useState(new Date());
+    const [calendarSelectedDate, setCalendarSelectedDate] = useState(new Date());
 
     const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
     const closeAddMenuTransientUi = () => {
@@ -147,6 +150,30 @@ export const MenuScreen = ({ navigation }: any) => {
         }
     };
 
+    const calendarEvents = useMemo<CalendarWidgetEvent[]>(() => {
+        return menuItemsList.map((item) => {
+            const parsedDate = new Date(`${item.date}T00:00:00`);
+            const meal = item.meal_type || 'Meal';
+            const preview = item.items?.split(',')[0]?.trim() || item.items || 'Menu item';
+            return {
+                id: item.id || `${item.date}-${meal}-${preview}`,
+                title: `${meal}: ${preview}`,
+                date: parsedDate,
+                type: 'special-event',
+                tags: ['Menu'],
+                accent: { bg: '#eef2ff', text: '#3730a3', marker: '#4f46e5' },
+            };
+        });
+    }, [menuItemsList]);
+
+    const selectedDateMenuItems = useMemo(() => {
+        const y = calendarSelectedDate.getFullYear();
+        const m = String(calendarSelectedDate.getMonth() + 1).padStart(2, '0');
+        const d = String(calendarSelectedDate.getDate()).padStart(2, '0');
+        const key = `${y}-${m}-${d}`;
+        return menuItemsList.filter((item) => item.date === key);
+    }, [menuItemsList, calendarSelectedDate]);
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -182,10 +209,10 @@ export const MenuScreen = ({ navigation }: any) => {
                         </View>
                         <TouchableOpacity
                             style={styles.iconButton}
-                            onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+                            onPress={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
                         >
                             <Ionicons
-                                name={viewMode === 'list' ? "list-outline" : "grid-outline"}
+                                name={viewMode === 'list' ? 'calendar-outline' : 'list-outline'}
                                 size={20}
                                 color={theme.colors.text}
                             />
@@ -209,17 +236,48 @@ export const MenuScreen = ({ navigation }: any) => {
 
                 {/* Main Content Card */}
                 <StyledCard style={styles.contentCard}>
-                    {menuItemsList.length === 0 ? (
+                    {viewMode === 'calendar' ? (
+                        <View>
+                            <UnifiedCalendar
+                                events={calendarEvents}
+                                currentDate={calendarCurrentDate}
+                                onCurrentDateChange={setCalendarCurrentDate}
+                                selectedDate={calendarSelectedDate}
+                                onSelectedDateChange={setCalendarSelectedDate}
+                                showZoom={false}
+                            />
+                            <View style={styles.selectedDayPanel}>
+                                <Text style={styles.selectedDayTitle}>
+                                    {calendarSelectedDate.toLocaleDateString(undefined, {
+                                        weekday: 'long',
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                    })}
+                                </Text>
+                                {selectedDateMenuItems.length === 0 ? (
+                                    <Text style={styles.selectedDayEmptyText}>No menu items for this date.</Text>
+                                ) : (
+                                    selectedDateMenuItems.map((item) => (
+                                        <View key={item.id || `${item.date}-${item.meal_type}`} style={styles.selectedDayMealRow}>
+                                            <Text style={styles.selectedDayMealType}>{item.meal_type}</Text>
+                                            <Text style={styles.selectedDayMealItems}>{item.items}</Text>
+                                        </View>
+                                    ))
+                                )}
+                            </View>
+                        </View>
+                    ) : menuItemsList.length === 0 ? (
                         <View style={styles.emptyState}>
                             <Text style={styles.emptyText}>No menu items found. Add your first menu item!</Text>
                         </View>
                     ) : (
-                        <View style={viewMode === 'grid' ? styles.gridContainer : styles.listContainer}>
+                        <View style={styles.listContainer}>
                             {menuItemsList.map((item) => (
                                 <View
                                     key={item.id}
                                     style={[
-                                        viewMode === 'grid' ? styles.gridItem : styles.listItem,
+                                        styles.listItem,
                                         { backgroundColor: getMealTypeColor(item.meal_type) }
                                     ]}
                                 >
@@ -807,6 +865,37 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.md,
         borderWidth: 1,
         borderColor: theme.colors.border,
+    },
+    selectedDayPanel: {
+        marginTop: theme.spacing.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        backgroundColor: theme.colors.surface,
+    },
+    selectedDayTitle: {
+        ...theme.typography.h3,
+        fontSize: 20,
+        color: theme.colors.text,
+        marginBottom: theme.spacing.md,
+    },
+    selectedDayEmptyText: {
+        ...theme.typography.body,
+        color: theme.colors.textSecondary,
+    },
+    selectedDayMealRow: {
+        marginBottom: theme.spacing.sm,
+    },
+    selectedDayMealType: {
+        ...theme.typography.body,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    selectedDayMealItems: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
     },
     menuItemHeader: {
         flexDirection: 'row',
