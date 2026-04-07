@@ -37,6 +37,8 @@ const EVENT_TYPES = [
     'Other',
 ];
 
+const EMOJI_PRESETS = ['🌙', '🏕️', '🎪', '⚽', '🏆', '🎯', '🚌', '🎨', '🎭', '🎵', '📸', '🍕'];
+
 const HELP_CONTENT: Record<string, { title: string, subtitle: string, columns: string, example: string, notes?: string }> = {
     'Children': {
         title: 'Children Directory',
@@ -135,6 +137,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const [eventDate, setEventDate] = useState(initialDate);
     const [title, setTitle] = useState('');
     const [eventType, setEventType] = useState('');
+    const [emoji, setEmoji] = useState('');
     const [startTime, setStartTime] = useState('');
     const [endTime, setEndTime] = useState('');
     const [selectedDivisions, setSelectedDivisions] = useState<string[]>([]);
@@ -409,6 +412,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
             title: title.trim(),
             event_date: isoDate,
             event_type: eventType.toLowerCase().replace(/ /g, '-'),
+            emoji: emoji || undefined,
             time_slot: timeSlot,
             start_time: startTime || undefined,
             end_time: endTime || undefined,
@@ -449,6 +453,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         setEventDate(initialDate);
         setTitle('');
         setEventType('');
+        setEmoji('');
         setStartTime('');
         setEndTime('');
         setSelectedDivisions([]);
@@ -457,6 +462,9 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         setSelectedStaffIds([]);
         setStaffSearchQuery('');
         setEditingEventId(null);
+        setShowEventTypeDropdown(false);
+        setIsTimePickerOpen(false);
+        setTimePickerField(null);
         setShowAddEventModal(false);
     };
 
@@ -465,6 +473,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         setEventDate(formatDate(eventDateObj));
         setTitle(event.title || '');
         setEventType((event.event_type || '').replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()));
+        setEmoji(event.emoji || '');
         setStartTime(event.start_time || '');
         setEndTime(event.end_time || '');
         setSelectedDivisions(Array.isArray(event.divisions) ? event.divisions.map((d: any) => d.id) : []);
@@ -651,7 +660,10 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 {(events as any[]).map((event: any) => (
                                     <StyledCard key={event.id} style={styles.eventCard}>
                                         <View style={styles.eventCardHeader}>
-                                            <Text style={styles.eventTitle}>{event.title}</Text>
+                                            <Text style={styles.eventTitle}>
+                                                {event.emoji ? `${event.emoji} ` : ''}
+                                                {event.title}
+                                            </Text>
                                             <View style={styles.eventActions}>
                                                 <TouchableOpacity
                                                     style={styles.eventActionButton}
@@ -771,7 +783,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                     <TouchableOpacity
                                         style={styles.eventTypeDropdown}
                                         onPress={() =>
-                                            setShowEventTypeDropdown(true)
+                                            setShowEventTypeDropdown((prev) => !prev)
                                         }
                                     >
                                         <Text
@@ -785,64 +797,220 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                             {eventType || 'Select event type'}
                                         </Text>
                                         <Ionicons
-                                            name="chevron-down"
+                                            name={showEventTypeDropdown ? 'chevron-up' : 'chevron-down'}
                                             size={20}
                                             color={theme.colors.textSecondary}
                                         />
                                     </TouchableOpacity>
+                                    {showEventTypeDropdown ? (
+                                        <View style={styles.eventTypeDropdownMenu}>
+                                            {EVENT_TYPES.map((item) => {
+                                                const isSelected = eventType === item;
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={item}
+                                                        style={[
+                                                            styles.eventTypeDropdownItem,
+                                                            isSelected && styles.eventTypeDropdownItemSelected,
+                                                        ]}
+                                                        onPress={() => {
+                                                            setEventType(item);
+                                                            setShowEventTypeDropdown(false);
+                                                        }}
+                                                    >
+                                                        <Text
+                                                            style={[
+                                                                styles.eventTypeDropdownItemText,
+                                                                isSelected && styles.eventTypeDropdownItemTextSelected,
+                                                            ]}
+                                                        >
+                                                            {item}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                    ) : null}
                                 </View>
                             </View>
 
-                            {/* Start Time */}
-                            <View style={[styles.formSection, showEventTypeDropdown && styles.formSectionWithDropdown]}>
-                                <Text style={styles.label}>Start Time</Text>
-                                <TouchableOpacity
-                                    style={styles.timeInput}
-                                    onPress={() => {
-                                        setTimePickerField('startTime');
-                                        setIsTimePickerOpen(true);
-                                    }}
+                            {/* Emoji */}
+                            <View style={styles.formSection}>
+                                <Text style={styles.label}>Emoji Icon (optional)</Text>
+                                <TextInput
+                                    style={styles.textInput}
+                                    placeholder="Paste an emoji e.g. 🌙 ⛺ 🎪"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    value={emoji}
+                                    onChangeText={setEmoji}
+                                />
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    contentContainerStyle={styles.emojiRow}
                                 >
-                                    <Text
-                                        style={[
-                                            styles.timeInputText,
-                                            !startTime && styles.placeholder,
-                                        ]}
-                                    >
-                                        {startTime || '--:--'}
-                                    </Text>
-                                    <Ionicons
-                                        name="time-outline"
-                                        size={20}
-                                        color={theme.colors.textSecondary}
-                                    />
-                                </TouchableOpacity>
+                                    {EMOJI_PRESETS.map((item) => {
+                                        const isSelected = emoji === item;
+                                        return (
+                                            <TouchableOpacity
+                                                key={item}
+                                                style={[styles.emojiChip, isSelected && styles.emojiChipSelected]}
+                                                onPress={() => setEmoji(item)}
+                                            >
+                                                <Text style={styles.emojiChipText}>{item}</Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
                             </View>
 
-                            {/* End Time */}
+                            {/* Time */}
                             <View style={styles.formSection}>
-                                <Text style={styles.label}>End Time</Text>
-                                <TouchableOpacity
-                                    style={styles.timeInput}
-                                    onPress={() => {
-                                        setTimePickerField('endTime');
-                                        setIsTimePickerOpen(true);
-                                    }}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.timeInputText,
-                                            !endTime && styles.placeholder,
-                                        ]}
-                                    >
-                                        {endTime || '--:--'}
-                                    </Text>
-                                    <Ionicons
-                                        name="time-outline"
-                                        size={20}
-                                        color={theme.colors.textSecondary}
-                                    />
-                                </TouchableOpacity>
+                                <View style={styles.timeRow}>
+                                    <View style={styles.timeCol}>
+                                        <Text style={styles.label}>Start Time</Text>
+                                        <TouchableOpacity
+                                            style={styles.timeInput}
+                                            onPress={() => {
+                                                setTimePickerField('startTime');
+                                                setIsTimePickerOpen((prev) => (timePickerField === 'startTime' ? !prev : true));
+                                            }}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.timeInputText,
+                                                    !startTime && styles.placeholder,
+                                                ]}
+                                            >
+                                                {startTime || '--:-- --'}
+                                            </Text>
+                                            <Ionicons
+                                                name="time-outline"
+                                                size={20}
+                                                color={theme.colors.textSecondary}
+                                            />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={styles.timeCol}>
+                                        <Text style={styles.label}>End Time</Text>
+                                        <TouchableOpacity
+                                            style={styles.timeInput}
+                                            onPress={() => {
+                                                setTimePickerField('endTime');
+                                                setIsTimePickerOpen((prev) => (timePickerField === 'endTime' ? !prev : true));
+                                            }}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.timeInputText,
+                                                    !endTime && styles.placeholder,
+                                                ]}
+                                            >
+                                                {endTime || '--:-- --'}
+                                            </Text>
+                                            <Ionicons
+                                                name="time-outline"
+                                                size={20}
+                                                color={theme.colors.textSecondary}
+                                            />
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                                {isTimePickerOpen ? (
+                                    <View style={styles.inlineTimePicker}>
+                                        <View style={styles.timePickerContent}>
+                                            <View style={styles.timePickerColumn}>
+                                                <Text style={styles.timePickerLabel}>Hour</Text>
+                                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
+                                                        <TouchableOpacity
+                                                            key={hour}
+                                                            style={[
+                                                                styles.timePickerOption,
+                                                                selectedTime.hour === hour && styles.timePickerOptionSelected,
+                                                            ]}
+                                                            onPress={() => setSelectedTime({ ...selectedTime, hour })}
+                                                        >
+                                                            <Text style={[
+                                                                styles.timePickerOptionText,
+                                                                selectedTime.hour === hour && styles.timePickerOptionTextSelected,
+                                                            ]}>
+                                                                {hour.toString().padStart(2, '0')}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    ))}
+                                                </ScrollView>
+                                            </View>
+                                            <View style={styles.timePickerColumn}>
+                                                <Text style={styles.timePickerLabel}>Minute</Text>
+                                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                                    {Array.from({ length: 60 }, (_, i) => i).map((minute) => (
+                                                        <TouchableOpacity
+                                                            key={minute}
+                                                            style={[
+                                                                styles.timePickerOption,
+                                                                selectedTime.minute === minute && styles.timePickerOptionSelected,
+                                                            ]}
+                                                            onPress={() => setSelectedTime({ ...selectedTime, minute })}
+                                                        >
+                                                            <Text style={[
+                                                                styles.timePickerOptionText,
+                                                                selectedTime.minute === minute && styles.timePickerOptionTextSelected,
+                                                            ]}>
+                                                                {minute.toString().padStart(2, '0')}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    ))}
+                                                </ScrollView>
+                                            </View>
+                                            <View style={styles.timePickerColumn}>
+                                                <Text style={styles.timePickerLabel}>Period</Text>
+                                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                                    {['AM', 'PM'].map((period) => (
+                                                        <TouchableOpacity
+                                                            key={period}
+                                                            style={[
+                                                                styles.timePickerOption,
+                                                                selectedTime.ampm === period && styles.timePickerOptionSelected,
+                                                            ]}
+                                                            onPress={() => setSelectedTime({ ...selectedTime, ampm: period })}
+                                                        >
+                                                            <Text style={[
+                                                                styles.timePickerOptionText,
+                                                                selectedTime.ampm === period && styles.timePickerOptionTextSelected,
+                                                            ]}>
+                                                                {period}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    ))}
+                                                </ScrollView>
+                                            </View>
+                                        </View>
+                                        <View style={styles.inlineTimeActions}>
+                                            <TouchableOpacity
+                                                style={styles.cancelButton}
+                                                onPress={() => {
+                                                    setIsTimePickerOpen(false);
+                                                    setTimePickerField(null);
+                                                }}
+                                            >
+                                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.submitButton}
+                                                onPress={() => {
+                                                    const timeString = `${selectedTime.hour}:${selectedTime.minute.toString().padStart(2, '0')} ${selectedTime.ampm}`;
+                                                    if (timePickerField === 'startTime') setStartTime(timeString);
+                                                    if (timePickerField === 'endTime') setEndTime(timeString);
+                                                    setIsTimePickerOpen(false);
+                                                    setTimePickerField(null);
+                                                }}
+                                            >
+                                                <Text style={styles.submitButtonText}>Apply</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                ) : null}
                             </View>
 
                             {/* Divisions */}
@@ -867,14 +1035,12 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                     </View>
                                 </View>
                                 <View style={styles.divisionsListContainer}>
-                                    
-                                    <FlatList
-                                        data={divisionsData}
-                                        keyExtractor={(item) => item.id}
-                                        renderItem={({ item }) => {
+                                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                        {divisionsData.map((item) => {
                                             const isSelected = selectedDivisions.includes(item.id);
                                             return (
                                                 <TouchableOpacity
+                                                    key={item.id}
                                                     style={styles.divisionCheckboxItem}
                                                     onPress={() => handleDivisionToggle(item.id)}
                                                 >
@@ -897,11 +1063,8 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                                     </Text>
                                                 </TouchableOpacity>
                                             );
-                                        }}
-                                        nestedScrollEnabled={true}
-                                        scrollEnabled={true}
-                                    />
-
+                                        })}
+                                    </ScrollView>
                                 </View>
                             </View>
 
@@ -950,13 +1113,12 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                     />
                                 </View>
                                 <View style={styles.staffListContainer}>
-                                    <FlatList
-                                        data={filteredStaff}
-                                        keyExtractor={(item: any) => item.id}
-                                        renderItem={({ item }: any) => {
+                                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                        {filteredStaff.map((item: any) => {
                                             const isSelected = selectedStaffIds.includes(item.id);
                                             return (
                                                 <TouchableOpacity
+                                                    key={item.id}
                                                     style={[
                                                         styles.staffRow,
                                                         isSelected && styles.staffRowSelected,
@@ -976,9 +1138,8 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                                     </View>
                                                 </TouchableOpacity>
                                             );
-                                        }}
-                                        nestedScrollEnabled
-                                    />
+                                        })}
+                                    </ScrollView>
                                 </View>
                             </View>
 
@@ -1187,197 +1348,6 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 </TouchableOpacity>
                             )}
                             showsVerticalScrollIndicator={false}
-                        />
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Time Picker Modal */}
-            <Modal
-                visible={isTimePickerOpen}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => {
-                    setIsTimePickerOpen(false);
-                    setTimePickerField(null);
-                }}
-            >
-                <Pressable
-                    style={styles.bottomSheetOverlay}
-                    onPress={() => {
-                        setIsTimePickerOpen(false);
-                        setTimePickerField(null);
-                    }}
-                >
-                    <Pressable
-                        style={styles.bottomSheet}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        <View style={[styles.bottomSheetHeader, { borderBottomWidth: 0, paddingBottom: 0 }]}>
-                            <Text style={styles.bottomSheetTitle}>Select Time</Text>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    setIsTimePickerOpen(false);
-                                    setTimePickerField(null);
-                                }}
-                            >
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.timePickerContent}>
-                            {/* Hour Selection */}
-                            <View style={styles.timePickerColumn}>
-                                <Text style={styles.timePickerLabel}>Hour</Text>
-                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
-                                        <TouchableOpacity
-                                            key={hour}
-                                            style={[
-                                                styles.timePickerOption,
-                                                selectedTime.hour === hour && styles.timePickerOptionSelected
-                                            ]}
-                                            onPress={() => setSelectedTime({ ...selectedTime, hour })}
-                                        >
-                                            <Text style={[
-                                                styles.timePickerOptionText,
-                                                selectedTime.hour === hour && styles.timePickerOptionTextSelected
-                                            ]}>
-                                                {hour}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-
-                            {/* Minute Selection */}
-                            <View style={styles.timePickerColumn}>
-                                <Text style={styles.timePickerLabel}>Minute</Text>
-                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                    {Array.from({ length: 60 }, (_, i) => i).map((minute) => (
-                                        <TouchableOpacity
-                                            key={minute}
-                                            style={[
-                                                styles.timePickerOption,
-                                                selectedTime.minute === minute && styles.timePickerOptionSelected
-                                            ]}
-                                            onPress={() => setSelectedTime({ ...selectedTime, minute })}
-                                        >
-                                            <Text style={[
-                                                styles.timePickerOptionText,
-                                                selectedTime.minute === minute && styles.timePickerOptionTextSelected
-                                            ]}>
-                                                {minute.toString().padStart(2, '0')}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-
-                            {/* AM/PM Selection */}
-                            <View style={styles.timePickerColumn}>
-                                <Text style={styles.timePickerLabel}>Period</Text>
-                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                    {['AM', 'PM'].map((period) => (
-                                        <TouchableOpacity
-                                            key={period}
-                                            style={[
-                                                styles.timePickerOption,
-                                                selectedTime.ampm === period && styles.timePickerOptionSelected
-                                            ]}
-                                            onPress={() => setSelectedTime({ ...selectedTime, ampm: period })}
-                                        >
-                                            <Text style={[
-                                                styles.timePickerOptionText,
-                                                selectedTime.ampm === period && styles.timePickerOptionTextSelected
-                                            ]}>
-                                                {period}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        </View>
-
-                        {/* Selected Time Display */}
-                        <View style={styles.timePickerDisplay}>
-                            <Text style={styles.timePickerDisplayText}>
-                                {selectedTime.hour}:{selectedTime.minute.toString().padStart(2, '0')} {selectedTime.ampm}
-                            </Text>
-                        </View>
-
-                        {/* Action Buttons */}
-                        <View style={styles.modalFooter}>
-                            <TouchableOpacity
-                                style={styles.cancelButton}
-                                onPress={() => {
-                                    setIsTimePickerOpen(false);
-                                    setTimePickerField(null);
-                                }}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.submitButton}
-                                onPress={() => {
-                                    if (timePickerField) {
-                                        const timeString = `${selectedTime.hour}:${selectedTime.minute.toString().padStart(2, '0')} ${selectedTime.ampm}`;
-                                        if (timePickerField === 'startTime') setStartTime(timeString);
-                                        else setEndTime(timeString);
-                                    }
-                                    setIsTimePickerOpen(false);
-                                    setTimePickerField(null);
-                                }}
-                            >
-                                <Text style={styles.submitButtonText}>Confirm</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Event Type Bottom Sheet Modal */}
-            <Modal
-                visible={showEventTypeDropdown}
-                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowEventTypeDropdown(false)}
-            >
-                <Pressable
-                    style={styles.bottomSheetOverlay}
-                    onPress={() => setShowEventTypeDropdown(false)}
-                >
-                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select Event Type</Text>
-                        </View>
-                        <FlatList
-                            data={EVENT_TYPES}
-                            keyExtractor={(item) => item}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={styles.bottomSheetOption}
-                                    onPress={() => {
-                                        setEventType(item);
-                                        setShowEventTypeDropdown(false);
-                                    }}
-                                >
-                                    {eventType === item ? (
-                                        <Ionicons name="checkmark" size={24} color={theme.colors.secondary} />
-                                    ) : (
-                                        <View style={{ width: 24 }} />
-                                    )}
-                                    <Text
-                                        style={[
-                                            styles.bottomSheetOptionText,
-                                            eventType === item && styles.bottomSheetOptionTextSelected,
-                                        ]}
-                                    >
-                                        {item}
-                                    </Text>
-                                </TouchableOpacity>
-                            )}
                         />
                     </Pressable>
                 </Pressable>
@@ -1801,9 +1771,6 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         marginBottom: theme.spacing.md,
     },
-    formSectionWithDropdown: {
-        marginTop: 320,
-    },
     eventTypeDropdownItem: {
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.sm,
@@ -1835,6 +1802,53 @@ const styles = StyleSheet.create({
     timeInputText: {
         ...theme.typography.body,
         flex: 1,
+    },
+    emojiRow: {
+        gap: theme.spacing.xs,
+        paddingTop: theme.spacing.sm,
+        paddingBottom: 2,
+    },
+    emojiChip: {
+        minWidth: 36,
+        minHeight: 36,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+    },
+    emojiChipSelected: {
+        borderColor: theme.colors.secondary,
+        backgroundColor: '#fff7ed',
+    },
+    emojiChipText: {
+        fontSize: 20,
+        fontFamily: Platform.OS === 'ios' ? 'AppleColorEmoji' : undefined,
+    },
+    timeRow: {
+        flexDirection: 'row',
+        gap: theme.spacing.md,
+    },
+    timeCol: {
+        flex: 1,
+    },
+    inlineTimePicker: {
+        marginTop: theme.spacing.sm,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.surface,
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.xs,
+    },
+    inlineTimeActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: theme.spacing.sm,
+        marginTop: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.sm,
     },
     divisionsHeader: {
         flexDirection: 'row',
@@ -2103,7 +2117,7 @@ const styles = StyleSheet.create({
     timePickerContent: {
         flexDirection: 'row',
         paddingHorizontal: theme.spacing.sm,
-        maxHeight: 200, // Reduced from 250
+        maxHeight: 200,
         justifyContent: 'space-between',
     },
     timePickerColumn: {
@@ -2116,11 +2130,11 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.xs, // Reduced margin
+        marginBottom: theme.spacing.xs,
     },
     timePickerScroll: {
         width: '100%',
-        maxHeight: 150, // Reduced from 200
+        maxHeight: 150,
     },
     timePickerOption: {
         paddingVertical: theme.spacing.sm,

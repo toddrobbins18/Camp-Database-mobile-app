@@ -230,6 +230,9 @@ export interface SpecialEvent {
     location?: string;
     description?: string;
     chaperone?: string;
+    emoji?: string;
+    file_url?: string;
+    file_name?: string;
     divisions?: Array<{ id: string; name: string }>;
     company_id?: string;
     season?: string;
@@ -301,6 +304,9 @@ export const useAddSpecialEvent = () => {
                     location: eventData.location || null,
                     description: eventData.description || null,
                     chaperone: eventData.chaperone || null,
+                    emoji: eventData.emoji || null,
+                    file_url: eventData.file_url || null,
+                    file_name: eventData.file_name || null,
                     company_id: eventData.company_id,
                     season: eventData.season,
                 }])
@@ -355,6 +361,9 @@ export const useUpdateSpecialEvent = () => {
                     location: eventData.location || null,
                     description: eventData.description || null,
                     chaperone: eventData.chaperone || null,
+                    emoji: eventData.emoji || null,
+                    file_url: eventData.file_url || null,
+                    file_name: eventData.file_name || null,
                     season: eventData.season,
                 })
                 .eq('id', id)
