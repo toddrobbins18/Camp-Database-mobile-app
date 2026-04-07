@@ -1522,165 +1522,175 @@ export const CamperScreen = ({ navigation }: any) => {
                                     </View>
                                 </View>
                             </ScrollView>
+
+                            {/* Add Child Dropdowns: true bottom-sheet Modals for smooth slide-up behavior */}
+                            <Modal
+                                visible={showAddGenderDropdown}
+                                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
+                                transparent={true}
+                                animationType="slide"
+                                onRequestClose={() => setShowAddGenderDropdown(false)}
+                            >
+                                <Pressable
+                                    style={styles.bottomSheetOverlay}
+                                    onPress={() => setShowAddGenderDropdown(false)}
+                                >
+                                    <Pressable
+                                        style={styles.bottomSheet}
+                                        onPress={(e) => e.stopPropagation()}
+                                    >
+                                        <View style={styles.bottomSheetHeader}>
+                                            <Text style={styles.bottomSheetTitle}>Select Gender</Text>
+                                        </View>
+                                        <ScrollView
+                                            style={styles.bottomSheetScroll}
+                                            nestedScrollEnabled={true}
+                                            showsVerticalScrollIndicator={false}
+                                        >
+                                            {['Male', 'Female'].map((gender) => (
+                                                <TouchableOpacity
+                                                    key={gender}
+                                                    style={[
+                                                        styles.bottomSheetOption,
+                                                        formData.gender === gender && styles.bottomSheetOptionSelected
+                                                    ]}
+                                                    onPress={() => {
+                                                        setFormData({ ...formData, gender });
+                                                        setShowAddGenderDropdown(false);
+                                                    }}
+                                                >
+                                                    <Text style={[
+                                                        styles.bottomSheetOptionText,
+                                                        formData.gender === gender && styles.bottomSheetOptionTextSelected
+                                                    ]}>
+                                                        {gender}
+                                                    </Text>
+                                                    {formData.gender === gender && (
+                                                        <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                                    )}
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </Pressable>
+                                </Pressable>
+                            </Modal>
+
+                            <Modal
+                                visible={showAddDivisionDropdown}
+                                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
+                                transparent={true}
+                                animationType="slide"
+                                onRequestClose={() => setShowAddDivisionDropdown(false)}
+                            >
+                                <Pressable
+                                    style={styles.bottomSheetOverlay}
+                                    onPress={() => setShowAddDivisionDropdown(false)}
+                                >
+                                    <Pressable
+                                        style={styles.bottomSheet}
+                                        onPress={(e) => e.stopPropagation()}
+                                    >
+                                        <View style={styles.bottomSheetHeader}>
+                                            <Text style={styles.bottomSheetTitle}>Select Division</Text>
+                                        </View>
+                                        <ScrollView
+                                            style={styles.bottomSheetScroll}
+                                            nestedScrollEnabled={true}
+                                            showsVerticalScrollIndicator={true}
+                                        >
+                                            {divisionsData.map((division: any) => (
+                                                <TouchableOpacity
+                                                    key={division.id}
+                                                    style={[
+                                                        styles.bottomSheetOption,
+                                                        formData.division === division.id && styles.bottomSheetOptionSelected
+                                                    ]}
+                                                    onPress={() => {
+                                                        setFormData({ ...formData, division: division.id });
+                                                        setShowAddDivisionDropdown(false);
+                                                    }}
+                                                >
+                                                    <Text style={[
+                                                        styles.bottomSheetOptionText,
+                                                        formData.division === division.id && styles.bottomSheetOptionTextSelected
+                                                    ]}>
+                                                        {division.name}
+                                                    </Text>
+                                                    {formData.division === division.id && (
+                                                        <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                                    )}
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </Pressable>
+                                </Pressable>
+                            </Modal>
+
+                            <Modal
+                                visible={showAddLeaderDropdown}
+                                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
+                                transparent={true}
+                                animationType="slide"
+                                onRequestClose={() => setShowAddLeaderDropdown(false)}
+                            >
+                                <Pressable
+                                    style={styles.bottomSheetOverlay}
+                                    onPress={() => setShowAddLeaderDropdown(false)}
+                                >
+                                    <Pressable
+                                        style={styles.bottomSheet}
+                                        onPress={(e) => e.stopPropagation()}
+                                    >
+                                        <View style={styles.bottomSheetHeader}>
+                                            <Text style={styles.bottomSheetTitle}>Select Assigned Leader</Text>
+                                        </View>
+                                        <ScrollView
+                                            style={styles.bottomSheetScroll}
+                                            nestedScrollEnabled={true}
+                                            showsVerticalScrollIndicator={true}
+                                        >
+                                            {staffList.map((leader: any) => {
+                                                const leaderDisplay = `${leader.name} - ${leader.role}`;
+                                                const isSelected = formData.assignedLeaderId === leader.id || formData.assignedLeader === leaderDisplay;
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={leader.id || leader.name}
+                                                        style={[
+                                                            styles.bottomSheetOption,
+                                                            isSelected && styles.bottomSheetOptionSelected
+                                                        ]}
+                                                        onPress={() => {
+                                                            setFormData({ ...formData, assignedLeader: leaderDisplay, assignedLeaderId: (leader as any).id ?? '' });
+                                                            setShowAddLeaderDropdown(false);
+                                                        }}
+                                                    >
+                                                        <View style={{ flex: 1 }}>
+                                                            <Text style={[
+                                                                styles.bottomSheetOptionText,
+                                                                isSelected && styles.bottomSheetOptionTextSelected
+                                                            ]}>
+                                                                {leader.name}
+                                                            </Text>
+                                                            <Text style={[
+                                                                styles.leaderRoleText,
+                                                                isSelected && styles.leaderRoleTextSelected
+                                                            ]}>
+                                                                {leader.role}
+                                                            </Text>
+                                                        </View>
+                                                        {isSelected && (
+                                                            <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
+                                                        )}
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </ScrollView>
+                                    </Pressable>
+                                </Pressable>
+                            </Modal>
                         </Pressable>
                     </Pressable>
                 </Modal>
-
-                {/* Gender Dropdown Overlay for Add Child (inline to avoid nested modal issues on iOS) */}
-                {showAddGenderDropdown && (
-                    <View style={styles.modalAbsoluteOverlay} pointerEvents="box-none">
-                    <Pressable
-                        style={styles.bottomSheetOverlay}
-                        onPress={() => setShowAddGenderDropdown(false)}
-                    >
-                        <Pressable
-                            style={styles.bottomSheet}
-                            onPress={(e) => e.stopPropagation()}
-                        >
-                            <View style={styles.bottomSheetHeader}>
-                                <Text style={styles.bottomSheetTitle}>Select Gender</Text>
-                            </View>
-                            <ScrollView
-                                style={styles.bottomSheetScroll}
-                                nestedScrollEnabled={true}
-                                showsVerticalScrollIndicator={false}
-                            >
-                                {['Male', 'Female'].map((gender) => (
-                                    <TouchableOpacity
-                                        key={gender}
-                                        style={[
-                                            styles.bottomSheetOption,
-                                            formData.gender === gender && styles.bottomSheetOptionSelected
-                                        ]}
-                                        onPress={() => {
-                                            setFormData({ ...formData, gender: gender });
-                                            setShowAddGenderDropdown(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.bottomSheetOptionText,
-                                            formData.gender === gender && styles.bottomSheetOptionTextSelected
-                                        ]}>
-                                            {gender}
-                                        </Text>
-                                        {formData.gender === gender && (
-                                            <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        </Pressable>
-                    </Pressable>
-                    </View>
-                )}
-
-                {/* Division Dropdown Overlay for Add Child (inline to avoid nested modal issues on iOS) */}
-                {showAddDivisionDropdown && (
-                    <View style={styles.modalAbsoluteOverlay} pointerEvents="box-none">
-                    <Pressable
-                        style={styles.bottomSheetOverlay}
-                        onPress={() => setShowAddDivisionDropdown(false)}
-                    >
-                        <Pressable
-                            style={styles.bottomSheet}
-                            onPress={(e) => e.stopPropagation()}
-                        >
-                            <View style={styles.bottomSheetHeader}>
-                                <Text style={styles.bottomSheetTitle}>Select Division</Text>
-                            </View>
-                            <ScrollView
-                                style={styles.bottomSheetScroll}
-                                nestedScrollEnabled={true}
-                                showsVerticalScrollIndicator={true}
-                            >
-                                {divisionsData.map((division: any) => (
-                                    <TouchableOpacity
-                                        key={division.id}
-                                        style={[
-                                            styles.bottomSheetOption,
-                                            formData.division === division.id && styles.bottomSheetOptionSelected
-                                        ]}
-                                        onPress={() => {
-                                            setFormData({ ...formData, division: division.id });
-                                            setShowAddDivisionDropdown(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.bottomSheetOptionText,
-                                            formData.division === division.id && styles.bottomSheetOptionTextSelected
-                                        ]}>
-                                            {division.name}
-                                        </Text>
-                                        {formData.division === division.id && (
-                                            <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        </Pressable>
-                    </Pressable>
-                    </View>
-                )}
-
-                {/* Assigned Leader Dropdown Overlay for Add Child (inline to avoid nested modal issues on iOS) */}
-                {showAddLeaderDropdown && (
-                    <View style={styles.modalAbsoluteOverlay} pointerEvents="box-none">
-                    <Pressable
-                        style={styles.bottomSheetOverlay}
-                        onPress={() => setShowAddLeaderDropdown(false)}
-                    >
-                        <Pressable
-                            style={styles.bottomSheet}
-                            onPress={(e) => e.stopPropagation()}
-                        >
-                            <View style={styles.bottomSheetHeader}>
-                                <Text style={styles.bottomSheetTitle}>Select Assigned Leader</Text>
-                            </View>
-                            <ScrollView
-                                style={styles.bottomSheetScroll}
-                                nestedScrollEnabled={true}
-                                showsVerticalScrollIndicator={true}
-                            >
-                                {staffList.map((leader: any) => {
-                                    const leaderDisplay = `${leader.name} - ${leader.role}`;
-                                    const isSelected = formData.assignedLeaderId === leader.id || formData.assignedLeader === leaderDisplay;
-                                    return (
-                                        <TouchableOpacity
-                                            key={leader.id || leader.name}
-                                            style={[
-                                                styles.bottomSheetOption,
-                                                isSelected && styles.bottomSheetOptionSelected
-                                            ]}
-                                            onPress={() => {
-                                                setFormData({ ...formData, assignedLeader: leaderDisplay, assignedLeaderId: (leader as any).id ?? '' });
-                                                setShowAddLeaderDropdown(false);
-                                            }}
-                                        >
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={[
-                                                    styles.bottomSheetOptionText,
-                                                    isSelected && styles.bottomSheetOptionTextSelected
-                                                ]}>
-                                                    {leader.name}
-                                                </Text>
-                                                <Text style={[
-                                                    styles.leaderRoleText,
-                                                    isSelected && styles.leaderRoleTextSelected
-                                                ]}>
-                                                    {leader.role}
-                                                </Text>
-                                            </View>
-                                            {isSelected && (
-                                                <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
-                                            )}
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </ScrollView>
-                        </Pressable>
-                    </Pressable>
-                    </View>
-                )}
 
                 {/* Delete Confirmation Modal */}
                 <Modal
