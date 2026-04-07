@@ -9,8 +9,18 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useCampers } from '../api/campers';
 import { useIncidentReports, useAddIncidentReport, useUpdateIncidentReport } from '../api/incidents_approvals';
 import { supabase } from '../lib/supabase';
+import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 
 const INCIDENT_ACCENT = '#ef4444';
+
+type AddIncidentSubsheet = 'date' | 'type' | 'severity' | 'status' | null;
+
+const ADD_INCIDENT_SUBSHEET_TITLES: Record<Exclude<AddIncidentSubsheet, null>, string> = {
+    date: 'Select Date',
+    type: 'Select Incident Type',
+    severity: 'Select Severity',
+    status: 'Select Status',
+};
 
 export const IncidentReportsScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
@@ -44,15 +54,13 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
 
     // Form state
     const [date, setDate] = useState<Date>(new Date());
-    const [showDatePicker, setShowDatePicker] = useState(false);
     const [incidentType, setIncidentType] = useState<string>('');
-    const [showTypePicker, setShowTypePicker] = useState(false);
     const [severity, setSeverity] = useState<string>('');
-    const [showSeverityPicker, setShowSeverityPicker] = useState(false);
     const [description, setDescription] = useState<string>('');
     const [reportedBy, setReportedBy] = useState<string>('');
     const [status, setStatus] = useState<string>('Open');
-    const [showStatusPicker, setShowStatusPicker] = useState(false);
+    /** Inline picker inside Add Incident modal — avoids stacking a second RN Modal (breaks on iOS). */
+    const [addIncidentSubsheet, setAddIncidentSubsheet] = useState<AddIncidentSubsheet>(null);
     const [focusedField, setFocusedField] = useState<string | null>(null);
 
     // Options
@@ -102,33 +110,25 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
         return `${month}/${day}/${year}`;
     };
 
-    // Handle date selection
-    const handleDateSelect = (selectedDate: Date) => {
-        setDate(selectedDate);
-        setShowDatePicker(false);
-    };
-
-    // Handle type selection
     const handleTypeSelect = (type: string) => {
         setIncidentType(type);
-        setShowTypePicker(false);
+        setAddIncidentSubsheet(null);
     };
 
-    // Handle severity selection
     const handleSeveritySelect = (sev: string) => {
         setSeverity(sev);
-        setShowSeverityPicker(false);
+        setAddIncidentSubsheet(null);
     };
 
-    // Handle status selection
     const handleStatusSelect = (stat: string) => {
         setStatus(stat);
-        setShowStatusPicker(false);
+        setAddIncidentSubsheet(null);
     };
 
     // Reset form when modal closes
     const handleCloseAddIncident = () => {
         setShowAddIncidentModal(false);
+        setAddIncidentSubsheet(null);
         // Reset form fields
         setSelectedChildren([]);
         setDate(new Date());
@@ -469,16 +469,28 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
-            {/* Add Incident Modal */}
+            {/* Add Incident Modal — one RN Modal; pickers are ModalPickerOverlay inside (stacked Modals break iOS). */}
             <Modal
                 visible={showAddIncidentModal}
                 transparent={true}
                 animationType="slide"
                 onRequestClose={handleCloseAddIncident}
             >
-                <Pressable style={styles.centerModalOverlay} onPress={handleCloseAddIncident}>
-                    <Pressable style={styles.addIncidentModal} onPress={(e) => e.stopPropagation()}>
-                        <ScrollView style={styles.addIncidentScroll} showsVerticalScrollIndicator={false}>
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <Pressable
+                        style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0, 0, 0, 0.5)' }]}
+                        onPress={() => {
+                            if (addIncidentSubsheet) setAddIncidentSubsheet(null);
+                            else handleCloseAddIncident();
+                        }}
+                    />
+                    <View style={[styles.addIncidentModal, { zIndex: 1 }]} pointerEvents="box-none">
+                        <ScrollView
+                            style={styles.addIncidentScroll}
+                            showsVerticalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                            nestedScrollEnabled
+                        >
                             {/* Modal Header */}
                             <View style={styles.addIncidentHeader}>
                                 <Text style={styles.addIncidentTitle}>Add Incident Report</Text>
@@ -529,7 +541,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     style={[styles.inputContainer, { borderColor: getFieldBorderColor('date') }]}
                                     onPress={() => {
                                         setFocusedField('date');
-                                        setShowDatePicker(true);
+                                        setAddIncidentSubsheet('date');
                                     }}
                                 >
                                     <TextInput
@@ -549,7 +561,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     style={[styles.inputContainer, { borderColor: getFieldBorderColor('type') }]}
                                     onPress={() => {
                                         setFocusedField('type');
-                                        setShowTypePicker(true);
+                                        setAddIncidentSubsheet('type');
                                     }}
                                 >
                                     <TextInput
@@ -571,7 +583,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     style={[styles.inputContainer, { borderColor: getFieldBorderColor('severity') }]}
                                     onPress={() => {
                                         setFocusedField('severity');
-                                        setShowSeverityPicker(true);
+                                        setAddIncidentSubsheet('severity');
                                     }}
                                 >
                                     <TextInput
@@ -654,7 +666,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     style={[styles.inputContainer, { borderColor: getFieldBorderColor('status') }]}
                                     onPress={() => {
                                         setFocusedField('status');
-                                        setShowStatusPicker(true);
+                                        setAddIncidentSubsheet('status');
                                     }}
                                 >
                                     <TextInput
@@ -693,8 +705,173 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
-                    </Pressable>
-                </Pressable>
+                    </View>
+                    {addIncidentSubsheet ? (
+                        <ModalPickerOverlay
+                            visible
+                            onClose={() => setAddIncidentSubsheet(null)}
+                            title={ADD_INCIDENT_SUBSHEET_TITLES[addIncidentSubsheet]}
+                        >
+                            {addIncidentSubsheet === 'date' ? (
+                                <View style={styles.datePickerContainer}>
+                                    <ScrollView style={styles.dateScrollView}>
+                                        <View style={styles.dateSection}>
+                                            <Text style={styles.dateSectionTitle}>Month</Text>
+                                            <View style={styles.dateOptionsRow}>
+                                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => (
+                                                    <TouchableOpacity
+                                                        key={month}
+                                                        style={[
+                                                            styles.dateOption,
+                                                            date.getMonth() + 1 === month && styles.dateOptionSelected,
+                                                        ]}
+                                                        onPress={() => {
+                                                            const newDate = new Date(date);
+                                                            newDate.setMonth(month - 1);
+                                                            setDate(newDate);
+                                                        }}
+                                                    >
+                                                        <Text
+                                                            style={[
+                                                                styles.dateOptionText,
+                                                                date.getMonth() + 1 === month && styles.dateOptionTextSelected,
+                                                            ]}
+                                                        >
+                                                            {month}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </View>
+                                        </View>
+                                        <View style={styles.dateSection}>
+                                            <Text style={styles.dateSectionTitle}>Day</Text>
+                                            <View style={styles.dateOptionsRow}>
+                                                {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                                                    <TouchableOpacity
+                                                        key={day}
+                                                        style={[
+                                                            styles.dateOption,
+                                                            date.getDate() === day && styles.dateOptionSelected,
+                                                        ]}
+                                                        onPress={() => {
+                                                            const newDate = new Date(date);
+                                                            newDate.setDate(day);
+                                                            setDate(newDate);
+                                                        }}
+                                                    >
+                                                        <Text
+                                                            style={[
+                                                                styles.dateOptionText,
+                                                                date.getDate() === day && styles.dateOptionTextSelected,
+                                                            ]}
+                                                        >
+                                                            {day}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </View>
+                                        </View>
+                                        <View style={styles.dateSection}>
+                                            <Text style={styles.dateSectionTitle}>Year</Text>
+                                            <View style={styles.dateOptionsRow}>
+                                                {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(
+                                                    (year) => (
+                                                        <TouchableOpacity
+                                                            key={year}
+                                                            style={[
+                                                                styles.dateOption,
+                                                                date.getFullYear() === year && styles.dateOptionSelected,
+                                                            ]}
+                                                            onPress={() => {
+                                                                const newDate = new Date(date);
+                                                                newDate.setFullYear(year);
+                                                                setDate(newDate);
+                                                            }}
+                                                        >
+                                                            <Text
+                                                                style={[
+                                                                    styles.dateOptionText,
+                                                                    date.getFullYear() === year &&
+                                                                        styles.dateOptionTextSelected,
+                                                                ]}
+                                                            >
+                                                                {year}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    ),
+                                                )}
+                                            </View>
+                                        </View>
+                                    </ScrollView>
+                                    <TouchableOpacity
+                                        style={styles.pickerConfirmBtn}
+                                        onPress={() => setAddIncidentSubsheet(null)}
+                                    >
+                                        <Text style={styles.pickerConfirmBtnText}>Confirm</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : null}
+                            {addIncidentSubsheet === 'type' ? (
+                                <View style={styles.pickerContent}>
+                                    {incidentTypes.map((type) => (
+                                        <TouchableOpacity
+                                            key={type}
+                                            style={styles.pickerOption}
+                                            onPress={() => handleTypeSelect(type)}
+                                        >
+                                            <Text style={styles.pickerOptionText}>{type}</Text>
+                                            {incidentType === type && (
+                                                <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            ) : null}
+                            {addIncidentSubsheet === 'severity' ? (
+                                <View style={styles.pickerContent}>
+                                    {severityLevels.map((level) => (
+                                        <TouchableOpacity
+                                            key={level}
+                                            style={styles.pickerOption}
+                                            onPress={() => handleSeveritySelect(level)}
+                                        >
+                                            <Text style={styles.pickerOptionText}>{level}</Text>
+                                            {severity === level && (
+                                                <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            ) : null}
+                            {addIncidentSubsheet === 'status' ? (
+                                <ScrollView style={styles.pickerScroll} keyboardShouldPersistTaps="handled">
+                                    {statusOptions.map((option) => (
+                                        <TouchableOpacity
+                                            key={option}
+                                            style={[
+                                                styles.pickerOption,
+                                                status === option && styles.pickerOptionActive,
+                                            ]}
+                                            onPress={() => handleStatusSelect(option)}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.pickerOptionText,
+                                                    status === option && styles.pickerOptionTextActive,
+                                                ]}
+                                            >
+                                                {option}
+                                            </Text>
+                                            {status === option && (
+                                                <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            ) : null}
+                        </ModalPickerOverlay>
+                    ) : null}
+                </View>
             </Modal>
 
             {/* Edit Incident Modal */}
@@ -802,223 +979,6 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     <Text style={styles.submitBtnText}>{updateIncidentMutation.isPending ? 'Updating...' : 'Update'}</Text>
                                 </TouchableOpacity>
                             </View>
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Date Picker Modal */}
-            <Modal
-                visible={showDatePicker}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowDatePicker(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
-                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.pickerHeader}>
-                            <Text style={styles.pickerTitle}>Select Date</Text>
-                            <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <View style={styles.datePickerContainer}>
-                            <ScrollView style={styles.dateScrollView}>
-                                {/* Month Selection */}
-                                <View style={styles.dateSection}>
-                                    <Text style={styles.dateSectionTitle}>Month</Text>
-                                    <View style={styles.dateOptionsRow}>
-                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => (
-                                            <TouchableOpacity
-                                                key={month}
-                                                style={[
-                                                    styles.dateOption,
-                                                    date.getMonth() + 1 === month && styles.dateOptionSelected
-                                                ]}
-                                                onPress={() => {
-                                                    const newDate = new Date(date);
-                                                    newDate.setMonth(month - 1);
-                                                    setDate(newDate);
-                                                }}
-                                            >
-                                                <Text style={[
-                                                    styles.dateOptionText,
-                                                    date.getMonth() + 1 === month && styles.dateOptionTextSelected
-                                                ]}>
-                                                    {month}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                </View>
-
-                                {/* Day Selection */}
-                                <View style={styles.dateSection}>
-                                    <Text style={styles.dateSectionTitle}>Day</Text>
-                                    <View style={styles.dateOptionsRow}>
-                                        {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                                            <TouchableOpacity
-                                                key={day}
-                                                style={[
-                                                    styles.dateOption,
-                                                    date.getDate() === day && styles.dateOptionSelected
-                                                ]}
-                                                onPress={() => {
-                                                    const newDate = new Date(date);
-                                                    newDate.setDate(day);
-                                                    setDate(newDate);
-                                                }}
-                                            >
-                                                <Text style={[
-                                                    styles.dateOptionText,
-                                                    date.getDate() === day && styles.dateOptionTextSelected
-                                                ]}>
-                                                    {day}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                </View>
-
-                                {/* Year Selection */}
-                                <View style={styles.dateSection}>
-                                    <Text style={styles.dateSectionTitle}>Year</Text>
-                                    <View style={styles.dateOptionsRow}>
-                                        {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => (
-                                            <TouchableOpacity
-                                                key={year}
-                                                style={[
-                                                    styles.dateOption,
-                                                    date.getFullYear() === year && styles.dateOptionSelected
-                                                ]}
-                                                onPress={() => {
-                                                    const newDate = new Date(date);
-                                                    newDate.setFullYear(year);
-                                                    setDate(newDate);
-                                                }}
-                                            >
-                                                <Text style={[
-                                                    styles.dateOptionText,
-                                                    date.getFullYear() === year && styles.dateOptionTextSelected
-                                                ]}>
-                                                    {year}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                </View>
-                            </ScrollView>
-                            <TouchableOpacity
-                                style={styles.pickerConfirmBtn}
-                                onPress={() => setShowDatePicker(false)}
-                            >
-                                <Text style={styles.pickerConfirmBtnText}>Confirm</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Type Picker Modal */}
-            <Modal
-                visible={showTypePicker}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowTypePicker(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowTypePicker(false)}>
-                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.pickerHeader}>
-                            <Text style={styles.pickerTitle}>Select Incident Type</Text>
-                            <TouchableOpacity onPress={() => setShowTypePicker(false)}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <View style={styles.pickerContent}>
-                            {incidentTypes.map((type) => (
-                                <TouchableOpacity
-                                    key={type}
-                                    style={styles.pickerOption}
-                                    onPress={() => handleTypeSelect(type)}
-                                >
-                                    <Text style={styles.pickerOptionText}>{type}</Text>
-                                    {incidentType === type && (
-                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Severity Picker Modal */}
-            <Modal
-                visible={showSeverityPicker}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowSeverityPicker(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowSeverityPicker(false)}>
-                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.pickerHeader}>
-                            <Text style={styles.pickerTitle}>Select Severity</Text>
-                            <TouchableOpacity onPress={() => setShowSeverityPicker(false)}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <View style={styles.pickerContent}>
-                            {severityLevels.map((level) => (
-                                <TouchableOpacity
-                                    key={level}
-                                    style={styles.pickerOption}
-                                    onPress={() => handleSeveritySelect(level)}
-                                >
-                                    <Text style={styles.pickerOptionText}>{level}</Text>
-                                    {severity === level && (
-                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Status Picker Modal */}
-            <Modal
-                visible={showStatusPicker}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowStatusPicker(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowStatusPicker(false)}>
-                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.pickerHeader}>
-                            <Text style={styles.pickerTitle}>Select Status</Text>
-                            <TouchableOpacity onPress={() => setShowStatusPicker(false)}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <ScrollView style={styles.pickerScroll}>
-                            {statusOptions.map((option) => (
-                                <TouchableOpacity
-                                    key={option}
-                                    style={[
-                                        styles.pickerOption,
-                                        status === option && styles.pickerOptionActive
-                                    ]}
-                                    onPress={() => handleStatusSelect(option)}
-                                >
-                                    <Text style={[
-                                        styles.pickerOptionText,
-                                        status === option && styles.pickerOptionTextActive
-                                    ]}>{option}</Text>
-                                    {status === option && (
-                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
                         </ScrollView>
                     </Pressable>
                 </Pressable>
