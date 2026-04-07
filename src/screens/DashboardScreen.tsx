@@ -377,10 +377,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                             <Text style={styles.menuLabel}>BREAKFAST: {meals?.breakfast || 'TBD'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.menuItem}>
-                            <View style={styles.menuItemWithDot}>
-                                <Text style={styles.menuLabel}>LUNCH: {meals?.lunch || 'TBD'}</Text>
-                                <View style={styles.blueDot} />
-                            </View>
+                            <Text style={styles.menuLabel}>LUNCH: {meals?.lunch || 'TBD'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.menuItem}>
                             <Text style={styles.menuLabel}>SNACK: {meals?.snack || 'TBD'}</Text>
@@ -943,21 +940,10 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: theme.colors.border,
     },
-    menuItemWithDot: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
     menuLabel: {
         fontSize: 12,
         fontWeight: '600',
         color: theme.colors.text,
-    },
-    blueDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#2563eb',
     },
     viewMenuBtn: {
         marginTop: theme.spacing.sm,
