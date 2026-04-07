@@ -247,13 +247,30 @@ export const CalendarScreen = ({ navigation }: any) => {
                     </View>
                     <View style={styles.titleRight}>
                         <TouchableOpacity
-                            style={styles.calendarIcon}
+                            style={[styles.viewToggleBtn, !showEventList && styles.viewToggleBtnActive]}
                             onPress={() => setShowEventList(false)}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: !showEventList }}
+                            accessibilityLabel="Calendar view"
                         >
-                            <Ionicons name="calendar" size={20} color="white" />
+                            <Ionicons
+                                name="calendar-outline"
+                                size={22}
+                                color={!showEventList ? '#fff' : theme.colors.text}
+                            />
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => setShowEventList(!showEventList)}>
-                            <Ionicons name="menu" size={28} color={theme.colors.text} />
+                        <TouchableOpacity
+                            style={[styles.viewToggleBtn, showEventList && styles.viewToggleBtnActive]}
+                            onPress={() => setShowEventList(true)}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: showEventList }}
+                            accessibilityLabel="List view"
+                        >
+                            <Ionicons
+                                name="menu"
+                                size={24}
+                                color={showEventList ? '#fff' : theme.colors.text}
+                            />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -406,7 +423,6 @@ export const CalendarScreen = ({ navigation }: any) => {
                             if (calEvt) setSelectedEvent(calEvt);
                         }}
                         views={['Month', 'Week', 'Day', 'Agenda']}
-                        showZoom
                         showNavigation={true}
                         getEventAccent={(evt) => evt.accent || { bg: '#e5e7eb', text: '#1e293b', marker: '#6b7280' }}
                         getTagStyle={getTagStyle}
@@ -555,10 +571,10 @@ export const CalendarScreen = ({ navigation }: any) => {
             <Modal
                 visible={!!selectedEvent}
                 transparent={true}
-                animationType="slide"
+                animationType="fade"
                 onRequestClose={() => setSelectedEvent(null)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setSelectedEvent(null)}>
+                <Pressable style={styles.eventDetailModalOverlay} onPress={() => setSelectedEvent(null)}>
                     <Pressable style={styles.eventDetailModal} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.eventDetailHeader}>
                             <View style={styles.eventDetailTitleRow}>
@@ -674,13 +690,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: theme.spacing.sm,
     },
-    calendarIcon: {
+    viewToggleBtn: {
         width: 40,
         height: 40,
-        backgroundColor: theme.colors.accent,
         borderRadius: theme.borderRadius.md,
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    viewToggleBtnActive: {
+        backgroundColor: theme.colors.accent,
+        borderColor: theme.colors.accent,
     },
     filterCard: {
         backgroundColor: theme.colors.surface,
@@ -750,6 +772,14 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
+    },
+    /** Centered dimmed backdrop for event detail (pickers stay bottom-sheet). */
+    eventDetailModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: theme.spacing.md,
     },
     pickerModal: {
         backgroundColor: theme.colors.surface,
@@ -911,8 +941,11 @@ const styles = StyleSheet.create({
     eventDetailModal: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
-        marginHorizontal: theme.spacing.lg,
+        width: '100%',
+        maxWidth: 420,
         maxHeight: '85%',
+        ...theme.shadows.card,
+        elevation: 12,
     },
     eventDetailHeader: {
         flexDirection: 'row',

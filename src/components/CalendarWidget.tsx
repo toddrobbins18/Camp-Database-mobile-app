@@ -157,7 +157,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     onDatePress,
     views = ['Month', 'Week', 'Day', 'Agenda'],
     initialView = 'Month',
-    showZoom = true,
+    showZoom = false,
     showNavigation = true,
     containerStyle,
     getEventAccent = defaultGetEventAccent,
@@ -387,7 +387,6 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                             const isSelected = isSameDate(day.fullDate, selectedDate);
                             const isToday = isSameDate(day.fullDate, new Date());
                             const dayEvts = getEventsForDate(day.fullDate);
-                            const accent = dayEvts.length > 0 ? getEventAccent(dayEvts[0]) : null;
 
                             return (
                                 <TouchableOpacity
@@ -395,9 +394,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                                     style={[
                                         s.dayCell,
                                         { height: monthCellHeight },
-                                        dayEvts.length > 0 && day.isCurrentMonth && { backgroundColor: accent!.bg },
                                         !day.isCurrentMonth && s.dayCellOther,
-                                        isSelected && s.dayCellSelected,
+                                        day.isCurrentMonth && isSelected && s.dayCellSelectedOutline,
                                     ]}
                                     onPress={() => {
                                         onSelectedDateChange(day.fullDate);
@@ -409,17 +407,11 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                                     <Text style={[
                                         s.dayText,
                                         !day.isCurrentMonth && s.dayTextOther,
-                                        isSelected && s.dayTextSelected,
-                                        dayEvts.length > 0 && day.isCurrentMonth && accent && { color: accent.text, fontWeight: '700' as const },
-                                        isToday && !isSelected && s.dayTextToday,
+                                        isSelected && day.isCurrentMonth && s.dayTextEmphasis,
+                                        isToday && day.isCurrentMonth && !isSelected && s.dayTextTodayMark,
                                     ]}>
                                         {day.date}
                                     </Text>
-                                    {dayEvts.length > 0 && day.isCurrentMonth && accent && (
-                                        <View style={[s.eventDot, { backgroundColor: accent.marker }]}>
-                                            {dayEvts.length > 1 && <Text style={s.eventCountText}>{dayEvts.length}</Text>}
-                                        </View>
-                                    )}
                                 </TouchableOpacity>
                             );
                         })}
@@ -593,14 +585,17 @@ const s = StyleSheet.create({
     weekDayText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
     daysGrid: { flexDirection: 'row', flexWrap: 'wrap' },
     dayCell: { width: '14.28%', alignItems: 'center', justifyContent: 'center', paddingVertical: theme.spacing.xs, position: 'relative' },
-    dayCellOther: { opacity: 0.4 },
-    dayCellSelected: { backgroundColor: '#dbeafe', borderRadius: theme.borderRadius.md },
+    dayCellOther: { backgroundColor: '#f3f4f6' },
+    /** Neutral outline only — no blue fill (matches clean web month grid). */
+    dayCellSelectedOutline: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+    },
     dayText: { fontSize: 14, color: theme.colors.text, fontWeight: '500' },
     dayTextOther: { color: theme.colors.textSecondary },
-    dayTextSelected: { color: theme.colors.secondary, fontWeight: '700' },
-    dayTextToday: { fontWeight: '700' },
-    eventDot: { position: 'absolute', bottom: 4, minWidth: 8, height: 8, borderRadius: 999, paddingHorizontal: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.secondary },
-    eventCountText: { color: '#fff', fontSize: 8, fontWeight: '700', lineHeight: 8 },
+    dayTextEmphasis: { fontWeight: '700' },
+    dayTextTodayMark: { fontWeight: '700' },
     /* Week view */
     weekViewContainer: { flexDirection: 'row', minHeight: 400 },
     weekDayColumn: { width: 120, borderRightWidth: 1, borderRightColor: theme.colors.border, paddingHorizontal: theme.spacing.sm },
