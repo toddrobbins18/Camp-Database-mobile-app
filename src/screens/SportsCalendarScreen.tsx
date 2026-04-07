@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { CalendarWidget, CalendarWidgetEvent } from '../components/CalendarWidget';
+import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { useCampers } from '../api/campers';
 import { useStaff } from '../api/staff';
 import { useCompany } from '../contexts/CompanyContext';
@@ -1369,7 +1369,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 </StyledCard>
 
                 {/* Calendar Widget */}
-                <CalendarWidget
+                <UnifiedCalendar
                     events={calendarWidgetEvents}
                     currentDate={currentDate}
                     onCurrentDateChange={setCurrentDate}

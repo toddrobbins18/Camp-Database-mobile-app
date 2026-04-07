@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { CalendarWidget, type CalendarWidgetEvent } from '../components/CalendarWidget';
+import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
@@ -397,7 +397,7 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                     </View>
                 ) : (
                     viewMode === 'calendar' ? (
-                        <CalendarWidget
+                        <UnifiedCalendar
                             events={calendarWidgetEvents}
                             currentDate={currentDate}
                             onCurrentDateChange={setCurrentDate}

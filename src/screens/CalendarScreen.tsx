@@ -6,7 +6,7 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCalendarEvents, useDivisions, type CalendarEvent, type EventSource } from '../api/calendar_events';
-import { CalendarWidget, type CalendarWidgetEvent } from '../components/CalendarWidget';
+import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
 
 interface Event {
     id: string;
@@ -395,7 +395,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                         })}
                     </View>
                 ) : (
-                    <CalendarWidget
+                    <UnifiedCalendar
                         events={calendarWidgetEvents}
                         currentDate={currentDate}
                         onCurrentDateChange={setCurrentDate}
@@ -406,7 +406,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                             if (calEvt) setSelectedEvent(calEvt);
                         }}
                         views={['Month', 'Week', 'Day', 'Agenda']}
-                        showZoom={false}
+                        showZoom
                         showNavigation={true}
                         getEventAccent={(evt) => evt.accent || { bg: '#e5e7eb', text: '#1e293b', marker: '#6b7280' }}
                         getTagStyle={getTagStyle}

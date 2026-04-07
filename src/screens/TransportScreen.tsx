@@ -27,7 +27,7 @@ import { theme } from '../theme/theme';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadTripAttachment, getSignedUrl, pathFromFileUrl } from '../api/storage';
 import { supabase } from '../lib/supabase';
-import { CalendarWidget as SharedCalendarWidget, CalendarWidgetEvent } from '../components/CalendarWidget';
+import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 
 // Trip Interfaces
 interface Trip {
@@ -866,7 +866,7 @@ export const TransportScreen = ({ navigation }: any) => {
             return (
                 <ScrollView contentContainerStyle={[styles.calendarViewContent, { flexDirection: 'row', gap: 24 }]}>
                     <View style={{ flex: 1, maxWidth: 400 }}>
-                        <SharedCalendarWidget
+                        <UnifiedCalendar
                             events={calendarWidgetEvents}
                             currentDate={calendarCurrentDate}
                             onCurrentDateChange={setCalendarCurrentDate}
@@ -892,7 +892,7 @@ export const TransportScreen = ({ navigation }: any) => {
                     {selectedDateDisplay}
                 </Text>
 
-                <SharedCalendarWidget
+                <UnifiedCalendar
                     events={calendarWidgetEvents}
                     currentDate={calendarCurrentDate}
                     onCurrentDateChange={setCalendarCurrentDate}
@@ -1148,7 +1148,7 @@ export const TransportScreen = ({ navigation }: any) => {
             return (
                 <View style={{ padding: 16 }}>
                     <Text style={styles.pickerTitle}>Select {activePicker === 'startDate' ? 'Start' : 'End'} Date</Text>
-                    <SharedCalendarWidget
+                    <UnifiedCalendar
                         events={[]}
                         currentDate={pickerCalendarDate}
                         onCurrentDateChange={setPickerCalendarDate}

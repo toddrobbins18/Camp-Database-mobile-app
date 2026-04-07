@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { CalendarWidget, type CalendarWidgetEvent } from '../components/CalendarWidget';
+import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { useCompany } from '../contexts/CompanyContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -543,7 +543,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                     )}
                 </StyledCard>
 
-                <CalendarWidget
+                <UnifiedCalendar
                     events={calendarWidgetEvents}
                     currentDate={currentDate}
                     onCurrentDateChange={setCurrentDate}

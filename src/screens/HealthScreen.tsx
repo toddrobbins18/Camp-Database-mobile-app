@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { CalendarWidget, CalendarWidgetEvent } from '../components/CalendarWidget';
+import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useDivisions } from '../api/campers';
 import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
@@ -445,7 +445,7 @@ export const HealthScreen = ({ navigation }: any) => {
                 {/* Conditional Content: Calendar or List View */}
                 {activeView === 'calendar' ? (
                     <>
-                        <CalendarWidget
+                        <UnifiedCalendar
                             events={calendarWidgetEvents}
                             currentDate={currentDate}
                             onCurrentDateChange={setCurrentDate}

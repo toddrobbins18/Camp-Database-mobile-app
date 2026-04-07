@@ -9,7 +9,7 @@ import { useStaff, useAddStaff, useEditStaff } from '../api/staff';
 import { supabase } from '../lib/supabase';
 import { buildStaffInsertRow, formatIsoDateToUs, formatStaffTypeFromDb } from '../api/staffPayload';
 import { useRole } from '../hooks/useRole';
-import CalendarWidget, { type CalendarWidgetEvent } from '../components/CalendarWidget';
+import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { StaffLeaderAssignmentModal } from '../components/StaffLeaderAssignmentModal';
 
 const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
@@ -1032,7 +1032,7 @@ export const StaffScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
 
-                        <CalendarWidget
+                        <UnifiedCalendar
                             events={[] as CalendarWidgetEvent[]}
                             currentDate={calendarPickerCurrentDate}
                             onCurrentDateChange={setCalendarPickerCurrentDate}

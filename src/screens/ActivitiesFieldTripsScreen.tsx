@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
 import * as DocumentPicker from 'expo-document-picker';
-import { CalendarWidget, CalendarWidgetEvent } from '../components/CalendarWidget';
+import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 
 export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
@@ -792,7 +792,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
                 {/* Calendar View */}
                 {viewMode === 'calendar' && (
-                    <CalendarWidget
+                    <UnifiedCalendar
                         events={calendarWidgetEvents}
                         currentDate={currentDate}
                         onCurrentDateChange={setCurrentDate}
