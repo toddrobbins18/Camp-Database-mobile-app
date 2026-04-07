@@ -183,12 +183,6 @@ export const MenuScreen = ({ navigation }: any) => {
                         <Ionicons name="menu" size={28} color={theme.colors.primary} />
                     </TouchableOpacity>
                     <View style={styles.headerRight}>
-                        <TouchableOpacity
-                            onPress={() => navigation.navigate('Messages')}
-                            style={styles.headerIconBtn}
-                        >
-                            <Ionicons name="notifications-outline" size={26} color={theme.colors.primary} />
-                        </TouchableOpacity>
                         <MobileUserMenu navigation={navigation} />
                     </View>
                 </View>
