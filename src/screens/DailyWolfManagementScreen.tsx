@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { MobileUserMenu } from '../components/MobileUserMenu';
@@ -68,7 +68,13 @@ const GUIDE_CONTENT: Record<string, { title: string; subtitle: string; required:
     },
 };
 
-const formatDateForDb = (date: Date) => date.toISOString().split('T')[0];
+/** Match web `date-fns` `format(date, 'yyyy-MM-dd')` — local calendar date, not UTC. */
+function formatDateLocalYmd(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
 
 /** Focused input border (web Daily Wolf — coral when active). */
 const INPUT_FOCUS_BORDER = '#E67E6E';
@@ -90,6 +96,15 @@ const formatDisplayDate = (date: Date) => {
     return `${date.toLocaleDateString('en-US', { month: 'long' })} ${day}${suffix}, ${date.getFullYear()}`;
 };
 
+type DailyWolfRow = {
+    id: string;
+    officer_of_day?: string | null;
+    quote_of_the_day?: string | null;
+    laundry_info?: string | null;
+    phone_calls_info?: string | null;
+    notes?: string | null;
+};
+
 export const DailyWolfManagementScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
@@ -97,12 +112,12 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [activeHelpTab, setActiveHelpTab] = useState('Children');
-    const [isEditing, setIsEditing] = useState(false);
     const [form, setForm] = useState<WolfForm>(EMPTY_FORM);
     const [focusedField, setFocusedField] = useState<FocusField>(null);
-    const formDirtyRef = useRef(false);
+    const [saving, setSaving] = useState(false);
+    const [creating, setCreating] = useState(false);
 
-    const selectedYmd = useMemo(() => formatDateForDb(selectedDate), [selectedDate]);
+    const selectedYmd = useMemo(() => formatDateLocalYmd(selectedDate), [selectedDate]);
 
     const { data: existingRow, isFetching } = useQuery({
         queryKey: ['daily_wolf_management_row', companyId, season, selectedYmd],
@@ -110,13 +125,13 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
             if (!companyId || !season) return null;
             const { data, error } = await supabase
                 .from('daily_wolf_content')
-                .select('id, officer_of_day, quote_of_the_day, laundry_info, phone_calls_info, notes')
+                .select('*')
                 .eq('company_id', companyId)
                 .eq('season', season)
                 .eq('date', selectedYmd)
                 .maybeSingle();
             if (error) throw error;
-            return data;
+            return data as DailyWolfRow | null;
         },
         enabled: !!companyId && !!season,
     });
@@ -124,61 +139,98 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
     useEffect(() => {
         if (existingRow) {
             setForm({
-                officer_of_day: existingRow.officer_of_day || '',
-                quote_of_the_day: existingRow.quote_of_the_day || '',
-                laundry_info: existingRow.laundry_info || '',
-                phone_calls_info: existingRow.phone_calls_info || '',
-                notes: existingRow.notes || '',
+                officer_of_day: existingRow.officer_of_day ?? '',
+                quote_of_the_day: existingRow.quote_of_the_day ?? '',
+                laundry_info: existingRow.laundry_info ?? '',
+                phone_calls_info: existingRow.phone_calls_info ?? '',
+                notes: existingRow.notes ?? '',
             });
-            setIsEditing(true);
         } else {
             setForm(EMPTY_FORM);
-            setIsEditing(false);
         }
-        formDirtyRef.current = false;
     }, [existingRow]);
 
-    const { mutate: saveDraft } = useMutation({
-        mutationFn: async () => {
-            if (!companyId || !season) throw new Error('Camp or season missing');
-            const payload = {
-                company_id: companyId,
-                season,
-                date: selectedYmd,
-                officer_of_day: form.officer_of_day.trim() || null,
-                quote_of_the_day: form.quote_of_the_day.trim() || null,
-                laundry_info: form.laundry_info.trim() || null,
-                phone_calls_info: form.phone_calls_info.trim() || null,
-                notes: form.notes.trim() || null,
-            };
-
-            const { error } = await supabase
-                .from('daily_wolf_content')
-                .upsert(payload, { onConflict: 'company_id,season,date' });
-            if (error) throw error;
+    const saveField = useCallback(
+        async (field: keyof WolfForm, value: string) => {
+            const rowId = existingRow?.id;
+            if (!rowId) return;
+            setSaving(true);
+            try {
+                const { error } = await supabase
+                    .from('daily_wolf_content')
+                    .update({ [field]: value })
+                    .eq('id', rowId);
+                if (error) throw error;
+                await queryClient.invalidateQueries({ queryKey: ['daily_wolf_management_row'] });
+                await queryClient.invalidateQueries({ queryKey: ['daily_wolf_content_dashboard'] });
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : 'Failed to save';
+                Alert.alert('Save failed', msg);
+            } finally {
+                setSaving(false);
+            }
         },
-        onSuccess: async () => {
-            formDirtyRef.current = false;
+        [existingRow?.id, queryClient],
+    );
+
+    const blurField = useCallback(
+        (field: keyof WolfForm, value: string) => {
+            setFocusedField(null);
+            void saveField(field, value);
+        },
+        [saveField],
+    );
+
+    useEffect(() => {
+        if (!companyId) return;
+        const channel = supabase
+            .channel(`daily_wolf_content_${companyId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'daily_wolf_content',
+                    filter: `company_id=eq.${companyId}`,
+                },
+                () => {
+                    void queryClient.invalidateQueries({ queryKey: ['daily_wolf_management_row'] });
+                    void queryClient.invalidateQueries({ queryKey: ['daily_wolf_content_dashboard'] });
+                },
+            )
+            .subscribe();
+        return () => {
+            void supabase.removeChannel(channel);
+        };
+    }, [companyId, queryClient]);
+
+    const createTodaysEntry = async () => {
+        if (!companyId || !season) {
+            Alert.alert('Error', 'Camp or season missing');
+            return;
+        }
+        setCreating(true);
+        try {
+            const { error } = await supabase.from('daily_wolf_content').insert({
+                company_id: companyId,
+                date: selectedYmd,
+                season,
+                officer_of_day: '',
+                quote_of_the_day: '',
+                laundry_info: '',
+                phone_calls_info: '',
+                notes: '',
+            });
+            if (error) throw error;
             await queryClient.invalidateQueries({ queryKey: ['daily_wolf_management_row'] });
             await queryClient.invalidateQueries({ queryKey: ['daily_wolf_content_dashboard'] });
-        },
-        onError: (err: any) => {
-            Alert.alert('Save failed', err?.message || 'Please try again.');
-        },
-    });
-
-    /** Auto-save without Save button — debounced after edits. */
-    useEffect(() => {
-        if (!isEditing || !companyId || !season) return;
-        const hasContent = Object.values(form).some((v) => String(v).trim().length > 0);
-        if (!hasContent && !existingRow) return;
-        if (!formDirtyRef.current) return;
-
-        const t = setTimeout(() => {
-            saveDraft();
-        }, 1200);
-        return () => clearTimeout(t);
-    }, [form, isEditing, companyId, season, selectedYmd, existingRow, saveDraft]);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Failed to create entry';
+            Alert.alert('Error', msg);
+        } finally {
+            setCreating(false);
+        }
+    };
 
     const guide = GUIDE_CONTENT[activeHelpTab] || GUIDE_CONTENT.default;
 
@@ -237,21 +289,22 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
                     </View>
                 </View>
 
-                {!isEditing ? (
+                {!existingRow && !isFetching ? (
                     <StyledCard style={styles.emptyCard}>
-                        <Text style={styles.emptyText}>
-                            {isFetching ? 'Loading content...' : 'No content exists for this date.'}
-                        </Text>
+                        <Text style={styles.emptyText}>No content exists for this date.</Text>
                         <TouchableOpacity
-                            style={styles.createBtn}
-                            onPress={() => {
-                                setForm(EMPTY_FORM);
-                                formDirtyRef.current = false;
-                                setIsEditing(true);
-                            }}
+                            style={[styles.createBtn, creating && { opacity: 0.7 }]}
+                            onPress={() => void createTodaysEntry()}
+                            disabled={creating}
                         >
-                            <Text style={styles.createBtnText}>Create Entry</Text>
+                            <Text style={styles.createBtnText}>
+                                {creating ? 'Creating…' : 'Create Entry'}
+                            </Text>
                         </TouchableOpacity>
+                    </StyledCard>
+                ) : isFetching && !existingRow ? (
+                    <StyledCard style={styles.emptyCard}>
+                        <Text style={styles.emptyText}>Loading content…</Text>
                     </StyledCard>
                 ) : (
                     <View style={styles.grid}>
@@ -266,12 +319,10 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
                                 placeholder="Enter OD name/details"
                                 placeholderTextColor={theme.colors.textSecondary}
                                 value={form.officer_of_day}
-                                onChangeText={(v) => {
-                                    formDirtyRef.current = true;
-                                    setForm((p) => ({ ...p, officer_of_day: v }));
-                                }}
+                                editable={!saving}
+                                onChangeText={(v) => setForm((p) => ({ ...p, officer_of_day: v }))}
                                 onFocus={() => setFocusedField('officer')}
-                                onBlur={() => setFocusedField(null)}
+                                onBlur={() => blurField('officer_of_day', form.officer_of_day)}
                             />
                         </StyledCard>
 
@@ -286,12 +337,10 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
                                 placeholder="Enter quote"
                                 placeholderTextColor={theme.colors.textSecondary}
                                 value={form.quote_of_the_day}
-                                onChangeText={(v) => {
-                                    formDirtyRef.current = true;
-                                    setForm((p) => ({ ...p, quote_of_the_day: v }));
-                                }}
+                                editable={!saving}
+                                onChangeText={(v) => setForm((p) => ({ ...p, quote_of_the_day: v }))}
                                 onFocus={() => setFocusedField('quote')}
-                                onBlur={() => setFocusedField(null)}
+                                onBlur={() => blurField('quote_of_the_day', form.quote_of_the_day)}
                             />
                         </StyledCard>
 
@@ -308,12 +357,10 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
                                 placeholder="Enter laundry schedule"
                                 placeholderTextColor={theme.colors.textSecondary}
                                 value={form.laundry_info}
-                                onChangeText={(v) => {
-                                    formDirtyRef.current = true;
-                                    setForm((p) => ({ ...p, laundry_info: v }));
-                                }}
+                                editable={!saving}
+                                onChangeText={(v) => setForm((p) => ({ ...p, laundry_info: v }))}
                                 onFocus={() => setFocusedField('laundry')}
-                                onBlur={() => setFocusedField(null)}
+                                onBlur={() => blurField('laundry_info', form.laundry_info)}
                             />
                         </StyledCard>
 
@@ -330,12 +377,10 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
                                 placeholder="Enter phone call information"
                                 placeholderTextColor={theme.colors.textSecondary}
                                 value={form.phone_calls_info}
-                                onChangeText={(v) => {
-                                    formDirtyRef.current = true;
-                                    setForm((p) => ({ ...p, phone_calls_info: v }));
-                                }}
+                                editable={!saving}
+                                onChangeText={(v) => setForm((p) => ({ ...p, phone_calls_info: v }))}
                                 onFocus={() => setFocusedField('phone')}
-                                onBlur={() => setFocusedField(null)}
+                                onBlur={() => blurField('phone_calls_info', form.phone_calls_info)}
                             />
                         </StyledCard>
 
@@ -352,12 +397,10 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
                                 placeholder="Enter general notes"
                                 placeholderTextColor={theme.colors.textSecondary}
                                 value={form.notes}
-                                onChangeText={(v) => {
-                                    formDirtyRef.current = true;
-                                    setForm((p) => ({ ...p, notes: v }));
-                                }}
+                                editable={!saving}
+                                onChangeText={(v) => setForm((p) => ({ ...p, notes: v }))}
                                 onFocus={() => setFocusedField('notes')}
-                                onBlur={() => setFocusedField(null)}
+                                onBlur={() => blurField('notes', form.notes)}
                             />
                         </StyledCard>
                     </View>
