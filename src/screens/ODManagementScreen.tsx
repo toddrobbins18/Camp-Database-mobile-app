@@ -664,25 +664,37 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 </View>
 
                 {scannerMode ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.md, gap: 8 }}>
-                        <TextInput
-                            ref={rfidInputRef}
-                            style={[styles.bankInput, { flex: 1 }]}
-                            placeholder="Scan or enter RFID..."
-                            placeholderTextColor={theme.colors.textSecondary}
-                            value={rfidInput}
-                            onChangeText={setRfidInput}
-                            onSubmitEditing={handleRfidScan}
-                            editable={!isScanning}
-                            autoFocus
-                        />
-                        <TouchableOpacity
-                            style={[styles.addBankButton, (!rfidInput.trim() || isScanning) && { opacity: 0.6 }]}
-                            onPress={handleRfidScan}
-                            disabled={!rfidInput.trim() || isScanning}
-                        >
-                            {isScanning ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="checkmark" size={24} color="#fff" />}
-                        </TouchableOpacity>
+                    <View style={styles.scannerPanel}>
+                        <View style={styles.scannerPanelRow}>
+                            <View style={styles.scannerPanelLeft}>
+                                <Text style={styles.scannerPanelLabel}>
+                                    Ready to scan wristband - Staff will be checked in/out automatically
+                                </Text>
+                                <TextInput
+                                    ref={rfidInputRef}
+                                    style={styles.scannerInputField}
+                                    placeholder="Scan wristband or enter RFID..."
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    value={rfidInput}
+                                    onChangeText={setRfidInput}
+                                    onSubmitEditing={handleRfidScan}
+                                    editable={!isScanning}
+                                    autoFocus
+                                />
+                            </View>
+                            <TouchableOpacity
+                                style={[styles.scannerSubmitButton, (!rfidInput.trim() || isScanning) && { opacity: 0.6 }]}
+                                onPress={handleRfidScan}
+                                disabled={!rfidInput.trim() || isScanning}
+                                activeOpacity={0.85}
+                            >
+                                {isScanning ? (
+                                    <ActivityIndicator color="#fff" size="small" />
+                                ) : (
+                                    <Text style={styles.scannerSubmitText}>Submit</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 ) : null}
 
@@ -1734,6 +1746,53 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: theme.colors.text,
+    },
+    scannerPanel: {
+        backgroundColor: '#f0fdf4',
+        borderWidth: 1,
+        borderColor: '#bbf7d0',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
+        marginBottom: theme.spacing.md,
+    },
+    scannerPanelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    scannerPanelLeft: {
+        flex: 1,
+        minWidth: 0,
+    },
+    scannerPanelLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#166534',
+        marginBottom: 6,
+    },
+    scannerInputField: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: '#86efac',
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        height: 44,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    scannerSubmitButton: {
+        backgroundColor: '#16a34a',
+        paddingHorizontal: 20,
+        minHeight: 44,
+        minWidth: 96,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: theme.borderRadius.md,
+    },
+    scannerSubmitText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
     },
     addBankSection: {
         flexDirection: 'row',
