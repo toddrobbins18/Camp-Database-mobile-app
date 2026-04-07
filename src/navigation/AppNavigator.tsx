@@ -93,6 +93,73 @@ const CustomDrawerContent = (props: any) => {
         },
     ];
 
+    const mainMenuItems: Array<{
+        key: string;
+        label: string;
+        icon: keyof typeof Ionicons.glyphMap;
+        onPress: () => void;
+    }> = [
+        { key: 'dashboard', label: 'Dashboard', icon: 'home-outline', onPress: () => props.navigation.navigate('Dashboard') },
+        { key: 'camper', label: 'Camper', icon: 'people-outline', onPress: () => props.navigation.navigate('Camper', { screen: 'CamperList' }) },
+        { key: 'master-calendar', label: 'Master Calendar', icon: 'calendar-outline', onPress: () => props.navigation.navigate('Calendar') },
+        { key: 'menu', label: 'Menu', icon: 'restaurant-outline', onPress: () => props.navigation.navigate('Menu') },
+        { key: 'messages', label: 'Messages', icon: 'mail-outline', onPress: () => props.navigation.navigate('Messages') },
+        { key: 'notification-preferences', label: 'Notification Preferences', icon: 'notifications-outline', onPress: () => props.navigation.navigate('NotificationPreferences') },
+    ];
+
+    if (canSeeStaffScreens) {
+        mainMenuItems.push(
+            { key: 'activities-field-trips', label: 'Activities & Field Trips', icon: 'leaf-outline', onPress: () => props.navigation.navigate('ActivitiesFieldTrips') },
+            { key: 'appointments', label: 'Appointments', icon: 'calendar-outline', onPress: () => props.navigation.navigate('Appointments') },
+            { key: 'nurse', label: 'Nurse', icon: 'medical-outline', onPress: () => props.navigation.navigate('Health') },
+            { key: 'od-management', label: 'OD Management', icon: 'clipboard-outline', onPress: () => props.navigation.navigate('ODManagement') },
+            { key: 'special-events', label: 'Special Events & Evening Activities', icon: 'calendar-outline', onPress: () => props.navigation.navigate('SpecialEvents') },
+            { key: 'sports-academy', label: 'Sports Academy', icon: 'trophy-outline', onPress: () => props.navigation.navigate('Sports') },
+            { key: 'sports-calendar', label: companySlug === 'timber-lake-west' ? 'Athletics' : 'Sports Calendar', icon: 'trophy-outline', onPress: () => props.navigation.navigate('SportsCalendar') },
+            { key: 'staff', label: 'Staff', icon: 'person-outline', onPress: () => props.navigation.navigate('Staff') },
+            { key: 'transportation', label: 'Transportation', icon: 'car-outline', onPress: () => props.navigation.navigate('Transport') },
+        );
+
+        if (companySlug === 'tyler-hill-camp') {
+            mainMenuItems.push(
+                { key: 'owl-pay', label: 'Owl Pay', icon: 'wallet-outline', onPress: () => props.navigation.navigate('OwlPay') },
+                { key: 'special-meals', label: 'Special Meals', icon: 'restaurant-outline', onPress: () => props.navigation.navigate('SpecialMeals') },
+            );
+        }
+        if (isTimberLakeCamp) {
+            mainMenuItems.push(
+                { key: 'daily-schedule', label: 'Daily Schedule', icon: 'calendar-outline', onPress: () => props.navigation.navigate('DailySchedule') },
+                { key: 'elective-sign-up', label: 'Elective Sign-Up', icon: 'link-outline', onPress: () => props.navigation.navigate('ElectiveSignUp') },
+                { key: 'tiger-times', label: 'Tiger Times', icon: 'newspaper-outline', onPress: () => props.navigation.navigate('TigerTimes') },
+            );
+        }
+    }
+
+    if (canSeeAdminScreens) {
+        mainMenuItems.push(
+            { key: 'awards', label: 'Awards', icon: 'ribbon-outline', onPress: () => props.navigation.navigate('Awards') },
+            { key: 'incident-reports', label: 'Incident Reports', icon: 'warning-outline', onPress: () => props.navigation.navigate('IncidentReports') },
+            { key: 'rainy-day-schedule', label: 'Rainy Day Schedule', icon: 'rainy-outline', onPress: () => props.navigation.navigate('RainyDaySchedule') },
+            { key: 'reports', label: 'Reports', icon: 'bar-chart-outline', onPress: () => props.navigation.navigate('Reports') },
+            { key: 'roster-templates', label: 'Roster Templates', icon: 'list-outline', onPress: () => props.navigation.navigate('RosterTemplates') },
+            { key: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', onPress: () => props.navigation.navigate('TutoringTherapy') },
+        );
+        if (companySlug !== 'timber-lake-camp') {
+            mainMenuItems.push({
+                key: 'daily-news-notes',
+                label: companySlug === 'tyler-hill-camp' ? 'Daily News' : 'Daily Notes',
+                icon: 'document-text-outline',
+                onPress: () => props.navigation.navigate('DailyNews'),
+            });
+        }
+        if (companySlug === 'timber-lake-west') {
+            mainMenuItems.push(
+                { key: 'daily-wolf-management', label: 'Daily Wolf Management', icon: 'newspaper-outline', onPress: () => props.navigation.navigate('DailyWolfManagement') },
+                { key: 'daily-wolf-printable', label: 'Daily Wolf Printable', icon: 'document-text-outline', onPress: () => props.navigation.navigate('DailyWolfPrintable') },
+            );
+        }
+    }
+
     return (
         <View style={{ flex: 1, backgroundColor: menuTheme.drawerBackground }}>
             {loadError ? (
@@ -221,208 +288,17 @@ const CustomDrawerContent = (props: any) => {
                 )}
 
                 <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Main Menu</Text>
-
-                {/* ── Everyone (all roles) ── */}
-                <DrawerItem
-                    label="Dashboard"
-                    icon={({ color }) => <Ionicons name="home-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Dashboard')}
-                    {...drawerItemProps}
-                />
-                <DrawerItem
-                    label="Camper"
-                    icon={({ color }) => <Ionicons name="people-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Camper', { screen: 'CamperList' })}
-                    {...drawerItemProps}
-                />
-                <DrawerItem
-                    label="Master Calendar"
-                    icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Calendar')}
-                    {...drawerItemProps}
-                />
-                <DrawerItem
-                    label="Menu"
-                    icon={({ color }) => <Ionicons name="restaurant-outline" size={22} color={color} />}
-                    onPress={() => props.navigation.navigate('Menu')}
-                    {...drawerItemProps}
-                />
+                {[...mainMenuItems]
+                    .sort((a, b) => a.label.localeCompare(b.label))
+                    .map((item) => (
                         <DrawerItem
-                            label="Messages"
-                            icon={({ color }) => <Ionicons name="mail-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('Messages')}
+                            key={item.key}
+                            label={item.label}
+                            icon={({ color }) => <Ionicons name={item.icon} size={22} color={color} />}
+                            onPress={item.onPress}
                             {...drawerItemProps}
                         />
-                        <DrawerItem
-                            label="Notification Preferences"
-                            icon={({ color }) => <Ionicons name="notifications-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('NotificationPreferences')}
-                            {...drawerItemProps}
-                        />
-
-                {/* ── Staff + Admin + Super Admin ── */}
-                {canSeeStaffScreens && (
-                    <>
-                        <DrawerItem
-                            label="Activities & Field Trips"
-                            icon={({ color }) => <Ionicons name="leaf-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('ActivitiesFieldTrips')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label="Appointments"
-                            icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('Appointments')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label="Nurse"
-                            icon={({ color }) => <Ionicons name="medical-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('Health')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label="OD Management"
-                            icon={({ color }) => <Ionicons name="clipboard-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('ODManagement')}
-                            {...drawerItemProps}
-                        />
-                {companySlug === 'tyler-hill-camp' && (
-                    <>
-                        <DrawerItem
-                            label="Special Meals"
-                            icon={({ color }) => <Ionicons name="restaurant-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('SpecialMeals')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label="Owl Pay"
-                            icon={({ color }) => <Ionicons name="wallet-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('OwlPay')}
-                            {...drawerItemProps}
-                        />
-                    </>
-                )}
-                        {isTimberLakeCamp && (
-                            <>
-                                <DrawerItem
-                                    label="Daily Schedule"
-                                    icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
-                                    onPress={() => props.navigation.navigate('DailySchedule')}
-                                    {...drawerItemProps}
-                                />
-                                <DrawerItem
-                                    label="Tiger Times"
-                                    icon={({ color }) => <Ionicons name="newspaper-outline" size={22} color={color} />}
-                                    onPress={() => props.navigation.navigate('TigerTimes')}
-                                    {...drawerItemProps}
-                                />
-                                <DrawerItem
-                                    label="Elective Sign-Up"
-                                    icon={({ color }) => <Ionicons name="link-outline" size={22} color={color} />}
-                                    onPress={() => props.navigation.navigate('ElectiveSignUp')}
-                                    {...drawerItemProps}
-                                />
-                            </>
-                        )}
-                        <DrawerItem
-                            label="Special Events & Evening Activities"
-                            icon={({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('SpecialEvents')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label="Sports Academy"
-                            icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('Sports')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label={companySlug === 'timber-lake-west' ? 'Athletics' : 'Sports Calendar'}
-                            icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('SportsCalendar')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label="Staff"
-                            icon={({ color }) => <Ionicons name="person-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('Staff')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label="Transportation"
-                            icon={({ color }) => <Ionicons name="car-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('Transport')}
-                            {...drawerItemProps}
-                        />
-                    </>
-                )}
-
-                {/* ── Admin + Super Admin only ── */}
-                {canSeeAdminScreens && (
-                    <>
-                        <DrawerItem
-                            label="Awards"
-                            icon={({ color }) => <Ionicons name="ribbon-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('Awards')}
-                            {...drawerItemProps}
-                        />
-                        {companySlug !== 'timber-lake-camp' && (
-                            <DrawerItem
-                                label={companySlug === 'tyler-hill-camp' ? 'Daily News' : 'Daily Notes'}
-                                icon={({ color }) => <Ionicons name="document-text-outline" size={22} color={color} />}
-                                onPress={() => props.navigation.navigate('DailyNews')}
-                                {...drawerItemProps}
-                            />
-                        )}
-                        {companySlug === 'timber-lake-west' && (
-                            <>
-                                <DrawerItem
-                                    label="Daily Wolf Management"
-                                    icon={({ color }) => <Ionicons name="newspaper-outline" size={22} color={color} />}
-                                    onPress={() => props.navigation.navigate('DailyWolfManagement')}
-                                    {...drawerItemProps}
-                                />
-                                <DrawerItem
-                                    label="Daily Wolf Printable"
-                                    icon={({ color }) => <Ionicons name="document-text-outline" size={22} color={color} />}
-                                    onPress={() => props.navigation.navigate('DailyWolfPrintable')}
-                                    {...drawerItemProps}
-                                />
-                            </>
-                        )}
-                        <DrawerItem
-                            label="Incident Reports"
-                            icon={({ color }) => <Ionicons name="warning-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('IncidentReports')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label="Rainy Day Schedule"
-                            icon={({ color }) => <Ionicons name="rainy-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('RainyDaySchedule')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label="Reports"
-                            icon={({ color }) => <Ionicons name="bar-chart-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('Reports')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label="Roster Templates"
-                            icon={({ color }) => <Ionicons name="list-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('RosterTemplates')}
-                            {...drawerItemProps}
-                        />
-                        <DrawerItem
-                            label="Tutoring & Therapy"
-                            icon={({ color }) => <Ionicons name="book-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('TutoringTherapy')}
-                            {...drawerItemProps}
-                        />
-                    </>
-                )}
+                    ))}
 
                 {/* ── Administration Section (Admin+) ── */}
                 {canSeeAdminScreens && (
