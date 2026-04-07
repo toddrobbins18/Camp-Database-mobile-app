@@ -14,8 +14,16 @@ import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 const INCIDENT_ACCENT = '#ef4444';
 
 type AddIncidentSubsheet = 'date' | 'type' | 'severity' | 'status' | null;
+type EditIncidentSubsheet = 'date' | 'type' | 'severity' | 'status' | null;
 
 const ADD_INCIDENT_SUBSHEET_TITLES: Record<Exclude<AddIncidentSubsheet, null>, string> = {
+    date: 'Select Date',
+    type: 'Select Incident Type',
+    severity: 'Select Severity',
+    status: 'Select Status',
+};
+
+const EDIT_INCIDENT_SUBSHEET_TITLES: Record<Exclude<EditIncidentSubsheet, null>, string> = {
     date: 'Select Date',
     type: 'Select Incident Type',
     severity: 'Select Severity',
@@ -62,6 +70,8 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     /** Inline picker inside Add Incident modal — avoids stacking a second RN Modal (breaks on iOS). */
     const [addIncidentSubsheet, setAddIncidentSubsheet] = useState<AddIncidentSubsheet>(null);
     const [focusedField, setFocusedField] = useState<string | null>(null);
+    const [editIncidentSubsheet, setEditIncidentSubsheet] = useState<EditIncidentSubsheet>(null);
+    const [editDate, setEditDate] = useState<Date>(new Date());
 
     // Options
     const incidentTypes = ['Accident', 'Behavior', 'Medical', 'Injury', 'Other'];
@@ -108,6 +118,19 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
         const day = String(date.getDate()).padStart(2, '0');
         const year = date.getFullYear();
         return `${month}/${day}/${year}`;
+    };
+
+    const formatDateForStorage = (date: Date): string => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    };
+
+    const parseDateString = (value?: string | null) => {
+        if (!value) return new Date();
+        const parsed = new Date(`${value}T00:00:00`);
+        return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
     };
 
     const handleTypeSelect = (type: string) => {
@@ -160,6 +183,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                 status: (editingIncident.status && formatLabel(editingIncident.status)) || 'Open',
                 tags: Array.isArray(editingIncident.tags) ? [...editingIncident.tags] : [],
             });
+            setEditDate(parseDateString(editingIncident.date));
         }
     }, [editingIncident]);
 
@@ -685,7 +709,21 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     <Text style={styles.cancelBtnText}>Cancel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.submitBtn} onPress={() => {
-                                        if (!incidentType || !description) return;
+                                        if (selectedChildren.length === 0) {
+                                            Alert.alert('Missing children', 'Please select at least one child.');
+                                            return;
+                                        }
+                                        if (!companyId) {
+                                            Alert.alert(
+                                                'Missing camp',
+                                                "Your profile doesn't have a camp (company_id) assigned, so Supabase blocks writes. Ask an admin to assign your user to a camp.",
+                                            );
+                                            return;
+                                        }
+                                        if (!incidentType || !description) {
+                                            Alert.alert('Missing fields', 'Please select a type and add a description.');
+                                            return;
+                                        }
                                         addIncidentMutation.mutate({
                                             type: incidentType,
                                             description,
@@ -699,6 +737,9 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                             childIds: selectedChildren,
                                         }, {
                                             onSuccess: () => handleCloseAddIncident(),
+                                            onError: (err: any) => {
+                                                Alert.alert('Failed to add incident', err?.message || 'Please try again.');
+                                            },
                                         });
                                     }}>
                                     <Text style={styles.submitBtnText}>{addIncidentMutation.isPending ? 'Adding...' : 'Add Incident'}</Text>
@@ -879,36 +920,43 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                 visible={!!editingIncident}
                 transparent={true}
                 animationType="slide"
-                onRequestClose={() => setEditingIncident(null)}
+                onRequestClose={() => {
+                    setEditIncidentSubsheet(null);
+                    setEditingIncident(null);
+                }}
             >
-                <Pressable style={styles.centerModalOverlay} onPress={() => setEditingIncident(null)}>
-                    <Pressable style={styles.addIncidentModal} onPress={(e) => e.stopPropagation()}>
-                        <ScrollView style={styles.addIncidentScroll} showsVerticalScrollIndicator={false}>
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <Pressable
+                        style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0, 0, 0, 0.5)' }]}
+                        onPress={() => {
+                            if (editIncidentSubsheet) setEditIncidentSubsheet(null);
+                            else setEditingIncident(null);
+                        }}
+                    />
+                    <View style={[styles.addIncidentModal, { zIndex: 1 }]} pointerEvents="box-none">
+                        <ScrollView style={styles.addIncidentScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                             <View style={styles.addIncidentHeader}>
                                 <Text style={styles.addIncidentTitle}>Edit Incident Report</Text>
-                                <TouchableOpacity onPress={() => setEditingIncident(null)}>
+                                <TouchableOpacity onPress={() => {
+                                    setEditIncidentSubsheet(null);
+                                    setEditingIncident(null);
+                                }}>
                                     <Ionicons name="close" size={24} color={theme.colors.text} />
                                 </TouchableOpacity>
                             </View>
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Date</Text>
-                                <TextInput
-                                    style={styles.inputField}
-                                    value={editForm.date}
-                                    onChangeText={(t) => setEditForm((f) => ({ ...f, date: t }))}
-                                    placeholder="YYYY-MM-DD"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                />
+                                <TouchableOpacity style={styles.inputContainer} onPress={() => setEditIncidentSubsheet('date')}>
+                                    <TextInput style={styles.inputField} value={formatDate(editDate)} editable={false} pointerEvents="none" />
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
                             </View>
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Type</Text>
-                                <TextInput
-                                    style={styles.inputField}
-                                    value={editForm.type}
-                                    onChangeText={(t) => setEditForm((f) => ({ ...f, type: t }))}
-                                    placeholder="e.g. Behavioral, Medical"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                />
+                                <TouchableOpacity style={styles.inputContainer} onPress={() => setEditIncidentSubsheet('type')}>
+                                    <TextInput style={styles.inputField} value={editForm.type} editable={false} pointerEvents="none" />
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
                             </View>
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Description</Text>
@@ -924,13 +972,10 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             </View>
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Severity</Text>
-                                <TextInput
-                                    style={styles.inputField}
-                                    value={editForm.severity}
-                                    onChangeText={(t) => setEditForm((f) => ({ ...f, severity: t }))}
-                                    placeholder="e.g. Low, Medium, High, Critical"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                />
+                                <TouchableOpacity style={styles.inputContainer} onPress={() => setEditIncidentSubsheet('severity')}>
+                                    <TextInput style={styles.inputField} value={editForm.severity} editable={false} pointerEvents="none" />
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
                             </View>
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Reported By</Text>
@@ -944,16 +989,16 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             </View>
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Status</Text>
-                                <TextInput
-                                    style={styles.inputField}
-                                    value={editForm.status}
-                                    onChangeText={(t) => setEditForm((f) => ({ ...f, status: t }))}
-                                    placeholder="e.g. Open, Investigating, Resolved"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                />
+                                <TouchableOpacity style={styles.inputContainer} onPress={() => setEditIncidentSubsheet('status')}>
+                                    <TextInput style={styles.inputField} value={editForm.status} editable={false} pointerEvents="none" />
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
                             </View>
                             <View style={styles.formActions}>
-                                <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingIncident(null)}>
+                                <TouchableOpacity style={styles.cancelBtn} onPress={() => {
+                                    setEditIncidentSubsheet(null);
+                                    setEditingIncident(null);
+                                }}>
                                     <Text style={styles.cancelBtnText}>Cancel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
@@ -964,7 +1009,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                             {
                                                 id: editingIncident.id,
                                                 company_id: companyId,
-                                                date: editForm.date,
+                                                date: formatDateForStorage(editDate),
                                                 type: editForm.type,
                                                 description: editForm.description,
                                                 severity: editForm.severity || undefined,
@@ -980,8 +1025,100 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
-                    </Pressable>
-                </Pressable>
+                    </View>
+                    {editIncidentSubsheet ? (
+                        <ModalPickerOverlay
+                            visible
+                            onClose={() => setEditIncidentSubsheet(null)}
+                            title={EDIT_INCIDENT_SUBSHEET_TITLES[editIncidentSubsheet]}
+                        >
+                            {editIncidentSubsheet === 'date' ? (
+                                <View style={styles.datePickerContainer}>
+                                    <ScrollView style={styles.dateScrollView}>
+                                        <View style={styles.dateSection}>
+                                            <Text style={styles.dateSectionTitle}>Month</Text>
+                                            <View style={styles.dateOptionsRow}>
+                                                {[1,2,3,4,5,6,7,8,9,10,11,12].map((month) => (
+                                                    <TouchableOpacity key={month} style={[styles.dateOption, editDate.getMonth() + 1 === month && styles.dateOptionSelected]} onPress={() => {
+                                                        const next = new Date(editDate); next.setMonth(month - 1); setEditDate(next);
+                                                    }}>
+                                                        <Text style={[styles.dateOptionText, editDate.getMonth() + 1 === month && styles.dateOptionTextSelected]}>{month}</Text>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </View>
+                                        </View>
+                                        <View style={styles.dateSection}>
+                                            <Text style={styles.dateSectionTitle}>Day</Text>
+                                            <View style={styles.dateOptionsRow}>
+                                                {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                                                    <TouchableOpacity key={day} style={[styles.dateOption, editDate.getDate() === day && styles.dateOptionSelected]} onPress={() => {
+                                                        const next = new Date(editDate); next.setDate(day); setEditDate(next);
+                                                    }}>
+                                                        <Text style={[styles.dateOptionText, editDate.getDate() === day && styles.dateOptionTextSelected]}>{day}</Text>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </View>
+                                        </View>
+                                        <View style={styles.dateSection}>
+                                            <Text style={styles.dateSectionTitle}>Year</Text>
+                                            <View style={styles.dateOptionsRow}>
+                                                {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => (
+                                                    <TouchableOpacity key={year} style={[styles.dateOption, editDate.getFullYear() === year && styles.dateOptionSelected]} onPress={() => {
+                                                        const next = new Date(editDate); next.setFullYear(year); setEditDate(next);
+                                                    }}>
+                                                        <Text style={[styles.dateOptionText, editDate.getFullYear() === year && styles.dateOptionTextSelected]}>{year}</Text>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </View>
+                                        </View>
+                                    </ScrollView>
+                                    <TouchableOpacity style={styles.pickerConfirmBtn} onPress={() => setEditIncidentSubsheet(null)}>
+                                        <Text style={styles.pickerConfirmBtnText}>Confirm</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : null}
+                            {editIncidentSubsheet === 'type' ? (
+                                <View style={styles.pickerContent}>
+                                    {incidentTypes.map((type) => (
+                                        <TouchableOpacity key={type} style={styles.pickerOption} onPress={() => {
+                                            setEditForm((f) => ({ ...f, type }));
+                                            setEditIncidentSubsheet(null);
+                                        }}>
+                                            <Text style={styles.pickerOptionText}>{type}</Text>
+                                            {editForm.type === type && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            ) : null}
+                            {editIncidentSubsheet === 'severity' ? (
+                                <View style={styles.pickerContent}>
+                                    {severityLevels.map((level) => (
+                                        <TouchableOpacity key={level} style={styles.pickerOption} onPress={() => {
+                                            setEditForm((f) => ({ ...f, severity: level }));
+                                            setEditIncidentSubsheet(null);
+                                        }}>
+                                            <Text style={styles.pickerOptionText}>{level}</Text>
+                                            {editForm.severity === level && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            ) : null}
+                            {editIncidentSubsheet === 'status' ? (
+                                <View style={styles.pickerContent}>
+                                    {statusOptions.map((option) => (
+                                        <TouchableOpacity key={option} style={styles.pickerOption} onPress={() => {
+                                            setEditForm((f) => ({ ...f, status: option }));
+                                            setEditIncidentSubsheet(null);
+                                        }}>
+                                            <Text style={styles.pickerOptionText}>{option}</Text>
+                                            {editForm.status === option && <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            ) : null}
+                        </ModalPickerOverlay>
+                    ) : null}
+                </View>
             </Modal>
 
             <Modal visible={isDeleteConfirmVisible} transparent animationType="fade" onRequestClose={() => { setIsDeleteConfirmVisible(false); setItemToDelete(null); }}>
