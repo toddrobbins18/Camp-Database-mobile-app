@@ -604,7 +604,11 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                 }}
                 title={title}
             >
-                <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+                <ScrollView
+                    style={{ maxHeight: 320 }}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={styles.activityTypePickerList}
+                >
                     {options.map((option) => (
                         <TouchableOpacity
                             key={option.label}
@@ -632,6 +636,106 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             </ModalPickerOverlay>
         );
     };
+
+    /** In-modal time picker — avoid stacking a second RN Modal on iOS (does not open reliably). */
+    const renderTimePickerOverlay = () => (
+        <ModalPickerOverlay
+            visible={isTimePickerOpen}
+            onClose={() => {
+                setIsTimePickerOpen(false);
+                setTimePickerField(null);
+            }}
+            title="Select Time"
+        >
+            <View style={styles.timePickerContent}>
+                <View style={styles.timePickerColumn}>
+                    <Text style={styles.timePickerLabel}>Hour</Text>
+                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
+                            <TouchableOpacity
+                                key={hour}
+                                style={[
+                                    styles.timePickerOption,
+                                    selectedTime.hour === hour && styles.timePickerOptionSelected
+                                ]}
+                                onPress={() => setSelectedTime({ ...selectedTime, hour })}
+                            >
+                                <Text style={[
+                                    styles.timePickerOptionText,
+                                    selectedTime.hour === hour && styles.timePickerOptionTextSelected
+                                ]}>
+                                    {hour}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+                <View style={styles.timePickerColumn}>
+                    <Text style={styles.timePickerLabel}>Minute</Text>
+                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                        {Array.from({ length: 60 }, (_, i) => i).map((minute) => (
+                            <TouchableOpacity
+                                key={minute}
+                                style={[
+                                    styles.timePickerOption,
+                                    selectedTime.minute === minute && styles.timePickerOptionSelected
+                                ]}
+                                onPress={() => setSelectedTime({ ...selectedTime, minute })}
+                            >
+                                <Text style={[
+                                    styles.timePickerOptionText,
+                                    selectedTime.minute === minute && styles.timePickerOptionTextSelected
+                                ]}>
+                                    {minute.toString().padStart(2, '0')}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+                <View style={styles.timePickerColumn}>
+                    <Text style={styles.timePickerLabel}>Period</Text>
+                    <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                        {['AM', 'PM'].map((period) => (
+                            <TouchableOpacity
+                                key={period}
+                                style={[
+                                    styles.timePickerOption,
+                                    selectedTime.ampm === period && styles.timePickerOptionSelected
+                                ]}
+                                onPress={() => setSelectedTime({ ...selectedTime, ampm: period })}
+                            >
+                                <Text style={[
+                                    styles.timePickerOptionText,
+                                    selectedTime.ampm === period && styles.timePickerOptionTextSelected
+                                ]}>
+                                    {period}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+            </View>
+            <View style={styles.timePickerDisplay}>
+                <Text style={styles.timePickerDisplayText}>
+                    {selectedTime.hour}:{selectedTime.minute.toString().padStart(2, '0')} {selectedTime.ampm}
+                </Text>
+            </View>
+            <View style={styles.timePickerActions}>
+                <TouchableOpacity
+                    style={styles.timePickerCancelButton}
+                    onPress={() => {
+                        setIsTimePickerOpen(false);
+                        setTimePickerField(null);
+                    }}
+                >
+                    <Text style={styles.timePickerCancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.timePickerConfirmButton} onPress={confirmTimeSelection}>
+                    <Text style={styles.timePickerConfirmButtonText}>Confirm</Text>
+                </TouchableOpacity>
+            </View>
+        </ModalPickerOverlay>
+    );
 
     return (
         <SafeAreaView style={styles.container}>
@@ -1295,6 +1399,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
                 {renderActivitySelectOverlay()}
+                {renderTimePickerOverlay()}
                 </View>
             </Modal>
 
@@ -1589,6 +1694,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
                 {renderActivitySelectOverlay()}
+                {renderTimePickerOverlay()}
                 </View>
             </Modal>
 
@@ -2113,143 +2219,6 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         </KeyboardAwareScrollView>
                     </View>
                 </View>
-            </Modal>
-
-            {/* Time Picker Modal */}
-            <Modal
-                visible={isTimePickerOpen}
-                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => {
-                    setIsTimePickerOpen(false);
-                    setTimePickerField(null);
-                }}
-            >
-                <Pressable
-                    style={styles.bottomSheetOverlay}
-                    onPress={() => {
-                        setIsTimePickerOpen(false);
-                        setTimePickerField(null);
-                    }}
-                >
-                    <Pressable
-                        style={styles.bottomSheet}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        <View style={[styles.timePickerHeader, { borderBottomWidth: 0, paddingBottom: 0 }]}>
-                            <Text style={styles.bottomSheetTitle}>Select Time</Text>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    setIsTimePickerOpen(false);
-                                    setTimePickerField(null);
-                                }}
-                            >
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.timePickerContent}>
-                            {/* Hour Selection */}
-                            <View style={styles.timePickerColumn}>
-                                <Text style={styles.timePickerLabel}>Hour</Text>
-                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
-                                        <TouchableOpacity
-                                            key={hour}
-                                            style={[
-                                                styles.timePickerOption,
-                                                selectedTime.hour === hour && styles.timePickerOptionSelected
-                                            ]}
-                                            onPress={() => setSelectedTime({ ...selectedTime, hour })}
-                                        >
-                                            <Text style={[
-                                                styles.timePickerOptionText,
-                                                selectedTime.hour === hour && styles.timePickerOptionTextSelected
-                                            ]}>
-                                                {hour}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-
-                            {/* Minute Selection */}
-                            <View style={styles.timePickerColumn}>
-                                <Text style={styles.timePickerLabel}>Minute</Text>
-                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                    {Array.from({ length: 60 }, (_, i) => i).map((minute) => (
-                                        <TouchableOpacity
-                                            key={minute}
-                                            style={[
-                                                styles.timePickerOption,
-                                                selectedTime.minute === minute && styles.timePickerOptionSelected
-                                            ]}
-                                            onPress={() => setSelectedTime({ ...selectedTime, minute })}
-                                        >
-                                            <Text style={[
-                                                styles.timePickerOptionText,
-                                                selectedTime.minute === minute && styles.timePickerOptionTextSelected
-                                            ]}>
-                                                {minute.toString().padStart(2, '0')}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-
-                            {/* AM/PM Selection */}
-                            <View style={styles.timePickerColumn}>
-                                <Text style={styles.timePickerLabel}>Period</Text>
-                                <ScrollView style={styles.timePickerScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                    {['AM', 'PM'].map((period) => (
-                                        <TouchableOpacity
-                                            key={period}
-                                            style={[
-                                                styles.timePickerOption,
-                                                selectedTime.ampm === period && styles.timePickerOptionSelected
-                                            ]}
-                                            onPress={() => setSelectedTime({ ...selectedTime, ampm: period })}
-                                        >
-                                            <Text style={[
-                                                styles.timePickerOptionText,
-                                                selectedTime.ampm === period && styles.timePickerOptionTextSelected
-                                            ]}>
-                                                {period}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        </View>
-
-                        {/* Selected Time Display */}
-                        <View style={styles.timePickerDisplay}>
-                            <Text style={styles.timePickerDisplayText}>
-                                {selectedTime.hour}:{selectedTime.minute.toString().padStart(2, '0')} {selectedTime.ampm}
-                            </Text>
-                        </View>
-
-                        {/* Action Buttons */}
-                        <View style={styles.timePickerActions}>
-                            <TouchableOpacity
-                                style={styles.timePickerCancelButton}
-                                onPress={() => {
-                                    setIsTimePickerOpen(false);
-                                    setTimePickerField(null);
-                                }}
-                            >
-                                <Text style={styles.timePickerCancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.timePickerConfirmButton}
-                                onPress={confirmTimeSelection}
-                            >
-                                <Text style={styles.timePickerConfirmButtonText}>Confirm</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Pressable>
-                </Pressable>
             </Modal>
         </SafeAreaView >
     );
@@ -3315,16 +3284,21 @@ const styles = StyleSheet.create({
     bottomSheetContent: {
         gap: theme.spacing.md,
     },
+    activityTypePickerList: {
+        paddingHorizontal: theme.spacing.md,
+        paddingBottom: theme.spacing.md,
+    },
     bottomSheetOption: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.xs,
         gap: theme.spacing.md,
     },
     bottomSheetOptionSelected: {
         backgroundColor: theme.colors.secondary,
         borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
     },
     bottomSheetOptionText: {
         ...theme.typography.body,
