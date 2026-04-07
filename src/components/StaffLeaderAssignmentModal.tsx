@@ -11,6 +11,7 @@ import {
     Pressable,
     Alert,
     ScrollView,
+    useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
@@ -45,6 +46,8 @@ type Props = {
  * Parity with web BulkLeaderAssignmentDialog: Auto-Assign by Division + Manual Assignment.
  */
 export function StaffLeaderAssignmentModal({ visible, onClose, companyId, season }: Props) {
+    const { width } = useWindowDimensions();
+    const isCompact = width < 768;
     const queryClient = useQueryClient();
     const [mainTab, setMainTab] = useState<'auto' | 'manual'>('auto');
     const [loading, setLoading] = useState(false);
@@ -295,8 +298,17 @@ export function StaffLeaderAssignmentModal({ visible, onClose, companyId, season
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
             <View style={{ flex: 1 }}>
-            <Pressable style={styles.overlay} onPress={onClose}>
-                <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <Pressable
+                style={[styles.overlay, !isCompact && styles.overlayCentered]}
+                onPress={onClose}
+            >
+                <Pressable
+                    style={[
+                        styles.sheet,
+                        isCompact ? styles.sheetCompact : styles.sheetDesktop,
+                    ]}
+                    onPress={(e) => e.stopPropagation()}
+                >
                     <View style={styles.header}>
                         <Text style={styles.title}>Leader Assignments</Text>
                         <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityLabel="Close">
@@ -562,13 +574,16 @@ export function StaffLeaderAssignmentModal({ visible, onClose, companyId, season
                     style={[StyleSheet.absoluteFillObject, { zIndex: 10000, elevation: 10000 }]}
                     pointerEvents="box-none"
                 >
-                    <Pressable style={styles.pickerOverlay} onPress={() => setLeaderPickerOpen(false)}>
-                        <View style={styles.pickerSheet}>
+                    <Pressable
+                        style={[styles.pickerOverlay, isCompact ? styles.pickerOverlayBottom : styles.pickerOverlayCentered]}
+                        onPress={() => setLeaderPickerOpen(false)}
+                    >
+                        <View style={[styles.pickerSheet, isCompact ? styles.pickerSheetBottom : styles.pickerSheetCentered]}>
                             <Text style={styles.pickerTitle}>Choose leader</Text>
                             <FlatList
                                 data={potentialLeaders}
                                 keyExtractor={(item) => item.id}
-                                style={{ maxHeight: 360 }}
+                                style={{ maxHeight: isCompact ? 420 : 360 }}
                                 renderItem={({ item }) => (
                                     <TouchableOpacity
                                         style={styles.pickerRow}
@@ -599,13 +614,29 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end',
+        alignItems: 'center',
+    },
+    overlayCentered: {
+        justifyContent: 'center',
+        padding: 20,
     },
     sheet: {
         backgroundColor: theme.colors.surface,
+        width: '100%',
+        paddingBottom: 16,
+    },
+    sheetCompact: {
         borderTopLeftRadius: 16,
         borderTopRightRadius: 16,
+        minHeight: '78%',
         maxHeight: '92%',
-        paddingBottom: 24,
+    },
+    sheetDesktop: {
+        width: '92%',
+        maxWidth: 980,
+        minHeight: 560,
+        maxHeight: '86%',
+        borderRadius: 14,
     },
     header: {
         flexDirection: 'row',
@@ -798,14 +829,27 @@ const styles = StyleSheet.create({
     pickerOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.4)',
+    },
+    pickerOverlayCentered: {
         justifyContent: 'center',
         padding: 24,
     },
+    pickerOverlayBottom: {
+        justifyContent: 'flex-end',
+    },
     pickerSheet: {
         backgroundColor: theme.colors.surface,
-        borderRadius: 12,
         padding: 12,
+    },
+    pickerSheetCentered: {
+        borderRadius: 12,
         maxHeight: '70%',
+    },
+    pickerSheetBottom: {
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        paddingBottom: 18,
+        maxHeight: '78%',
     },
     pickerTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
     pickerRow: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border },
