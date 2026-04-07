@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { supabase } from '../lib/supabase';
@@ -42,13 +43,19 @@ interface BunkStaffRow {
     } | null;
 }
 
+type CsvUploadResult = {
+    success: number;
+    failed: number;
+    errors: string[];
+};
+
 export const ODManagementScreen = ({ navigation }: any) => {
     const { companyId, season, companySlug } = useCompany();
     /** Same as web ODManagement.tsx — Free Play hidden for Tyler Hill */
     const showFreePlay = !isTylerHillCamp(companySlug);
     const queryClient = useQueryClient();
     const { width } = useWindowDimensions();
-    const isCompactModal = width < 760;
+    const isCompactModal = width < 560;
 
     const [activeTab, setActiveTab] = useState<'OD' | 'OFF' | 'FREE_PLAY'>('OD');
     const [selectedDate, setSelectedDate] = useState(new Date());
@@ -67,6 +74,10 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const [selectedStaffToAdd, setSelectedStaffToAdd] = useState<string>('');
     const [showDivisionPickerModal, setShowDivisionPickerModal] = useState(false);
     const [showStaffPickerForBunk, setShowStaffPickerForBunk] = useState<string | null>(null);
+    const [bunkModalTab, setBunkModalTab] = useState<'manage' | 'upload'>('manage');
+    const [csvUploading, setCsvUploading] = useState(false);
+    const [csvUploadResult, setCsvUploadResult] = useState<CsvUploadResult | null>(null);
+    const [lastCsvFileName, setLastCsvFileName] = useState('');
     const [showLateOverrideModal, setShowLateOverrideModal] = useState(false);
     const [lateOverrideReason, setLateOverrideReason] = useState('');
     const [lateOverrideStaffId, setLateOverrideStaffId] = useState<string | null>(null);
@@ -324,6 +335,8 @@ export const ODManagementScreen = ({ navigation }: any) => {
     }, [showFreePlay, activeTab]);
 
     const handleManageBunks = () => {
+        setBunkModalTab('manage');
+        setCsvUploadResult(null);
         setShowManageBunksModal(true);
     };
 
@@ -352,6 +365,126 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const handleDeleteBunk = (bunkId: string, _displayName: string) => {
         setItemToDelete({ id: bunkId });
         setIsDeleteConfirmVisible(true);
+    };
+
+    const handleUploadBunkCsv = async () => {
+        if (!companyId || !season) {
+            Alert.alert('Missing context', 'Company or season is not available yet.');
+            return;
+        }
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                copyToCacheDirectory: true,
+                type: ['text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel'],
+            });
+            const file = result.assets?.[0];
+            if (!file) return;
+            setLastCsvFileName(file.name || 'Selected CSV');
+
+            setCsvUploading(true);
+            setCsvUploadResult(null);
+            const csvText = await (await fetch(file.uri)).text();
+            const lines = csvText.split(/\r?\n/).filter((line) => line.trim().length > 0);
+            if (lines.length < 2) {
+                Alert.alert('Invalid file', 'CSV is empty or missing data rows.');
+                return;
+            }
+
+            const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/"/g, ''));
+            const personIdx = headers.findIndex((h) => h === 'person id' || h === 'person_id');
+            const bunkIdx = headers.findIndex((h) => h === 'bunk number' || h === 'bunk_number');
+            const primaryIdx = headers.findIndex((h) => h === 'is primary' || h === 'is_primary');
+            if (personIdx === -1 || bunkIdx === -1) {
+                Alert.alert('Invalid CSV format', 'Required columns: Person ID, Bunk Number');
+                return;
+            }
+
+            const [{ data: staffRows, error: staffErr }, { data: bunkRows, error: bunkErr }] = await Promise.all([
+                supabase.from('staff').select('id, person_id').eq('company_id', companyId).eq('season', season),
+                supabase.from('bunks').select('id, bunk_number').eq('company_id', companyId).eq('season', season).eq('is_active', true),
+            ]);
+            if (staffErr) throw staffErr;
+            if (bunkErr) throw bunkErr;
+
+            const staffByPersonId = new Map<string, string>();
+            (staffRows || []).forEach((s: any) => {
+                if (s.person_id) staffByPersonId.set(String(s.person_id).toLowerCase().trim(), s.id);
+            });
+            const bunkByNumber = new Map<number, string>();
+            (bunkRows || []).forEach((b: any) => bunkByNumber.set(Number(b.bunk_number), b.id));
+
+            const summary: CsvUploadResult = { success: 0, failed: 0, errors: [] };
+            for (let i = 1; i < lines.length; i += 1) {
+                const values = lines[i].split(',').map((v) => v.trim().replace(/"/g, ''));
+                const personId = String(values[personIdx] || '').toLowerCase().trim();
+                const bunkNumber = Number(values[bunkIdx] || '');
+                const isPrimaryRaw = String(values[primaryIdx] || '').toLowerCase();
+                const isPrimary = ['true', '1', 'yes', 'y'].includes(isPrimaryRaw);
+                if (!personId || !Number.isFinite(bunkNumber)) {
+                    summary.failed += 1;
+                    summary.errors.push(`Row ${i + 1}: Invalid person id or bunk number`);
+                    continue;
+                }
+                const staffId = staffByPersonId.get(personId);
+                if (!staffId) {
+                    summary.failed += 1;
+                    summary.errors.push(`Row ${i + 1}: Staff with Person ID "${values[personIdx]}" not found`);
+                    continue;
+                }
+                const bunkId = bunkByNumber.get(bunkNumber);
+                if (!bunkId) {
+                    summary.failed += 1;
+                    summary.errors.push(`Row ${i + 1}: Bunk #${bunkNumber} not found`);
+                    continue;
+                }
+
+                const { data: existing, error: existingErr } = await supabase
+                    .from('bunk_staff')
+                    .select('id')
+                    .eq('company_id', companyId)
+                    .eq('season', season)
+                    .eq('staff_id', staffId)
+                    .eq('bunk_id', bunkId)
+                    .maybeSingle();
+                if (existingErr) {
+                    summary.failed += 1;
+                    summary.errors.push(`Row ${i + 1}: ${existingErr.message}`);
+                    continue;
+                }
+
+                if (existing?.id) {
+                    const { error } = await supabase.from('bunk_staff').update({ is_primary: isPrimary }).eq('id', existing.id);
+                    if (error) {
+                        summary.failed += 1;
+                        summary.errors.push(`Row ${i + 1}: ${error.message}`);
+                        continue;
+                    }
+                } else {
+                    const { error } = await supabase.from('bunk_staff').insert({
+                        company_id: companyId,
+                        season,
+                        staff_id: staffId,
+                        bunk_id: bunkId,
+                        is_primary: isPrimary,
+                    });
+                    if (error) {
+                        summary.failed += 1;
+                        summary.errors.push(`Row ${i + 1}: ${error.message}`);
+                        continue;
+                    }
+                }
+                summary.success += 1;
+            }
+
+            setCsvUploadResult(summary);
+            await queryClient.invalidateQueries({ queryKey: ['bunk_staff'] });
+            await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+            if (summary.success > 0) Alert.alert('Upload complete', `Assigned ${summary.success} staff record(s) from CSV.`);
+        } catch (error: any) {
+            Alert.alert('Upload failed', error?.message || 'Failed to process CSV file');
+        } finally {
+            setCsvUploading(false);
+        }
     };
 
     const handleRfidScan = async () => {
@@ -764,57 +897,102 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         <View style={styles.modalContent}>
                             <Text style={styles.modalSubtitle}>Configure bunks and assign staff members to each bunk</Text>
                             <View style={[styles.bunkTabs, isCompactModal && styles.bunkTabsCompact]}>
-                                <View style={[styles.bunkTab, styles.bunkTabActive]}>
-                                    <Text style={[styles.bunkTabText, styles.bunkTabTextActive]}>Manage Bunks</Text>
-                                </View>
-                                <View style={styles.bunkTab}>
-                                    <Text style={styles.bunkTabText}>CSV Upload</Text>
-                                </View>
+                                <TouchableOpacity style={[styles.bunkTab, bunkModalTab === 'manage' && styles.bunkTabActive]} onPress={() => setBunkModalTab('manage')}>
+                                    <Text style={[styles.bunkTabText, bunkModalTab === 'manage' && styles.bunkTabTextActive]}>Manage Bunks</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={[styles.bunkTab, bunkModalTab === 'upload' && styles.bunkTabActive]} onPress={() => setBunkModalTab('upload')}>
+                                    <Text style={[styles.bunkTabText, bunkModalTab === 'upload' && styles.bunkTabTextActive]}>CSV Upload</Text>
+                                </TouchableOpacity>
                             </View>
-
+                            {bunkModalTab === 'manage' ? (
+                            <>
                             <View style={styles.addBunkCard}>
                                 <Text style={styles.addBunkTitle}>Add New Bunk</Text>
-                                <View style={[styles.addBunkRow, isCompactModal && styles.addBunkRowCompact]}>
-                                    <View style={[styles.addBunkField, !isCompactModal && { maxWidth: 130 }]}>
-                                        <Text style={styles.formLabel}>Bunk Number</Text>
-                                        <TextInput
-                                            style={styles.bankInput}
-                                            keyboardType="number-pad"
-                                            value={newBunkNumber}
-                                            onChangeText={setNewBunkNumber}
-                                        />
+                                {isCompactModal ? (
+                                    <View style={styles.addBunkRowCompact}>
+                                        <View style={styles.addBunkFieldCompact}>
+                                            <Text style={styles.formLabel}>Bunk Number</Text>
+                                            <TextInput
+                                                style={styles.bankInput}
+                                                keyboardType="number-pad"
+                                                value={newBunkNumber}
+                                                onChangeText={setNewBunkNumber}
+                                            />
+                                        </View>
+                                        <View style={styles.addBunkFieldCompact}>
+                                            <Text style={styles.formLabel}>Bunk Name (optional)</Text>
+                                            <TextInput
+                                                style={styles.bankInput}
+                                                placeholder="e.g., Bunk A, Senior Boys 1"
+                                                placeholderTextColor={theme.colors.textSecondary}
+                                                value={newBunkName}
+                                                onChangeText={setNewBunkName}
+                                                onSubmitEditing={handleAddBunk}
+                                            />
+                                        </View>
+                                        <View style={styles.addBunkFieldCompact}>
+                                            <Text style={styles.formLabel}>Division (optional)</Text>
+                                            <TouchableOpacity style={[styles.bankInput, styles.selectInput]} onPress={() => setShowDivisionPickerModal(true)}>
+                                                <Text style={styles.selectInputText}>
+                                                    {newBunkDivision ? ((divisionsList.find((d: any) => d.id === newBunkDivision)?.name) || 'None') : 'None'}
+                                                </Text>
+                                                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                                            </TouchableOpacity>
+                                        </View>
+                                        <View style={styles.addBunkActionCompact}>
+                                            <TouchableOpacity
+                                                style={[styles.addBankButtonWide, addBunkMutation.isPending && { opacity: 0.65 }]}
+                                                onPress={handleAddBunk}
+                                                disabled={addBunkMutation.isPending}
+                                            >
+                                                <Ionicons name="add" size={18} color="white" />
+                                                <Text style={styles.addBankButtonText}>{addBunkMutation.isPending ? 'Adding...' : 'Add Bunk'}</Text>
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
-                                    <View style={styles.addBunkField}>
-                                        <Text style={styles.formLabel}>Bunk Name (optional)</Text>
-                                        <TextInput
-                                            style={styles.bankInput}
-                                            placeholder="e.g., Bunk A, Senior Boys 1"
-                                            placeholderTextColor={theme.colors.textSecondary}
-                                            value={newBunkName}
-                                            onChangeText={setNewBunkName}
-                                            onSubmitEditing={handleAddBunk}
-                                        />
+                                ) : (
+                                    <View style={styles.addBunkRow}>
+                                        <View style={[styles.addBunkField, { maxWidth: 130 }]}>
+                                            <Text style={styles.formLabel}>Bunk Number</Text>
+                                            <TextInput
+                                                style={styles.bankInput}
+                                                keyboardType="number-pad"
+                                                value={newBunkNumber}
+                                                onChangeText={setNewBunkNumber}
+                                            />
+                                        </View>
+                                        <View style={styles.addBunkField}>
+                                            <Text style={styles.formLabel}>Bunk Name (optional)</Text>
+                                            <TextInput
+                                                style={styles.bankInput}
+                                                placeholder="e.g., Bunk A, Senior Boys 1"
+                                                placeholderTextColor={theme.colors.textSecondary}
+                                                value={newBunkName}
+                                                onChangeText={setNewBunkName}
+                                                onSubmitEditing={handleAddBunk}
+                                            />
+                                        </View>
+                                        <View style={styles.addBunkField}>
+                                            <Text style={styles.formLabel}>Division (optional)</Text>
+                                            <TouchableOpacity style={[styles.bankInput, styles.selectInput]} onPress={() => setShowDivisionPickerModal(true)}>
+                                                <Text style={styles.selectInputText}>
+                                                    {newBunkDivision ? ((divisionsList.find((d: any) => d.id === newBunkDivision)?.name) || 'None') : 'None'}
+                                                </Text>
+                                                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                                            </TouchableOpacity>
+                                        </View>
+                                        <View style={styles.addBunkAction}>
+                                            <TouchableOpacity
+                                                style={[styles.addBankButtonWide, addBunkMutation.isPending && { opacity: 0.65 }]}
+                                                onPress={handleAddBunk}
+                                                disabled={addBunkMutation.isPending}
+                                            >
+                                                <Ionicons name="add" size={18} color="white" />
+                                                <Text style={styles.addBankButtonText}>{addBunkMutation.isPending ? 'Adding...' : 'Add Bunk'}</Text>
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
-                                    <View style={styles.addBunkField}>
-                                        <Text style={styles.formLabel}>Division (optional)</Text>
-                                        <TouchableOpacity style={[styles.bankInput, styles.selectInput]} onPress={() => setShowDivisionPickerModal(true)}>
-                                            <Text style={styles.selectInputText}>
-                                                {newBunkDivision ? ((divisionsList.find((d: any) => d.id === newBunkDivision)?.name) || 'None') : 'None'}
-                                            </Text>
-                                            <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                                        </TouchableOpacity>
-                                    </View>
-                                    <View style={[styles.addBunkAction, isCompactModal && styles.addBunkActionCompact]}>
-                                        <TouchableOpacity
-                                            style={[styles.addBankButtonWide, addBunkMutation.isPending && { opacity: 0.65 }]}
-                                            onPress={handleAddBunk}
-                                            disabled={addBunkMutation.isPending}
-                                        >
-                                            <Ionicons name="add" size={18} color="white" />
-                                            <Text style={styles.addBankButtonText}>{addBunkMutation.isPending ? 'Adding...' : 'Add Bunk'}</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
+                                )}
                             </View>
 
                             <ScrollView
@@ -822,6 +1000,15 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                 contentContainerStyle={styles.bunksScrollContent}
                                 showsVerticalScrollIndicator
                             >
+                                {!isCompactModal ? (
+                                    <View style={styles.bunkTableHeader}>
+                                        <Text style={[styles.tableHeader, { flex: 0.6 }]}>Bunk #</Text>
+                                        <Text style={[styles.tableHeader, { flex: 1.1 }]}>Name</Text>
+                                        <Text style={[styles.tableHeader, { flex: 1 }]}>Division</Text>
+                                        <Text style={[styles.tableHeader, { flex: 1.9 }]}>Assigned Staff</Text>
+                                        <Text style={[styles.tableHeader, { flex: 0.6, textAlign: 'center' }]}>Actions</Text>
+                                    </View>
+                                ) : null}
                                 {bunksList.map((b) => {
                                     const assigned = bunkStaffList.filter((bs) => bs.bunk_id === b.id);
                                     const divisionName = b.division_id ? ((divisionsList.find((d: any) => d.id === b.division_id)?.name) || '-') : '-';
@@ -871,6 +1058,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                                         }}
                                                     >
                                                         <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
+                                                        {isCompactModal ? <Text style={styles.iconAddStaffText}>Add Staff</Text> : null}
                                                     </TouchableOpacity>
                                                 </View>
                                                 {selectedBunkForStaff === b.id && (
@@ -916,8 +1104,49 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                         </View>
                                     );
                                 })}
+                                {bunksList.length === 0 ? (
+                                    <View style={styles.bunkEmptyRow}>
+                                        <Text style={styles.bunkEmptyText}>No bunks configured yet. Add your first bunk above.</Text>
+                                    </View>
+                                ) : null}
                             </ScrollView>
-
+                            </>
+                            ) : (
+                                <View style={styles.csvUploadCard}>
+                                    <Text style={styles.csvUploadTitle}>Upload Bunk Assignments</Text>
+                                    <Text style={styles.csvUploadSubtitle}>Upload a CSV with columns: Person ID, Bunk Number, Is Primary (optional)</Text>
+                                    <View style={styles.csvFormatBox}>
+                                        <Text style={styles.csvFormatTitle}>CSV Example</Text>
+                                        <Text style={styles.csvFormatText}>Person ID,Bunk Number,Is Primary</Text>
+                                        <Text style={styles.csvFormatText}>12345,1,true</Text>
+                                        <Text style={styles.csvFormatText}>67890,2,false</Text>
+                                    </View>
+                                    <View style={styles.csvRulesBox}>
+                                        <Text style={styles.csvRulesTitle}>CSV Format Rules</Text>
+                                        <Text style={styles.csvRulesItem}>- Person ID: CampMinder Person ID (required)</Text>
+                                        <Text style={styles.csvRulesItem}>- Bunk Number: Must already exist</Text>
+                                        <Text style={styles.csvRulesItem}>- Is Primary: Optional true/false, yes/no, 1/0</Text>
+                                    </View>
+                                    {lastCsvFileName ? <Text style={styles.csvFileName} numberOfLines={1}>Selected: {lastCsvFileName}</Text> : null}
+                                    <TouchableOpacity
+                                        style={[styles.addBankButtonWide, csvUploading && { opacity: 0.7 }]}
+                                        disabled={csvUploading}
+                                        onPress={handleUploadBunkCsv}
+                                    >
+                                        {csvUploading ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="cloud-upload-outline" size={18} color="#fff" />}
+                                        <Text style={styles.addBankButtonText}>{csvUploading ? 'Uploading...' : 'Upload CSV'}</Text>
+                                    </TouchableOpacity>
+                                    {csvUploadResult ? (
+                                        <View style={styles.csvResultBox}>
+                                            <Text style={styles.csvResultSuccess}>Success: {csvUploadResult.success}</Text>
+                                            <Text style={styles.csvResultFailed}>Failed: {csvUploadResult.failed}</Text>
+                                            {csvUploadResult.errors.slice(0, 8).map((err, idx) => (
+                                                <Text key={`${err}-${idx}`} style={styles.csvErrorLine}>- {err}</Text>
+                                            ))}
+                                        </View>
+                                    ) : null}
+                                </View>
+                            )}
                             <View style={styles.bunkFooter}>
                                 <TouchableOpacity style={styles.doneButton} onPress={() => setShowManageBunksModal(false)}>
                                     <Text style={styles.doneButtonText}>Done</Text>
@@ -1540,7 +1769,7 @@ const styles = StyleSheet.create({
     bunkModal: {
         width: '100%',
         maxWidth: 960,
-        maxHeight: '90%',
+        maxHeight: '92%',
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
         borderWidth: 1,
@@ -1602,7 +1831,7 @@ const styles = StyleSheet.create({
     addBunkRowCompact: {
         flexDirection: 'column',
         alignItems: 'stretch',
-        gap: 8,
+        gap: 10,
     },
     addBunkField: {
         flex: 1,
@@ -1647,9 +1876,11 @@ const styles = StyleSheet.create({
     },
     bunksScrollList: {
         maxHeight: 320,
+        minHeight: 180,
     },
     bunksScrollListCompact: {
         maxHeight: 300,
+        minHeight: 140,
     },
     bunksScrollContent: {
         paddingBottom: 16,
@@ -1730,14 +1961,23 @@ const styles = StyleSheet.create({
         maxWidth: 120,
     },
     iconAddStaffBtn: {
-        width: 28,
-        height: 28,
+        minWidth: 28,
+        minHeight: 28,
         borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
+        flexDirection: 'row',
+        gap: 4,
+        paddingHorizontal: 8,
         borderWidth: 1,
         borderColor: theme.colors.border,
         backgroundColor: '#fff',
+    },
+    iconAddStaffText: {
+        ...theme.typography.body,
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.text,
     },
     assignStaffRow: {
         marginTop: 8,
@@ -1784,6 +2024,103 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
         color: '#fff',
+    },
+    csvUploadCard: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        padding: 12,
+        marginBottom: 12,
+        backgroundColor: '#fbfcfe',
+        gap: 10,
+    },
+    csvUploadTitle: {
+        ...theme.typography.body,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    csvUploadSubtitle: {
+        ...theme.typography.body,
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+    },
+    csvFormatBox: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 10,
+        backgroundColor: '#f8fafc',
+        padding: 10,
+        gap: 2,
+    },
+    csvFormatTitle: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: 2,
+    },
+    csvFormatText: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    csvRulesBox: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 10,
+        backgroundColor: '#fff',
+        padding: 10,
+        gap: 2,
+    },
+    csvRulesTitle: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: 2,
+    },
+    csvRulesItem: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    csvFileName: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        fontWeight: '600',
+    },
+    csvResultBox: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 10,
+        padding: 10,
+        gap: 4,
+        backgroundColor: '#fff',
+    },
+    csvResultSuccess: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#166534',
+    },
+    csvResultFailed: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#b91c1c',
+    },
+    csvErrorLine: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    bunkEmptyRow: {
+        minHeight: 120,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        paddingHorizontal: 12,
+    },
+    bunkEmptyText: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
     },
     pickerSheet: {
         width: '100%',
