@@ -207,17 +207,39 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const [isDeleting, setIsDeleting] = useState(false);
 
     const handleConfirmDelete = async () => {
-        if (!itemToDelete) return;
+        if (!itemToDelete || !companyId || !season) return;
         setIsDeleting(true);
         console.log('[DELETE] Starting delete for:', itemToDelete.id);
         try {
-            const { error, status, statusText } = await supabase.from('bunks').delete().eq('id', itemToDelete.id);
-            console.log('[DELETE] Response:', { error, status, statusText });
-            if (error) throw error;
-            queryClient.invalidateQueries({ queryKey: ['bunks'] });
-            queryClient.invalidateQueries({ queryKey: ['bunk_staff'] });
-            queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
-            Alert.alert('Success', 'Bunk deleted');
+            // Remove active staff assignments for this bunk first.
+            const { error: unassignErr } = await supabase
+                .from('bunk_staff')
+                .delete()
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .eq('bunk_id', itemToDelete.id);
+            if (unassignErr) throw unassignErr;
+
+            // Soft delete bunk to avoid FK/history constraint issues.
+            const { error: archiveErr, status, statusText } = await supabase
+                .from('bunks')
+                .update({ is_active: false })
+                .eq('id', itemToDelete.id)
+                .eq('company_id', companyId)
+                .eq('season', season);
+            console.log('[DELETE] Response:', { archiveErr, status, statusText });
+            if (archiveErr) throw archiveErr;
+
+            if (selectedBunkForStaff === itemToDelete.id) {
+                setSelectedBunkForStaff(null);
+                setSelectedStaffToAdd('');
+                setShowStaffPickerForBunk(null);
+            }
+
+            await queryClient.invalidateQueries({ queryKey: ['bunks'] });
+            await queryClient.invalidateQueries({ queryKey: ['bunk_staff'] });
+            await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+            Alert.alert('Success', 'Bunk deleted.');
         } catch (err: any) {
             console.error('[DELETE] Error:', err);
             Alert.alert('Delete failed', err.message || 'Unknown error');
