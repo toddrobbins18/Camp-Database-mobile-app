@@ -28,6 +28,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { uploadTripAttachment, getSignedUrl, pathFromFileUrl } from '../api/storage';
 import { supabase } from '../lib/supabase';
 import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
+import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 
 // Trip Interfaces
 interface Trip {
@@ -1241,22 +1242,15 @@ export const TransportScreen = ({ navigation }: any) => {
 
 
     const renderPickerModal = () => (
-        <Modal
-            transparent
-            animationType="slide"
+        <ModalPickerOverlay
             visible={!!activePicker}
-            onRequestClose={() => setActivePicker(null)}
+            onClose={() => setActivePicker(null)}
+            title="Select Value"
         >
-            <TouchableWithoutFeedback onPress={() => setActivePicker(null)}>
-                <View style={styles.pickerModalOverlay}>
-                    <TouchableWithoutFeedback>
-                        <View style={styles.pickerModalContent}>
-                            {renderPickerModalContent()}
-                        </View>
-                    </TouchableWithoutFeedback>
-                </View>
-            </TouchableWithoutFeedback>
-        </Modal>
+            <View style={styles.pickerModalContent}>
+                {renderPickerModalContent()}
+            </View>
+        </ModalPickerOverlay>
     );
 
     const renderTripFormModal = () => (
@@ -1548,6 +1542,7 @@ export const TransportScreen = ({ navigation }: any) => {
 
                     </ScrollView>
                 </View>
+                {renderPickerModal()}
             </View>
         </Modal>
     );
@@ -1765,7 +1760,6 @@ export const TransportScreen = ({ navigation }: any) => {
             {renderHelpModal()}
             {renderTripFormModal()}
             {renderRosterModal()}
-            {renderPickerModal()}
             {renderDivisionFilterModal()}
             {renderHeader()}
             {isLoading && companyId ? (

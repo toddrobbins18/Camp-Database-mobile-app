@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
@@ -577,102 +578,58 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
     const groupedActivities = groupActivitiesByMonth();
 
-    /** Inline overlay (not a second Modal) — nested Modals do not show or receive touches reliably on iOS. */
+    /** In-modal bottom sheet overlay; avoids stacked RN Modal touch issues on iOS. */
     const renderActivitySelectOverlay = () => {
-        const isVisible = isActivityTypeDropdownOpen || isLocationTypeDropdownOpen;
-        const title = isActivityTypeDropdownOpen ? 'Select Activity Type' : 'Select Location Type';
+        const isVisible = isActivityTypeDropdownOpen;
+        const title = 'Select Type';
 
         let options: { value: string, label: string }[] = [];
         let currentValue = '';
         let onSelect: (val: string) => void = () => { };
 
-        if (isActivityTypeDropdownOpen) {
-            options = [
-                { value: 'field-trip', label: 'Field Trip' },
-                { value: 'arts-crafts', label: 'Arts & Crafts' },
-                { value: 'nature', label: 'Nature Activity' },
-                { value: 'water', label: 'Water Activity' },
-                { value: 'outdoor', label: 'Outdoor Adventure' },
-                { value: 'cultural', label: 'Cultural Activity' },
-                { value: 'other', label: 'Other' },
-            ];
-            currentValue = formData.activity_type;
-            onSelect = (val) => setFormData({ ...formData, activity_type: val });
-        } else if (isLocationTypeDropdownOpen) {
-            options = [
-                { value: '', label: 'Not Specified' },
-                { value: 'home', label: 'HOME' },
-                { value: 'away', label: 'AWAY' },
-            ];
-            currentValue = formData.home_away;
-            onSelect = (val) => setFormData({ ...formData, home_away: val });
-        }
-
-        if (!isVisible) return null;
+        options = [
+            { value: 'field-trip', label: 'Field Trip' },
+            { value: 'sporting-event', label: 'Sporting Event' },
+            { value: 'staff-bus', label: 'Staff Bus' },
+            { value: 'other', label: 'Other' },
+        ];
+        currentValue = formData.activity_type;
+        onSelect = (val) => setFormData({ ...formData, activity_type: val });
 
         return (
-            <View
-                style={[StyleSheet.absoluteFillObject, { zIndex: 10000, elevation: 10000 }]}
-                pointerEvents="box-none"
+            <ModalPickerOverlay
+                visible={isVisible}
+                onClose={() => {
+                    setIsActivityTypeDropdownOpen(false);
+                }}
+                title={title}
             >
-                <Pressable
-                    style={styles.bottomSheetOverlay}
-                    onPress={() => {
-                        setIsActivityTypeDropdownOpen(false);
-                        setIsLocationTypeDropdownOpen(false);
-                    }}
-                >
-                    <Pressable
-                        style={styles.bottomSheet}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>{title}</Text>
-                        </View>
-                        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="always" style={{ maxHeight: 300 }}>
-                            {options.map((option) => (
-                                <TouchableOpacity
-                                    key={option.label}
-                                    style={[
-                                        styles.bottomSheetOption,
-                                        currentValue === option.value && styles.bottomSheetOptionSelected
-                                    ]}
-                                    onPress={() => {
-                                        onSelect(option.value);
-                                        setIsActivityTypeDropdownOpen(false);
-                                        setIsLocationTypeDropdownOpen(false);
-                                    }}
-                                >
-                                    <Text style={[
-                                        styles.bottomSheetOptionText,
-                                        currentValue === option.value && styles.bottomSheetOptionTextSelected
-                                    ]}>
-                                        {option.label}
-                                    </Text>
-                                    {currentValue === option.value && (
-                                        <Ionicons name="checkmark" size={20} color={currentValue === option.value ? theme.colors.surface : theme.colors.secondary} />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
-                        </KeyboardAwareScrollView>
+                <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+                    {options.map((option) => (
                         <TouchableOpacity
-                            style={{
-                                marginTop: 16,
-                                padding: 12,
-                                alignItems: 'center',
-                                backgroundColor: '#f1f5f9',
-                                borderRadius: 8
-                            }}
+                            key={option.label}
+                            style={[
+                                styles.bottomSheetOption,
+                                currentValue === option.value && styles.bottomSheetOptionSelected
+                            ]}
                             onPress={() => {
+                                onSelect(option.value);
                                 setIsActivityTypeDropdownOpen(false);
-                                setIsLocationTypeDropdownOpen(false);
                             }}
                         >
-                            <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary }}>Cancel</Text>
+                            <Text style={[
+                                styles.bottomSheetOptionText,
+                                currentValue === option.value && styles.bottomSheetOptionTextSelected
+                            ]}>
+                                {option.label}
+                            </Text>
+                            {currentValue === option.value && (
+                                <Ionicons name="checkmark" size={20} color={theme.colors.surface} />
+                            )}
                         </TouchableOpacity>
-                    </Pressable>
-                </Pressable>
-            </View>
+                    ))}
+                </ScrollView>
+            </ModalPickerOverlay>
         );
     };
 
@@ -1091,7 +1048,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                         >
                             {/* Modal Header */}
                             <View style={styles.addActivityBottomSheetHeader}>
-                                <Text style={styles.addActivityBottomSheetTitle}>Add Activity/Field Trip</Text>
+                                <Text style={styles.addActivityBottomSheetTitle}>Add New Trip</Text>
                                 <TouchableOpacity
                                     onPress={() => {
                                         closeActivityTransientUi();
@@ -1109,7 +1066,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     <View style={styles.multiDayToggleContent}>
                                         <Ionicons name="calendar-outline" size={20} color={theme.colors.text} />
                                         <View style={styles.multiDayToggleText}>
-                                            <Text style={styles.multiDayToggleLabel}>Multi-Day Event</Text>
+                                            <Text style={styles.multiDayToggleLabel}>Multi-Day Trip</Text>
                                             <Text style={styles.multiDayToggleDescription}>
                                                 Enable this for events spanning multiple days
                                             </Text>
@@ -1184,30 +1141,31 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
                                 {/* Title */}
                                 <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Title *</Text>
+                                    <Text style={styles.formLabel}>Trip Name *</Text>
                                     <TextInput
                                         style={styles.formInput}
                                         value={formData.title}
                                         onChangeText={(text) => setFormData({ ...formData, title: text })}
-                                        placeholder="Activity title"
+                                        placeholder="e.g., Science Museum Visit"
                                     />
                                 </View>
+                                <Text style={styles.tripNameHelpText}>Descriptive name for this trip or event</Text>
 
                                 {/* Activity Type */}
                                 <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Activity Type *</Text>
+                                    <Text style={styles.formLabel}>Type *</Text>
                                     <View style={styles.dropdownContainer}>
                                         <TouchableOpacity
                                             style={styles.formInput}
                                             onPress={() => {
-                                                setIsActivityTypeDropdownOpen(!isActivityTypeDropdownOpen);
+                                                setIsActivityTypeDropdownOpen(true);
                                                 setIsLocationTypeDropdownOpen(false);
                                             }}
                                         >
                                             <Text style={formData.activity_type ? styles.formInputText : styles.formInputPlaceholder}>
                                                 {formData.activity_type
                                                     ? formData.activity_type.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-                                                    : 'Select activity type'}
+                                                    : 'Select type'}
                                             </Text>
                                             <Ionicons
                                                 name={isActivityTypeDropdownOpen ? "chevron-up" : "chevron-down"}
@@ -1218,77 +1176,10 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     </View>
                                 </View>
 
-                                {/* Location Type */}
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Location Type</Text>
-                                    <View style={styles.dropdownContainer}>
-                                        <TouchableOpacity
-                                            style={styles.formInput}
-                                            onPress={() => {
-                                                setIsLocationTypeDropdownOpen(!isLocationTypeDropdownOpen);
-                                                setIsActivityTypeDropdownOpen(false);
-                                            }}
-                                        >
-                                            <Text style={formData.home_away ? styles.formInputText : styles.formInputPlaceholder}>
-                                                {formData.home_away ? formData.home_away.toUpperCase() : 'Select location type (optional)'}
-                                            </Text>
-                                            <Ionicons
-                                                name={isLocationTypeDropdownOpen ? "chevron-up" : "chevron-down"}
-                                                size={20}
-                                                color={theme.colors.textSecondary}
-                                            />
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-
-                                {/* Divisions */}
-                                <View style={styles.formField}>
-                                    <View style={styles.divisionsHeader}>
-                                        <Text style={styles.formLabel}>Divisions (select multiple)</Text>
-                                        <View style={styles.divisionsActions}>
-                                            <TouchableOpacity
-                                                style={styles.selectAllButton}
-                                                onPress={() => setFormData({ ...formData, division_ids: divisions.map(d => d.id) })}
-                                            >
-                                                <Text style={styles.selectAllButtonText}>Select All</Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                                style={styles.selectAllButton}
-                                                onPress={() => setFormData({ ...formData, division_ids: [] })}
-                                            >
-                                                <Text style={styles.selectAllButtonText}>Deselect All</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-                                    <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.divisionsList} nestedScrollEnabled>
-                                        {divisions.map((division) => (
-                                            <TouchableOpacity
-                                                key={division.id}
-                                                style={styles.divisionCheckbox}
-                                                onPress={() => {
-                                                    const isSelected = formData.division_ids.includes(division.id);
-                                                    setFormData({
-                                                        ...formData,
-                                                        division_ids: isSelected
-                                                            ? formData.division_ids.filter(id => id !== division.id)
-                                                            : [...formData.division_ids, division.id],
-                                                    });
-                                                }}
-                                            >
-                                                <Ionicons
-                                                    name={formData.division_ids.includes(division.id) ? 'checkbox' : 'checkbox-outline'}
-                                                    size={20}
-                                                    color={formData.division_ids.includes(division.id) ? theme.colors.secondary : theme.colors.textSecondary}
-                                                />
-                                                <Text style={styles.divisionCheckboxText}>{division.name}</Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </KeyboardAwareScrollView>
-                                </View>
 
                                 {/* Optional Fields */}
                                 <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Depart from Camp (optional)</Text>
+                                    <Text style={styles.formLabel}>Departure Time</Text>
                                     <TouchableOpacity style={styles.formInput} onPress={() => openTimePicker('depart_from_camp')}>
                                         <Text style={formData.depart_from_camp ? styles.formInputText : styles.formInputPlaceholder}>
                                             {formData.depart_from_camp ? formatTime(formData.depart_from_camp) : '--:-- --'}
@@ -1298,7 +1189,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 </View>
 
                                 <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Depart from Activity (optional)</Text>
+                                    <Text style={styles.formLabel}>Return Time</Text>
                                     <TouchableOpacity style={styles.formInput} onPress={() => openTimePicker('depart_from_activity')}>
                                         <Text style={formData.depart_from_activity ? styles.formInputText : styles.formInputPlaceholder}>
                                             {formData.depart_from_activity ? formatTime(formData.depart_from_activity) : '--:-- --'}
@@ -1308,12 +1199,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 </View>
 
                                 <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Location (optional)</Text>
+                                    <Text style={styles.formLabel}>Destination</Text>
                                     <TextInput
                                         style={styles.formInput}
                                         value={formData.location}
                                         onChangeText={(text) => setFormData({ ...formData, location: text })}
-                                        placeholder="Location"
+                                        placeholder="Where are you going?"
                                     />
                                 </View>
 
@@ -1354,7 +1245,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 </View>
 
                                 <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Staff (optional)</Text>
+                                    <Text style={styles.formLabel}>Staff</Text>
                                     <TextInput
                                         style={styles.formInput}
                                         value={formData.chaperone}
@@ -1363,57 +1254,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     />
                                 </View>
 
-                                <View style={styles.formField}>
-                                    <Text style={styles.formLabel}>Description (optional)</Text>
-                                    <TextInput
-                                        style={[styles.formInput, styles.formTextArea]}
-                                        value={formData.description}
-                                        onChangeText={(text) => setFormData({ ...formData, description: text })}
-                                        placeholder="Description"
-                                        multiline
-                                        numberOfLines={3}
-                                    />
-                                </View>
-
-                                {/* Meal Options */}
-                                <View style={styles.mealOptionsSection}>
-                                    <Text style={styles.mealOptionsTitle}>Meal Options</Text>
-                                    {['Breakfast', 'Snack', 'Lunch', 'Dinner', 'Other'].map((meal) => (
-                                        <TouchableOpacity
-                                            key={meal}
-                                            style={styles.mealOption}
-                                            onPress={() => {
-                                                const isSelected = formData.meal_options.includes(meal);
-                                                setFormData({
-                                                    ...formData,
-                                                    meal_options: isSelected
-                                                        ? formData.meal_options.filter(m => m !== meal)
-                                                        : [...formData.meal_options, meal],
-                                                });
-                                            }}
-                                        >
-                                            <Ionicons
-                                                name={formData.meal_options.includes(meal) ? 'checkbox' : 'checkbox-outline'}
-                                                size={20}
-                                                color={formData.meal_options.includes(meal) ? theme.colors.secondary : theme.colors.textSecondary}
-                                            />
-                                            <Text style={styles.mealOptionText}>{meal}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                    {formData.meal_options.includes('Other') && (
-                                        <View style={styles.formField}>
-                                            <Text style={styles.formLabel}>Meal Notes</Text>
-                                            <TextInput
-                                                style={[styles.formInput, styles.formTextArea]}
-                                                value={formData.meal_notes}
-                                                onChangeText={(text) => setFormData({ ...formData, meal_notes: text })}
-                                                placeholder="e.g., Other location serves lunch"
-                                                multiline
-                                                numberOfLines={2}
-                                            />
-                                        </View>
-                                    )}
-                                </View>
+                                
 
                                 {/* Action Buttons */}
                                 <View style={styles.addActivityBottomSheetActions}>
@@ -1446,7 +1287,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             }
                                         }}
                                     >
-                                        <Text style={styles.addActivitySaveButtonText}>Save</Text>
+                                        <Text style={styles.addActivitySaveButtonText}>Add Trip</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -1508,7 +1349,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 <View style={styles.multiDayToggleContent}>
                                     <Ionicons name="calendar-outline" size={20} color={theme.colors.text} />
                                     <View style={styles.multiDayToggleText}>
-                                        <Text style={styles.multiDayToggleLabel}>Multi-Day Event</Text>
+                                        <Text style={styles.multiDayToggleLabel}>Multi-Day Trip</Text>
                                         <Text style={styles.multiDayToggleDescription}>
                                             Enable this for events spanning multiple days
                                         </Text>
@@ -1587,30 +1428,31 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
                             {/* Title */}
                             <View style={styles.formField}>
-                                <Text style={styles.formLabel}>Title</Text>
+                                <Text style={styles.formLabel}>Trip Name *</Text>
                                 <TextInput
                                     style={styles.formInput}
                                     value={formData.title}
                                     onChangeText={(text) => setFormData({ ...formData, title: text })}
-                                    placeholder="Activity title"
+                                    placeholder="e.g., Science Museum Visit"
                                 />
                             </View>
+                            <Text style={styles.tripNameHelpText}>Descriptive name for this trip or event</Text>
 
                             {/* Activity Type */}
                             <View style={styles.formField}>
-                                <Text style={styles.formLabel}>Activity Type</Text>
+                                <Text style={styles.formLabel}>Type *</Text>
                                 <View style={styles.dropdownContainer}>
                                     <TouchableOpacity
                                         style={styles.formInput}
                                         onPress={() => {
-                                            setIsActivityTypeDropdownOpen(!isActivityTypeDropdownOpen);
+                                            setIsActivityTypeDropdownOpen(true);
                                             setIsLocationTypeDropdownOpen(false);
                                         }}
                                     >
                                         <Text style={formData.activity_type ? styles.formInputText : styles.formInputPlaceholder}>
                                             {formData.activity_type
                                                 ? formData.activity_type.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-                                                : 'Select activity type'}
+                                                : 'Select type'}
                                         </Text>
                                         <Ionicons
                                             name={isActivityTypeDropdownOpen ? "chevron-up" : "chevron-down"}
@@ -1618,91 +1460,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             color={theme.colors.textSecondary}
                                         />
                                     </TouchableOpacity>
-
                                 </View>
                             </View>
 
-                            {/* Location Type */}
-                            <View style={styles.formField}>
-                                <Text style={styles.formLabel}>Location Type</Text>
-                                <View style={styles.dropdownContainer}>
-                                    <TouchableOpacity
-                                        style={styles.formInput}
-                                        onPress={() => {
-                                            setIsLocationTypeDropdownOpen(!isLocationTypeDropdownOpen);
-                                            setIsActivityTypeDropdownOpen(false);
-                                        }}
-                                    >
-                                        <Text style={formData.home_away ? styles.formInputText : styles.formInputPlaceholder}>
-                                            {formData.home_away
-                                                ? formData.home_away.toUpperCase()
-                                                : 'Select location type (optional)'}
-                                        </Text>
-                                        <Ionicons
-                                            name={isLocationTypeDropdownOpen ? "chevron-up" : "chevron-down"}
-                                            size={20}
-                                            color={theme.colors.textSecondary}
-                                        />
-                                    </TouchableOpacity>
-
-                                </View>
-                            </View>
-
-                            {/* Divisions */}
-                            <View style={styles.formField}>
-                                <View style={styles.divisionsHeader}>
-                                    <Text style={styles.formLabel}>Divisions (select multiple)</Text>
-                                    <View style={styles.divisionsActions}>
-                                        <TouchableOpacity
-                                            style={styles.selectAllButton}
-                                            onPress={() => {
-                                                setFormData({
-                                                    ...formData,
-                                                    division_ids: divisions.filter(d => d.id !== '1').map(d => d.id),
-                                                });
-                                            }}
-                                        >
-                                            <Text style={styles.selectAllButtonText}>Select All</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={styles.selectAllButton}
-                                            onPress={() => {
-                                                setFormData({ ...formData, division_ids: [] });
-                                            }}
-                                        >
-                                            <Text style={styles.selectAllButtonText}>Deselect All</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                                <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={20} keyboardShouldPersistTaps="handled" style={styles.divisionsList} nestedScrollEnabled>
-                                    {divisions.map((division) => (
-                                        <TouchableOpacity
-                                            key={division.id}
-                                            style={styles.divisionCheckbox}
-                                            onPress={() => {
-                                                const isSelected = formData.division_ids.includes(division.id);
-                                                setFormData({
-                                                    ...formData,
-                                                    division_ids: isSelected
-                                                        ? formData.division_ids.filter(id => id !== division.id)
-                                                        : [...formData.division_ids, division.id],
-                                                });
-                                            }}
-                                        >
-                                            <Ionicons
-                                                name={formData.division_ids.includes(division.id) ? 'checkbox' : 'checkbox-outline'}
-                                                size={20}
-                                                color={formData.division_ids.includes(division.id) ? theme.colors.secondary : theme.colors.textSecondary}
-                                            />
-                                            <Text style={styles.divisionCheckboxText}>{division.name}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </KeyboardAwareScrollView>
-                            </View>
 
                             {/* Optional Fields */}
                             <View style={styles.formField}>
-                                <Text style={styles.formLabel}>Depart from Camp (optional)</Text>
+                                <Text style={styles.formLabel}>Departure Time</Text>
                                 <TouchableOpacity
                                     style={styles.formInput}
                                     onPress={() => openTimePicker('depart_from_camp')}
@@ -1715,7 +1479,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             </View>
 
                             <View style={styles.formField}>
-                                <Text style={styles.formLabel}>Depart from Activity (optional)</Text>
+                                <Text style={styles.formLabel}>Return Time</Text>
                                 <TouchableOpacity
                                     style={styles.formInput}
                                     onPress={() => openTimePicker('depart_from_activity')}
@@ -1728,17 +1492,17 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             </View>
 
                             <View style={styles.formField}>
-                                <Text style={styles.formLabel}>Location (optional)</Text>
+                                <Text style={styles.formLabel}>Destination</Text>
                                 <TextInput
                                     style={styles.formInput}
                                     value={formData.location}
                                     onChangeText={(text) => setFormData({ ...formData, location: text })}
-                                    placeholder="Location"
+                                    placeholder="Where are you going?"
                                 />
                             </View>
 
                             <View style={styles.formField}>
-                                <Text style={styles.formLabel}>Capacity (optional)</Text>
+                                    <Text style={styles.formLabel}>Capacity</Text>
                                 <View style={styles.capacityStepper}>
                                     <TextInput
                                         style={styles.capacityInput}
@@ -1748,7 +1512,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             const numericValue = text.replace(/[^0-9]/g, '');
                                             setFormData({ ...formData, capacity: numericValue });
                                         }}
-                                        placeholder="Maximum number of participants"
+                                            placeholder="Maximum number of children"
                                         keyboardType="numeric"
                                     />
                                     <View style={styles.capacityButtons}>
@@ -1777,66 +1541,16 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             </View>
 
                             <View style={styles.formField}>
-                                <Text style={styles.formLabel}>Chaperone (optional)</Text>
+                                <Text style={styles.formLabel}>Staff</Text>
                                 <TextInput
                                     style={styles.formInput}
                                     value={formData.chaperone}
                                     onChangeText={(text) => setFormData({ ...formData, chaperone: text })}
-                                    placeholder="Staff member name"
+                                    placeholder="Search staff to assign..."
                                 />
                             </View>
 
-                            <View style={styles.formField}>
-                                <Text style={styles.formLabel}>Description (optional)</Text>
-                                <TextInput
-                                    style={[styles.formInput, styles.formTextArea]}
-                                    value={formData.description}
-                                    onChangeText={(text) => setFormData({ ...formData, description: text })}
-                                    placeholder="Description"
-                                    multiline
-                                    numberOfLines={3}
-                                />
-                            </View>
-
-                            {/* Meal Options */}
-                            <View style={styles.mealOptionsSection}>
-                                <Text style={styles.mealOptionsTitle}>Meal Options</Text>
-                                {['Breakfast', 'Snack', 'Lunch', 'Dinner', 'Other'].map((meal) => (
-                                    <TouchableOpacity
-                                        key={meal}
-                                        style={styles.mealOption}
-                                        onPress={() => {
-                                            const isSelected = formData.meal_options.includes(meal);
-                                            setFormData({
-                                                ...formData,
-                                                meal_options: isSelected
-                                                    ? formData.meal_options.filter(m => m !== meal)
-                                                    : [...formData.meal_options, meal],
-                                            });
-                                        }}
-                                    >
-                                        <Ionicons
-                                            name={formData.meal_options.includes(meal) ? 'checkbox' : 'checkbox-outline'}
-                                            size={20}
-                                            color={formData.meal_options.includes(meal) ? theme.colors.secondary : theme.colors.textSecondary}
-                                        />
-                                        <Text style={styles.mealOptionText}>{meal}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                                {formData.meal_options.includes('Other') && (
-                                    <View style={styles.formField}>
-                                        <Text style={styles.formLabel}>Meal Notes</Text>
-                                        <TextInput
-                                            style={[styles.formInput, styles.formTextArea]}
-                                            value={formData.meal_notes}
-                                            onChangeText={(text) => setFormData({ ...formData, meal_notes: text })}
-                                            placeholder="e.g., Other location serves lunch"
-                                            multiline
-                                            numberOfLines={2}
-                                        />
-                                    </View>
-                                )}
-                            </View>
+                            
 
                             {/* Action Buttons */}
                             <View style={styles.modalActions}>
@@ -2928,6 +2642,12 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         marginBottom: theme.spacing.xs,
         color: theme.colors.text,
+    },
+    tripNameHelpText: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: -4,
+        marginBottom: theme.spacing.md,
     },
     formInput: {
         flexDirection: 'row',
