@@ -204,7 +204,7 @@ export const MenuScreen = ({ navigation }: any) => {
                     <View style={styles.actionButtonsContainer}>
                         <View style={styles.iconButton}>
                             <View style={styles.orangeIcon}>
-                                <Ionicons name="restaurant-outline" size={20} color="white" />
+                                <Ionicons name="calendar-outline" size={20} color="white" />
                             </View>
                         </View>
                         <TouchableOpacity
