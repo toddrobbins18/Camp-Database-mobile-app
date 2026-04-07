@@ -18,7 +18,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { useMessages, useSendMessage, useMarkMessageRead } from '../api/messages';
+import { useMessages, useSentMessages, useMessageGroups, useCreateMessageGroup, useSendMessage, useMarkMessageRead } from '../api/messages';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { MobileUserMenu } from '../components/MobileUserMenu';
@@ -35,6 +35,7 @@ export const MessagesScreen = ({ navigation }: any) => {
               : StatusBar.currentHeight ?? 0;
     const [activeView, setActiveView] = useState('inbox');
     const [showComposeModal, setShowComposeModal] = useState(false);
+    const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
     const [deliveryMethod, setDeliveryMethod] = useState('in-app');
     const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
@@ -42,6 +43,10 @@ export const MessagesScreen = ({ navigation }: any) => {
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
     const [showRecipientPreview, setShowRecipientPreview] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<any>(null);
+    const [groupName, setGroupName] = useState('');
+    const [groupDescription, setGroupDescription] = useState('');
+    const [groupSearchUsers, setGroupSearchUsers] = useState('');
+    const [selectedGroupMembers, setSelectedGroupMembers] = useState<string[]>([]);
 
     const { companyId } = useCompany();
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -50,7 +55,10 @@ export const MessagesScreen = ({ navigation }: any) => {
     }, []);
 
     const { data: messages = [], isLoading: messagesLoading } = useMessages(currentUserId);
+    const { data: sentMessages = [], isLoading: sentMessagesLoading } = useSentMessages(currentUserId);
+    const { data: messageGroups = [], isLoading: groupsLoading } = useMessageGroups(currentUserId);
     const sendMutation = useSendMessage();
+    const createGroupMutation = useCreateMessageGroup();
     const markReadMutation = useMarkMessageRead();
 
     // Fetch users (profiles) for same company only, same as web
@@ -69,9 +77,19 @@ export const MessagesScreen = ({ navigation }: any) => {
         enabled: !!companyId,
     });
     const messageCount = messages.length;
+    const sentCount = sentMessages.length;
+    const unreadCount = messages.filter((m: any) => !m.read && m.recipient_id === currentUserId).length;
 
     const handleInbox = () => {
         setActiveView('inbox');
+        setShowComposeModal(false);
+    };
+    const handleSent = () => {
+        setActiveView('sent');
+        setShowComposeModal(false);
+    };
+    const handleGroups = () => {
+        setActiveView('groups');
         setShowComposeModal(false);
     };
 
@@ -108,6 +126,13 @@ export const MessagesScreen = ({ navigation }: any) => {
         user.name.toLowerCase().includes(searchUsers.toLowerCase()) ||
         user.email.toLowerCase().includes(searchUsers.toLowerCase())
     );
+    const filteredGroupUsers = users.filter(user =>
+        user.name.toLowerCase().includes(groupSearchUsers.toLowerCase()) ||
+        user.email.toLowerCase().includes(groupSearchUsers.toLowerCase())
+    );
+
+    const activeList = activeView === 'sent' ? sentMessages : messages;
+    const activeLoading = activeView === 'sent' ? sentMessagesLoading : messagesLoading;
 
     return (
         <SafeAreaView style={styles.container}>
@@ -155,7 +180,33 @@ export const MessagesScreen = ({ navigation }: any) => {
                                 color={activeView === 'inbox' ? 'white' : theme.colors.text}
                             />
                             <Text style={[styles.inboxBtnText, activeView === 'inbox' && styles.inboxBtnTextActive]}>
-                                Inbox
+                                Inbox {unreadCount > 0 ? `(${unreadCount})` : ''}
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.composeBtn, activeView === 'sent' && styles.composeBtnActive]}
+                            onPress={handleSent}
+                        >
+                            <Ionicons
+                                name="send-outline"
+                                size={18}
+                                color={activeView === 'sent' ? 'white' : theme.colors.text}
+                            />
+                            <Text style={[styles.composeBtnText, activeView === 'sent' && styles.composeBtnTextActive]}>
+                                Sent
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.composeBtn, activeView === 'groups' && styles.composeBtnActive]}
+                            onPress={handleGroups}
+                        >
+                            <Ionicons
+                                name="people-outline"
+                                size={18}
+                                color={activeView === 'groups' ? 'white' : theme.colors.text}
+                            />
+                            <Text style={[styles.composeBtnText, activeView === 'groups' && styles.composeBtnTextActive]}>
+                                Groups
                             </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -174,33 +225,37 @@ export const MessagesScreen = ({ navigation }: any) => {
                     </View>
                 </View>
 
-                {/* Inbox View */}
-                {activeView === 'inbox' && (
+                {/* Inbox / Sent View */}
+                {(activeView === 'inbox' || activeView === 'sent') && (
                     <View style={styles.inboxContainer}>
                         {/* Messages List Card */}
                         <StyledCard style={styles.messagesListCard}>
-                            <Text style={styles.cardTitle}>Notifications & Messages</Text>
-                            <Text style={styles.messageCount}>{messageCount} total messages</Text>
-                            {messagesLoading ? (
+                            <Text style={styles.cardTitle}>{activeView === 'sent' ? 'Sent Messages' : 'Notifications & Messages'}</Text>
+                            <Text style={styles.messageCount}>{activeView === 'sent' ? sentCount : messageCount} total messages</Text>
+                            {activeLoading ? (
                                 <ActivityIndicator size="large" color={theme.colors.secondary} style={{ marginTop: 20 }} />
-                            ) : messages.length === 0 ? (
+                            ) : activeList.length === 0 ? (
                                 <View style={styles.emptyState}>
-                                    <Text style={styles.emptyText}>No messages yet</Text>
+                                    <Text style={styles.emptyText}>{activeView === 'sent' ? 'No sent messages yet' : 'No messages yet'}</Text>
                                 </View>
                             ) : (
                                 <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled>
-                                    {messages.map((msg: any) => (
+                                    {activeList.map((msg: any) => (
                                         <TouchableOpacity
                                             key={msg.id}
                                             style={[styles.messageItem, !msg.read && styles.messageUnread]}
                                             onPress={() => {
                                                 setSelectedMessage(msg);
-                                                if (!msg.read && msg.recipient_id === currentUserId) {
+                                                if (activeView === 'inbox' && !msg.read && msg.recipient_id === currentUserId) {
                                                     markReadMutation.mutate(msg.id);
                                                 }
                                             }}
                                         >
-                                            <Text style={styles.messageSender}>{msg.sender?.full_name || 'Unknown'}</Text>
+                                            <Text style={styles.messageSender}>
+                                                {activeView === 'sent'
+                                                    ? `To: ${msg.recipient?.full_name || msg.recipient?.email || 'Unknown'}`
+                                                    : `From: ${msg.sender?.full_name || msg.sender?.email || 'Unknown'}`}
+                                            </Text>
                                             <Text style={styles.messageSubject} numberOfLines={1}>{msg.subject}</Text>
                                             <Text style={styles.messageDate}>{new Date(msg.created_at).toLocaleDateString()}</Text>
                                         </TouchableOpacity>
@@ -214,7 +269,11 @@ export const MessagesScreen = ({ navigation }: any) => {
                             {selectedMessage ? (
                                 <View>
                                     <Text style={styles.selectMessageTitle}>{selectedMessage.subject}</Text>
-                                    <Text style={styles.messageSender}>From: {selectedMessage.sender?.full_name || 'Unknown'}</Text>
+                                    <Text style={styles.messageSender}>
+                                        {activeView === 'sent'
+                                            ? `To: ${selectedMessage.recipient?.full_name || selectedMessage.recipient?.email || 'Unknown'}`
+                                            : `From: ${selectedMessage.sender?.full_name || selectedMessage.sender?.email || 'Unknown'}`}
+                                    </Text>
                                     <Text style={[styles.selectMessageText, { marginTop: 12, textAlign: 'left' }]}>{selectedMessage.content}</Text>
                                 </View>
                             ) : (
@@ -227,6 +286,40 @@ export const MessagesScreen = ({ navigation }: any) => {
                             )}
                         </StyledCard>
                     </View>
+                )}
+
+                {/* Groups View */}
+                {activeView === 'groups' && (
+                    <StyledCard style={styles.contentCard}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <View>
+                                <Text style={styles.cardTitle}>Group Conversations</Text>
+                                <Text style={styles.messageCount}>{messageGroups.length} groups</Text>
+                            </View>
+                            <TouchableOpacity style={styles.sendBtn} onPress={() => setShowCreateGroupModal(true)}>
+                                <Ionicons name="add" size={18} color="white" />
+                                <Text style={styles.sendBtnText}>New Group</Text>
+                            </TouchableOpacity>
+                        </View>
+                        {groupsLoading ? (
+                            <ActivityIndicator size="large" color={theme.colors.secondary} style={{ marginTop: 20 }} />
+                        ) : messageGroups.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyText}>No groups yet. Create a group to start conversations.</Text>
+                            </View>
+                        ) : (
+                            <ScrollView style={{ marginTop: theme.spacing.md }}>
+                                {messageGroups.map((group: any) => (
+                                    <View key={group.id} style={styles.messageItem}>
+                                        <Text style={styles.messageSender}>{group.name}</Text>
+                                        {!!group.description && (
+                                            <Text style={styles.messageSubject} numberOfLines={2}>{group.description}</Text>
+                                        )}
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        )}
+                    </StyledCard>
                 )}
 
                 {/* Compose View - Show empty state when compose is active but modal not open */}
@@ -508,6 +601,102 @@ export const MessagesScreen = ({ navigation }: any) => {
                     </KeyboardAwareScrollView>
                 </View>
             </Modal>
+
+            {/* Create Group Modal */}
+            <Modal
+                visible={showCreateGroupModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowCreateGroupModal(false)}
+            >
+                <Pressable style={styles.centerModalOverlay} onPress={() => setShowCreateGroupModal(false)}>
+                    <Pressable style={[styles.contentCard, { width: '92%', maxHeight: '86%' }]} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Create Group</Text>
+                            <TouchableOpacity onPress={() => setShowCreateGroupModal(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <TextInput
+                            style={styles.textInput}
+                            placeholder="Group name"
+                            value={groupName}
+                            onChangeText={setGroupName}
+                        />
+                        <TextInput
+                            style={[styles.textArea, { minHeight: 80, marginTop: theme.spacing.sm }]}
+                            placeholder="Description (optional)"
+                            value={groupDescription}
+                            onChangeText={setGroupDescription}
+                            multiline
+                        />
+                        <Text style={[styles.fieldLabel, { marginTop: theme.spacing.md }]}>
+                            Members ({selectedGroupMembers.length} selected)
+                        </Text>
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search users..."
+                            value={groupSearchUsers}
+                            onChangeText={setGroupSearchUsers}
+                        />
+                        <ScrollView style={styles.usersList}>
+                            {filteredGroupUsers.map((user) => (
+                                <TouchableOpacity key={user.id} style={styles.userItem} onPress={() => {
+                                    setSelectedGroupMembers((prev) =>
+                                        prev.includes(user.id) ? prev.filter((id) => id !== user.id) : [...prev, user.id]
+                                    );
+                                }}>
+                                    <View style={[styles.radio, selectedGroupMembers.includes(user.id) && styles.radioSelected]}>
+                                        {selectedGroupMembers.includes(user.id) && <View style={styles.radioInner} />}
+                                    </View>
+                                    <View style={styles.userInfo}>
+                                        <Text style={styles.userName}>{user.name}</Text>
+                                        <Text style={styles.userEmail}>{user.email}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                        <View style={styles.actionButtons}>
+                            <TouchableOpacity style={styles.clearBtn} onPress={() => setShowCreateGroupModal(false)}>
+                                <Text style={styles.clearBtnText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.sendBtn}
+                                onPress={() => {
+                                    if (!groupName.trim() || !companyId || !currentUserId || selectedGroupMembers.length === 0) {
+                                        Alert.alert('Error', 'Enter group name and select at least one member.');
+                                        return;
+                                    }
+                                    createGroupMutation.mutate(
+                                        {
+                                            name: groupName,
+                                            description: groupDescription,
+                                            company_id: companyId,
+                                            created_by: currentUserId,
+                                            member_ids: selectedGroupMembers,
+                                        },
+                                        {
+                                            onSuccess: () => {
+                                                Alert.alert('Success', 'Group created.');
+                                                setGroupName('');
+                                                setGroupDescription('');
+                                                setGroupSearchUsers('');
+                                                setSelectedGroupMembers([]);
+                                                setShowCreateGroupModal(false);
+                                            },
+                                            onError: (err: any) => {
+                                                Alert.alert('Error', err?.message || 'Failed to create group');
+                                            },
+                                        }
+                                    );
+                                }}
+                            >
+                                <Text style={styles.sendBtnText}>Create Group</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -699,6 +888,13 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 8,
         elevation: 8,
+    },
+    centerModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: theme.spacing.md,
     },
     fabText: {
         fontSize: 24,
