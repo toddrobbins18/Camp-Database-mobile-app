@@ -742,9 +742,6 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                       ? 'Staff Off'
                                       : 'Free Play Shifts'}
                             </Text>
-                            <TouchableOpacity onPress={() => setShowNewModal(true)} hitSlop={8} style={styles.cardAddEntryBtn}>
-                                <Text style={styles.cardAddEntryText}>Add entry</Text>
-                            </TouchableOpacity>
                         </View>
                         <Text style={styles.cardSubtitle}>
                             {activeTab === 'OD'
