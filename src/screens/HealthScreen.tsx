@@ -779,20 +779,24 @@ export const HealthScreen = ({ navigation }: any) => {
                                                         onPress={() => setExpandedHistoryChildId(isExpanded ? null : (entity?.id || childId))}
                                                         activeOpacity={0.7}
                                                     >
-                                                        <View style={styles.historyGroupHeaderLeft}>
-                                                            <Text style={styles.historyGroupName}>{entity?.name || 'Unknown'}</Text>
-                                                            <View style={styles.camperBadge}><Text style={styles.camperBadgeText}>Camper</Text></View>
-                                                        </View>
-                                                        <Text style={styles.historyGroupDivision}>{entity?.group_name || '—'}</Text>
-                                                        <View style={styles.historyGroupMeta}>
-                                                            <View style={styles.admissionCountBadge}>
-                                                                <Text style={styles.admissionCountText}>{entityAdmissions.length} {entityAdmissions.length === 1 ? 'admission' : 'admissions'}</Text>
+                                                        <View style={styles.historyHeaderTopRow}>
+                                                            <View style={styles.historyGroupHeaderLeft}>
+                                                                <Text style={styles.historyGroupName} numberOfLines={1}>{entity?.name || 'Unknown'}</Text>
+                                                                <View style={styles.camperBadge}><Text style={styles.camperBadgeText}>Camper</Text></View>
                                                             </View>
+                                                            <View style={styles.historyHeaderRightRow}>
+                                                                <View style={styles.admissionCountBadge}>
+                                                                    <Text style={styles.admissionCountText}>{entityAdmissions.length} {entityAdmissions.length === 1 ? 'admission' : 'admissions'}</Text>
+                                                                </View>
+                                                                <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={theme.colors.textSecondary} />
+                                                            </View>
+                                                        </View>
+                                                        <View style={styles.historyHeaderBottomRow}>
+                                                            <Text style={styles.historyGroupDivision} numberOfLines={1}>{entity?.group_name || '—'}</Text>
                                                             <Text style={styles.historyLastDate}>
                                                                 Last: {entityAdmissions[0]?.admitted_at ? new Date(entityAdmissions[0].admitted_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
                                                             </Text>
                                                         </View>
-                                                        <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={theme.colors.textSecondary} />
                                                     </TouchableOpacity>
                                                     {isExpanded && (
                                                         <View style={styles.historyGroupDetails}>
@@ -2092,32 +2096,48 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     historyGroupHeader: {
+        gap: theme.spacing.xs,
+        padding: theme.spacing.md,
+        backgroundColor: theme.colors.surface,
+    },
+    historyHeaderTopRow: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: theme.spacing.md,
-        backgroundColor: theme.colors.surface,
+        gap: theme.spacing.sm,
     },
     historyGroupHeaderLeft: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: theme.spacing.sm,
         flex: 1,
+        minWidth: 0,
+    },
+    historyHeaderRightRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        flexShrink: 0,
     },
     historyGroupName: {
         ...theme.typography.h3,
         fontSize: 16,
         fontWeight: '600',
         color: theme.colors.text,
+        flexShrink: 1,
+    },
+    historyHeaderBottomRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: theme.spacing.sm,
     },
     historyGroupDivision: {
         fontSize: 12,
         color: theme.colors.textSecondary,
         marginTop: 2,
-    },
-    historyGroupMeta: {
-        alignItems: 'flex-end',
-        marginRight: theme.spacing.sm,
+        flex: 1,
+        minWidth: 0,
     },
     admissionCountBadge: {
         backgroundColor: theme.colors.secondary,
@@ -2134,6 +2154,7 @@ const styles = StyleSheet.create({
     historyLastDate: {
         fontSize: 11,
         color: theme.colors.textSecondary,
+        flexShrink: 0,
     },
     historyGroupDetails: {
         padding: theme.spacing.md,
