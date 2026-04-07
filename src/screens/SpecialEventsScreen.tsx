@@ -536,6 +536,14 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         );
     };
 
+    const applySelectedTime = () => {
+        const timeString = `${selectedTime.hour}:${selectedTime.minute.toString().padStart(2, '0')} ${selectedTime.ampm}`;
+        if (timePickerField === 'startTime') setStartTime(timeString);
+        if (timePickerField === 'endTime') setEndTime(timeString);
+        setIsTimePickerOpen(false);
+        setTimePickerField(null);
+    };
+
     const handleSelectFileOption = (option: string) => {
         console.log('Selected:', option);
         setShowUploadCSVModal(false);
@@ -987,6 +995,9 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                             </View>
                                         </View>
                                         <View style={styles.inlineTimeActions}>
+                                            <Text style={styles.timePickerBottomHint}>
+                                                Select time then tap Enter
+                                            </Text>
                                             <TouchableOpacity
                                                 style={styles.cancelButton}
                                                 onPress={() => {
@@ -997,16 +1008,10 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                                 <Text style={styles.cancelButtonText}>Cancel</Text>
                                             </TouchableOpacity>
                                             <TouchableOpacity
-                                                style={styles.submitButton}
-                                                onPress={() => {
-                                                    const timeString = `${selectedTime.hour}:${selectedTime.minute.toString().padStart(2, '0')} ${selectedTime.ampm}`;
-                                                    if (timePickerField === 'startTime') setStartTime(timeString);
-                                                    if (timePickerField === 'endTime') setEndTime(timeString);
-                                                    setIsTimePickerOpen(false);
-                                                    setTimePickerField(null);
-                                                }}
+                                                style={styles.timeEnterButton}
+                                                onPress={applySelectedTime}
                                             >
-                                                <Text style={styles.submitButtonText}>Apply</Text>
+                                                <Text style={styles.timeEnterButtonText}>Enter</Text>
                                             </TouchableOpacity>
                                         </View>
                                     </View>
@@ -1701,6 +1706,7 @@ const styles = StyleSheet.create({
     },
     modalScrollContent: {
         padding: theme.spacing.lg,
+        paddingBottom: 140,
     },
     formSection: {
         marginBottom: theme.spacing.lg,
@@ -1840,15 +1846,44 @@ const styles = StyleSheet.create({
         borderColor: theme.colors.border,
         borderRadius: theme.borderRadius.md,
         backgroundColor: theme.colors.surface,
-        paddingVertical: theme.spacing.sm,
+        paddingVertical: theme.spacing.xs,
         paddingHorizontal: theme.spacing.xs,
     },
     inlineTimeActions: {
         flexDirection: 'row',
-        justifyContent: 'flex-end',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         gap: theme.spacing.sm,
-        marginTop: theme.spacing.sm,
+        marginTop: theme.spacing.md,
         paddingHorizontal: theme.spacing.sm,
+        paddingTop: theme.spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    timePickerBottomHint: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        flex: 1,
+        marginRight: theme.spacing.sm,
+    },
+    timeEnterButton: {
+        minWidth: 110,
+        paddingHorizontal: theme.spacing.lg,
+        paddingVertical: theme.spacing.md,
+        borderRadius: 12,
+        backgroundColor: theme.colors.secondary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    timeEnterButtonText: {
+        ...theme.typography.body,
+        color: theme.colors.surface,
+        fontWeight: '700',
     },
     divisionsHeader: {
         flexDirection: 'row',
@@ -2117,7 +2152,7 @@ const styles = StyleSheet.create({
     timePickerContent: {
         flexDirection: 'row',
         paddingHorizontal: theme.spacing.sm,
-        maxHeight: 200,
+        maxHeight: 180,
         justifyContent: 'space-between',
     },
     timePickerColumn: {
@@ -2134,7 +2169,7 @@ const styles = StyleSheet.create({
     },
     timePickerScroll: {
         width: '100%',
-        maxHeight: 150,
+        maxHeight: 120,
     },
     timePickerOption: {
         paddingVertical: theme.spacing.sm,
