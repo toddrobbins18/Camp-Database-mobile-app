@@ -12,6 +12,11 @@ export interface AdminUser {
     tags?: string[];
 }
 
+export interface UserTagRow {
+    user_id: string;
+    tag: string;
+}
+
 function roleLabelFromAppRole(appRole: string): string {
     const r = String(appRole || '').toLowerCase();
     switch (r) {
@@ -401,11 +406,16 @@ export interface EmailConfig {
     lastUpdated: string;
 }
 
-export const useEmailConfigs = () => {
+export const useEmailConfigs = (companyId: string | null) => {
     return useQuery({
-        queryKey: ['emailConfigs'],
+        queryKey: ['emailConfigs', companyId],
+        enabled: !!companyId,
         queryFn: async () => {
-            const { data, error } = await supabase.from('automated_email_config').select('*');
+            if (!companyId) return [] as EmailConfig[];
+            const { data, error } = await supabase
+                .from('automated_email_config')
+                .select('*')
+                .eq('company_id', companyId);
             if (error) throw error;
             return data.map((d: any) => ({
                 id: d.id,
@@ -423,17 +433,78 @@ export const useEmailConfigs = () => {
 export const useUpdateEmailConfig = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (config: Partial<EmailConfig> & { id: string }) => {
-            const { error } = await supabase.from('automated_email_config').update({
+        mutationFn: async (config: Partial<EmailConfig> & { id: string; companyId?: string | null }) => {
+            if (!config.companyId) {
+                throw new Error('Missing company context for email config update.');
+            }
+            const { data, error } = await supabase.from('automated_email_config').update({
                 enabled: config.enabled,
                 recipient_tags: config.selectedTags,
                 send_timing: config.selectedTimings
-            }).eq('id', config.id);
+            })
+                .eq('id', config.id)
+                .eq('company_id', config.companyId)
+                .select('id');
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                throw new Error('Email config update did not match any row for this company.');
+            }
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['emailConfigs', variables.companyId ?? null] });
+        }
+    });
+};
+
+// --------- User Tags --------- //
+export const useUserTags = (companyId: string | null) => {
+    return useQuery({
+        queryKey: ['userTags', companyId],
+        enabled: !!companyId,
+        queryFn: async () => {
+            if (!companyId) return [] as UserTagRow[];
+            const { data, error } = await supabase
+                .from('user_tags')
+                .select('user_id, tag')
+                .eq('company_id', companyId);
+            if (error) throw error;
+            return (data || []) as UserTagRow[];
+        },
+    });
+};
+
+export const useAddUserTag = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ userId, tag, companyId }: { userId: string; tag: string; companyId: string }) => {
+            const { data: authData } = await supabase.auth.getUser();
+            const createdBy = authData?.user?.id ?? null;
+            const { error } = await supabase
+                .from('user_tags')
+                .insert({ user_id: userId, tag, company_id: companyId, created_by: createdBy });
             if (error) throw error;
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['emailConfigs'] });
-        }
+        onSuccess: (_, vars) => {
+            queryClient.invalidateQueries({ queryKey: ['userTags', vars.companyId] });
+        },
+    });
+};
+
+export const useRemoveUserTag = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ userId, tag, companyId }: { userId: string; tag: string; companyId: string }) => {
+            const { error } = await supabase
+                .from('user_tags')
+                .delete()
+                .eq('user_id', userId)
+                .eq('tag', tag)
+                .eq('company_id', companyId);
+            if (error) throw error;
+        },
+        onSuccess: (_, vars) => {
+            queryClient.invalidateQueries({ queryKey: ['userTags', vars.companyId] });
+        },
     });
 };
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Pressable, TextInput, Alert, ActivityIndicator, Switch, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
@@ -14,6 +14,9 @@ import {
     useEmailConfigs,
     useUpdateEmailConfig,
     useEditHistory,
+    useUserTags,
+    useAddUserTag,
+    useRemoveUserTag,
 } from '../api/admin';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
@@ -24,14 +27,17 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
     const { companyId, season, isSuperAdmin } = useCompany();
     const { data: adminUsers = [] } = useAdminUsers(companyId);
-    const { data: fetchedEmailConfigs = [] } = useEmailConfigs();
+    const { data: fetchedEmailConfigs = [] } = useEmailConfigs(companyId);
     const { data: fetchedHistory = [] } = useEditHistory();
+    const { data: userTagsRows = [] } = useUserTags(companyId);
 
     const queryClient = useQueryClient();
     const updateUserRoleMutation = useUpdateUserRole();
     const sendPasswordResetMutation = useSendPasswordReset();
     const createUserMutation = useCreateUser();
     const updateEmailConfigMutation = useUpdateEmailConfig();
+    const addUserTagMutation = useAddUserTag();
+    const removeUserTagMutation = useRemoveUserTag();
 
     const users = adminUsers as any[];
     const emailConfigs = fetchedEmailConfigs as any[];
@@ -58,25 +64,44 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
     // Tags Management State
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedFilterTag, setSelectedFilterTag] = useState('All Tags');
+    const [selectedFilterTag, setSelectedFilterTag] = useState('all');
     const [showFilterTagPicker, setShowFilterTagPicker] = useState(false);
 
     const sendTimingOptions = [
-        { value: 'When Created', label: 'When Created', description: 'Send immediately when record is created.' },
-        { value: 'When Updated', label: 'When Updated', description: 'Send immediately when record is updated.' },
-        { value: 'Day Before', label: 'Day Before', description: 'Send 24 hours before the event.' },
-        { value: 'Morning Of (8 AM)', label: 'Morning Of (8 AM)', description: 'Send at 8:00 AM on the event day.' },
-        { value: '2 Hours Before', label: '2 Hours Before', description: 'Send 2 hours before event time.' },
-        { value: '4 Hours Before', label: '4 Hours Before', description: 'Send 4 hours before event time.' },
-        { value: '1 Week Before', label: '1 Week Before', description: 'Send 7 days before the event.' },
+        { value: 'on_create', label: 'When Created', description: 'Send immediately when record is created.' },
+        { value: 'on_update', label: 'When Updated', description: 'Send immediately when record is updated.' },
+        { value: 'day_before', label: 'Day Before', description: 'Send 24 hours before the event.' },
+        { value: 'morning_of', label: 'Morning Of (8 AM)', description: 'Send at 8:00 AM on the event day.' },
+        { value: '2_hours_before', label: '2 Hours Before', description: 'Send 2 hours before event time.' },
+        { value: '4_hours_before', label: '4 Hours Before', description: 'Send 4 hours before event time.' },
+        { value: '1_week_before', label: '1 Week Before', description: 'Send 7 days before the event.' },
     ];
 
-    const emailTags = ['nurse', 'transportation', 'food service', 'specialist', 'division leader', 'director', 'general staff', 'admin staff', 'head of girls side', 'head of boys side'];
+    const emailTagOptions = [
+        { value: 'nurse', label: 'Nurse / Health Center' },
+        { value: 'transportation', label: 'Transportation' },
+        { value: 'food_service', label: 'Food Service' },
+        { value: 'specialist', label: 'Specialist' },
+        { value: 'division_leader', label: 'Division Leader' },
+        { value: 'director', label: 'Director' },
+        { value: 'general_staff', label: 'General Staff' },
+        { value: 'admin_staff', label: 'Admin Staff' },
+        { value: 'head_of_girls_side', label: 'Head of Girls Side' },
+        { value: 'head_of_boys_side', label: 'Head of Boys Side' },
+    ];
+
+    const showEmailConfigError = (err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Could not update email automation settings.';
+        Alert.alert('Update failed', message);
+    };
 
     const handleToggleEmailConfig = (id: string) => {
         const config = emailConfigs.find(c => c.id === id);
         if (config) {
-            updateEmailConfigMutation.mutate({ ...config, enabled: !config.enabled });
+            updateEmailConfigMutation.mutate(
+                { ...config, enabled: !config.enabled, companyId },
+                { onError: showEmailConfigError }
+            );
         }
     };
 
@@ -86,7 +111,10 @@ export const AdminPanelScreen = ({ navigation }: any) => {
             const selectedTimings = config.selectedTimings.includes(timing)
                 ? config.selectedTimings.filter((t: string) => t !== timing)
                 : [...config.selectedTimings, timing];
-            updateEmailConfigMutation.mutate({ ...config, selectedTimings });
+            updateEmailConfigMutation.mutate(
+                { ...config, selectedTimings, companyId },
+                { onError: showEmailConfigError }
+            );
         }
     };
 
@@ -168,19 +196,41 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         );
     };
 
-    const availableTags = [
-        'All Tags',
-        'Nurse',
-        'Transportation',
-        'Food Service',
-        'Specialist',
-        'Division Leader',
-        'Director',
-        'General Staff',
-        'Admin Staff',
-        'Head of Girls Side',
-        'Head of Boys Side'
+    const tagOptions = [
+        { value: 'nurse', label: 'Nurse' },
+        { value: 'transportation', label: 'Transportation' },
+        { value: 'food_service', label: 'Food Service' },
+        { value: 'specialist', label: 'Specialist' },
+        { value: 'division_leader', label: 'Division Leader' },
+        { value: 'director', label: 'Director' },
+        { value: 'general_staff', label: 'General Staff' },
+        { value: 'admin_staff', label: 'Admin Staff' },
+        { value: 'head_of_girls_side', label: 'Head of Girls Side' },
+        { value: 'head_of_boys_side', label: 'Head of Boys Side' },
     ];
+    const availableTags = [{ value: 'all', label: 'All Tags' }, ...tagOptions];
+
+    const tagsByUserId = useMemo(() => {
+        const map = new Map<string, string[]>();
+        (userTagsRows as any[]).forEach((row) => {
+            const uid = String(row.user_id);
+            if (!map.has(uid)) map.set(uid, []);
+            map.get(uid)!.push(String(row.tag));
+        });
+        return map;
+    }, [userTagsRows]);
+
+    const filteredTagUsers = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        return users.filter((user: any) => {
+            const tags = tagsByUserId.get(user.id) || [];
+            const matchesTag = selectedFilterTag === 'all' || tags.includes(selectedFilterTag);
+            const matchesSearch = !q
+                || String(user.name || '').toLowerCase().includes(q)
+                || String(user.email || '').toLowerCase().includes(q);
+            return matchesTag && matchesSearch;
+        });
+    }, [users, tagsByUserId, selectedFilterTag, searchQuery]);
 
     const handleRoleClick = (user: User) => {
         setSelectedUser(user);
@@ -227,8 +277,8 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         });
     };
 
-    const handleFilterTagSelect = (tag: string) => {
-        setSelectedFilterTag(tag);
+    const handleFilterTagSelect = (tagValue: string) => {
+        setSelectedFilterTag(tagValue);
         setShowFilterTagPicker(false);
     };
 
@@ -237,13 +287,20 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         setShowAddTagModal(true);
     };
 
-    const handleAddTagSelect = (tag: string) => {
-        if (userForTags) {
-            // Usually this requires a separate API call to add tags for a user.
-            // Placeholder for real logic.
-            setShowAddTagModal(false);
-            setUserForTags(null);
-        }
+    const handleAddTagSelect = (tagValue: string) => {
+        if (!userForTags || !companyId) return;
+        addUserTagMutation.mutate(
+            { userId: userForTags.id, tag: tagValue, companyId },
+            {
+                onSuccess: () => {
+                    setShowAddTagModal(false);
+                    setUserForTags(null);
+                },
+                onError: (err: any) => {
+                    Alert.alert('Failed to add tag', err?.message || 'Please try again.');
+                },
+            }
+        );
     };
 
     const renderUserManagement = () => (
@@ -334,18 +391,39 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     style={styles.filterDropdown}
                     onPress={() => setShowFilterTagPicker(true)}
                 >
-                    <Text style={styles.filterDropdownText}>{selectedFilterTag}</Text>
+                    <Text style={styles.filterDropdownText}>
+                        {availableTags.find((t) => t.value === selectedFilterTag)?.label || 'All Tags'}
+                    </Text>
                     <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
             </View>
 
             <View style={styles.usersList}>
-                {users.map((user: any) => (
+                {filteredTagUsers.map((user: any) => (
                     <View key={user.id} style={styles.userCard}>
                         <View style={styles.userInfo}>
                             <Text style={styles.userName}>{user.name}</Text>
                             <Text style={styles.userEmail}>{user.email}</Text>
-                            <Text style={styles.noTagsText}>{user.tags?.length ? user.tags.join(', ') : 'No tags'}</Text>
+                            {(tagsByUserId.get(user.id) || []).length ? (
+                                <View style={styles.tagsInlineWrap}>
+                                    {(tagsByUserId.get(user.id) || []).map((tagValue) => (
+                                        <TouchableOpacity
+                                            key={`${user.id}-${tagValue}`}
+                                            style={styles.tagPill}
+                                            onPress={() => {
+                                                if (!companyId) return;
+                                                removeUserTagMutation.mutate({ userId: user.id, tag: tagValue, companyId });
+                                            }}
+                                        >
+                                            <Text style={styles.tagPillText}>
+                                                {tagOptions.find((t) => t.value === tagValue)?.label || tagValue} ×
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            ) : (
+                                <Text style={styles.noTagsText}>No tags</Text>
+                            )}
                         </View>
 
                         <TouchableOpacity
@@ -407,15 +485,23 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                         <View style={styles.emailSection}>
                             <Text style={styles.emailSectionTitle}>Recipient Tags</Text>
                             <View style={styles.tagsGrid}>
-                                {emailTags.map((tag) => {
-                                    const isSelected = config.selectedTags.includes(tag);
+                                {emailTagOptions.map((tag) => {
+                                    const isSelected = config.selectedTags.includes(tag.value);
                                     return (
                                         <TouchableOpacity
-                                            key={tag}
+                                            key={tag.value}
                                             style={[styles.emailTag, isSelected && styles.emailTagSelected]}
-                                            onPress={() => handleTagToggle(config.id, tag)}
+                                            onPress={() => {
+                                                const selectedTags = config.selectedTags.includes(tag.value)
+                                                    ? config.selectedTags.filter((t: string) => t !== tag.value)
+                                                    : [...config.selectedTags, tag.value];
+                                                updateEmailConfigMutation.mutate(
+                                                    { ...config, selectedTags, companyId },
+                                                    { onError: showEmailConfigError }
+                                                );
+                                            }}
                                         >
-                                            <Text style={[styles.emailTagText, isSelected && styles.emailTagTextSelected]}>{tag}</Text>
+                                            <Text style={[styles.emailTagText, isSelected && styles.emailTagTextSelected]}>{tag.label}</Text>
                                         </TouchableOpacity>
                                     );
                                 })}
@@ -455,7 +541,9 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                                 <View style={styles.selectedTimingsTags}>
                                     {config.selectedTimings.map((timing) => (
                                         <View key={timing} style={styles.selectedTimingTag}>
-                                            <Text style={styles.selectedTimingTagText}>{timing}</Text>
+                                            <Text style={styles.selectedTimingTagText}>
+                                                {sendTimingOptions.find((t) => t.value === timing)?.label || timing}
+                                            </Text>
                                         </View>
                                     ))}
                                 </View>
@@ -1871,7 +1959,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                                 style={[styles.tab, currentTab === 'dataManagement' && styles.activeTab]}
                                 onPress={() => setCurrentTab('dataManagement')}
                             >
-                                <Ionicons name="database-outline" size={16} color={currentTab === 'dataManagement' ? theme.colors.text : theme.colors.textSecondary} />
+                                <Ionicons name="server-outline" size={16} color={currentTab === 'dataManagement' ? theme.colors.text : theme.colors.textSecondary} />
                                 <Text style={[styles.tabText, currentTab === 'dataManagement' && styles.activeTabText]}>Data Management</Text>
                             </TouchableOpacity>
                         </>
@@ -1978,23 +2066,23 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                         <ScrollView style={styles.bottomSheetScroll}>
                             {availableTags.map((tag) => (
                                 <TouchableOpacity
-                                    key={tag}
+                                    key={tag.value}
                                     style={[
                                         styles.bottomSheetOption,
-                                        selectedFilterTag === tag && styles.bottomSheetOptionSelected
+                                        selectedFilterTag === tag.value && styles.bottomSheetOptionSelected
                                     ]}
-                                    onPress={() => handleFilterTagSelect(tag)}
+                                    onPress={() => handleFilterTagSelect(tag.value)}
                                 >
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                                         <Ionicons name="pricetag-outline" size={20} color={theme.colors.textSecondary} />
                                         <Text style={[
                                             styles.bottomSheetOptionText,
-                                            selectedFilterTag === tag && styles.bottomSheetOptionTextSelected
+                                            selectedFilterTag === tag.value && styles.bottomSheetOptionTextSelected
                                         ]}>
-                                            {tag}
+                                            {tag.label}
                                         </Text>
                                     </View>
-                                    {selectedFilterTag === tag && (
+                                    {selectedFilterTag === tag.value && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
                                     )}
                                 </TouchableOpacity>
@@ -2017,17 +2105,17 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                             <Text style={styles.bottomSheetTitle}>Add Tag to User</Text>
                         </View>
                         <ScrollView style={styles.bottomSheetScroll}>
-                            {availableTags.filter(tag => tag !== 'All Tags').map((tag) => (
+                            {tagOptions.map((tag) => (
                                 <TouchableOpacity
-                                    key={tag}
+                                    key={tag.value}
                                     style={styles.bottomSheetOption}
-                                    onPress={() => handleAddTagSelect(tag)}
+                                    onPress={() => handleAddTagSelect(tag.value)}
                                 >
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                                         <Ionicons name="pricetag-outline" size={20} color={theme.colors.textSecondary} />
-                                        <Text style={styles.bottomSheetOptionText}>{tag}</Text>
+                                        <Text style={styles.bottomSheetOptionText}>{tag.label}</Text>
                                     </View>
-                                    {userForTags?.tags?.includes(tag) && (
+                                    {(tagsByUserId.get(userForTags?.id || '') || []).includes(tag.value) && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
                                     )}
                                 </TouchableOpacity>
@@ -2708,6 +2796,25 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: theme.colors.textSecondary,
         fontStyle: 'italic',
+    },
+    tagsInlineWrap: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginTop: 4,
+    },
+    tagPill: {
+        backgroundColor: '#eff6ff',
+        borderWidth: 1,
+        borderColor: '#bfdbfe',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 999,
+    },
+    tagPillText: {
+        fontSize: 12,
+        color: '#1e40af',
+        fontWeight: '600',
     },
     addTagDropdown: {
         flexDirection: 'row',
