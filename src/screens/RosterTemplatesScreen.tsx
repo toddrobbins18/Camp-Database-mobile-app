@@ -39,13 +39,23 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
     const isTylerHill = isTylerHillCamp(companySlug);
     const queryClient = useQueryClient();
 
-    const [showCreateModal, setShowCreateModal] = useState(false);
+    /** Create vs edit — same form as tyler-hill RosterTemplates.tsx */
+    const [formModalVisible, setFormModalVisible] = useState(false);
+    const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
     const [templateName, setTemplateName] = useState('');
     const [description, setDescription] = useState('');
     const [selectedCampers, setSelectedCampers] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('all');
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
+
+    const resetFormState = () => {
+        setTemplateName('');
+        setDescription('');
+        setSelectedCampers([]);
+        setSearchQuery('');
+        setSelectedDivision('all');
+    };
 
     // Fetch campers from Supabase
     const { data: campers = [] } = useQuery({
@@ -136,15 +146,99 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['roster_templates'] });
             Alert.alert('Success', 'Roster template created successfully');
-            setTemplateName('');
-            setDescription('');
-            setSelectedCampers([]);
-            setSearchQuery('');
-            setSelectedDivision('all');
-            setShowCreateModal(false);
+            resetFormState();
+            setFormModalVisible(false);
+            setEditingTemplate(null);
         },
         onError: (error: any) => {
             Alert.alert('Error', error.message || 'Failed to create template');
+        },
+    });
+
+    const updateTemplateMutation = useMutation({
+        mutationFn: async (payload: { templateId: string; name: string; description: string; camperIds: string[] }) => {
+            const { error: updErr } = await supabase
+                .from('roster_templates')
+                .update({
+                    name: payload.name,
+                    description: payload.description || null,
+                })
+                .eq('id', payload.templateId);
+            if (updErr) throw updErr;
+
+            const { error: delErr } = await supabase
+                .from('roster_template_children')
+                .delete()
+                .eq('template_id', payload.templateId);
+            if (delErr) throw delErr;
+
+            if (payload.camperIds.length > 0) {
+                const rows = payload.camperIds.map((childId) => ({
+                    template_id: payload.templateId,
+                    company_id: companyId,
+                    child_id: childId,
+                }));
+                const { error: insErr } = await supabase.from('roster_template_children').insert(rows);
+                if (insErr) throw insErr;
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['roster_templates'] });
+            Alert.alert('Success', 'Template updated successfully');
+            resetFormState();
+            setFormModalVisible(false);
+            setEditingTemplate(null);
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to update template');
+        },
+    });
+
+    const duplicateTemplateMutation = useMutation({
+        mutationFn: async (template: any) => {
+            const children = Array.isArray(template.roster_template_children)
+                ? template.roster_template_children
+                : [];
+            const { data: newTemplate, error } = await supabase
+                .from('roster_templates')
+                .insert({
+                    company_id: companyId,
+                    name: `${template.name} (Copy)`,
+                    description: template.description ?? null,
+                })
+                .select()
+                .single();
+            if (error) throw error;
+            if (children.length > 0 && newTemplate) {
+                const rows = children.map((c: any) => ({
+                    template_id: newTemplate.id,
+                    company_id: companyId,
+                    child_id: c.child_id,
+                }));
+                const { error: chErr } = await supabase.from('roster_template_children').insert(rows);
+                if (chErr) throw chErr;
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['roster_templates'] });
+            Alert.alert('Success', 'Template duplicated');
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to duplicate template');
+        },
+    });
+
+    const deleteTemplateMutation = useMutation({
+        mutationFn: async (templateId: string) => {
+            const { error } = await supabase.from('roster_templates').delete().eq('id', templateId);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['roster_templates'] });
+            Alert.alert('Success', 'Template deleted');
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to delete template');
         },
     });
 
@@ -181,7 +275,26 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
         setSelectedCampers([]);
     };
 
-    const handleCreateTemplate = async () => {
+    const openCreateTemplateModal = () => {
+        setEditingTemplate(null);
+        resetFormState();
+        setFormModalVisible(true);
+    };
+
+    const openEditTemplate = (template: any) => {
+        setEditingTemplate(template);
+        setTemplateName(template.name || '');
+        setDescription(template.description || '');
+        const ch = Array.isArray(template.roster_template_children)
+            ? template.roster_template_children
+            : [];
+        setSelectedCampers(ch.map((c: any) => c.child_id));
+        setSearchQuery('');
+        setSelectedDivision('all');
+        setFormModalVisible(true);
+    };
+
+    const handleSaveTemplate = async () => {
         if (!templateName.trim()) {
             Alert.alert('Validation', 'Please enter a template name');
             return;
@@ -190,21 +303,49 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
             Alert.alert('Validation', 'Please select at least one camper');
             return;
         }
-        await createTemplateMutation.mutateAsync({
-            name: templateName,
-            description,
-            camperIds: selectedCampers,
-        });
+        if (editingTemplate) {
+            await updateTemplateMutation.mutateAsync({
+                templateId: editingTemplate.id,
+                name: templateName.trim(),
+                description,
+                camperIds: selectedCampers,
+            });
+        } else {
+            await createTemplateMutation.mutateAsync({
+                name: templateName.trim(),
+                description,
+                camperIds: selectedCampers,
+            });
+        }
     };
 
-    const handleCloseModal = () => {
-        setTemplateName('');
-        setDescription('');
-        setSelectedCampers([]);
-        setSearchQuery('');
-        setSelectedDivision('all');
-        setShowCreateModal(false);
+    const handleCloseFormModal = () => {
+        resetFormState();
+        setEditingTemplate(null);
+        setFormModalVisible(false);
     };
+
+    const handleDuplicateTemplate = (template: any) => {
+        duplicateTemplateMutation.mutate(template);
+    };
+
+    const handleDeleteTemplate = (template: any) => {
+        Alert.alert(
+            'Delete Template?',
+            'This action cannot be undone. The roster template will be permanently deleted.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => deleteTemplateMutation.mutate(template.id),
+                },
+            ]
+        );
+    };
+
+    const formSubmitPending =
+        createTemplateMutation.isPending || updateTemplateMutation.isPending;
 
     if (!isTylerHill) {
         return (
@@ -250,7 +391,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                 <View style={styles.headerActions}>
                     <TouchableOpacity
                         style={styles.createButton}
-                        onPress={() => setShowCreateModal(true)}
+                        onPress={openCreateTemplateModal}
                     >
                         <Ionicons name="add" size={20} color={theme.colors.surface} />
                         <Text style={styles.createButtonText}>Create Template</Text>
@@ -275,7 +416,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                             </Text>
                             <TouchableOpacity
                                 style={styles.createFirstButton}
-                                onPress={() => setShowCreateModal(true)}
+                                onPress={openCreateTemplateModal}
                             >
                                 <Ionicons name="add" size={20} color={theme.colors.surface} />
                                 <Text style={styles.createFirstButtonText}>Create Your First Template</Text>
@@ -293,9 +434,52 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                     <View style={styles.templateCardHeader}>
                                         <View style={styles.templateHeaderText}>
                                             <Text style={styles.templateName}>{template.name}</Text>
-                                            <Text style={styles.templateDescription}>
-                                                {template.description || 'none'}
-                                            </Text>
+                                            {template.description ? (
+                                                <Text style={styles.templateDescription}>
+                                                    {template.description}
+                                                </Text>
+                                            ) : null}
+                                        </View>
+                                        <View style={styles.templateCardActions}>
+                                            <TouchableOpacity
+                                                style={styles.templateActionBtn}
+                                                onPress={() => handleDuplicateTemplate(template)}
+                                                disabled={duplicateTemplateMutation.isPending}
+                                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                accessibilityLabel="Duplicate template"
+                                            >
+                                                <Ionicons
+                                                    name="copy-outline"
+                                                    size={22}
+                                                    color={theme.colors.textSecondary}
+                                                />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.templateActionBtn}
+                                                onPress={() => openEditTemplate(template)}
+                                                disabled={formSubmitPending}
+                                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                accessibilityLabel="Edit template"
+                                            >
+                                                <Ionicons
+                                                    name="create-outline"
+                                                    size={22}
+                                                    color={theme.colors.textSecondary}
+                                                />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.templateActionBtn}
+                                                onPress={() => handleDeleteTemplate(template)}
+                                                disabled={deleteTemplateMutation.isPending}
+                                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                accessibilityLabel="Delete template"
+                                            >
+                                                <Ionicons
+                                                    name="trash-outline"
+                                                    size={22}
+                                                    color={theme.colors.danger}
+                                                />
+                                            </TouchableOpacity>
                                         </View>
                                     </View>
                                     <View style={styles.templateMetaRow}>
@@ -305,17 +489,17 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                         </Text>
                                     </View>
                                     <View style={styles.templateBadgesRow}>
-                                        {children.slice(0, 4).map((child: any, index: number) => (
+                                        {children.slice(0, 6).map((child: any, index: number) => (
                                             <View key={`${template.id}-${index}`} style={styles.templateBadge}>
                                                 <Text style={styles.templateBadgeText}>
                                                     {camperNameById.get(child.child_id) || 'Unknown'}
                                                 </Text>
                                             </View>
                                         ))}
-                                        {children.length > 4 && (
+                                        {children.length > 6 && (
                                             <View style={styles.templateBadgeOutline}>
                                                 <Text style={styles.templateBadgeOutlineText}>
-                                                    +{children.length - 4} more
+                                                    +{children.length - 6} more
                                                 </Text>
                                             </View>
                                         )}
@@ -330,20 +514,22 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                 )}
             </ScrollView>
 
-            {/* Create Roster Template Modal */}
+            {/* Create / Edit Roster Template (matches tyler-hill web dialogs) */}
             <Modal
-                visible={showCreateModal}
+                visible={formModalVisible}
                 transparent
                 animationType="slide"
-                onRequestClose={handleCloseModal}
+                onRequestClose={handleCloseFormModal}
             >
                 <View style={{ flex: 1 }}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContainer}>
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Create Roster Template</Text>
-                            <TouchableOpacity onPress={handleCloseModal} style={styles.closeButton}>
+                            <Text style={styles.modalTitle}>
+                                {editingTemplate ? 'Edit Roster Template' : 'Create Roster Template'}
+                            </Text>
+                            <TouchableOpacity onPress={handleCloseFormModal} style={styles.closeButton}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
@@ -352,6 +538,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                             style={styles.modalContent}
                             contentContainerStyle={styles.modalScrollContent}
                             showsVerticalScrollIndicator={true}
+                            keyboardShouldPersistTaps="handled"
                         >
                             {/* Template Name */}
                             <View style={styles.formSection}>
@@ -436,15 +623,18 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                     </TouchableOpacity>
                                 </View>
 
-                                {/* Campers List */}
-                                <View style={[styles.campersListContainer, showDivisionDropdown && styles.campersListSectionWithDropdown]}>
-                                    <FlatList
-                                        data={filteredCampers}
-                                        keyExtractor={(item) => item.id}
-                                        renderItem={({ item }) => {
+                                {/* Campers list: map (not FlatList) — avoids VirtualizedList inside ScrollView */}
+                                <View style={styles.campersListContainer}>
+                                    {filteredCampers.length === 0 ? (
+                                        <Text style={styles.emptyCampersHint}>
+                                            No campers match your search or filters.
+                                        </Text>
+                                    ) : (
+                                        filteredCampers.map((item) => {
                                             const isSelected = selectedCampers.includes(item.id);
                                             return (
                                                 <TouchableOpacity
+                                                    key={item.id}
                                                     style={styles.camperItem}
                                                     onPress={() => handleSelectCamper(item.id)}
                                                 >
@@ -476,10 +666,8 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                                                     </View>
                                                 </TouchableOpacity>
                                             );
-                                        }}
-                                        nestedScrollEnabled={true}
-                                        scrollEnabled={true}
-                                    />
+                                        })
+                                    )}
                                 </View>
                             </View>
                         </ScrollView>
@@ -488,19 +676,28 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                         <View style={styles.modalFooter}>
                             <TouchableOpacity
                                 style={styles.cancelButton}
-                                onPress={handleCloseModal}
+                                onPress={handleCloseFormModal}
                             >
                                 <Text style={styles.cancelButtonText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[
                                     styles.submitButton,
-                                    !templateName && styles.submitButtonDisabled,
+                                    (!templateName.trim() ||
+                                        selectedCampers.length === 0 ||
+                                        formSubmitPending) &&
+                                        styles.submitButtonDisabled,
                                 ]}
-                                onPress={handleCreateTemplate}
-                                disabled={!templateName}
+                                onPress={handleSaveTemplate}
+                                disabled={
+                                    !templateName.trim() ||
+                                    selectedCampers.length === 0 ||
+                                    formSubmitPending
+                                }
                             >
-                                <Text style={styles.submitButtonText}>Create Template</Text>
+                                <Text style={styles.submitButtonText}>
+                                    {editingTemplate ? 'Save Changes' : 'Create Template'}
+                                </Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -645,9 +842,20 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
+        gap: theme.spacing.sm,
     },
     templateHeaderText: {
         flex: 1,
+        minWidth: 0,
+    },
+    templateCardActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        flexShrink: 0,
+    },
+    templateActionBtn: {
+        padding: theme.spacing.xs,
     },
     templateName: {
         ...theme.typography.h3,
@@ -756,9 +964,12 @@ const styles = StyleSheet.create({
     modalContainer: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.xl,
-        width: '90%',
+        width: '92%',
         maxWidth: 600,
-        maxHeight: '90%',
+        height: '88%',
+        maxHeight: '92%',
+        overflow: 'hidden',
+        flexDirection: 'column',
         ...theme.shadows.card,
     },
     modalHeader: {
@@ -777,6 +988,7 @@ const styles = StyleSheet.create({
     },
     modalContent: {
         flex: 1,
+        minHeight: 0,
     },
     modalScrollContent: {
         padding: theme.spacing.lg,
@@ -894,9 +1106,6 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 8,
     },
-    campersListSectionWithDropdown: {
-        marginTop: 320,
-    },
     divisionDropdownItem: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -923,8 +1132,14 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: theme.colors.border,
         borderRadius: theme.borderRadius.md,
-        maxHeight: 300,
         marginTop: theme.spacing.sm,
+        overflow: 'hidden',
+    },
+    emptyCampersHint: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        padding: theme.spacing.md,
+        textAlign: 'center',
     },
     camperItem: {
         flexDirection: 'row',
