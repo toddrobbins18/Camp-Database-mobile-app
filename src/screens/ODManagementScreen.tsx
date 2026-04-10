@@ -213,35 +213,27 @@ export const ODManagementScreen = ({ navigation }: any) => {
         },
     });
 
-    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
-    const [itemToDelete, setItemToDelete] = useState<{ id: string } | null>(null);
-    const [isDeleting, setIsDeleting] = useState(false);
-
-    const handleConfirmDelete = async () => {
-        if (!itemToDelete || !companyId || !season) return;
-        setIsDeleting(true);
-        console.log('[DELETE] Starting delete for:', itemToDelete.id);
+    /** Bunk delete — use native Alert (nested RN Modals often fail to show/touch when Manage Bunks modal is open). */
+    const performBunkDelete = async (bunkId: string) => {
+        if (!companyId || !season) return;
         try {
-            // Remove active staff assignments for this bunk first.
             const { error: unassignErr } = await supabase
                 .from('bunk_staff')
                 .delete()
                 .eq('company_id', companyId)
                 .eq('season', season)
-                .eq('bunk_id', itemToDelete.id);
+                .eq('bunk_id', bunkId);
             if (unassignErr) throw unassignErr;
 
-            // Soft delete bunk to avoid FK/history constraint issues.
-            const { error: archiveErr, status, statusText } = await supabase
+            const { error: archiveErr } = await supabase
                 .from('bunks')
                 .update({ is_active: false })
-                .eq('id', itemToDelete.id)
+                .eq('id', bunkId)
                 .eq('company_id', companyId)
                 .eq('season', season);
-            console.log('[DELETE] Response:', { archiveErr, status, statusText });
             if (archiveErr) throw archiveErr;
 
-            if (selectedBunkForStaff === itemToDelete.id) {
+            if (selectedBunkForStaff === bunkId) {
                 setSelectedBunkForStaff(null);
                 setSelectedStaffToAdd('');
                 setShowStaffPickerForBunk(null);
@@ -254,11 +246,25 @@ export const ODManagementScreen = ({ navigation }: any) => {
         } catch (err: any) {
             console.error('[DELETE] Error:', err);
             Alert.alert('Delete failed', err.message || 'Unknown error');
-        } finally {
-            setIsDeleting(false);
-            setIsDeleteConfirmVisible(false);
-            setItemToDelete(null);
         }
+    };
+
+    const handleDeleteBunk = (bunkId: string, displayName: string) => {
+        const label = displayName?.trim() || 'this bunk';
+        Alert.alert(
+            'Delete bunk?',
+            `Remove "${label}" and unassign all staff from this bunk? This cannot be undone.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => {
+                        void performBunkDelete(bunkId);
+                    },
+                },
+            ]
+        );
     };
 
     const assignStaffToBunkMutation = useMutation({
@@ -400,11 +406,6 @@ export const ODManagementScreen = ({ navigation }: any) => {
             return prev;
         });
     }, [showManageBunksModal, bunksList]);
-
-    const handleDeleteBunk = (bunkId: string, _displayName: string) => {
-        setItemToDelete({ id: bunkId });
-        setIsDeleteConfirmVisible(true);
-    };
 
     const handleUploadBunkCsv = async () => {
         if (!companyId || !season) {
@@ -1087,7 +1088,9 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                                     <Text style={styles.bunkAssignCardTitle}>Bunk #{b.bunk_number}</Text>
                                                     <TouchableOpacity
                                                         onPress={() => handleDeleteBunk(b.id, b.bunk_name || `Bunk ${b.bunk_number}`)}
-                                                        hitSlop={8}
+                                                        hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel={`Delete bunk ${b.bunk_number}`}
                                                     >
                                                         <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
                                                     </TouchableOpacity>
@@ -1278,7 +1281,9 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                                     <View style={[styles.bunkColAct, styles.bunkActCell]}>
                                                         <TouchableOpacity
                                                             onPress={() => handleDeleteBunk(b.id, b.bunk_name || `Bunk ${b.bunk_number}`)}
-                                                            hitSlop={8}
+                                                            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={`Delete bunk ${b.bunk_number}`}
                                                         >
                                                             <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
                                                         </TouchableOpacity>
@@ -1514,58 +1519,6 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                 )}
                             </TouchableOpacity>
                         </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            <Modal
-                visible={isDeleteConfirmVisible}
-                transparent
-                animationType="fade"
-                onRequestClose={() => {
-                    if (!isDeleting) {
-                        setIsDeleteConfirmVisible(false);
-                        setItemToDelete(null);
-                    }
-                }}
-            >
-                <Pressable
-                    style={styles.deleteModalOverlay}
-                    onPress={() => {
-                        if (!isDeleting) {
-                            setIsDeleteConfirmVisible(false);
-                            setItemToDelete(null);
-                        }
-                    }}
-                >
-                    <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
-                        <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
-                        <Text style={styles.deleteModalMessage}>Are you sure? This cannot be undone.</Text>
-                        <View style={styles.deleteModalActions}>
-                            <TouchableOpacity
-                                style={styles.deleteModalCancelBtn}
-                                onPress={() => {
-                                    if (!isDeleting) {
-                                        setIsDeleteConfirmVisible(false);
-                                        setItemToDelete(null);
-                                    }
-                                }}
-                                disabled={isDeleting}
-                            >
-                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]}
-                                onPress={handleConfirmDelete}
-                                disabled={isDeleting}
-                            >
-                                {isDeleting ? (
-                                    <ActivityIndicator size="small" color="#fff" />
-                                ) : (
-                                    <Text style={styles.deleteModalConfirmText}>Delete</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -2632,66 +2585,6 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.text,
-    },
-    deleteModalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-    deleteModalContent: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 24,
-        width: '100%',
-        maxWidth: 340,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    deleteModalTitle: {
-        ...theme.typography.h3,
-        fontSize: 18,
-        fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: 12,
-    },
-    deleteModalMessage: {
-        ...theme.typography.body,
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-        lineHeight: 20,
-        marginBottom: 24,
-    },
-    deleteModalActions: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 12,
-    },
-    deleteModalCancelBtn: {
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-        backgroundColor: '#f3f4f6',
-    },
-    deleteModalCancelText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: theme.colors.text,
-    },
-    deleteModalConfirmBtn: {
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-        backgroundColor: theme.colors.secondary,
-        minWidth: 88,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    deleteModalConfirmText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#fff',
     },
 });
 
