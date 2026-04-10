@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator, useWindowDimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator, useWindowDimensions, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScrollView as GHScrollView, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
@@ -54,8 +56,10 @@ export const ODManagementScreen = ({ navigation }: any) => {
     /** Same as web ODManagement.tsx — Free Play hidden for Tyler Hill */
     const showFreePlay = !isTylerHillCamp(companySlug);
     const queryClient = useQueryClient();
-    const { width } = useWindowDimensions();
+    const { width, height: windowHeight } = useWindowDimensions();
+    const insets = useSafeAreaInsets();
     const isCompactModal = width < 560;
+    const bunkModalMaxHeight = Math.round(windowHeight * 0.9);
 
     const [activeTab, setActiveTab] = useState<'OD' | 'OFF' | 'FREE_PLAY'>('OD');
     const [selectedDate, setSelectedDate] = useState(new Date());
@@ -67,7 +71,8 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [newBunkNumber, setNewBunkNumber] = useState('1');
     const [newBunkName, setNewBunkName] = useState('');
-    const [newBunkDivision, setNewBunkDivision] = useState<string | null>(null);
+    /** Matches web BunkManagement: "none" = no division */
+    const [newBunkDivision, setNewBunkDivision] = useState<string>('none');
     const [newEntryStaffId, setNewEntryStaffId] = useState<string | null>(null);
     const [newEntrySleepingOut, setNewEntrySleepingOut] = useState(false);
     const [selectedBunkForStaff, setSelectedBunkForStaff] = useState<string | null>(null);
@@ -185,13 +190,19 @@ export const ODManagementScreen = ({ navigation }: any) => {
         mutationFn: async ({ bunkNumber, bunkName }: { bunkNumber: number; bunkName: string }) => {
             const { error } = await supabase
                 .from('bunks')
-                .insert([{ company_id: companyId, season, bunk_number: bunkNumber, bunk_name: bunkName || null, division_id: newBunkDivision }]);
+                .insert([{
+                    company_id: companyId,
+                    season,
+                    bunk_number: bunkNumber,
+                    bunk_name: bunkName || null,
+                    division_id: newBunkDivision === 'none' ? null : newBunkDivision,
+                }]);
             if (error) throw error;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bunks'] });
             setNewBunkName('');
-            setNewBunkDivision(null);
+            setNewBunkDivision('none');
         },
         onError: (error: any) => {
             if (error?.code === '23505') {
@@ -262,9 +273,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
             await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
             await queryClient.invalidateQueries({ queryKey: ['staff'] });
             setSelectedStaffToAdd('');
-            setSelectedBunkForStaff(null);
             setShowStaffPickerForBunk(null);
-            Alert.alert('Saved', 'Staff assigned to bunk');
         },
         onError: (error: any) => {
             Alert.alert('Error', error.message || 'Failed to assign staff');
@@ -359,7 +368,15 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const handleManageBunks = () => {
         setBunkModalTab('manage');
         setCsvUploadResult(null);
+        setShowDivisionPickerModal(false);
+        setShowStaffPickerForBunk(null);
         setShowManageBunksModal(true);
+    };
+
+    const closeManageBunksModal = () => {
+        setShowManageBunksModal(false);
+        setShowDivisionPickerModal(false);
+        setShowStaffPickerForBunk(null);
     };
 
     const handleAddBunk = () => {
@@ -915,17 +932,45 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 visible={showManageBunksModal}
                 transparent={true}
                 animationType="fade"
-                onRequestClose={() => setShowManageBunksModal(false)}
+                onRequestClose={closeManageBunksModal}
             >
-                <Pressable style={styles.modalOverlayCenter} onPress={() => setShowManageBunksModal(false)}>
-                    <Pressable style={styles.bunkModal} onPress={(e) => e.stopPropagation()}>
+                <View style={styles.modalOverlayCenter}>
+                    <Pressable
+                        style={StyleSheet.absoluteFillObject}
+                        onPress={closeManageBunksModal}
+                        accessibilityRole="button"
+                        accessibilityLabel="Close bunk management"
+                    />
+                    <View
+                        style={[
+                            styles.bunkModal,
+                            {
+                                height: bunkModalMaxHeight,
+                                maxHeight: bunkModalMaxHeight,
+                                zIndex: 2,
+                                elevation: 8,
+                            },
+                        ]}
+                    >
+                        <GestureHandlerRootView style={styles.bunkModalGestureRoot}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Bunk Management</Text>
-                            <TouchableOpacity onPress={() => setShowManageBunksModal(false)}>
+                            <TouchableOpacity onPress={closeManageBunksModal}>
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
-                        <View style={styles.modalContent}>
+                        <View style={styles.bunkModalBody}>
+                        <GHScrollView
+                            style={styles.bunkModalScroll}
+                            contentContainerStyle={[
+                                styles.bunkModalScrollContent,
+                                { paddingBottom: 20 + insets.bottom },
+                            ]}
+                            nestedScrollEnabled
+                            keyboardShouldPersistTaps="handled"
+                            showsVerticalScrollIndicator
+                            bounces
+                        >
                             <Text style={styles.modalSubtitle}>Configure bunks and assign staff members to each bunk</Text>
                             <View style={[styles.bunkTabs, isCompactModal && styles.bunkTabsCompact]}>
                                 <TouchableOpacity style={[styles.bunkTab, bunkModalTab === 'manage' && styles.bunkTabActive]} onPress={() => setBunkModalTab('manage')}>
@@ -942,18 +987,18 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                 {isCompactModal ? (
                                     <View style={styles.addBunkRowCompact}>
                                         <View style={styles.addBunkFieldCompact}>
-                                            <Text style={styles.formLabel}>Bunk Number</Text>
+                                            <Text style={styles.bunkFormLabel}>Bunk Number</Text>
                                             <TextInput
-                                                style={styles.bankInput}
+                                                style={styles.bunkFormInput}
                                                 keyboardType="number-pad"
                                                 value={newBunkNumber}
                                                 onChangeText={setNewBunkNumber}
                                             />
                                         </View>
                                         <View style={styles.addBunkFieldCompact}>
-                                            <Text style={styles.formLabel}>Bunk Name (optional)</Text>
+                                            <Text style={styles.bunkFormLabel}>Bunk Name (optional)</Text>
                                             <TextInput
-                                                style={styles.bankInput}
+                                                style={styles.bunkFormInput}
                                                 placeholder="e.g., Bunk A, Senior Boys 1"
                                                 placeholderTextColor={theme.colors.textSecondary}
                                                 value={newBunkName}
@@ -962,10 +1007,12 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                             />
                                         </View>
                                         <View style={styles.addBunkFieldCompact}>
-                                            <Text style={styles.formLabel}>Division (optional)</Text>
-                                            <TouchableOpacity style={[styles.bankInput, styles.selectInput]} onPress={() => setShowDivisionPickerModal(true)}>
-                                                <Text style={styles.selectInputText}>
-                                                    {newBunkDivision ? ((divisionsList.find((d: any) => d.id === newBunkDivision)?.name) || 'None') : 'None'}
+                                            <Text style={styles.bunkFormLabel}>Division (optional)</Text>
+                                            <TouchableOpacity style={[styles.bunkFormInput, styles.selectInput]} onPress={() => setShowDivisionPickerModal(true)}>
+                                                <Text style={styles.selectInputText} numberOfLines={1}>
+                                                    {newBunkDivision === 'none'
+                                                        ? 'None'
+                                                        : (divisionsList.find((d: any) => d.id === newBunkDivision)?.name || 'None')}
                                                 </Text>
                                                 <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                                             </TouchableOpacity>
@@ -984,18 +1031,18 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                 ) : (
                                     <View style={styles.addBunkRow}>
                                         <View style={[styles.addBunkField, { maxWidth: 130 }]}>
-                                            <Text style={styles.formLabel}>Bunk Number</Text>
+                                            <Text style={styles.bunkFormLabel}>Bunk Number</Text>
                                             <TextInput
-                                                style={styles.bankInput}
+                                                style={styles.bunkFormInput}
                                                 keyboardType="number-pad"
                                                 value={newBunkNumber}
                                                 onChangeText={setNewBunkNumber}
                                             />
                                         </View>
                                         <View style={styles.addBunkField}>
-                                            <Text style={styles.formLabel}>Bunk Name (optional)</Text>
+                                            <Text style={styles.bunkFormLabel}>Bunk Name (optional)</Text>
                                             <TextInput
-                                                style={styles.bankInput}
+                                                style={styles.bunkFormInput}
                                                 placeholder="e.g., Bunk A, Senior Boys 1"
                                                 placeholderTextColor={theme.colors.textSecondary}
                                                 value={newBunkName}
@@ -1004,10 +1051,12 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                             />
                                         </View>
                                         <View style={styles.addBunkField}>
-                                            <Text style={styles.formLabel}>Division (optional)</Text>
-                                            <TouchableOpacity style={[styles.bankInput, styles.selectInput]} onPress={() => setShowDivisionPickerModal(true)}>
-                                                <Text style={styles.selectInputText}>
-                                                    {newBunkDivision ? ((divisionsList.find((d: any) => d.id === newBunkDivision)?.name) || 'None') : 'None'}
+                                            <Text style={styles.bunkFormLabel}>Division (optional)</Text>
+                                            <TouchableOpacity style={[styles.bunkFormInput, styles.selectInput]} onPress={() => setShowDivisionPickerModal(true)}>
+                                                <Text style={styles.selectInputText} numberOfLines={1}>
+                                                    {newBunkDivision === 'none'
+                                                        ? 'None'
+                                                        : (divisionsList.find((d: any) => d.id === newBunkDivision)?.name || 'None')}
                                                 </Text>
                                                 <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                                             </TouchableOpacity>
@@ -1026,57 +1075,47 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                 )}
                             </View>
 
-                            <ScrollView
-                                style={[styles.bunksScrollList, isCompactModal && styles.bunksScrollListCompact]}
-                                contentContainerStyle={styles.bunksScrollContent}
-                                showsVerticalScrollIndicator
-                            >
-                                {!isCompactModal ? (
-                                    <View style={styles.bunkTableHeader}>
-                                        <Text style={[styles.tableHeader, { flex: 0.6 }]}>Bunk #</Text>
-                                        <Text style={[styles.tableHeader, { flex: 1.1 }]}>Name</Text>
-                                        <Text style={[styles.tableHeader, { flex: 1 }]}>Division</Text>
-                                        <Text style={[styles.tableHeader, { flex: 1.9 }]}>Assigned Staff</Text>
-                                        <Text style={[styles.tableHeader, { flex: 0.6, textAlign: 'center' }]}>Actions</Text>
-                                    </View>
-                                ) : null}
-                                {bunksList.map((b) => {
-                                    const assigned = bunkStaffList.filter((bs) => bs.bunk_id === b.id);
-                                    const divisionName = b.division_id ? ((divisionsList.find((d: any) => d.id === b.division_id)?.name) || '-') : '-';
-                                    return (
-                                        <View key={b.id} style={[styles.bunkTableRow, isCompactModal && styles.bunkCard]}>
-                                            {isCompactModal ? (
-                                                <View style={styles.bunkCardTop}>
-                                                    <Text style={styles.bunkCardTitle}>Bunk #{b.bunk_number}</Text>
-                                                    <TouchableOpacity onPress={() => handleDeleteBunk(b.id, b.bunk_name || `Bunk ${b.bunk_number}`)}>
+                            {isCompactModal ? (
+                                <View style={styles.bunkAssignCardList}>
+                                    {bunksList.map((b) => {
+                                        const assigned = bunkStaffList.filter((bs) => bs.bunk_id === b.id);
+                                        const division = b.division_id ? divisionsList.find((d: any) => d.id === b.division_id) : null;
+                                        const divisionName = division?.name || '-';
+                                        return (
+                                            <View key={b.id} style={styles.bunkAssignCard}>
+                                                <View style={styles.bunkAssignCardHeader}>
+                                                    <Text style={styles.bunkAssignCardTitle}>Bunk #{b.bunk_number}</Text>
+                                                    <TouchableOpacity
+                                                        onPress={() => handleDeleteBunk(b.id, b.bunk_name || `Bunk ${b.bunk_number}`)}
+                                                        hitSlop={8}
+                                                    >
                                                         <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
                                                     </TouchableOpacity>
                                                 </View>
-                                            ) : (
-                                                <>
-                                                    <Text style={[styles.staffCell, { flex: 0.6 }]}>{b.bunk_number}</Text>
-                                                    <Text style={[styles.staffCell, { flex: 1.1 }]}>{b.bunk_name || '-'}</Text>
-                                                    <Text style={[styles.staffCell, { flex: 1 }]}>{divisionName}</Text>
-                                                </>
-                                            )}
-                                            <View style={isCompactModal ? { marginTop: 8 } : { flex: 1.9 }}>
-                                                {isCompactModal && (
-                                                    <View style={styles.bunkMetaBlock}>
-                                                        <View style={styles.bunkMetaLine}>
-                                                            <Text style={styles.bunkMetaLabel}>Name: </Text>
-                                                            <Text style={styles.bunkMetaValue}>{b.bunk_name || '-'}</Text>
+                                                <Text style={styles.bunkAssignMetaLine}>
+                                                    <Text style={styles.bunkAssignMetaLabel}>Name: </Text>
+                                                    <Text style={styles.bunkAssignMetaValue}>{b.bunk_name || '—'}</Text>
+                                                </Text>
+                                                <View style={styles.bunkAssignDivisionRow}>
+                                                    <Text style={styles.bunkAssignMetaLabel}>Division: </Text>
+                                                    {division ? (
+                                                        <View style={styles.divisionBadge}>
+                                                            <Text style={styles.divisionBadgeText} numberOfLines={2}>
+                                                                {divisionName}
+                                                            </Text>
                                                         </View>
-                                                        <View style={styles.bunkMetaLine}>
-                                                            <Text style={styles.bunkMetaLabel}>Division: </Text>
-                                                            <Text style={styles.bunkMetaValue}>{divisionName}</Text>
-                                                        </View>
-                                                    </View>
-                                                )}
+                                                    ) : (
+                                                        <Text style={styles.bunkTableCellMuted}>—</Text>
+                                                    )}
+                                                </View>
+                                                <Text style={styles.bunkAssignSectionLabel}>Assigned Staff</Text>
                                                 <View style={styles.assignedStaffRow}>
                                                     {assigned.map((bs) => (
-                                                        <View key={bs.id} style={styles.staffChip}>
-                                                            <Text style={styles.staffChipText} numberOfLines={1}>{bs.staff?.name || 'Unknown'}</Text>
-                                                            <TouchableOpacity onPress={() => removeStaffFromBunkMutation.mutate(bs.id)}>
+                                                        <View key={bs.id} style={styles.staffChipOutline}>
+                                                            <Text style={styles.staffChipOutlineText} numberOfLines={1}>
+                                                                {bs.staff?.name || 'Unknown'}
+                                                            </Text>
+                                                            <TouchableOpacity onPress={() => removeStaffFromBunkMutation.mutate(bs.id)} hitSlop={6}>
                                                                 <Ionicons name="close" size={14} color={theme.colors.textSecondary} />
                                                             </TouchableOpacity>
                                                         </View>
@@ -1085,62 +1124,176 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                                         style={styles.iconAddStaffBtn}
                                                         onPress={() => {
                                                             setSelectedBunkForStaff(b.id);
-                                                            setShowStaffPickerForBunk(b.id);
+                                                            setSelectedStaffToAdd('');
                                                         }}
+                                                        hitSlop={6}
                                                     >
-                                                        <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
-                                                        {isCompactModal ? <Text style={styles.iconAddStaffText}>Add Staff</Text> : null}
+                                                        <Ionicons name="person-add-outline" size={18} color={theme.colors.text} />
                                                     </TouchableOpacity>
                                                 </View>
-                                                {selectedBunkForStaff === b.id && (
-                                                    <View style={[styles.assignStaffRow, isCompactModal && styles.assignStaffRowCompact]}>
+                                                {selectedBunkForStaff === b.id ? (
+                                                    <View style={styles.bunkAssignEditBlock}>
                                                         <TouchableOpacity
-                                                            style={[styles.bankInput, styles.selectInput, { flex: 1 }]}
+                                                            style={[styles.bunkFormInput, styles.selectInput, styles.bunkAssignSelectFull]}
                                                             onPress={() => setShowStaffPickerForBunk(b.id)}
                                                         >
-                                                            <Text style={styles.selectInputText}>
+                                                            <Text style={[styles.selectInputText, { flex: 1 }]} numberOfLines={1}>
                                                                 {selectedStaffToAdd
-                                                                    ? ((staffList || []).find((s: any) => s.id === selectedStaffToAdd)?.name || 'Select staff...')
+                                                                    ? ((staffList || []).find((s: any) => s.id === selectedStaffToAdd)?.name ||
+                                                                          'Select staff...')
                                                                     : 'Select staff...'}
                                                             </Text>
                                                             <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                                                         </TouchableOpacity>
+                                                        <View style={styles.bunkAssignBtnRow}>
+                                                            <TouchableOpacity
+                                                                style={[styles.smallActionBtn, styles.bunkAssignBtnHalf, !selectedStaffToAdd && { opacity: 0.6 }]}
+                                                                disabled={!selectedStaffToAdd}
+                                                                onPress={() =>
+                                                                    assignStaffToBunkMutation.mutate({ bunkId: b.id, staffId: selectedStaffToAdd })
+                                                                }
+                                                            >
+                                                                <Text style={styles.smallActionBtnText}>Add</Text>
+                                                            </TouchableOpacity>
+                                                            <TouchableOpacity
+                                                                style={[styles.smallActionBtn, styles.bunkAssignBtnHalf, { backgroundColor: '#e5e7eb' }]}
+                                                                onPress={() => {
+                                                                    setSelectedBunkForStaff(null);
+                                                                    setSelectedStaffToAdd('');
+                                                                    setShowStaffPickerForBunk(null);
+                                                                }}
+                                                            >
+                                                                <Text style={[styles.smallActionBtnText, { color: theme.colors.text }]}>Cancel</Text>
+                                                            </TouchableOpacity>
+                                                        </View>
+                                                    </View>
+                                                ) : null}
+                                            </View>
+                                        );
+                                    })}
+                                    {bunksList.length === 0 ? (
+                                        <View style={styles.bunkEmptyRowCompact}>
+                                            <Text style={styles.bunkEmptyText}>No bunks configured yet. Add your first bunk above.</Text>
+                                        </View>
+                                    ) : null}
+                                </View>
+                            ) : (
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator
+                                    style={styles.bunksHScroll}
+                                    nestedScrollEnabled
+                                    keyboardShouldPersistTaps="handled"
+                                >
+                                    <View style={styles.bunkTableSheet}>
+                                        <View style={styles.bunkTableHeaderRow}>
+                                            <Text style={[styles.bunkTableHeadCell, styles.bunkColNum]}>Bunk #</Text>
+                                            <Text style={[styles.bunkTableHeadCell, styles.bunkColName]}>Name</Text>
+                                            <Text style={[styles.bunkTableHeadCell, styles.bunkColDiv]}>Division</Text>
+                                            <Text style={[styles.bunkTableHeadCell, styles.bunkColStaff]}>Assigned Staff</Text>
+                                            <Text style={[styles.bunkTableHeadCell, styles.bunkColAct]}>Actions</Text>
+                                        </View>
+                                        {bunksList.map((b) => {
+                                            const assigned = bunkStaffList.filter((bs) => bs.bunk_id === b.id);
+                                            const division = b.division_id ? divisionsList.find((d: any) => d.id === b.division_id) : null;
+                                            const divisionName = division?.name || '-';
+                                            return (
+                                                <View key={b.id} style={styles.bunkTableDataRow}>
+                                                    <Text style={[styles.bunkTableCell, styles.bunkColNum, styles.bunkTableCellStrong]}>{b.bunk_number}</Text>
+                                                    <Text style={[styles.bunkTableCell, styles.bunkColName]} numberOfLines={2}>
+                                                        {b.bunk_name || '-'}
+                                                    </Text>
+                                                    <View style={[styles.bunkColDiv, styles.bunkColDivWrap]}>
+                                                        {division ? (
+                                                            <View style={styles.divisionBadge}>
+                                                                <Text style={styles.divisionBadgeText} numberOfLines={1}>
+                                                                    {divisionName}
+                                                                </Text>
+                                                            </View>
+                                                        ) : (
+                                                            <Text style={styles.bunkTableCellMuted}>-</Text>
+                                                        )}
+                                                    </View>
+                                                    <View style={[styles.bunkColStaff, styles.bunkStaffCellWide]}>
+                                                        <View style={styles.assignedStaffRow}>
+                                                            {assigned.map((bs) => (
+                                                                <View key={bs.id} style={styles.staffChipOutline}>
+                                                                    <Text style={styles.staffChipOutlineText} numberOfLines={1}>
+                                                                        {bs.staff?.name || 'Unknown'}
+                                                                    </Text>
+                                                                    <TouchableOpacity onPress={() => removeStaffFromBunkMutation.mutate(bs.id)} hitSlop={6}>
+                                                                        <Ionicons name="close" size={14} color={theme.colors.textSecondary} />
+                                                                    </TouchableOpacity>
+                                                                </View>
+                                                            ))}
+                                                            <TouchableOpacity
+                                                                style={styles.iconAddStaffBtn}
+                                                                onPress={() => {
+                                                                    setSelectedBunkForStaff(b.id);
+                                                                    setSelectedStaffToAdd('');
+                                                                }}
+                                                                hitSlop={6}
+                                                            >
+                                                                <Ionicons name="person-add-outline" size={18} color={theme.colors.text} />
+                                                            </TouchableOpacity>
+                                                        </View>
+                                                        {selectedBunkForStaff === b.id ? (
+                                                            <View style={styles.assignStaffStack}>
+                                                                <TouchableOpacity
+                                                                    style={[styles.bunkFormInput, styles.selectInput, styles.assignStaffSelectWide]}
+                                                                    onPress={() => setShowStaffPickerForBunk(b.id)}
+                                                                >
+                                                                    <Text style={[styles.selectInputText, { flex: 1 }]} numberOfLines={1}>
+                                                                        {selectedStaffToAdd
+                                                                            ? ((staffList || []).find((s: any) => s.id === selectedStaffToAdd)?.name ||
+                                                                                  'Select staff...')
+                                                                            : 'Select staff...'}
+                                                                    </Text>
+                                                                    <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                                                                </TouchableOpacity>
+                                                                <View style={styles.assignStaffBtnRow}>
+                                                                    <TouchableOpacity
+                                                                        style={[styles.smallActionBtn, !selectedStaffToAdd && { opacity: 0.6 }]}
+                                                                        disabled={!selectedStaffToAdd}
+                                                                        onPress={() =>
+                                                                            assignStaffToBunkMutation.mutate({ bunkId: b.id, staffId: selectedStaffToAdd })
+                                                                        }
+                                                                    >
+                                                                        <Text style={styles.smallActionBtnText}>Add</Text>
+                                                                    </TouchableOpacity>
+                                                                    <TouchableOpacity
+                                                                        style={[styles.smallActionBtn, { backgroundColor: '#e5e7eb' }]}
+                                                                        onPress={() => {
+                                                                            setSelectedBunkForStaff(null);
+                                                                            setSelectedStaffToAdd('');
+                                                                            setShowStaffPickerForBunk(null);
+                                                                        }}
+                                                                    >
+                                                                        <Text style={[styles.smallActionBtnText, { color: theme.colors.text }]}>✕</Text>
+                                                                    </TouchableOpacity>
+                                                                </View>
+                                                            </View>
+                                                        ) : null}
+                                                    </View>
+                                                    <View style={[styles.bunkColAct, styles.bunkActCell]}>
                                                         <TouchableOpacity
-                                                            style={[styles.smallActionBtn, !selectedStaffToAdd && { opacity: 0.6 }]}
-                                                            disabled={!selectedStaffToAdd}
-                                                            onPress={() => assignStaffToBunkMutation.mutate({ bunkId: b.id, staffId: selectedStaffToAdd })}
+                                                            onPress={() => handleDeleteBunk(b.id, b.bunk_name || `Bunk ${b.bunk_number}`)}
+                                                            hitSlop={8}
                                                         >
-                                                            <Text style={styles.smallActionBtnText}>Add</Text>
-                                                        </TouchableOpacity>
-                                                        <TouchableOpacity
-                                                            style={[styles.smallActionBtn, { backgroundColor: '#e5e7eb' }]}
-                                                            onPress={() => {
-                                                                setSelectedBunkForStaff(null);
-                                                                setSelectedStaffToAdd('');
-                                                                setShowStaffPickerForBunk(null);
-                                                            }}
-                                                        >
-                                                            <Text style={[styles.smallActionBtnText, { color: theme.colors.text }]}>X</Text>
+                                                            <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
                                                         </TouchableOpacity>
                                                     </View>
-                                                )}
-                                            </View>
-                                            {!isCompactModal && (
-                                                <View style={{ flex: 0.6, alignItems: 'center' }}>
-                                                    <TouchableOpacity onPress={() => handleDeleteBunk(b.id, b.bunk_name || `Bunk ${b.bunk_number}`)}>
-                                                        <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
-                                                    </TouchableOpacity>
                                                 </View>
-                                            )}
-                                        </View>
-                                    );
-                                })}
-                                {bunksList.length === 0 ? (
-                                    <View style={styles.bunkEmptyRow}>
-                                        <Text style={styles.bunkEmptyText}>No bunks configured yet. Add your first bunk above.</Text>
+                                            );
+                                        })}
+                                        {bunksList.length === 0 ? (
+                                            <View style={styles.bunkEmptyRow}>
+                                                <Text style={styles.bunkEmptyText}>No bunks configured yet. Add your first bunk above.</Text>
+                                            </View>
+                                        ) : null}
                                     </View>
-                                ) : null}
-                            </ScrollView>
+                                </ScrollView>
+                            )}
                             </>
                             ) : (
                                 <View style={styles.csvUploadCard}>
@@ -1178,79 +1331,78 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                     ) : null}
                                 </View>
                             )}
-                            <View style={styles.bunkFooter}>
-                                <TouchableOpacity style={styles.doneButton} onPress={() => setShowManageBunksModal(false)}>
+                        </GHScrollView>
+                            <View style={[styles.bunkFooter, { paddingBottom: Math.max(10, insets.bottom) }]}>
+                                <TouchableOpacity style={styles.doneButton} onPress={closeManageBunksModal}>
                                     <Text style={styles.doneButtonText}>Done</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
+                        </GestureHandlerRootView>
+                    </View>
 
-            {/* Division Picker for new bunk */}
-            <Modal
-                visible={showDivisionPickerModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowDivisionPickerModal(false)}
-            >
-                <Pressable style={styles.modalOverlayCenter} onPress={() => setShowDivisionPickerModal(false)}>
-                    <Pressable style={styles.pickerSheet} onPress={(e) => e.stopPropagation()}>
-                        <ScrollView>
-                            <TouchableOpacity
-                                style={styles.pickerOption}
-                                onPress={() => {
-                                    setNewBunkDivision(null);
-                                    setShowDivisionPickerModal(false);
-                                }}
-                            >
-                                <Text style={styles.pickerOptionText}>None</Text>
-                            </TouchableOpacity>
-                            {divisionsList.map((d: any) => (
+                        <ModalPickerOverlay
+                            visible={showDivisionPickerModal}
+                            onClose={() => setShowDivisionPickerModal(false)}
+                            title="Division (optional)"
+                        >
+                            <ScrollView keyboardShouldPersistTaps="handled" style={styles.bunkPickerScroll}>
                                 <TouchableOpacity
-                                    key={d.id}
-                                    style={styles.pickerOption}
+                                    style={[styles.pickerOption, styles.pickerOptionRow]}
                                     onPress={() => {
-                                        setNewBunkDivision(d.id);
+                                        setNewBunkDivision('none');
                                         setShowDivisionPickerModal(false);
                                     }}
                                 >
-                                    <Text style={styles.pickerOptionText}>{d.name}</Text>
+                                    <Text style={[styles.pickerOptionText, { flex: 1 }]}>None</Text>
+                                    {newBunkDivision === 'none' ? (
+                                        <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
+                                    ) : null}
                                 </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Staff picker for bunk assignment */}
-            <Modal
-                visible={!!showStaffPickerForBunk}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowStaffPickerForBunk(null)}
-            >
-                <Pressable style={styles.modalOverlayCenter} onPress={() => setShowStaffPickerForBunk(null)}>
-                    <Pressable style={styles.pickerSheet} onPress={(e) => e.stopPropagation()}>
-                        <ScrollView>
-                            {(staffList || [])
-                                .filter((s: any) => !bunkStaffList.some((bs) => bs.staff_id === s.id))
-                                .map((s: any) => (
+                                {divisionsList.map((d: any) => (
                                     <TouchableOpacity
-                                        key={s.id}
-                                        style={styles.pickerOption}
+                                        key={d.id}
+                                        style={[styles.pickerOption, styles.pickerOptionRow]}
                                         onPress={() => {
-                                            setSelectedStaffToAdd(s.id);
-                                            setShowStaffPickerForBunk(null);
+                                            setNewBunkDivision(d.id);
+                                            setShowDivisionPickerModal(false);
                                         }}
                                     >
-                                        <Text style={styles.pickerOptionText}>{s.name}</Text>
+                                        <Text style={[styles.pickerOptionText, { flex: 1 }]} numberOfLines={2}>
+                                            {d.name}
+                                        </Text>
+                                        {newBunkDivision === d.id ? (
+                                            <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
+                                        ) : null}
                                     </TouchableOpacity>
                                 ))}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
+                            </ScrollView>
+                        </ModalPickerOverlay>
+
+                        <ModalPickerOverlay
+                            visible={!!showStaffPickerForBunk}
+                            onClose={() => setShowStaffPickerForBunk(null)}
+                            title="Select staff"
+                        >
+                            <ScrollView keyboardShouldPersistTaps="handled" style={styles.bunkPickerScroll}>
+                                {(staffList || [])
+                                    .filter((s: any) => !bunkStaffList.some((bs) => bs.staff_id === s.id))
+                                    .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
+                                    .map((s: any) => (
+                                        <TouchableOpacity
+                                            key={s.id}
+                                            style={styles.pickerOption}
+                                            onPress={() => {
+                                                setSelectedStaffToAdd(s.id);
+                                                setShowStaffPickerForBunk(null);
+                                            }}
+                                        >
+                                            <Text style={styles.pickerOptionText}>{s.name}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                            </ScrollView>
+                        </ModalPickerOverlay>
+                </View>
             </Modal>
 
             {/* Late Sign-Out Override Modal */}
@@ -1847,11 +1999,31 @@ const styles = StyleSheet.create({
     bunkModal: {
         width: '100%',
         maxWidth: 960,
-        maxHeight: '92%',
+        flexDirection: 'column',
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
         borderWidth: 1,
         borderColor: theme.colors.border,
+        overflow: 'hidden',
+    },
+    bunkModalGestureRoot: {
+        flex: 1,
+        minHeight: 0,
+        width: '100%',
+    },
+    bunkModalBody: {
+        flex: 1,
+        minHeight: 0,
+        width: '100%',
+    },
+    bunkModalScroll: {
+        flex: 1,
+        minHeight: 0,
+    },
+    bunkModalScrollContent: {
+        paddingHorizontal: 14,
+        paddingTop: 8,
+        /** Do not use flexGrow — it breaks vertical scrolling inside modals on iOS */
     },
     bunkTabs: {
         flexDirection: 'row',
@@ -1896,10 +2068,31 @@ const styles = StyleSheet.create({
     },
     addBunkTitle: {
         ...theme.typography.body,
-        fontSize: 30,
+        fontSize: 17,
         fontWeight: '700',
         color: theme.colors.text,
-        marginBottom: 12,
+        marginBottom: 14,
+    },
+    bunkFormLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: 6,
+    },
+    bunkFormInput: {
+        width: '100%',
+        minHeight: 44,
+        paddingHorizontal: 12,
+        paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: '#ffffff',
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    addBunkFieldCompact: {
+        width: '100%',
     },
     addBunkRow: {
         flexDirection: 'row',
@@ -1953,12 +2146,218 @@ const styles = StyleSheet.create({
         borderBottomColor: theme.colors.border,
     },
     bunksScrollList: {
-        maxHeight: 320,
-        minHeight: 180,
+        maxHeight: 380,
+        minHeight: 200,
     },
     bunksScrollListCompact: {
-        maxHeight: 300,
-        minHeight: 140,
+        maxHeight: 340,
+        minHeight: 160,
+    },
+    bunksHScroll: {
+        flexGrow: 0,
+    },
+    bunkTableSheet: {
+        minWidth: 600,
+        paddingBottom: 8,
+    },
+    bunkTableHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 4,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        backgroundColor: '#f8fafc',
+    },
+    bunkTableHeadCell: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: theme.colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.3,
+    },
+    bunkColNum: {
+        width: 56,
+        paddingRight: 4,
+    },
+    bunkColName: {
+        width: 132,
+        paddingRight: 4,
+    },
+    bunkColDiv: {
+        width: 124,
+        paddingRight: 4,
+    },
+    bunkColStaff: {
+        width: 260,
+        paddingRight: 4,
+    },
+    bunkColDivWrap: {
+        justifyContent: 'center',
+    },
+    bunkColAct: {
+        width: 48,
+    },
+    bunkTableDataRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingVertical: 12,
+        paddingHorizontal: 4,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        backgroundColor: '#ffffff',
+    },
+    bunkTableCell: {
+        fontSize: 14,
+        color: theme.colors.text,
+    },
+    bunkTableCellStrong: {
+        fontWeight: '600',
+    },
+    bunkTableCellMuted: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    divisionBadge: {
+        alignSelf: 'flex-start',
+        backgroundColor: '#ccfbf1',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: '#99f6e4',
+        maxWidth: '100%',
+    },
+    divisionBadgeText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#0f766e',
+    },
+    bunkStaffCell: {
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        gap: 6,
+    },
+    bunkStaffCellWide: {
+        width: 260,
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        gap: 8,
+    },
+    assignStaffStack: {
+        width: '100%',
+        gap: 8,
+    },
+    assignStaffSelectWide: {
+        width: '100%',
+        alignSelf: 'stretch',
+    },
+    assignStaffBtnRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flexWrap: 'wrap',
+    },
+    bunkAssignCardList: {
+        marginTop: 4,
+        gap: 12,
+    },
+    bunkAssignCard: {
+        width: '100%',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        padding: 12,
+        backgroundColor: '#ffffff',
+    },
+    bunkAssignCardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+    },
+    bunkAssignCardTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    bunkAssignMetaLine: {
+        fontSize: 14,
+        color: theme.colors.text,
+        marginBottom: 6,
+    },
+    bunkAssignMetaLabel: {
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+    },
+    bunkAssignMetaValue: {
+        fontWeight: '400',
+        color: theme.colors.text,
+    },
+    bunkAssignDivisionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 10,
+    },
+    bunkAssignSectionLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: theme.colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.4,
+        marginBottom: 6,
+    },
+    bunkAssignEditBlock: {
+        marginTop: 8,
+        gap: 10,
+        width: '100%',
+    },
+    bunkAssignSelectFull: {
+        width: '100%',
+        alignSelf: 'stretch',
+    },
+    bunkAssignBtnRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    bunkAssignBtnHalf: {
+        flex: 1,
+        minWidth: 0,
+    },
+    bunkEmptyRowCompact: {
+        paddingVertical: 24,
+        paddingHorizontal: 8,
+        alignItems: 'center',
+    },
+    bunkActCell: {
+        alignItems: 'center',
+        paddingTop: 2,
+    },
+    staffChipOutline: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: '#ffffff',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 999,
+        paddingVertical: 4,
+        paddingHorizontal: 10,
+        maxWidth: '100%',
+    },
+    staffChipOutlineText: {
+        ...theme.typography.body,
+        fontSize: 12,
+        color: theme.colors.text,
+        flexShrink: 1,
+    },
+    assignStaffSelect: {
+        flex: 1,
+        minWidth: 140,
+        maxWidth: 220,
     },
     bunksScrollContent: {
         paddingBottom: 16,
@@ -2086,7 +2485,11 @@ const styles = StyleSheet.create({
     bunkFooter: {
         alignItems: 'flex-end',
         paddingTop: 12,
-        paddingBottom: 4,
+        paddingBottom: 12,
+        paddingHorizontal: 14,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
     },
     doneButton: {
         minWidth: 84,
@@ -2210,11 +2613,20 @@ const styles = StyleSheet.create({
         borderColor: theme.colors.border,
         overflow: 'hidden',
     },
+    bunkPickerScroll: {
+        maxHeight: 360,
+    },
     pickerOption: {
         paddingVertical: 12,
         paddingHorizontal: 14,
         borderBottomWidth: 1,
         borderBottomColor: '#edf0f4',
+    },
+    pickerOptionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
     },
     pickerOptionText: {
         ...theme.typography.body,
