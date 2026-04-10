@@ -33,11 +33,24 @@ const MEAL_TYPES = [
     'Dessert',
 ];
 
+function normalizeMealTypeForForm(raw: string): string {
+    const found = MEAL_TYPES.find((t) => t.toLowerCase() === String(raw).toLowerCase());
+    return found ?? raw;
+}
+
+function isoDateToMmDdYyyy(iso: string): string {
+    const parts = String(iso).split('T')[0].split('-');
+    if (parts.length !== 3) return '';
+    const [y, m, d] = parts;
+    return `${m.padStart(2, '0')}/${d.padStart(2, '0')}/${y}`;
+}
+
 export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
     const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
 
     const [showAddMealModal, setShowAddMealModal] = useState(false);
+    const [editingMealId, setEditingMealId] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
 
     // Add Meal Modal States
@@ -98,10 +111,50 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['special_meals'] });
-            Alert.alert('Success', 'Special meal added successfully');
         },
         onError: (error: any) => {
             Alert.alert('Error', error.message || 'Failed to add special meal');
+        },
+    });
+
+    const updateMealMutation = useMutation({
+        mutationFn: async (payload: { id: string; date: string; mealType: string; menuItems: string; allergens: string }) => {
+            const parts = payload.date.split('/');
+            const isoDate = `${parts[2]}-${parts[0]}-${parts[1]}`;
+            const { error } = await supabase
+                .from('special_meals')
+                .update({
+                    date: isoDate,
+                    meal_type: payload.mealType,
+                    items: payload.menuItems,
+                    allergens: payload.allergens || null,
+                })
+                .eq('id', payload.id)
+                .eq('company_id', companyId!);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['special_meals'] });
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to update special meal');
+        },
+    });
+
+    const deleteMealMutation = useMutation({
+        mutationFn: async (mealId: string) => {
+            const { error } = await supabase
+                .from('special_meals')
+                .delete()
+                .eq('id', mealId)
+                .eq('company_id', companyId!);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['special_meals'] });
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to delete special meal');
         },
     });
 
@@ -251,7 +304,25 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
         );
     };
 
-    const handleAddMeal = () => {
+    const openAddMealModal = () => {
+        setEditingMealId(null);
+        setMealDate('');
+        setMealType('');
+        setMenuItems('');
+        setAllergens('');
+        setShowAddMealModal(true);
+    };
+
+    const openEditMeal = (meal: any) => {
+        setEditingMealId(meal.id);
+        setMealDate(isoDateToMmDdYyyy(meal.date));
+        setMealType(normalizeMealTypeForForm(meal.meal_type));
+        setMenuItems(meal.items ?? meal.menu_items ?? '');
+        setAllergens(meal.allergens ?? '');
+        setShowAddMealModal(true);
+    };
+
+    const handleSaveMeal = () => {
         if (!companyId || !season) {
             Alert.alert('Context missing', 'Company or season is not loaded yet.');
             return;
@@ -260,20 +331,45 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
             Alert.alert('Validation', 'Please fill Date, Meal Type, and Menu Items');
             return;
         }
-        addMealMutation.mutate({
-            date: mealDate,
-            mealType,
-            menuItems,
-            allergens,
-        }, {
-            onSuccess: () => {
-                setMealDate('');
-                setMealType('');
-                setMenuItems('');
-                setAllergens('');
-                setShowAddMealModal(false);
-            },
-        });
+        const payload = { date: mealDate, mealType, menuItems, allergens };
+        const onDone = (message: string) => {
+            setMealDate('');
+            setMealType('');
+            setMenuItems('');
+            setAllergens('');
+            setEditingMealId(null);
+            setShowAddMealModal(false);
+            Alert.alert('Success', message);
+        };
+
+        if (editingMealId) {
+            updateMealMutation.mutate(
+                { id: editingMealId, ...payload },
+                { onSuccess: () => onDone('Special meal updated successfully') }
+            );
+        } else {
+            addMealMutation.mutate(payload, {
+                onSuccess: () => onDone('Special meal added successfully'),
+            });
+        }
+    };
+
+    const handleDeleteMeal = (meal: any) => {
+        Alert.alert(
+            'Delete special meal?',
+            'This cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () =>
+                        deleteMealMutation.mutate(meal.id, {
+                            onSuccess: () => Alert.alert('Success', 'Special meal deleted successfully'),
+                        }),
+                },
+            ]
+        );
     };
 
     const handleCloseAddMealModal = () => {
@@ -281,6 +377,7 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
         setMealType('');
         setMenuItems('');
         setAllergens('');
+        setEditingMealId(null);
         setShowAddMealModal(false);
     };
 
@@ -365,7 +462,7 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={styles.addMealButton}
-                        onPress={() => setShowAddMealModal(true)}
+                        onPress={openAddMealModal}
                     >
                         <Ionicons name="add" size={20} color={theme.colors.surface} />
                         <Text style={styles.addMealButtonText}>Add Special Meal</Text>
@@ -404,11 +501,17 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                             selectedDate={selectedDate}
                             onSelectedDateChange={setSelectedDate}
                             onEventPress={(evt) => {
-                                setMealDate(formatDate(evt.date));
-                                setShowAddMealModal(true);
+                                const meal = (specialMeals as any[]).find(
+                                    (m) => String(m.id) === String(evt.id)
+                                );
+                                if (meal) openEditMeal(meal);
                             }}
                             onDatePress={(date) => {
+                                setEditingMealId(null);
                                 setMealDate(formatDate(date));
+                                setMealType('');
+                                setMenuItems('');
+                                setAllergens('');
                                 setShowAddMealModal(true);
                             }}
                             views={['Month', 'Week', 'Day', 'Agenda']}
@@ -429,13 +532,49 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                                     </Text>
                                     {(meals as any[]).map((meal: any) => (
                                         <View key={meal.id} style={styles.mealRow}>
-                                            <View style={styles.mealBadge}>
-                                                <Text style={styles.mealBadgeText}>{meal.meal_type}</Text>
+                                            <View style={styles.mealRowMain}>
+                                                <View style={styles.mealTagsRow}>
+                                                    <View style={styles.mealBadge}>
+                                                        <Text style={styles.mealBadgeText}>
+                                                            {normalizeMealTypeForForm(meal.meal_type)}
+                                                        </Text>
+                                                    </View>
+                                                    {meal.allergens ? (
+                                                        <View style={styles.mealAllergenBadge}>
+                                                            <Text style={styles.mealAllergenBadgeText}>
+                                                                Contains: {meal.allergens}
+                                                            </Text>
+                                                        </View>
+                                                    ) : null}
+                                                </View>
+                                                <Text style={styles.mealItemsText}>{meal.items}</Text>
                                             </View>
-                                            <Text style={styles.mealItemsText}>{meal.items}</Text>
-                                            {meal.allergens ? (
-                                                <Text style={styles.mealAllergenText}>Contains: {meal.allergens}</Text>
-                                            ) : null}
+                                            <View style={styles.mealRowActions}>
+                                                <TouchableOpacity
+                                                    style={styles.mealRowActionBtn}
+                                                    onPress={() => openEditMeal(meal)}
+                                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                    accessibilityLabel="Edit meal"
+                                                >
+                                                    <Ionicons
+                                                        name="create-outline"
+                                                        size={20}
+                                                        color={theme.colors.text}
+                                                    />
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.mealRowActionBtn}
+                                                    onPress={() => handleDeleteMeal(meal)}
+                                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                    accessibilityLabel="Delete meal"
+                                                >
+                                                    <Ionicons
+                                                        name="trash-outline"
+                                                        size={20}
+                                                        color={theme.colors.danger}
+                                                    />
+                                                </TouchableOpacity>
+                                            </View>
                                         </View>
                                     ))}
                                 </StyledCard>
@@ -457,9 +596,13 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
                             <View style={styles.modalHeaderContent}>
-                                <Text style={styles.modalTitle}>Add Special Meal</Text>
+                                <Text style={styles.modalTitle}>
+                                    {editingMealId ? 'Edit Special Meal' : 'Add Special Meal'}
+                                </Text>
                                 <Text style={styles.modalSubtitle}>
-                                    Schedule a special meal for a specific date
+                                    {editingMealId
+                                        ? 'Update the special meal details'
+                                        : 'Schedule a special meal for a specific date'}
                                 </Text>
                             </View>
                             <TouchableOpacity
@@ -629,12 +772,25 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                             <TouchableOpacity
                                 style={[
                                     styles.submitButton,
-                                    (!mealDate || !mealType) && styles.submitButtonDisabled,
+                                    (!mealDate ||
+                                        !mealType ||
+                                        !menuItems.trim() ||
+                                        addMealMutation.isPending ||
+                                        updateMealMutation.isPending) &&
+                                        styles.submitButtonDisabled,
                                 ]}
-                                onPress={handleAddMeal}
-                                disabled={!mealDate || !mealType}
+                                onPress={handleSaveMeal}
+                                disabled={
+                                    !mealDate ||
+                                    !mealType ||
+                                    !menuItems.trim() ||
+                                    addMealMutation.isPending ||
+                                    updateMealMutation.isPending
+                                }
                             >
-                                <Text style={styles.submitButtonText}>Add Special Meal</Text>
+                                <Text style={styles.submitButtonText}>
+                                    {editingMealId ? 'Update Special Meal' : 'Add Special Meal'}
+                                </Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -752,31 +908,64 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.sm,
     },
     mealRow: {
-        paddingVertical: theme.spacing.xs,
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: theme.spacing.sm,
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.sm,
+        marginBottom: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: '#f3f4f6',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    mealRowMain: {
+        flex: 1,
+        minWidth: 0,
+    },
+    mealTagsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        marginBottom: theme.spacing.xs,
     },
     mealBadge: {
         backgroundColor: '#eff6ff',
         borderRadius: theme.borderRadius.sm,
-        alignSelf: 'flex-start',
         paddingHorizontal: theme.spacing.sm,
         paddingVertical: 2,
-        marginBottom: 4,
     },
     mealBadgeText: {
         ...theme.typography.bodySmall,
         color: '#1d4ed8',
+        fontWeight: '600',
+        textTransform: 'capitalize',
+    },
+    mealAllergenBadge: {
+        backgroundColor: '#fef2f2',
+        borderRadius: theme.borderRadius.sm,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 2,
+    },
+    mealAllergenBadgeText: {
+        fontSize: 12,
+        color: theme.colors.danger,
         fontWeight: '600',
     },
     mealItemsText: {
         ...theme.typography.body,
         color: theme.colors.text,
     },
-    mealAllergenText: {
-        ...theme.typography.bodySmall,
-        color: theme.colors.warning,
-        marginTop: 2,
+    mealRowActions: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 2,
+        flexShrink: 0,
+    },
+    mealRowActionBtn: {
+        padding: theme.spacing.xs,
     },
     modalOverlay: {
         ...StyleSheet.absoluteFillObject,
