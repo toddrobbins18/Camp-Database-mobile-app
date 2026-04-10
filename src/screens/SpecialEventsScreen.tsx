@@ -12,9 +12,10 @@ import {
     FlatList,
     Pressable,
     Platform,
+    KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
@@ -37,7 +38,54 @@ const EVENT_TYPES = [
     'Other',
 ];
 
-const EMOJI_PRESETS = ['🌙', '🏕️', '🎪', '⚽', '🏆', '🎯', '🚌', '🎨', '🎭', '🎵', '📸', '🍕'];
+/**
+ * Same Unicode values as web (stored in DB) — icons render reliably in RN; chars still sent to API for web parity.
+ */
+const EMOJI_PRESETS: { char: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }[] = [
+    { char: '🌙', icon: 'weather-night' },
+    { char: '⛺', icon: 'tent' },
+    { char: '🎪', icon: 'party-popper' },
+    { char: '⚽', icon: 'soccer' },
+    { char: '🏆', icon: 'trophy' },
+    { char: '🎯', icon: 'target' },
+    { char: '🚌', icon: 'bus' },
+    { char: '🎨', icon: 'palette' },
+    { char: '🎭', icon: 'drama-masks' },
+    { char: '🎵', icon: 'music' },
+    { char: '📸', icon: 'camera' },
+    { char: '🍕', icon: 'pizza' },
+];
+
+const EMOJI_CHAR_TO_ICON = Object.fromEntries(
+    EMOJI_PRESETS.map((p) => [p.char, p.icon])
+) as Record<string, keyof typeof MaterialCommunityIcons.glyphMap>;
+
+const EVENT_TYPE_COLORS: Record<string, string> = {
+    'special-event': '#3b82f6',
+    'evening-activity': '#8b5cf6',
+    campfire: '#f59e0b',
+    'movie-night': '#6366f1',
+    'talent-show': '#ec4899',
+    'game-night': '#14b8a6',
+    other: '#6b7280',
+};
+
+function getEventTypeColor(eventType: string): string {
+    return EVENT_TYPE_COLORS[eventType] || '#6b7280';
+}
+
+/** Matches web getTimeSlotIcon (Sun vs Moon) using parsed 12h start time */
+function getTimeSlotIconName(event: { start_time?: string; time_slot?: string }): 'sunny-outline' | 'moon-outline' {
+    const t = String(event.start_time || '').trim();
+    const m = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!m) return 'sunny-outline';
+    let h = parseInt(m[1], 10);
+    const ap = m[3].toUpperCase();
+    if (ap === 'PM' && h !== 12) h += 12;
+    if (ap === 'AM' && h === 12) h = 0;
+    if (h >= 17 || h < 6) return 'moon-outline';
+    return 'sunny-outline';
+}
 
 const HELP_CONTENT: Record<string, { title: string, subtitle: string, columns: string, example: string, notes?: string }> = {
     'Children': {
@@ -668,10 +716,17 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 {(events as any[]).map((event: any) => (
                                     <StyledCard key={event.id} style={styles.eventCard}>
                                         <View style={styles.eventCardHeader}>
-                                            <Text style={styles.eventTitle}>
-                                                {event.emoji ? `${event.emoji} ` : ''}
-                                                {event.title}
-                                            </Text>
+                                            <View style={styles.eventTitleRow}>
+                                                <Ionicons
+                                                    name={getTimeSlotIconName(event)}
+                                                    size={18}
+                                                    color={theme.colors.text}
+                                                    style={styles.eventTitleIcon}
+                                                />
+                                                <Text style={styles.eventTitle} numberOfLines={2}>
+                                                    {event.title}
+                                                </Text>
+                                            </View>
                                             <View style={styles.eventActions}>
                                                 <TouchableOpacity
                                                     style={styles.eventActionButton}
@@ -695,10 +750,33 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
 
                                         <View style={styles.eventBadgeRow}>
                                             {!!event.event_type && (
-                                                <View style={styles.eventTypeBadge}>
-                                                    <Text style={styles.eventTypeBadgeText}>
-                                                        {event.event_type.replace(/-/g, ' ')}
-                                                    </Text>
+                                                <View
+                                                    style={[
+                                                        styles.eventTypeBadge,
+                                                        {
+                                                            backgroundColor: getEventTypeColor(
+                                                                String(event.event_type)
+                                                            ),
+                                                        },
+                                                    ]}
+                                                >
+                                                    <View style={styles.eventTypeBadgeInner}>
+                                                        {!!event.emoji &&
+                                                            (EMOJI_CHAR_TO_ICON[String(event.emoji)] ? (
+                                                                <MaterialCommunityIcons
+                                                                    name={EMOJI_CHAR_TO_ICON[String(event.emoji)]}
+                                                                    size={14}
+                                                                    color={theme.colors.surface}
+                                                                />
+                                                            ) : (
+                                                                <Text style={styles.eventTypeBadgeEmoji}>
+                                                                    {`${event.emoji} `}
+                                                                </Text>
+                                                            ))}
+                                                        <Text style={styles.eventTypeBadgeText}>
+                                                            {String(event.event_type)}
+                                                        </Text>
+                                                    </View>
                                                 </View>
                                             )}
                                             {Array.isArray(event.divisions) &&
@@ -710,10 +788,26 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                         </View>
 
                                         {event.location ? (
-                                            <Text style={styles.eventDetailText}>📍 {event.location}</Text>
+                                            <View style={styles.eventDetailRow}>
+                                                <Ionicons
+                                                    name="location-outline"
+                                                    size={14}
+                                                    color={theme.colors.danger}
+                                                    style={styles.eventDetailIcon}
+                                                />
+                                                <Text style={styles.eventDetailText}>{event.location}</Text>
+                                            </View>
                                         ) : null}
                                         {event.chaperone ? (
-                                            <Text style={styles.eventDetailText}>👤 Staff: {event.chaperone}</Text>
+                                            <View style={styles.eventDetailRow}>
+                                                <Ionicons
+                                                    name="person-outline"
+                                                    size={14}
+                                                    color={theme.colors.secondary}
+                                                    style={styles.eventDetailIcon}
+                                                />
+                                                <Text style={styles.eventDetailText}>Staff: {event.chaperone}</Text>
+                                            </View>
                                         ) : null}
                                         {event.description ? (
                                             <Text style={styles.eventDescription} numberOfLines={2}>
@@ -728,18 +822,24 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                 </View>
             </ScrollView>
 
-            {/* Add Event Modal */}
+            {/* Add Event Modal — backdrop tap closes; inner View scrolls (inner Pressable breaks ScrollView) */}
             <Modal
                 visible={showAddEventModal}
                 transparent
                 animationType="slide"
                 onRequestClose={handleCloseAddEventModal}
             >
-                <Pressable style={styles.modalOverlay} onPress={handleCloseAddEventModal}>
+                <View style={styles.modalOverlay}>
                     <Pressable
-                        style={styles.addEventModalContainer}
-                        onPress={(e) => e.stopPropagation()}
+                        style={StyleSheet.absoluteFill}
+                        onPress={handleCloseAddEventModal}
+                        accessibilityLabel="Close dialog"
+                    />
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                        style={styles.addEventModalKeyboard}
                     >
+                        <View style={styles.addEventModalContainer}>
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>{editingEventId ? 'Edit Event' : 'Add Event'}</Text>
@@ -752,6 +852,9 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                             style={styles.modalContent}
                             contentContainerStyle={styles.modalScrollContent}
                             showsVerticalScrollIndicator={true}
+                            keyboardShouldPersistTaps="handled"
+                            nestedScrollEnabled
+                            bounces
                         >
                             {/* Event Date */}
                             <View style={styles.formSection}>
@@ -842,30 +945,42 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 </View>
                             </View>
 
-                            {/* Emoji */}
+                            {/* Emoji — vector icons (Unicode still stored for web); paste supported in field below */}
                             <View style={styles.formSection}>
                                 <Text style={styles.label}>Emoji Icon (optional)</Text>
                                 <TextInput
-                                    style={styles.textInput}
-                                    placeholder="Paste an emoji e.g. 🌙 ⛺ 🎪"
+                                    style={styles.emojiPasteInput}
+                                    placeholder="Optional: paste a custom emoji here"
                                     placeholderTextColor={theme.colors.textSecondary}
                                     value={emoji}
                                     onChangeText={setEmoji}
+                                    maxLength={8}
+                                    autoCorrect={false}
+                                    autoCapitalize="none"
                                 />
                                 <ScrollView
                                     horizontal
                                     showsHorizontalScrollIndicator={false}
+                                    nestedScrollEnabled
+                                    keyboardShouldPersistTaps="handled"
                                     contentContainerStyle={styles.emojiRow}
                                 >
-                                    {EMOJI_PRESETS.map((item) => {
-                                        const isSelected = emoji === item;
+                                    {EMOJI_PRESETS.map((preset, idx) => {
+                                        const isSelected = emoji === preset.char;
                                         return (
                                             <TouchableOpacity
-                                                key={item}
+                                                key={`emoji-preset-${idx}`}
                                                 style={[styles.emojiChip, isSelected && styles.emojiChipSelected]}
-                                                onPress={() => setEmoji(item)}
+                                                onPress={() => setEmoji(isSelected ? '' : preset.char)}
+                                                accessibilityLabel={`Emoji preset ${idx + 1}`}
                                             >
-                                                <Text style={styles.emojiChipText}>{item}</Text>
+                                                <MaterialCommunityIcons
+                                                    name={preset.icon}
+                                                    size={24}
+                                                    color={
+                                                        isSelected ? theme.colors.secondary : theme.colors.text
+                                                    }
+                                                />
                                             </TouchableOpacity>
                                         );
                                     })}
@@ -1183,8 +1298,9 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 <Text style={styles.submitButtonText}>{editingEventId ? 'Update Event' : 'Add Event'}</Text>
                             </TouchableOpacity>
                         </View>
-                    </Pressable>
-                </Pressable>
+                        </View>
+                    </KeyboardAvoidingView>
+                </View>
             </Modal>
 
             {/* Upload CSV Modal */}
@@ -1588,7 +1704,7 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     modalOverlay: {
-        ...StyleSheet.absoluteFillObject,
+        flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
@@ -1679,12 +1795,23 @@ const styles = StyleSheet.create({
         color: theme.colors.secondary,
         fontWeight: '600',
     },
+    addEventModalKeyboard: {
+        width: '100%',
+        maxHeight: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     addEventModalContainer: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.xl,
-        width: '90%',
+        width: '92%',
         maxWidth: 600,
-        maxHeight: '90%',
+        height: '88%',
+        maxHeight: '92%',
+        overflow: 'hidden',
+        flexDirection: 'column',
+        zIndex: 2,
+        elevation: 24,
         ...theme.shadows.card,
     },
     modalHeader: {
@@ -1702,11 +1829,13 @@ const styles = StyleSheet.create({
         padding: theme.spacing.xs,
     },
     modalContent: {
-        // removed flex: 1 to prevent collapse on mobile
+        flex: 1,
+        minHeight: 0,
     },
     modalScrollContent: {
         padding: theme.spacing.lg,
-        paddingBottom: 140,
+        paddingBottom: theme.spacing.xl,
+        flexGrow: 1,
     },
     formSection: {
         marginBottom: theme.spacing.lg,
@@ -1809,6 +1938,17 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         flex: 1,
     },
+    /** Avoid theme body font so pasted emoji can render; presets use vector icons only */
+    emojiPasteInput: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        fontSize: 17,
+        minHeight: 44,
+        color: theme.colors.text,
+    },
     emojiRow: {
         gap: theme.spacing.xs,
         paddingTop: theme.spacing.sm,
@@ -1828,10 +1968,6 @@ const styles = StyleSheet.create({
     emojiChipSelected: {
         borderColor: theme.colors.secondary,
         backgroundColor: '#fff7ed',
-    },
-    emojiChipText: {
-        fontSize: 20,
-        fontFamily: Platform.OS === 'ios' ? 'AppleColorEmoji' : undefined,
     },
     timeRow: {
         flexDirection: 'row',
@@ -1956,6 +2092,16 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
         gap: theme.spacing.sm,
     },
+    eventTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        flex: 1,
+        minWidth: 0,
+        gap: 6,
+    },
+    eventTitleIcon: {
+        marginTop: 2,
+    },
     eventTitle: {
         ...theme.typography.body,
         fontWeight: '700',
@@ -1988,21 +2134,52 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.sm,
     },
     eventTypeBadge: {
-        backgroundColor: '#1d4ed8',
         borderRadius: theme.borderRadius.md,
         paddingHorizontal: theme.spacing.sm,
         paddingVertical: 4,
     },
+    eventTypeBadgeInner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        flexShrink: 1,
+    },
     eventTypeBadgeText: {
-        ...theme.typography.bodySmall,
+        fontSize: 12,
+        lineHeight: 16,
         color: theme.colors.surface,
         fontWeight: '600',
-        textTransform: 'capitalize',
+        flexShrink: 1,
+    },
+    eventTypeBadgeEmoji: {
+        fontSize: 13,
+        fontWeight: '400',
+        color: theme.colors.surface,
+    },
+    divisionTag: {
+        backgroundColor: '#e5e7eb',
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 4,
+    },
+    divisionTagText: {
+        fontSize: 12,
+        color: theme.colors.text,
+        fontWeight: '500',
+    },
+    eventDetailRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 6,
+        marginBottom: 2,
+    },
+    eventDetailIcon: {
+        marginTop: 2,
     },
     eventDetailText: {
         ...theme.typography.bodySmall,
         color: theme.colors.textSecondary,
-        marginBottom: 2,
+        flex: 1,
     },
     eventDescription: {
         ...theme.typography.bodySmall,
