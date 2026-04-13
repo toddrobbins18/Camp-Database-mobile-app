@@ -12,6 +12,7 @@ import { useRole } from '../hooks/useRole';
 import { useStaff } from '../api/staff';
 import { supabase } from '../lib/supabase';
 import { showAppAlert } from '../utils/showAppAlert';
+import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 
 type BulkAssignRowResult = {
     name: string;
@@ -119,10 +120,10 @@ export const CamperScreen = ({ navigation }: any) => {
             console.log('[DELETE] Response:', { error, status, statusText });
             if (error) throw error;
             queryClient.invalidateQueries({ queryKey: ['campers'] });
-            Alert.alert('Success', 'Camper deleted');
+            showAppAlert('Success', 'Camper deleted');
         } catch (err: any) {
             console.error('[DELETE] Error:', err);
-            Alert.alert('Delete failed', err.message || 'Unknown error');
+            showAppAlert('Delete failed', err.message || 'Unknown error');
         } finally {
             setIsDeleting(false);
             setIsDeleteConfirmVisible(false);
@@ -1692,58 +1693,19 @@ export const CamperScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Modal>
 
-                {/* Delete Confirmation Modal */}
-                <Modal
+                <ConfirmDeleteModal
                     visible={isDeleteConfirmVisible}
-                    transparent={true}
-                    animationType="fade"
-                    onRequestClose={() => {
+                    title="Are you sure?"
+                    message="This action cannot be undone. This will permanently delete the camper record."
+                    onCancel={() => {
                         if (!isDeleting) {
                             setIsDeleteConfirmVisible(false);
                             setItemToDelete(null);
                         }
                     }}
-                >
-                    <Pressable
-                        style={styles.deleteModalOverlay}
-                        onPress={() => {
-                            if (!isDeleting) {
-                                setIsDeleteConfirmVisible(false);
-                                setItemToDelete(null);
-                            }
-                        }}
-                    >
-                        <Pressable style={styles.deleteModalContent} onPress={(e) => e.stopPropagation()}>
-                            <Text style={styles.deleteModalTitle}>Confirm Delete</Text>
-                            <Text style={styles.deleteModalMessage}>Are you sure? This cannot be undone.</Text>
-                            <View style={styles.deleteModalActions}>
-                                <TouchableOpacity
-                                    style={styles.deleteModalCancelBtn}
-                                    onPress={() => {
-                                        if (!isDeleting) {
-                                            setIsDeleteConfirmVisible(false);
-                                            setItemToDelete(null);
-                                        }
-                                    }}
-                                    disabled={isDeleting}
-                                >
-                                    <Text style={styles.deleteModalCancelText}>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.deleteModalConfirmBtn, isDeleting && { opacity: 0.6 }]}
-                                    onPress={handleConfirmDelete}
-                                    disabled={isDeleting}
-                                >
-                                    {isDeleting ? (
-                                        <ActivityIndicator size="small" color="#fff" />
-                                    ) : (
-                                        <Text style={styles.deleteModalConfirmText}>Delete</Text>
-                                    )}
-                                </TouchableOpacity>
-                            </View>
-                        </Pressable>
-                    </Pressable>
-                </Modal>
+                    onConfirm={handleConfirmDelete}
+                    isLoading={isDeleting}
+                />
 
                 {/* Edit Child Modal */}
                 <Modal
@@ -3937,68 +3899,6 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: theme.colors.text,
         flexShrink: 1,
-    },
-    deleteModalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: theme.spacing.lg,
-    },
-    deleteModalContent: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        width: '90%',
-        maxWidth: 400,
-        padding: theme.spacing.xl,
-        ...theme.shadows.card,
-        elevation: 10,
-    },
-    deleteModalTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.md,
-    },
-    deleteModalMessage: {
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.xl,
-        lineHeight: 20,
-    },
-    deleteModalActions: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: theme.spacing.md,
-    },
-    deleteModalCancelBtn: {
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-        backgroundColor: theme.colors.background,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        minWidth: 80,
-        alignItems: 'center',
-    },
-    deleteModalCancelText: {
-        color: theme.colors.text,
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    deleteModalConfirmBtn: {
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.md,
-        borderRadius: theme.borderRadius.md,
-        backgroundColor: theme.colors.secondary,
-        minWidth: 88,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    deleteModalConfirmText: {
-        color: theme.colors.surface,
-        fontSize: 14,
-        fontWeight: '600',
     },
     datePickerOverlay: {
         flex: 1,

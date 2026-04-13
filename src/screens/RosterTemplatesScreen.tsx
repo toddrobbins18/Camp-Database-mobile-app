@@ -19,6 +19,8 @@ import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
 import { isTylerHillCamp } from '../constants/camps';
+import { showAppAlert } from '../utils/showAppAlert';
+import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 
 interface RosterTemplatesScreenProps {
     navigation: any;
@@ -48,6 +50,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('all');
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
+    const [templatePendingDelete, setTemplatePendingDelete] = useState<any | null>(null);
 
     const resetFormState = () => {
         setTemplateName('');
@@ -234,11 +237,12 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
             if (error) throw error;
         },
         onSuccess: () => {
+            setTemplatePendingDelete(null);
             queryClient.invalidateQueries({ queryKey: ['roster_templates'] });
-            Alert.alert('Success', 'Template deleted');
         },
         onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to delete template');
+            setTemplatePendingDelete(null);
+            showAppAlert('Error', error.message || 'Failed to delete template');
         },
     });
 
@@ -330,18 +334,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
     };
 
     const handleDeleteTemplate = (template: any) => {
-        Alert.alert(
-            'Delete Template?',
-            'This action cannot be undone. The roster template will be permanently deleted.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () => deleteTemplateMutation.mutate(template.id),
-                },
-            ]
-        );
+        setTemplatePendingDelete(template);
     };
 
     const formSubmitPending =
@@ -761,6 +754,21 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                 ) : null}
                 </View>
             </Modal>
+
+            <ConfirmDeleteModal
+                visible={!!templatePendingDelete}
+                title="Are you sure?"
+                message="This action cannot be undone. This will permanently delete the roster template."
+                onCancel={() => {
+                    if (!deleteTemplateMutation.isPending) setTemplatePendingDelete(null);
+                }}
+                onConfirm={() => {
+                    if (templatePendingDelete?.id) {
+                        deleteTemplateMutation.mutate(templatePendingDelete.id);
+                    }
+                }}
+                isLoading={deleteTemplateMutation.isPending}
+            />
         </SafeAreaView>
     );
 };

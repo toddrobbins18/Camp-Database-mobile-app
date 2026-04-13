@@ -56,7 +56,6 @@ const getCompanyMenuItems = (companySlug?: string | null): Permission[] => {
         { id: 'awards', name: 'Awards', icon: 'trophy-outline', iconColor: '#f59e0b' },
         { id: 'incidents', name: 'Incident Reports', icon: 'warning-outline', iconColor: '#f59e0b' },
         { id: 'sports-academy', name: 'Sports Academy', icon: 'football-outline', iconColor: '#1f2937' },
-        { id: 'roster-templates', name: 'Roster Templates', icon: 'list-outline', iconColor: '#64748b' },
     ];
 
     // Daily Notes/News - all camps EXCEPT timber-lake-camp (matches web)
@@ -97,12 +96,18 @@ const getCompanyMenuItems = (companySlug?: string | null): Permission[] => {
         });
     }
 
-    // Special Meals - ONLY for tyler-hill-camp (matches web)
+    // Special Meals + Roster Templates — ONLY for tyler-hill-camp (matches web)
     if (companySlug === 'tyler-hill-camp') {
         baseItems.push({
             id: 'special-meals',
             name: 'Special Meals',
             icon: 'restaurant-outline',
+            iconColor: '#64748b',
+        });
+        baseItems.push({
+            id: 'roster-templates',
+            name: 'Roster Templates',
+            icon: 'list-outline',
             iconColor: '#64748b',
         });
     }

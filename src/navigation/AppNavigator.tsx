@@ -141,9 +141,16 @@ const CustomDrawerContent = (props: any) => {
             { key: 'incident-reports', label: 'Incident Reports', icon: 'warning-outline', onPress: () => props.navigation.navigate('IncidentReports') },
             { key: 'rainy-day-schedule', label: 'Rainy Day Schedule', icon: 'rainy-outline', onPress: () => props.navigation.navigate('RainyDaySchedule') },
             { key: 'reports', label: 'Reports', icon: 'bar-chart-outline', onPress: () => props.navigation.navigate('Reports') },
-            { key: 'roster-templates', label: 'Roster Templates', icon: 'list-outline', onPress: () => props.navigation.navigate('RosterTemplates') },
             { key: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', onPress: () => props.navigation.navigate('TutoringTherapy') },
         );
+        if (companySlug === 'tyler-hill-camp') {
+            mainMenuItems.push({
+                key: 'roster-templates',
+                label: 'Roster Templates',
+                icon: 'list-outline',
+                onPress: () => props.navigation.navigate('RosterTemplates'),
+            });
+        }
         if (companySlug !== 'timber-lake-camp') {
             mainMenuItems.push({
                 key: 'daily-news-notes',
