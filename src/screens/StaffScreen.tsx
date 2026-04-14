@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
 import { useQueryClient } from '@tanstack/react-query';
-import { useStaff, useAddStaff, useEditStaff } from '../api/staff';
+import { useStaff, useAddStaff, useEditStaff, type StaffMember } from '../api/staff';
 import { supabase } from '../lib/supabase';
 import { buildStaffInsertRow, formatIsoDateToUs, formatStaffTypeFromDb } from '../api/staffPayload';
 import { useRole } from '../hooks/useRole';
@@ -188,6 +188,10 @@ export const StaffScreen = ({ navigation }: any) => {
         Alert.alert("Choose File", "Opening document picker...");
     };
 
+    const openStaffProfile = (staff: StaffMember) => {
+        navigation.navigate('StaffDetail', { staff });
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -297,7 +301,11 @@ export const StaffScreen = ({ navigation }: any) => {
                 <View style={styles.grid}>
                     {staffData.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase())).map((staff, index) => (
                         <View key={index} style={styles.staffCardWrapper}>
-                            <View style={styles.staffCard}>
+                            <TouchableOpacity
+                                style={styles.staffCard}
+                                activeOpacity={0.85}
+                                onPress={() => openStaffProfile(staff)}
+                            >
                                 <View style={styles.staffHeader}>
                                     <View style={styles.avatar}>
                                         <Text style={styles.avatarText}>{staff.name?.substring(0, 2).toUpperCase() || 'NA'}</Text>
@@ -373,7 +381,7 @@ export const StaffScreen = ({ navigation }: any) => {
                                     <Text style={styles.trendText}>Recent Evaluation</Text>
                                 </View>
                                 <Text style={styles.trendSub}>No evaluations yet</Text>
-                            </View>
+                            </TouchableOpacity>
                         </View>
                     ))}
                 </View>

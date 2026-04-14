@@ -11,6 +11,7 @@ import { DashboardScreen } from '../screens/DashboardScreen';
 import { CamperScreen } from '../screens/CamperScreen';
 import { CamperDetailScreen } from '../screens/CamperDetailScreen';
 import { StaffScreen } from '../screens/StaffScreen';
+import { StaffDetailScreen } from '../screens/StaffDetailScreen';
 import { CalendarScreen } from '../screens/CalendarScreen';
 import { HealthScreen } from '../screens/HealthScreen';
 import { TransportScreen } from '../screens/TransportScreen';
@@ -389,6 +390,19 @@ const CamperStackNavigator = () => {
     );
 };
 
+const StaffStackNavigator = () => {
+    return (
+        <Stack.Navigator
+            screenOptions={{
+                headerShown: false,
+            }}
+        >
+            <Stack.Screen name="StaffList" component={StaffScreen} />
+            <Stack.Screen name="StaffDetail" component={StaffDetailScreen} />
+        </Stack.Navigator>
+    );
+};
+
 // Menu Stack Navigator
 const MenuStackNavigator = () => {
     return (
@@ -417,7 +431,7 @@ const MainAppNavigator = () => {
         >
             <Drawer.Screen name="Dashboard" component={DashboardScreen} />
             <Drawer.Screen name="Camper" component={CamperStackNavigator} />
-            <Drawer.Screen name="Staff" component={StaffScreen} />
+            <Drawer.Screen name="Staff" component={StaffStackNavigator} />
             <Drawer.Screen name="Calendar" component={CalendarScreen} />
             <Drawer.Screen name="Health" component={HealthScreen} />
             <Drawer.Screen name="Transport" component={TransportScreen} />
