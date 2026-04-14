@@ -1,0 +1,49 @@
+{
+  "generatedAt": "2026-04-14T13:55:09.380Z",
+  "totals": [
+    {
+      "slug": "timber-lake-camp",
+      "season": "2025",
+      "oldCount": 0,
+      "newCount": 0,
+      "deltaOldMinusNew": 0
+    },
+    {
+      "slug": "timber-lake-camp",
+      "season": "2026",
+      "oldCount": 297,
+      "newCount": 297,
+      "deltaOldMinusNew": 0
+    },
+    {
+      "slug": "timber-lake-west",
+      "season": "2025",
+      "oldCount": 0,
+      "newCount": 0,
+      "deltaOldMinusNew": 0
+    },
+    {
+      "slug": "timber-lake-west",
+      "season": "2026",
+      "oldCount": 235,
+      "newCount": 235,
+      "deltaOldMinusNew": 0
+    },
+    {
+      "slug": "tyler-hill-camp",
+      "season": "2025",
+      "oldCount": 0,
+      "newCount": 0,
+      "deltaOldMinusNew": 0
+    },
+    {
+      "slug": "tyler-hill-camp",
+      "season": "2026",
+      "oldCount": 351,
+      "newCount": 351,
+      "deltaOldMinusNew": 0
+    }
+  ],
+  "missingInNew": [],
+  "missingInOld": []
+}
