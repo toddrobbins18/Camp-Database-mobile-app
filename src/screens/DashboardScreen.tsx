@@ -291,10 +291,6 @@ export const DashboardScreen = ({ navigation }: any) => {
                         <Ionicons name="menu-outline" size={28} color={ink} />
                     </TouchableOpacity>
 
-                    <View style={styles.headerCenter}>
-                        <View style={[styles.centerDot, isTimberLakeWest && styles.centerDotOnHero]} />
-                    </View>
-
                     <View style={styles.headerRight}>
                         <TouchableOpacity
                             onPress={() => navigation.navigate('Messages')}
@@ -734,9 +730,6 @@ const styles = StyleSheet.create({
     welcomeOnHero: {
         color: 'rgba(255,255,255,0.88)',
     },
-    centerDotOnHero: {
-        backgroundColor: '#ffffff',
-    },
     wolfStrip: {
         marginBottom: theme.spacing.md,
         gap: theme.spacing.sm,
@@ -807,17 +800,6 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    headerCenter: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    centerDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#2563eb',
     },
     titleSection: {
         marginBottom: theme.spacing.lg,
