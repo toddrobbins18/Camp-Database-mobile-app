@@ -70,6 +70,7 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                 activitiesBatch2,
                 specialBatch1,
                 specialBatch2,
+                specialDivisionsRes,
                 tigerTimesRes,
             ] = await Promise.all([
                 supabase
@@ -109,6 +110,10 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                     .order('event_date', { ascending: true })
                     .range(1000, 1999),
                 supabase
+                    .from('special_events_divisions')
+                    .select('event_id, division_id, divisions(id, name, gender)')
+                    .eq('company_id', companyId),
+                supabase
                     .from('daily_wolf_content')
                     .select('*')
                     .eq('company_id', companyId)
@@ -122,6 +127,19 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                 .filter((e: any) => e.season === seasonFilter || e.season == null);
             const specialData = [...(specialBatch1.data || []), ...(specialBatch2.data || [])]
                 .filter((e: any) => e.season === seasonFilter || e.season == null);
+
+            const specialDivisionMap = new Map<string, Array<{ id: string; name: string; gender?: string }>>();
+            (specialDivisionsRes.data || []).forEach((row: any) => {
+                if (!row?.event_id || !row?.divisions?.id) return;
+                if (!specialDivisionMap.has(row.event_id)) {
+                    specialDivisionMap.set(row.event_id, []);
+                }
+                specialDivisionMap.get(row.event_id)!.push({
+                    id: row.divisions.id,
+                    name: row.divisions.name,
+                    gender: row.divisions.gender,
+                });
+            });
 
             const events: CalendarEvent[] = [];
 
@@ -166,7 +184,10 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
             });
 
             specialData.forEach((event: any) => {
-                const div = event.division;
+                const mappedDivisions = specialDivisionMap.get(event.id) || [];
+                const fallbackSingleDivision = event.division ? [event.division] : [];
+                const divisions = mappedDivisions.length > 0 ? mappedDivisions : fallbackSingleDivision;
+                const div = divisions[0];
                 events.push({
                     id: `special_${event.id}`,
                     title: event.title || '',
@@ -178,8 +199,8 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                     source: 'special_events_activities',
                     divisionId: div?.id,
                     divisionName: div?.name,
-                    tags: ['Special Event', event.event_type, div?.name].filter(Boolean),
-                    originalData: event,
+                    tags: ['Special Event', event.event_type, ...divisions.map((d: any) => d.name)].filter(Boolean),
+                    originalData: { ...event, divisions },
                 });
             });
 
