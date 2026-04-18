@@ -21,6 +21,8 @@ import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/Unified
 import { useCompany } from '../contexts/CompanyContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
+import { uploadCsvFromText } from '../lib/csvTableUpload';
 import {
     useSportsEnrollments,
     useAddSportsEnrollment,
@@ -90,6 +92,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const [currentDate, setCurrentDate] = useState(() => new Date());
     const [selectedDate, setSelectedDate] = useState(() => new Date());
     const [showAddEnrollmentModal, setShowAddEnrollmentModal] = useState(false);
+    const [sportsCsvUploading, setSportsCsvUploading] = useState(false);
 
     const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
@@ -648,9 +651,36 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                     <TouchableOpacity style={styles.helpButton} onPress={() => setShowHelpModal(true)}>
                         <Ionicons name="help-circle-outline" size={24} color={theme.colors.text} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.uploadButton}>
+                    <TouchableOpacity
+                        style={[styles.uploadButton, sportsCsvUploading && { opacity: 0.65 }]}
+                        disabled={sportsCsvUploading}
+                        onPress={async () => {
+                            if (!companyId || !season) {
+                                Alert.alert('Missing context', 'Company or season is not available yet.');
+                                return;
+                            }
+                            const picked = await pickAndReadCsvText();
+                            if (!picked.ok) {
+                                if (picked.error === 'canceled') return;
+                                Alert.alert('CSV', picked.message || 'Could not read file.');
+                                return;
+                            }
+                            setSportsCsvUploading(true);
+                            try {
+                                const result = await uploadCsvFromText('sports_academy', picked.text, { companyId, season });
+                                if (result.ok) {
+                                    await queryClient.invalidateQueries({ queryKey: ['sports_enrollments'] });
+                                    Alert.alert('Success', result.message);
+                                } else {
+                                    Alert.alert('Upload failed', result.error);
+                                }
+                            } finally {
+                                setSportsCsvUploading(false);
+                            }
+                        }}
+                    >
                         <Ionicons name="arrow-up-outline" size={20} color={theme.colors.text} />
-                        <Text style={styles.uploadButtonText}>Upload CSV</Text>
+                        <Text style={styles.uploadButtonText}>{sportsCsvUploading ? 'Uploading…' : 'Upload CSV'}</Text>
                     </TouchableOpacity>
                 </View>
 

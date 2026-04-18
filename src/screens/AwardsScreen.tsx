@@ -7,6 +7,8 @@ import { StyledCard } from '../components/StyledCard';
 import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
+import { uploadCsvFromText } from '../lib/csvTableUpload';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -201,7 +203,7 @@ export const AwardsScreen = ({ navigation }: any) => {
     const [isCSVGuideOpen, setIsCSVGuideOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('awards');
     const [isAddAwardModalOpen, setIsAddAwardModalOpen] = useState(false);
-    const [isUploadCSVModalOpen, setIsUploadCSVModalOpen] = useState(false);
+    const [csvUploading, setCsvUploading] = useState(false);
 
     // Add Award Form State
     const [selectedChild, setSelectedChild] = useState('');
@@ -411,8 +413,29 @@ export const AwardsScreen = ({ navigation }: any) => {
         }));
     }, [awards]);
 
-    const handleUploadCSV = () => {
-        setIsUploadCSVModalOpen(true);
+    const handleUploadCSV = async () => {
+        if (!companyId || !season) {
+            Alert.alert('Missing context', 'Company or season is not available yet.');
+            return;
+        }
+        const picked = await pickAndReadCsvText();
+        if (!picked.ok) {
+            if (picked.error === 'canceled') return;
+            Alert.alert('CSV', picked.message || 'Could not read file.');
+            return;
+        }
+        setCsvUploading(true);
+        try {
+            const result = await uploadCsvFromText('awards', picked.text, { companyId, season });
+            if (result.ok) {
+                await queryClient.invalidateQueries({ queryKey: ['awards'] });
+                Alert.alert('Success', result.message);
+            } else {
+                Alert.alert('Upload failed', result.error);
+            }
+        } finally {
+            setCsvUploading(false);
+        }
     };
 
     const handleHelp = () => {
@@ -448,11 +471,12 @@ export const AwardsScreen = ({ navigation }: any) => {
                             <Ionicons name="help-circle" size={20} color={theme.colors.text} />
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={styles.uploadButton}
-                            onPress={handleUploadCSV}
+                            style={[styles.uploadButton, csvUploading && { opacity: 0.6 }]}
+                            onPress={() => void handleUploadCSV()}
+                            disabled={csvUploading}
                         >
                             <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} style={styles.uploadIcon} />
-                            <Text style={styles.uploadButtonText}>Upload CSV</Text>
+                            <Text style={styles.uploadButtonText}>{csvUploading ? 'Uploading…' : 'Upload CSV'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.addButton}
@@ -549,56 +573,6 @@ export const AwardsScreen = ({ navigation }: any) => {
                     </View>
                 )}
             </ScrollView>
-
-            {/* Upload CSV Bottom Sheet Modal */}
-            <Modal
-                visible={isUploadCSVModalOpen}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setIsUploadCSVModalOpen(false)}
-            >
-                <Pressable
-                    style={styles.bottomSheetOverlay}
-                    onPress={() => setIsUploadCSVModalOpen(false)}
-                >
-                    <Pressable
-                        style={styles.bottomSheet}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        {/* Bottom Sheet Header */}
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select file</Text>
-                        </View>
-
-                        {/* Bottom Sheet Options */}
-                        <View style={styles.bottomSheetContent}>
-                            <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => {
-                                    // TODO: Handle file selection
-                                    console.log('Selected: Aloha downloads');
-                                    setIsUploadCSVModalOpen(false);
-                                }}
-                            >
-                                <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => {
-                                    // TODO: Handle file selection
-                                    console.log('Selected: Other files');
-                                    setIsUploadCSVModalOpen(false);
-                                }}
-                            >
-                                <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Other files</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
 
             {/* Add New Award Modal - Centered Popup */}
             <Modal

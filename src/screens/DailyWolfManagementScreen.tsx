@@ -20,6 +20,8 @@ import { StyledCard } from '../components/StyledCard';
 import { MobileUserMenu } from '../components/MobileUserMenu';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
+import { uploadCsvFromText } from '../lib/csvTableUpload';
 
 type WolfForm = {
     officer_of_day: string;
@@ -116,6 +118,7 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
     const [focusedField, setFocusedField] = useState<FocusField>(null);
     const [saving, setSaving] = useState(false);
     const [creating, setCreating] = useState(false);
+    const [wolfCsvUploading, setWolfCsvUploading] = useState(false);
 
     const selectedYmd = useMemo(() => formatDateLocalYmd(selectedDate), [selectedDate]);
 
@@ -280,11 +283,39 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
                             <Ionicons name="help-circle-outline" size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={styles.uploadBtn}
-                            onPress={() => Alert.alert('Upload CSV', 'CSV upload wiring can be added next.')}
+                            style={[styles.uploadBtn, wolfCsvUploading && { opacity: 0.65 }]}
+                            disabled={wolfCsvUploading}
+                            onPress={async () => {
+                                if (!companyId || !season) {
+                                    Alert.alert('Missing context', 'Company or season is not available yet.');
+                                    return;
+                                }
+                                const picked = await pickAndReadCsvText();
+                                if (!picked.ok) {
+                                    if (picked.error === 'canceled') return;
+                                    Alert.alert('CSV', picked.message || 'Could not read file.');
+                                    return;
+                                }
+                                setWolfCsvUploading(true);
+                                try {
+                                    const result = await uploadCsvFromText('daily_wolf_content', picked.text, {
+                                        companyId,
+                                        season,
+                                    });
+                                    if (result.ok) {
+                                        await queryClient.invalidateQueries({ queryKey: ['daily_wolf_management_row'] });
+                                        await queryClient.invalidateQueries({ queryKey: ['daily_wolf_content_dashboard'] });
+                                        Alert.alert('Success', result.message);
+                                    } else {
+                                        Alert.alert('Upload failed', result.error);
+                                    }
+                                } finally {
+                                    setWolfCsvUploading(false);
+                                }
+                            }}
                         >
                             <Ionicons name="cloud-upload-outline" size={16} color={theme.colors.text} />
-                            <Text style={styles.uploadBtnText}>Upload CSV</Text>
+                            <Text style={styles.uploadBtnText}>{wolfCsvUploading ? 'Uploading…' : 'Upload CSV'}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

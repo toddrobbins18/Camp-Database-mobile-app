@@ -24,6 +24,8 @@ import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalen
 import { useCampers } from '../api/campers';
 import { useStaff } from '../api/staff';
 import { useCompany } from '../contexts/CompanyContext';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
+import { uploadCsvFromText } from '../lib/csvTableUpload';
 
 /** DB + web use lowercase; labels are for UI only (see migrations sports_calendar_home_away_check). */
 const HOME_AWAY_OPTIONS: { value: string; label: string }[] = [
@@ -120,7 +122,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [showAddEventModal, setShowAddEventModal] = useState(false);
     const [showGuideModal, setShowGuideModal] = useState(false);
-    const [showUploadCSVModal, setShowUploadCSVModal] = useState(false);
+    const [sportsCalCsvUploading, setSportsCalCsvUploading] = useState(false);
     const [showListViewModal, setShowListViewModal] = useState(false);
     const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
     const [eventToDelete, setEventToDelete] = useState<string | null>(null);
@@ -757,10 +759,30 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         setShowEditEventModal(false);
     };
 
-    const handleSelectFileOption = (option: string) => {
-        console.log('Selected:', option);
-        setShowUploadCSVModal(false);
-        // TODO: Handle file selection
+    const handleSportsCalendarCsvUpload = async () => {
+        if (!companyId || !season) {
+            Alert.alert('Missing context', 'Company or season is not available yet.');
+            return;
+        }
+        const picked = await pickAndReadCsvText();
+        if (!picked.ok) {
+            if (picked.error === 'canceled') return;
+            Alert.alert('CSV', picked.message || 'Could not read file.');
+            return;
+        }
+        setSportsCalCsvUploading(true);
+        try {
+            const result = await uploadCsvFromText('sports_calendar', picked.text, { companyId, season });
+            if (result.ok) {
+                await queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
+                await queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
+                Alert.alert('Success', result.message);
+            } else {
+                Alert.alert('Upload failed', result.error);
+            }
+        } finally {
+            setSportsCalCsvUploading(false);
+        }
     };
 
     const renderManageRosterModal = () => (
@@ -1287,11 +1309,12 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             <Ionicons name="help-circle-outline" size={20} color={theme.colors.text} />
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={styles.uploadBtn}
-                            onPress={() => setShowUploadCSVModal(true)}
+                            style={[styles.uploadBtn, sportsCalCsvUploading && { opacity: 0.65 }]}
+                            onPress={() => void handleSportsCalendarCsvUpload()}
+                            disabled={sportsCalCsvUploading}
                         >
                             <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} />
-                            <Text style={styles.uploadBtnText}>Upload CSV</Text>
+                            <Text style={styles.uploadBtnText}>{sportsCalCsvUploading ? 'Uploading…' : 'Upload CSV'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.addBtn}
@@ -1789,38 +1812,6 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                 </View>
                             </View>
                         </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Upload CSV Modal */}
-            <Modal
-                visible={showUploadCSVModal}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowUploadCSVModal(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowUploadCSVModal(false)}>
-                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select file</Text>
-                        </View>
-                        <View style={styles.bottomSheetContent}>
-                            <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => handleSelectFileOption('Aloha downloads')}
-                            >
-                                <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => handleSelectFileOption('Other files')}
-                            >
-                                <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Other files</Text>
-                            </TouchableOpacity>
-                        </View>
                     </Pressable>
                 </Pressable>
             </Modal>

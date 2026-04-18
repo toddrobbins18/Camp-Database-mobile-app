@@ -11,6 +11,8 @@ import { buildStaffInsertRow, formatIsoDateToUs, formatStaffTypeFromDb } from '.
 import { useRole } from '../hooks/useRole';
 import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { StaffLeaderAssignmentModal } from '../components/StaffLeaderAssignmentModal';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
+import { uploadCsvFromText } from '../lib/csvTableUpload';
 
 const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
     <View style={styles.header}>
@@ -157,6 +159,7 @@ export const StaffScreen = ({ navigation }: any) => {
 
     // Eval Error State
     const [isEvalErrorVisible, setIsEvalErrorVisible] = useState(false);
+    const [staffCsvUploading, setStaffCsvUploading] = useState(false);
 
     const formatDate = (date: Date) => {
         return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
@@ -184,8 +187,30 @@ export const StaffScreen = ({ navigation }: any) => {
         setModalVisible(prev => ({ ...prev, [key]: value }));
     };
 
-    const handleFileUpload = () => {
-        Alert.alert("Choose File", "Opening document picker...");
+    const handleFileUpload = async () => {
+        if (!companyId || !season) {
+            Alert.alert('Missing context', 'Company or season is not available yet.');
+            return;
+        }
+        const picked = await pickAndReadCsvText();
+        if (!picked.ok) {
+            if (picked.error === 'canceled') return;
+            Alert.alert('CSV', picked.message || 'Could not read file.');
+            return;
+        }
+        setStaffCsvUploading(true);
+        try {
+            const result = await uploadCsvFromText('staff', picked.text, { companyId, season });
+            if (result.ok) {
+                await queryClient.invalidateQueries({ queryKey: ['staff'] });
+                Alert.alert('Success', result.message);
+                toggleModal('uploadCsv', false);
+            } else {
+                Alert.alert('Upload failed', result.error);
+            }
+        } finally {
+            setStaffCsvUploading(false);
+        }
     };
 
     const openStaffProfile = (staff: StaffMember) => {
@@ -692,12 +717,18 @@ export const StaffScreen = ({ navigation }: any) => {
 
                         <ScrollView style={styles.modalBody}>
                             <Text style={styles.sectionTitle}>Upload CSV</Text>
-                            <TouchableOpacity style={styles.fileUploadBtnLarge} onPress={handleFileUpload}>
+                            <TouchableOpacity
+                                style={[styles.fileUploadBtnLarge, staffCsvUploading && { opacity: 0.65 }]}
+                                onPress={() => void handleFileUpload()}
+                                disabled={staffCsvUploading}
+                            >
                                 <View style={styles.uploadIconCircle}>
                                     <Ionicons name="cloud-upload" size={32} color={theme.colors.secondary} />
                                 </View>
-                                <Text style={styles.fileUploadTextPrimary}>Tap to Select CSV File</Text>
-                                <Text style={styles.fileUploadSubText}>or drag and drop on desktop</Text>
+                                <Text style={styles.fileUploadTextPrimary}>
+                                    {staffCsvUploading ? 'Uploading…' : 'Tap to Select CSV File'}
+                                </Text>
+                                <Text style={styles.fileUploadSubText}>Person ID, First/Last name, or name column (see web format guide)</Text>
                             </TouchableOpacity>
 
                             <View style={styles.divider} />

@@ -22,6 +22,8 @@ import { StyledCard } from '../components/StyledCard';
 import { MobileUserMenu } from '../components/MobileUserMenu';
 
 import { useCompany } from '../contexts/CompanyContext';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
+import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { useMenuItems, useAddMenuItem, MenuItem } from '../api/menu';
 import { supabase } from '../lib/supabase';
 import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
@@ -33,11 +35,10 @@ export const MenuScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [showGuideModal, setShowGuideModal] = useState(false);
-    const [showSelectFileModal, setShowSelectFileModal] = useState(false);
     const [showAddMenuItemModal, setShowAddMenuItemModal] = useState(false);
     const [activeTab, setActiveTab] = useState('Children');
     const [activeSubTab, setActiveSubTab] = useState('Roster');
-    const { companyId } = useCompany();
+    const { companyId, season } = useCompany();
     const { data: menuItemsList = [] } = useMenuItems(companyId);
     const addMenuItemMutation = useAddMenuItem();
     const [itemToDelete, setItemToDelete] = useState<any>(null);
@@ -52,25 +53,42 @@ export const MenuScreen = ({ navigation }: any) => {
     const [addMenuSubsheet, setAddMenuSubsheet] = useState<AddMenuSubsheet>(null);
     const [calendarCurrentDate, setCalendarCurrentDate] = useState(new Date());
     const [calendarSelectedDate, setCalendarSelectedDate] = useState(new Date());
+    const [menuCsvUploading, setMenuCsvUploading] = useState(false);
 
     const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
     const closeAddMenuTransientUi = () => {
         setAddMenuSubsheet(null);
     };
 
-    const handleUploadCSV = () => {
-        setShowSelectFileModal(true);
+    const handleUploadCSV = async () => {
+        if (!companyId || !season) {
+            Alert.alert('Missing context', 'Company or season is not available yet.');
+            return;
+        }
+        const picked = await pickAndReadCsvText();
+        if (!picked.ok) {
+            if (picked.error === 'canceled') return;
+            Alert.alert('CSV', picked.message || 'Could not read file.');
+            return;
+        }
+        setMenuCsvUploading(true);
+        try {
+            const result = await uploadCsvFromText('menu_items', picked.text, { companyId, season });
+            if (result.ok) {
+                await queryClient.invalidateQueries({ queryKey: ['menu_items', companyId] });
+                await queryClient.invalidateQueries({ queryKey: ['dashboard_meals'] });
+                Alert.alert('Success', result.message);
+            } else {
+                Alert.alert('Upload failed', result.error);
+            }
+        } finally {
+            setMenuCsvUploading(false);
+        }
     };
 
     const handleAddMenuItem = () => {
         closeAddMenuTransientUi();
         setShowAddMenuItemModal(true);
-    };
-
-    const handleSelectFileOption = (option: string) => {
-        console.log('Selected:', option);
-        setShowSelectFileModal(false);
-        // TODO: Handle file selection
     };
 
     const formatDate = (date: Date): string => {
@@ -217,9 +235,13 @@ export const MenuScreen = ({ navigation }: any) => {
                         >
                             <Ionicons name="help-circle-outline" size={20} color={theme.colors.text} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.uploadBtn} onPress={handleUploadCSV}>
+                        <TouchableOpacity
+                            style={[styles.uploadBtn, menuCsvUploading && { opacity: 0.65 }]}
+                            onPress={() => void handleUploadCSV()}
+                            disabled={menuCsvUploading}
+                        >
                             <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} />
-                            <Text style={styles.uploadBtnText}>Upload CSV</Text>
+                            <Text style={styles.uploadBtnText}>{menuCsvUploading ? 'Uploading…' : 'Upload CSV'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.addBtn} onPress={handleAddMenuItem}>
                             <Ionicons name="add" size={18} color="white" />
@@ -433,42 +455,6 @@ export const MenuScreen = ({ navigation }: any) => {
                                 </View>
                             </View>
                         </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Select File Bottom Sheet Modal */}
-            <Modal
-                visible={showSelectFileModal}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowSelectFileModal(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowSelectFileModal(false)}>
-                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
-                        {/* Bottom Sheet Header */}
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select file</Text>
-                        </View>
-
-                        {/* Bottom Sheet Options */}
-                        <View style={styles.bottomSheetContent}>
-                            <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => handleSelectFileOption('Aloha downloads')}
-                            >
-                                <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => handleSelectFileOption('Other files')}
-                            >
-                                <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Other files</Text>
-                            </TouchableOpacity>
-                        </View>
                     </Pressable>
                 </Pressable>
             </Modal>

@@ -10,6 +10,8 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useDivisions } from '../api/campers';
 import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
 import { supabase } from '../lib/supabase';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
+import { uploadCsvFromText } from '../lib/csvTableUpload';
 
 const getChildDisplayName = (child: any) =>
     (child?.name != null && child.name !== '')
@@ -48,7 +50,7 @@ export const HealthScreen = ({ navigation }: any) => {
     const [notes, setNotes] = useState('');
     const [isRecurring, setIsRecurring] = useState(false);
     const [showChildPicker, setShowChildPicker] = useState(false);
-    const [showUploadModal, setShowUploadModal] = useState(false);
+    const [medCsvUploading, setMedCsvUploading] = useState(false);
     const [expandedHistoryChildId, setExpandedHistoryChildId] = useState<string | null>(null);
     const [itemToDelete, setItemToDelete] = useState<{ id: string } | null>(null);
     const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
@@ -305,8 +307,29 @@ export const HealthScreen = ({ navigation }: any) => {
         return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
     };
 
-    const handleUploadCSV = () => {
-        setShowUploadModal(true);
+    const handleUploadCSV = async () => {
+        if (!companyId || !season) {
+            Alert.alert('Missing context', 'Company or season is not available yet.');
+            return;
+        }
+        const picked = await pickAndReadCsvText();
+        if (!picked.ok) {
+            if (picked.error === 'canceled') return;
+            Alert.alert('CSV', picked.message || 'Could not read file.');
+            return;
+        }
+        setMedCsvUploading(true);
+        try {
+            const result = await uploadCsvFromText('medication_logs', picked.text, { companyId, season });
+            if (result.ok) {
+                await queryClient.invalidateQueries({ queryKey: ['medication_logs'] });
+                Alert.alert('Success', result.message);
+            } else {
+                Alert.alert('Upload failed', result.error);
+            }
+        } finally {
+            setMedCsvUploading(false);
+        }
     };
 
     const tabs = ['Daily Log', "Today's Medications", 'Health Center', 'Health Center Log', 'Add Medication'];
@@ -410,9 +433,13 @@ export const HealthScreen = ({ navigation }: any) => {
                     <TouchableOpacity style={styles.viewControlIcon}>
                         <Ionicons name="time-outline" size={18} color={theme.colors.text} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.uploadBtn} onPress={handleUploadCSV}>
+                    <TouchableOpacity
+                        style={[styles.uploadBtn, medCsvUploading && { opacity: 0.65 }]}
+                        onPress={() => void handleUploadCSV()}
+                        disabled={medCsvUploading}
+                    >
                         <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} />
-                        <Text style={styles.uploadBtnText}>Upload CSV</Text>
+                        <Text style={styles.uploadBtnText}>{medCsvUploading ? 'Uploading…' : 'Upload CSV'}</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -1227,50 +1254,6 @@ export const HealthScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             ))}
                         </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Upload CSV Modal */}
-            <Modal
-                visible={showUploadModal}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowUploadModal(false)}
-            >
-                <Pressable
-                    style={styles.uploadModalOverlay}
-                    onPress={() => setShowUploadModal(false)}
-                >
-                    <Pressable
-                        style={styles.uploadModal}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        <Text style={styles.uploadModalTitle}>Select file</Text>
-
-                        <TouchableOpacity
-                            style={styles.uploadOption}
-                            onPress={() => {
-                                // Handle Aloha downloads selection
-                                console.log('Selected: Aloha downloads');
-                                setShowUploadModal(false);
-                            }}
-                        >
-                            <Ionicons name="folder-outline" size={24} color={theme.colors.text} />
-                            <Text style={styles.uploadOptionText}>Aloha downloads</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.uploadOption}
-                            onPress={() => {
-                                // Handle Other files selection
-                                console.log('Selected: Other files');
-                                setShowUploadModal(false);
-                            }}
-                        >
-                            <Ionicons name="document-outline" size={24} color={theme.colors.text} />
-                            <Text style={styles.uploadOptionText}>Other files</Text>
-                        </TouchableOpacity>
                     </Pressable>
                 </Pressable>
             </Modal>

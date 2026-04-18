@@ -27,6 +27,8 @@ import { theme } from '../theme/theme';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadTripAttachment, getSignedUrl, pathFromFileUrl } from '../api/storage';
 import { supabase } from '../lib/supabase';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
+import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 
@@ -351,6 +353,7 @@ export const TransportScreen = ({ navigation }: any) => {
     const { data: rawDivisions = [] } = useDivisions(companyId);
 
     const queryClient = useQueryClient();
+    const [tripCsvUploading, setTripCsvUploading] = useState(false);
     const addTripMutation = useAddTrip();
     const updateTripMutation = useUpdateTrip();
     const manageRosterMutation = useManageTripRoster();
@@ -767,13 +770,35 @@ export const TransportScreen = ({ navigation }: any) => {
 
                 {/* Upload CSV */}
                 <TouchableOpacity
-                    style={styles.actionButtonSecondary}
-                    onPress={() =>
-                        Alert.alert('Upload CSV', 'Trip CSV upload from mobile is coming soon. Use the web app Transportation page to bulk upload.')
-                    }
+                    style={[styles.actionButtonSecondary, tripCsvUploading && { opacity: 0.65 }]}
+                    disabled={tripCsvUploading}
+                    onPress={async () => {
+                        if (!companyId || !season) {
+                            Alert.alert('Missing context', 'Company or season is not available yet.');
+                            return;
+                        }
+                        const picked = await pickAndReadCsvText();
+                        if (!picked.ok) {
+                            if (picked.error === 'canceled') return;
+                            Alert.alert('CSV', picked.message || 'Could not read file.');
+                            return;
+                        }
+                        setTripCsvUploading(true);
+                        try {
+                            const result = await uploadCsvFromText('trips', picked.text, { companyId, season });
+                            if (result.ok) {
+                                await queryClient.invalidateQueries({ queryKey: ['trips', companyId, season] });
+                                Alert.alert('Success', result.message);
+                            } else {
+                                Alert.alert('Upload failed', result.error);
+                            }
+                        } finally {
+                            setTripCsvUploading(false);
+                        }
+                    }}
                 >
                     <Ionicons name="cloud-upload-outline" size={16} color={theme.colors.text} />
-                    <Text style={styles.actionButtonTextSecondary}>Upload CSV</Text>
+                    <Text style={styles.actionButtonTextSecondary}>{tripCsvUploading ? 'Uploading…' : 'Upload CSV'}</Text>
                 </TouchableOpacity>
 
                 {/* Add Trip */}

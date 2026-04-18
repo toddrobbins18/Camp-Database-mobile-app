@@ -23,6 +23,8 @@ import { useDivisions } from '../api/campers';
 import { useSpecialEvents, useAddSpecialEvent, useUpdateSpecialEvent } from '../api/calendar_events';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
+import { uploadCsvFromText } from '../lib/csvTableUpload';
 
 interface SpecialEventsScreenProps {
     navigation: any;
@@ -175,7 +177,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
     const [showAddEventModal, setShowAddEventModal] = useState(false);
-    const [showUploadCSVModal, setShowUploadCSVModal] = useState(false);
+    const [specialEventsCsvUploading, setSpecialEventsCsvUploading] = useState(false);
     const [editingEventId, setEditingEventId] = useState<string | null>(null);
     const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
     const [timePickerField, setTimePickerField] = useState<'startTime' | 'endTime' | null>(null);
@@ -592,10 +594,30 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         setTimePickerField(null);
     };
 
-    const handleSelectFileOption = (option: string) => {
-        console.log('Selected:', option);
-        setShowUploadCSVModal(false);
-        // TODO: Handle file selection
+    const handleSpecialEventsCsvUpload = async () => {
+        if (!companyId || !season) {
+            Alert.alert('Missing context', 'Company or season is not available yet.');
+            return;
+        }
+        const picked = await pickAndReadCsvText();
+        if (!picked.ok) {
+            if (picked.error === 'canceled') return;
+            Alert.alert('CSV', picked.message || 'Could not read file.');
+            return;
+        }
+        setSpecialEventsCsvUploading(true);
+        try {
+            const result = await uploadCsvFromText('special_events_activities', picked.text, { companyId, season });
+            if (result.ok) {
+                await queryClient.invalidateQueries({ queryKey: ['special_events', companyId, season] });
+                await queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
+                Alert.alert('Success', result.message);
+            } else {
+                Alert.alert('Upload failed', result.error);
+            }
+        } finally {
+            setSpecialEventsCsvUploading(false);
+        }
     };
 
     return (
@@ -635,11 +657,12 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                         <Ionicons name="help-circle-outline" size={24} color={theme.colors.text} />
                     </TouchableOpacity>
                     <TouchableOpacity
-                        style={styles.uploadButton}
-                        onPress={() => setShowUploadCSVModal(true)}
+                        style={[styles.uploadButton, specialEventsCsvUploading && { opacity: 0.65 }]}
+                        onPress={() => void handleSpecialEventsCsvUpload()}
+                        disabled={specialEventsCsvUploading}
                     >
                         <Ionicons name="arrow-up-outline" size={20} color={theme.colors.text} />
-                        <Text style={styles.uploadButtonText}>Upload CSV</Text>
+                        <Text style={styles.uploadButtonText}>{specialEventsCsvUploading ? 'Uploading…' : 'Upload CSV'}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={styles.addEventButton}
@@ -1302,39 +1325,6 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                     </KeyboardAvoidingView>
                 </View>
             </Modal>
-
-            {/* Upload CSV Modal */}
-            <Modal
-                visible={showUploadCSVModal}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowUploadCSVModal(false)}
-            >
-                <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowUploadCSVModal(false)}>
-                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select file</Text>
-                        </View>
-                        <View style={styles.bottomSheetContent}>
-                            <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => handleSelectFileOption('Aloha downloads')}
-                            >
-                                <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => handleSelectFileOption('Other files')}
-                            >
-                                <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Other files</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
 
             {/* Help Modal (CSV Guide) */}
             <Modal

@@ -11,6 +11,8 @@ import { useCampers, useAddCamper, useEditCamper, useDivisions } from '../api/ca
 import { useRole } from '../hooks/useRole';
 import { useStaff } from '../api/staff';
 import { supabase } from '../lib/supabase';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
+import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { showAppAlert } from '../utils/showAppAlert';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 
@@ -110,6 +112,32 @@ export const CamperScreen = ({ navigation }: any) => {
     const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
     const [itemToDelete, setItemToDelete] = useState<any>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [rosterCsvUploading, setRosterCsvUploading] = useState(false);
+
+    const handleRosterCsvUpload = async () => {
+        if (!companyId || !season) {
+            showAppAlert('Missing context', 'Company or season is not available yet.');
+            return;
+        }
+        const picked = await pickAndReadCsvText();
+        if (!picked.ok) {
+            if (picked.error === 'canceled') return;
+            showAppAlert('CSV', picked.message || 'Could not read file.');
+            return;
+        }
+        setRosterCsvUploading(true);
+        try {
+            const result = await uploadCsvFromText('children', picked.text, { companyId, season });
+            if (result.ok) {
+                await queryClient.invalidateQueries({ queryKey: ['campers', companyId, season] });
+                showAppAlert('Success', result.message);
+            } else {
+                showAppAlert('Upload failed', result.error);
+            }
+        } finally {
+            setRosterCsvUploading(false);
+        }
+    };
 
     const handleConfirmDelete = async () => {
         if (!itemToDelete?.id) return;
@@ -677,9 +705,13 @@ export const CamperScreen = ({ navigation }: any) => {
                             <Ionicons name="pricetag-outline" size={18} color={theme.colors.text} />
                             <Text style={styles.actionButtonText}>Assign Wristbands</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionButton}>
+                        <TouchableOpacity
+                            style={[styles.actionButton, rosterCsvUploading && { opacity: 0.65 }]}
+                            onPress={() => void handleRosterCsvUpload()}
+                            disabled={rosterCsvUploading}
+                        >
                             <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} />
-                            <Text style={styles.actionButtonText}>Upload CSV</Text>
+                            <Text style={styles.actionButtonText}>{rosterCsvUploading ? 'Uploading…' : 'Upload CSV'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.addChildButton}

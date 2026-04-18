@@ -9,6 +9,8 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useCampers } from '../api/campers';
 import { useIncidentReports, useAddIncidentReport, useUpdateIncidentReport } from '../api/incidents_approvals';
 import { supabase } from '../lib/supabase';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
+import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 
 const INCIDENT_ACCENT = '#ef4444';
@@ -38,7 +40,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     const addIncidentMutation = useAddIncidentReport();
     const updateIncidentMutation = useUpdateIncidentReport();
     const childrenNames = campersList.map((c: any) => ({ id: c.id, name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim() }));
-    const [showBottomSheet, setShowBottomSheet] = useState(false);
+    const [incidentCsvUploading, setIncidentCsvUploading] = useState(false);
     const [showAddIncidentModal, setShowAddIncidentModal] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [itemToDelete, setItemToDelete] = useState<any>(null);
@@ -78,18 +80,29 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     const severityLevels = ['Low', 'Medium', 'High', 'Critical'];
     const statusOptions = ['Open', 'Investigating', 'Resolved', 'Closed'];
 
-    const handleUploadCSV = () => {
-        setShowBottomSheet(true);
-    };
-
-    const handleCloseBottomSheet = () => {
-        setShowBottomSheet(false);
-    };
-
-    const handleSelectOption = (option: string) => {
-        // TODO: Handle file selection
-        console.log('Selected:', option);
-        setShowBottomSheet(false);
+    const handleUploadCSV = async () => {
+        if (!companyId || !season) {
+            Alert.alert('Missing context', 'Company or season is not available yet.');
+            return;
+        }
+        const picked = await pickAndReadCsvText();
+        if (!picked.ok) {
+            if (picked.error === 'canceled') return;
+            Alert.alert('CSV', picked.message || 'Could not read file.');
+            return;
+        }
+        setIncidentCsvUploading(true);
+        try {
+            const result = await uploadCsvFromText('incident_reports', picked.text, { companyId, season });
+            if (result.ok) {
+                await queryClient.invalidateQueries({ queryKey: ['incident_reports', companyId, season] });
+                Alert.alert('Success', result.message);
+            } else {
+                Alert.alert('Upload failed', result.error);
+            }
+        } finally {
+            setIncidentCsvUploading(false);
+        }
     };
 
     const handleAddIncident = () => {
@@ -240,9 +253,13 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                             <Ionicons name="help-circle-outline" size={24} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                         <View style={styles.actionButtonsRight}>
-                            <TouchableOpacity style={styles.uploadBtn} onPress={handleUploadCSV}>
+                            <TouchableOpacity
+                                style={[styles.uploadBtn, incidentCsvUploading && { opacity: 0.65 }]}
+                                onPress={() => void handleUploadCSV()}
+                                disabled={incidentCsvUploading}
+                            >
                                 <Ionicons name="cloud-upload-outline" size={18} color="white" />
-                                <Text style={styles.uploadBtnText}>Upload CSV</Text>
+                                <Text style={styles.uploadBtnText}>{incidentCsvUploading ? 'Uploading…' : 'Upload CSV'}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.addBtn} onPress={handleAddIncident}>
                                 <Ionicons name="add" size={18} color="white" />
@@ -453,42 +470,6 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                 </View>
                             </View>
                         </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Bottom Sheet Modal */}
-            <Modal
-                visible={showBottomSheet}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={handleCloseBottomSheet}
-            >
-                <Pressable style={styles.modalOverlay} onPress={handleCloseBottomSheet}>
-                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
-                        {/* Bottom Sheet Header */}
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select file</Text>
-                        </View>
-
-                        {/* Bottom Sheet Options */}
-                        <View style={styles.bottomSheetContent}>
-                            <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => handleSelectOption('Aloha downloads')}
-                            >
-                                <Ionicons name="folder-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Aloha downloads</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.bottomSheetOption}
-                                onPress={() => handleSelectOption('Other files')}
-                            >
-                                <Ionicons name="document-text-outline" size={24} color={theme.colors.secondary} />
-                                <Text style={styles.bottomSheetOptionText}>Other files</Text>
-                            </TouchableOpacity>
-                        </View>
                     </Pressable>
                 </Pressable>
             </Modal>

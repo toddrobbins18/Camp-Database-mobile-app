@@ -26,6 +26,7 @@ interface ReportsScreenProps {
 type ReportType =
     | 'incidents'
     | 'staff_evaluations'
+    | 'camper_reports'
     | 'awards'
     | 'sports_events'
     | 'conflicts'
@@ -92,6 +93,7 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
         const base: ReportOption[] = [
             { value: 'incidents', label: 'Incident Reports' },
             { value: 'staff_evaluations', label: 'Staff Evaluations' },
+            { value: 'camper_reports', label: 'Camper Reports' },
             { value: 'awards', label: 'Awards' },
             { value: 'sports_events', label: 'Sports Events' },
             { value: 'conflicts', label: 'Schedule Conflicts' },
@@ -137,6 +139,41 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
             let summaryRows: Record<string, string | number> = {};
             const fromDate = startDate || '1900-01-01';
             const toDate = endDate || '2100-12-31';
+
+            // Keep report filtering aligned with web ReportingCenter/AuthContext behavior.
+            const resolveWebDivisionFilter = async (): Promise<string[] | null> => {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return [];
+
+                const { data: roleRows } = await supabase
+                    .from('user_roles')
+                    .select('role')
+                    .eq('user_id', user.id);
+
+                const roles = (roleRows || []).map((r: any) => r.role as string);
+                const isSuperAdmin = roles.includes('super_admin');
+                const effectiveRole = isSuperAdmin
+                    ? 'super_admin'
+                    : roles.includes('admin')
+                        ? 'admin'
+                        : (roles[0] || null);
+
+                const fullDivisionAccessRoles = new Set(['admin', 'super_admin', 'specialist', 'staff', 'health_center']);
+                if (effectiveRole && fullDivisionAccessRoles.has(effectiveRole)) {
+                    return null;
+                }
+
+                const { data: divPerms } = await supabase
+                    .from('division_permissions')
+                    .select('division_id')
+                    .eq('user_id', user.id)
+                    .eq('can_access', true);
+
+                const ids = [...new Set((divPerms || []).map((d: any) => d.division_id).filter(Boolean))] as string[];
+                return ids.length > 0 ? ids : [];
+            };
+
+            const allowedDivisionIds = await resolveWebDivisionFilter();
 
             switch (reportType) {
                 case 'incidents': {
@@ -197,6 +234,46 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                     summaryRows = {
                         'Total Evaluations': (evals || []).length,
                         'Average Rating': avg.toFixed(2),
+                    };
+                    break;
+                }
+                case 'camper_reports': {
+                    const { data } = await supabase
+                        .from('camper_reports')
+                        .select('report_date, report_type, report_data, children(name, division_id, divisions(name))')
+                        .eq('company_id', companyId)
+                        .eq('season', season)
+                        .gte('report_date', fromDate)
+                        .lte('report_date', toDate)
+                        .order('report_date', { ascending: false });
+
+                    const filtered = (data || []).filter((row: any) =>
+                        selectedDivisionId === 'all' ? true : row.children?.division_id === selectedDivisionId
+                    );
+
+                    dataRows = filtered.map((row: any) => {
+                        const reportData = row.report_data && typeof row.report_data === 'object' ? row.report_data : {};
+                        const questionCount = Array.isArray(reportData.responses)
+                            ? reportData.responses.length
+                            : typeof reportData === 'object'
+                                ? Object.keys(reportData).length
+                                : 0;
+
+                        return {
+                            Date: row.report_date,
+                            Child: row.children?.name || 'Unknown',
+                            Division: row.children?.divisions?.name || 'N/A',
+                            'Report Type': row.report_type === '10_day' ? '10-Day' : 'End of Summer',
+                            Questions: questionCount,
+                        };
+                    });
+
+                    const tenDayCount = filtered.filter((r: any) => r.report_type === '10_day').length;
+                    const endOfSummerCount = filtered.filter((r: any) => r.report_type === 'end_of_summer').length;
+                    summaryRows = {
+                        'Total Camper Reports': filtered.length,
+                        '10-Day Reports': tenDayCount,
+                        'End of Summer Reports': endOfSummerCount,
                     };
                     break;
                 }
@@ -450,12 +527,24 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                     break;
                 }
                 case 'tshirt_sizes': {
-                    const { data: children } = await supabase
+                    let childrenQuery = supabase
                         .from('children')
                         .select('name, tshirt_size, division_id, divisions(name), gender, status')
                         .eq('company_id', companyId)
                         .eq('season', season)
                         .eq('status', 'active');
+
+                    // Match web report behavior: users with restricted division access should only
+                    // see campers from allowed divisions even when "All Divisions" is selected.
+                    if (allowedDivisionIds !== null) {
+                        if (allowedDivisionIds.length === 0) {
+                            childrenQuery = childrenQuery.in('division_id', ['00000000-0000-0000-0000-000000000000']);
+                        } else {
+                            childrenQuery = childrenQuery.in('division_id', allowedDivisionIds);
+                        }
+                    }
+
+                    const { data: children } = await childrenQuery;
                     const { data: staff } = await supabase
                         .from('staff')
                         .select('name, tshirt_size, department, status')
@@ -478,11 +567,28 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                         Gender: 'N/A',
                     }));
                     dataRows = [...camperRows, ...staffRows];
+                    const sizeCounts: Record<string, number> = {};
+                    dataRows.forEach((row) => {
+                        const size = String(row['T-Shirt Size'] || 'Not Set');
+                        sizeCounts[size] = (sizeCounts[size] || 0) + 1;
+                    });
+
+                    const missingSize = sizeCounts['Not Set'] || 0;
+                    const withSizeSet = dataRows.length - missingSize;
+
+                    const sizeBreakdown = Object.fromEntries(
+                        Object.entries(sizeCounts)
+                            .filter(([size]) => size !== 'Not Set')
+                            .sort((a, b) => b[1] - a[1])
+                    );
+
                     summaryRows = {
                         'Total People': dataRows.length,
                         Campers: camperRows.length,
                         Staff: staffRows.length,
-                        'Missing Size': dataRows.filter((r) => r['T-Shirt Size'] === 'Not Set').length,
+                        'With Size Set': withSizeSet,
+                        'Missing Size': missingSize,
+                        ...sizeBreakdown,
                     };
                     break;
                 }
