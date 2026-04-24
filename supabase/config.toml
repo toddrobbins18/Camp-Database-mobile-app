@@ -4,16 +4,13 @@ project_id = "qjbkvnzeejbqxbcbskdu"
 verify_jwt = false
 
 [functions.create-user]
-verify_jwt = false
+verify_jwt = true
 
 [functions.delete-user]
 verify_jwt = true
 
 [functions.send-user-invitation]
 verify_jwt = true
-
-[functions.confirm-user-email]
-verify_jwt = false
 
 [functions.notify-transportation-events]
 verify_jwt = false
@@ -37,7 +34,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.get-weather]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ai-chat]
 verify_jwt = true
@@ -58,6 +55,9 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.detect-schedule-conflicts]
+verify_jwt = false
+
+[functions.populate-guardian-emails]
 verify_jwt = false
 
 [functions.send-sports-academy-notification]

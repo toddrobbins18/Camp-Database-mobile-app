@@ -10,6 +10,16 @@ function jsonResponse(body: Record<string, unknown>, status: number) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
 
+const ALLOWED_ROLES = new Set([
+  'admin',
+  'staff',
+  'viewer',
+  'division_leader',
+  'specialist',
+  'health_center',
+  'super_admin',
+]);
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -58,6 +68,7 @@ serve(async (req) => {
       return jsonResponse({ error: 'Invalid request body. Send JSON with email, password, fullName, role, and optionally companyId.' }, 400);
     }
     const { email, password, fullName, role, companyId } = body ?? {};
+    const normalizedRole = String(role ?? '').trim().toLowerCase();
 
     console.log('Creating user:', { email, fullName, role, companyId });
 
@@ -80,6 +91,10 @@ serve(async (req) => {
 
     if (!email?.trim() || !password || !fullName?.trim()) {
       return jsonResponse({ error: 'Email, password, and full name are required.' }, 400);
+    }
+
+    if (!ALLOWED_ROLES.has(normalizedRole)) {
+      return jsonResponse({ error: `Invalid role: ${role}` }, 400);
     }
 
     // Create the user
@@ -117,7 +132,7 @@ serve(async (req) => {
       .from('user_roles')
       .insert({
         user_id: newUser.user.id,
-        role,
+        role: normalizedRole,
         company_id: targetCompanyId,
       });
 

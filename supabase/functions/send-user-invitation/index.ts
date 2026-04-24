@@ -68,9 +68,14 @@ serve(async (req) => {
       targetCompanyId = adminProfile?.company_id;
     }
 
-    // Get the app URL for redirect
-    const projectId = Deno.env.get('SUPABASE_URL')?.match(/https:\/\/([^.]+)\./)?.[1] || '';
-    const redirectUrl = `https://${projectId}.lovableproject.com/auth?company_id=${targetCompanyId}`;
+    // Prefer environment-configured redirect URL for parity-safe cutovers.
+    // Examples:
+    // - INVITE_REDIRECT_URL=datacampmobile://auth
+    // - INVITE_REDIRECT_URL=https://your-web-domain/auth
+    const configuredRedirect = Deno.env.get('INVITE_REDIRECT_URL')?.trim();
+    const baseRedirect = configuredRedirect || 'datacampmobile://auth';
+    const separator = baseRedirect.includes('?') ? '&' : '?';
+    const redirectUrl = `${baseRedirect}${separator}company_id=${encodeURIComponent(String(targetCompanyId ?? ''))}`;
     
     console.log('Using redirect URL:', redirectUrl);
 

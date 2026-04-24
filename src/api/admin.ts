@@ -350,31 +350,15 @@ export const useApproveUser = () => {
             // Ignore duplicate key errors if role somehow exists
             if (roleError && roleError.code !== '23505') throw roleError;
 
-            // Ensure Auth email is confirmed so the user can sign in with password.
-            // (Admin approval updates profiles only; if Supabase requires email confirmation, sign-in fails.)
-            const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession();
-            const accessToken = refreshed.session?.access_token;
-            if (!accessToken) {
-                // Do not fail the whole approve flow; just warn.
-                console.warn(refreshErr?.message || 'No access token available to confirm user email.');
-                return;
-            }
-
-            const confirmRes = await fetch(`${supabaseUrl}/functions/v1/confirm-user-email`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${accessToken}`,
-                    apikey: supabaseAnonKey,
-                },
-                body: JSON.stringify({ userId }),
-            });
-
-            if (!confirmRes.ok) {
-                // Approval already succeeded; don't block.
-                const txt = await confirmRes.text().catch(() => '');
-                console.warn('confirm-user-email failed:', txt || confirmRes.status);
-            }
+            // NOTE: We intentionally do NOT call the `confirm-user-email`
+            // edge function here. The web (tyler-hill) app is the source of
+            // truth for the approval workflow and it never confirms email
+            // as part of approval - it relies on either the Supabase
+            // project having email confirmation disabled, or on users
+            // being created via the admin-side `create-user` edge function
+            // (which auto-confirms). Keeping this call would diverge the
+            // behavior between web and mobile when they share one
+            // centralized Supabase. See docs/CENTRALIZED_SUPABASE_SYNC.md.
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['pendingUsers'] });

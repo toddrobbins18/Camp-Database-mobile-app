@@ -2016,7 +2016,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 onRequestClose={() => setShowRolePicker(false)}
             >
                 <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowRolePicker(false)}>
-                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                    <Pressable style={styles.roleBottomSheet} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.bottomSheetHeader}>
                             <Text style={styles.bottomSheetTitle}>Select Role</Text>
                         </View>
@@ -2472,7 +2472,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 onRequestClose={() => setShowNewUserRolePicker(false)}
             >
                 <Pressable style={styles.bottomSheetOverlay} onPress={() => setShowNewUserRolePicker(false)}>
-                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
+                    <Pressable style={styles.roleBottomSheet} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.bottomSheetHeader}>
                             <Text style={styles.bottomSheetTitle}>Select Role</Text>
                         </View>
@@ -3067,6 +3067,17 @@ const styles = StyleSheet.create({
         paddingBottom: theme.spacing.xl,
         paddingHorizontal: theme.spacing.md,
         height: '30%',
+        width: '100%',
+    },
+    roleBottomSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.xl,
+        paddingHorizontal: theme.spacing.md,
+        minHeight: 360,
+        maxHeight: '70%',
         width: '100%',
     },
 
