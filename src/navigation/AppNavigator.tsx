@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer } from '@react-navigation/native';
@@ -472,13 +472,31 @@ const MainAppNavigator = () => {
 
 // Root Navigator (Stack)
 export const AppNavigator = () => {
+    const [initialRouteName, setInitialRouteName] = useState<'Login' | 'MainApp' | null>(null);
+
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!mounted) return;
+            setInitialRouteName(session ? 'MainApp' : 'Login');
+        })();
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
+    if (!initialRouteName) {
+        return null;
+    }
+
     return (
         <NavigationContainer>
             <Stack.Navigator
                 screenOptions={{
                     headerShown: false,
                 }}
-                initialRouteName="Login"
+                initialRouteName={initialRouteName}
             >
                 <Stack.Screen name="Login" component={LoginScreen} />
                 <Stack.Screen name="SignUp" component={SignUpScreen} />

@@ -387,6 +387,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                             const isSelected = isSameDate(day.fullDate, selectedDate);
                             const isToday = isSameDate(day.fullDate, new Date());
                             const dayEvts = getEventsForDate(day.fullDate);
+                            const hasEvents = dayEvts.length > 0;
+                            const dayAccent = hasEvents ? getEventAccent(dayEvts[0]) : DEFAULT_ACCENT;
 
                             return (
                                 <TouchableOpacity
@@ -395,6 +397,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                                         s.dayCell,
                                         { height: monthCellHeight },
                                         !day.isCurrentMonth && s.dayCellOther,
+                                        day.isCurrentMonth && hasEvents && s.dayCellWithEvents,
+                                        day.isCurrentMonth && hasEvents && { borderColor: dayAccent.marker },
                                         day.isCurrentMonth && isSelected && s.dayCellSelectedOutline,
                                     ]}
                                     onPress={() => {
@@ -412,6 +416,9 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                                     ]}>
                                         {day.date}
                                     </Text>
+                                    {day.isCurrentMonth && hasEvents && (
+                                        <View style={[s.dayEventDot, { backgroundColor: dayAccent.marker }]} />
+                                    )}
                                 </TouchableOpacity>
                             );
                         })}
@@ -586,6 +593,10 @@ const s = StyleSheet.create({
     daysGrid: { flexDirection: 'row', flexWrap: 'wrap' },
     dayCell: { width: '14.28%', alignItems: 'center', justifyContent: 'center', paddingVertical: theme.spacing.xs, position: 'relative' },
     dayCellOther: { backgroundColor: '#f3f4f6' },
+    dayCellWithEvents: {
+        borderWidth: 1.5,
+        borderRadius: theme.borderRadius.md,
+    },
     /** Neutral outline only — no blue fill (matches clean web month grid). */
     dayCellSelectedOutline: {
         borderWidth: 1,
@@ -596,6 +607,13 @@ const s = StyleSheet.create({
     dayTextOther: { color: theme.colors.textSecondary },
     dayTextEmphasis: { fontWeight: '700' },
     dayTextTodayMark: { fontWeight: '700' },
+    dayEventDot: {
+        width: 5,
+        height: 5,
+        borderRadius: 999,
+        position: 'absolute',
+        bottom: 4,
+    },
     /* Week view */
     weekViewContainer: { flexDirection: 'row', minHeight: 400 },
     weekDayColumn: { width: 120, borderRightWidth: 1, borderRightColor: theme.colors.border, paddingHorizontal: theme.spacing.sm },

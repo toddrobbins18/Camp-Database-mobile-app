@@ -87,6 +87,20 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
         loadRememberedCredentials();
     }, []);
 
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!mounted) return;
+            if (session) {
+                navigation.replace('MainApp');
+            }
+        })();
+        return () => {
+            mounted = false;
+        };
+    }, [navigation]);
+
     const saveCredentialList = async (nextList: RememberedCredential[]) => {
         setRememberedCredentials(nextList);
         if (nextList.length === 0) {
