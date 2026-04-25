@@ -66,6 +66,8 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
     // Date picker state
     const [mealDatePickerMonth, setMealDatePickerMonth] = useState(new Date().getMonth());
     const [mealDatePickerYear, setMealDatePickerYear] = useState(new Date().getFullYear());
+    const [mealToDelete, setMealToDelete] = useState<any>(null);
+    const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
 
     // Fetch special meals from Supabase
     const { data: specialMeals = [], isLoading: isLoadingMeals } = useQuery({
@@ -355,21 +357,25 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
     };
 
     const handleDeleteMeal = (meal: any) => {
-        Alert.alert(
-            'Delete special meal?',
-            'This cannot be undone.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () =>
-                        deleteMealMutation.mutate(meal.id, {
-                            onSuccess: () => Alert.alert('Success', 'Special meal deleted successfully'),
-                        }),
-                },
-            ]
-        );
+        setMealToDelete(meal);
+        setIsDeleteConfirmVisible(true);
+    };
+
+    const closeDeleteConfirmModal = () => {
+        if (deleteMealMutation.isPending) return;
+        setIsDeleteConfirmVisible(false);
+        setMealToDelete(null);
+    };
+
+    const handleConfirmDelete = () => {
+        const id = mealToDelete?.id;
+        if (!id) return;
+        deleteMealMutation.mutate(id, {
+            onSuccess: () => {
+                setIsDeleteConfirmVisible(false);
+                setMealToDelete(null);
+            },
+        });
     };
 
     const handleCloseAddMealModal = () => {
@@ -791,6 +797,48 @@ export const SpecialMealsScreen = ({ navigation }: SpecialMealsScreenProps) => {
                                 <Text style={styles.submitButtonText}>
                                     {editingMealId ? 'Update Special Meal' : 'Add Special Meal'}
                                 </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Delete Confirm Modal */}
+            <Modal
+                visible={isDeleteConfirmVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={closeDeleteConfirmModal}
+            >
+                <View style={styles.centeredModalOverlay}>
+                    <TouchableOpacity
+                        style={StyleSheet.absoluteFillObject}
+                        activeOpacity={1}
+                        onPress={closeDeleteConfirmModal}
+                    />
+                    <View style={styles.deleteModalContent}>
+                        <Text style={styles.deleteModalTitle}>Delete special meal?</Text>
+                        <Text style={styles.deleteModalMessage}>
+                            This cannot be undone.
+                        </Text>
+                        <View style={styles.deleteModalActions}>
+                            <TouchableOpacity
+                                style={styles.deleteModalCancelBtn}
+                                onPress={closeDeleteConfirmModal}
+                                disabled={deleteMealMutation.isPending}
+                            >
+                                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.deleteModalConfirmBtn, deleteMealMutation.isPending && { opacity: 0.7 }]}
+                                onPress={handleConfirmDelete}
+                                disabled={deleteMealMutation.isPending}
+                            >
+                                {deleteMealMutation.isPending ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.deleteModalConfirmText}>Delete</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1235,6 +1283,54 @@ const styles = StyleSheet.create({
         opacity: 0.5,
     },
     submitButtonText: {
+        ...theme.typography.body,
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    deleteModalContent: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        width: '85%',
+        maxWidth: 360,
+        padding: theme.spacing.lg,
+        ...theme.shadows.card,
+    },
+    deleteModalTitle: {
+        ...theme.typography.h3,
+        textAlign: 'center',
+        marginBottom: theme.spacing.sm,
+    },
+    deleteModalMessage: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        marginBottom: theme.spacing.lg,
+    },
+    deleteModalActions: {
+        flexDirection: 'row',
+        gap: theme.spacing.sm,
+    },
+    deleteModalCancelBtn: {
+        flex: 1,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: theme.spacing.sm,
+        alignItems: 'center',
+    },
+    deleteModalCancelText: {
+        ...theme.typography.body,
+        color: theme.colors.text,
+        fontWeight: '600',
+    },
+    deleteModalConfirmBtn: {
+        flex: 1,
+        backgroundColor: theme.colors.danger,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: theme.spacing.sm,
+        alignItems: 'center',
+    },
+    deleteModalConfirmText: {
         ...theme.typography.body,
         color: theme.colors.surface,
         fontWeight: '600',

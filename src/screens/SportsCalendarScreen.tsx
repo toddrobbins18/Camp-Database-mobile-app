@@ -82,6 +82,7 @@ const SORT_OPTIONS = [
 type SortOptionLabel = (typeof SORT_OPTIONS)[number];
 
 const FILTER_SHEET_ORANGE = '#f97316';
+const SPORTS_EMOJI_PRESETS = ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏊', '🏃', '🥍', '🏆', '🎯', '🏒'];
 
 interface SportsEvent {
     id: string;
@@ -92,6 +93,7 @@ interface SportsEvent {
     division: string;
     gender: string;
     eventType: string;
+    emoji?: string;
     // Extended fields for Edit Form
     customSport?: string;
     /** Raw `sport_type` from DB (e.g. "Other") for forms */
@@ -153,6 +155,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         sport_type: string;
         custom_sport_type: string;
         event_type: string;
+        emoji: string;
         division_ids: string[];
         home_away: string;
         depart_time: string;
@@ -173,6 +176,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         sport_type: '',
         custom_sport_type: '',
         event_type: '',
+        emoji: '',
         division_ids: [],
         home_away: '',
         depart_time: '',
@@ -202,6 +206,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         sport_type: '',
         custom_sport_type: '',
         event_type: '',
+        emoji: '',
         division_ids: [] as string[],
         home_away: '',
         depart_time: '',
@@ -348,6 +353,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         division: (e._divisions && e._divisions[0]?.name) || '',
         gender: (e._divisions && e._divisions[0]?.gender) || '',
         eventType: e.event_type || '',
+        emoji: e.emoji || '',
         homeAway: e.home_away || '',
         departTime: e.depart_time || '',
         startTimeField: e.start_time_field || '',
@@ -536,7 +542,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         () =>
             filteredAndSortedEvents.map((evt) => ({
                 id: evt.id,
-                title: evt.title || '',
+                title: `${evt.emoji ? `${evt.emoji} ` : ''}${evt.title || ''}`,
                 date: new Date(evt.date),
                 time: evt.startTimeField || evt.departTime || '',
                 location: evt.location || '',
@@ -595,6 +601,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     ? addFormData.custom_sport_type || null
                     : null,
             event_type: addFormData.event_type || null,
+            emoji: addFormData.emoji || null,
             depart_time: addFormData.depart_time || null,
             start_time_field: addFormData.start_time_field || null,
             location: addFormData.location || null,
@@ -695,6 +702,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
             sport_type: event.dbSportType || event.sport,
             custom_sport_type: event.customSport || '',
             event_type: event.eventType,
+            emoji: event.emoji || '',
             division_ids: event.divisionIds?.length ? event.divisionIds : (event.divisions || []).map((d: any) => d.id),
             home_away: normalizeHomeAway(event.homeAway),
             depart_time: event.departTime || '',
@@ -724,6 +732,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     ? editFormData.custom_sport_type || null
                     : null,
             event_type: editFormData.event_type || null,
+            emoji: editFormData.emoji || null,
             home_away: normalizeHomeAway(editFormData.home_away) || null,
             depart_time: editFormData.depart_time || null,
             start_time_field: editFormData.start_time_field || null,
@@ -1422,7 +1431,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             {getEventsForDate(selectedDate).map((event) => (
                                 <View key={event.id} style={styles.eventItem}>
                                     <View style={styles.eventItemContent}>
-                                        <Text style={styles.eventItemTitle}>{event.title}</Text>
+                                        <Text style={styles.eventItemTitle}>{event.emoji ? `${event.emoji} ` : ''}{event.title}</Text>
                                         <Text style={styles.eventItemDetails}>
                                             {event.sport} • {event.location} • {event.division}
                                         </Text>
@@ -1447,7 +1456,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                         <StyledCard key={`month-${event.id}`} style={styles.eventCard}>
                                             <View style={styles.eventCardHeader}>
                                                 <View style={{ flex: 1 }}>
-                                                    <Text style={styles.eventTitle}>{event.title}</Text>
+                                                    <Text style={styles.eventTitle}>{event.emoji ? `${event.emoji} ` : ''}{event.title}</Text>
                                                     <Text style={styles.eventDate}>
                                                         {event.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                                                     </Text>
@@ -1583,6 +1592,35 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     <Text>{addFormData.event_type || 'Select event type'}</Text>
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
+                            </View>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Emoji Icon (optional)</Text>
+                                <TextInput
+                                    style={styles.emojiPasteInput}
+                                    value={addFormData.emoji}
+                                    onChangeText={(text) => setAddFormData({ ...addFormData, emoji: text })}
+                                    placeholder="Paste an emoji e.g. ⚽ 🏀 🏈"
+                                    maxLength={8}
+                                />
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    contentContainerStyle={styles.emojiRow}
+                                    keyboardShouldPersistTaps="handled"
+                                >
+                                    {SPORTS_EMOJI_PRESETS.map((e) => {
+                                        const isSelected = addFormData.emoji === e;
+                                        return (
+                                            <TouchableOpacity
+                                                key={`add-emoji-${e}`}
+                                                style={[styles.emojiChip, isSelected && styles.emojiChipSelected]}
+                                                onPress={() => setAddFormData({ ...addFormData, emoji: isSelected ? '' : e })}
+                                            >
+                                                <Text style={styles.emojiChipText}>{e}</Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
                             </View>
                             {addFormData.event_type === 'Other' && addFormData.sport_type !== 'Other' && (
                                 <View style={styles.formGroup}>
@@ -1893,7 +1931,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             filteredAndSortedEvents.map((event) => (
                                 <View key={`list-${event.id}`} style={styles.eventCard}>
                                     <View style={styles.eventCardHeader}>
-                                        <Text style={styles.eventTitle}>{event.title}</Text>
+                                        <Text style={styles.eventTitle}>{event.emoji ? `${event.emoji} ` : ''}{event.title}</Text>
                                         <View style={styles.eventActions}>
                                             <TouchableOpacity
                                                 style={styles.eventActionBtn}
@@ -2413,6 +2451,35 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     <Text>{editFormData.event_type || 'Select Event Type'}</Text>
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
+                            </View>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Emoji Icon (optional)</Text>
+                                <TextInput
+                                    style={styles.emojiPasteInput}
+                                    value={editFormData.emoji}
+                                    onChangeText={(text) => setEditFormData({ ...editFormData, emoji: text })}
+                                    placeholder="Paste an emoji e.g. ⚽ 🏀 🏈"
+                                    maxLength={8}
+                                />
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    contentContainerStyle={styles.emojiRow}
+                                    keyboardShouldPersistTaps="handled"
+                                >
+                                    {SPORTS_EMOJI_PRESETS.map((e) => {
+                                        const isSelected = editFormData.emoji === e;
+                                        return (
+                                            <TouchableOpacity
+                                                key={`edit-emoji-${e}`}
+                                                style={[styles.emojiChip, isSelected && styles.emojiChipSelected]}
+                                                onPress={() => setEditFormData({ ...editFormData, emoji: isSelected ? '' : e })}
+                                            >
+                                                <Text style={styles.emojiChipText}>{e}</Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
                             </View>
 
                             {/* Divisions */}
@@ -3746,6 +3813,39 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.md,
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.sm,
+    },
+    emojiPasteInput: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        fontSize: 16,
+        color: theme.colors.text,
+    },
+    emojiRow: {
+        gap: theme.spacing.xs,
+        paddingTop: theme.spacing.sm,
+        paddingBottom: 2,
+    },
+    emojiChip: {
+        minWidth: 36,
+        minHeight: 36,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+    },
+    emojiChipSelected: {
+        borderColor: theme.colors.secondary,
+        backgroundColor: '#fff7ed',
+    },
+    emojiChipText: {
+        fontSize: 20,
     },
     submitButton: {
         backgroundColor: theme.colors.secondary,
