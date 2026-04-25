@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCompany } from '../contexts/CompanyContext';
 import { useTrips, useAddTrip, useUpdateTrip, useManageTripRoster, useTripAttendees, useTripAttachments } from '../api/transport';
 import { useCampers, useDivisions } from '../api/campers';
+import { useStaff } from '../api/staff';
 import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -139,12 +140,6 @@ function transportDbToDisplay(s: string | undefined | null): string {
     if (lower === 'bus') return 'Bus';
     if (lower === 'van') return 'Van';
     return s;
-}
-
-function transportDisplayToDb(s: string): string | null {
-    const l = (s || '').trim().toLowerCase();
-    if (!l || l === 'none') return null;
-    return l;
 }
 
 /** DB times like 05:30 or 14:20 → picker strings e.g. 5:30 AM */
@@ -350,6 +345,7 @@ export const TransportScreen = ({ navigation }: any) => {
 
     const { data: rawTrips = [], isLoading } = useTrips(companyId, season);
     const { data: rawCampers = [] } = useCampers(companyId, season);
+    const { data: rawStaff = [] } = useStaff(companyId, season);
     const { data: rawDivisions = [] } = useDivisions(companyId);
 
     const queryClient = useQueryClient();
@@ -430,6 +426,7 @@ export const TransportScreen = ({ navigation }: any) => {
     const uniqueTypes = Array.from(new Set(trips.map(t => t.type))).sort() as string[];
     const uniqueEventTypes = Array.from(new Set(trips.map(t => t.event_type))).sort() as string[];
     const uniqueTransportTypes = Array.from(new Set(trips.map(t => t.transportation_type))).sort() as string[];
+
     const uniqueStatuses = Array.from(new Set(trips.map(t => t.status))).sort() as string[];
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -1042,6 +1039,15 @@ export const TransportScreen = ({ navigation }: any) => {
     };
 
     const [tripFormData, setTripFormData] = useState<Trip>(initialTripData);
+    const [staffSearchQuery, setStaffSearchQuery] = useState('');
+    const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
+
+    const filteredStaffForTrip = useMemo(() => {
+        const term = staffSearchQuery.trim().toLowerCase();
+        return (rawStaff || [])
+            .filter((s: any) => !term || String(s.name || '').toLowerCase().includes(term))
+            .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')));
+    }, [rawStaff, staffSearchQuery]);
 
     const handleEditTrip = (trip: Trip) => {
         setTripFormData({
@@ -1050,12 +1056,29 @@ export const TransportScreen = ({ navigation }: any) => {
             return_time: db24hToPickerTime(trip.return_time) || trip.return_time || '',
             transportation_type: transportDbToDisplay(trip.transportation_type),
         });
+        const names = (trip.chaperone || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+        const matched = rawStaff
+            .filter((s: any) => names.includes(String(s.name || '')))
+            .map((s: any) => String(s.id));
+        setSelectedStaffIds(matched);
+        setStaffSearchQuery('');
         setModalState({ visible: true, mode: 'edit', tripId: trip.id });
     };
 
     const handleAddTrip = () => {
         setTripFormData({ ...initialTripData, date: new Date().toISOString().split('T')[0] });
+        setSelectedStaffIds([]);
+        setStaffSearchQuery('');
         setModalState({ visible: true, mode: 'add' });
+    };
+
+    const toggleStaffSelection = (staffId: string) => {
+        setSelectedStaffIds((prev) =>
+            prev.includes(staffId) ? prev.filter((id) => id !== staffId) : [...prev, staffId]
+        );
     };
 
     const handleSaveTrip = () => {
@@ -1071,6 +1094,12 @@ export const TransportScreen = ({ navigation }: any) => {
         const dep = pickerTimeToDb24h(tripFormData.departure_time);
         const ret = pickerTimeToDb24h(tripFormData.return_time);
 
+        const selectedStaffNames = selectedStaffIds
+            .map((id) => rawStaff.find((s: any) => String(s.id) === id)?.name)
+            .filter(Boolean)
+            .map((name) => String(name).trim())
+            .filter(Boolean);
+
         const payload: Record<string, unknown> = {
             company_id: companyId,
             season,
@@ -1082,14 +1111,9 @@ export const TransportScreen = ({ navigation }: any) => {
             is_multi_day: tripFormData.is_multi_day,
             departure_time: dep,
             return_time: ret,
-            chaperone: tripFormData.chaperone?.trim() || null,
+            chaperone: selectedStaffNames.length ? selectedStaffNames.join(', ') : null,
             capacity: parseInt(tripFormData.capacity || '0', 10) || null,
             status: tripFormData.status || 'pending',
-            event_type: tripFormData.event_type?.trim() || null,
-            event_length: tripFormData.event_length?.trim() || null,
-            transportation_type: transportDisplayToDb(tripFormData.transportation_type || ''),
-            driver: tripFormData.driver?.trim() || null,
-            meal: tripFormData.meal && tripFormData.meal !== 'None' ? tripFormData.meal : null,
         };
 
         if (modalState.mode === 'edit' && modalState.tripId) {
@@ -1112,7 +1136,7 @@ export const TransportScreen = ({ navigation }: any) => {
     };
 
     // Picker State
-    const [activePicker, setActivePicker] = useState<'startDate' | 'endDate' | 'departureTime' | 'returnTime' | 'type' | 'locationType' | 'status' | 'transportation_type' | 'meal' | null>(null);
+    const [activePicker, setActivePicker] = useState<'startDate' | 'endDate' | 'departureTime' | 'returnTime' | 'type' | null>(null);
     const [pickerCalendarDate, setPickerCalendarDate] = useState(() => new Date());
 
     useEffect(() => {
@@ -1137,12 +1161,6 @@ export const TransportScreen = ({ navigation }: any) => {
             setTripFormData({ ...tripFormData, departure_time: value });
         } else if (activePicker === 'returnTime') {
             setTripFormData({ ...tripFormData, return_time: value });
-        } else if (activePicker === 'status') {
-            setTripFormData({ ...tripFormData, status: value as any });
-        } else if (activePicker === 'transportation_type') {
-            setTripFormData({ ...tripFormData, transportation_type: value });
-        } else if (activePicker === 'meal') {
-            setTripFormData({ ...tripFormData, meal: value });
         }
         setActivePicker(null);
     };
@@ -1246,24 +1264,7 @@ export const TransportScreen = ({ navigation }: any) => {
             );
         }
 
-        if (activePicker === 'locationType') {
-            return renderActionSheet('Select Location Type', ['AWAY', 'ON SITE'], tripFormData.location_type || 'AWAY', undefined, (val) => {
-                setTripFormData({ ...tripFormData, location_type: val });
-                setActivePicker(null);
-            });
-        }
-
-        if (activePicker === 'status') {
-            return renderActionSheet('Select Status', ['pending', 'approved', 'confirmed'], tripFormData.status, (status) => <StatusBadge status={status as any} />);
-        }
-
-        if (activePicker === 'transportation_type') {
-            return renderActionSheet('Select Transportation', ['Bus', 'Van', 'None'], tripFormData.transportation_type);
-        }
-
-        if (activePicker === 'meal') {
-            return renderActionSheet('Select Meal', ['None', 'Packed Lunch', 'Cafeteria', 'Restaurant'], tripFormData.meal);
-        }
+        return null;
     };
 
 
@@ -1289,56 +1290,90 @@ export const TransportScreen = ({ navigation }: any) => {
             <View style={styles.tripFormModalOverlay}>
                 <View style={styles.tripFormModalContent}>
                     <View style={styles.tripFormModalHeader}>
-                        <Text style={styles.tripFormModalTitle} numberOfLines={1}>{modalState.mode === 'add' ? 'New Activity/Field Trip' : 'Edit Activity/Field Trip'}</Text>
+                        <Text style={styles.tripFormModalTitle} numberOfLines={1}>{modalState.mode === 'add' ? 'Add New Trip' : 'Edit Trip'}</Text>
                         <TouchableOpacity onPress={() => setModalState({ ...modalState, visible: false })} style={styles.closeButton}>
                             <Ionicons name="close" size={24} color={theme.colors.text} />
                         </TouchableOpacity>
                     </View>
 
                     <ScrollView style={styles.tripFormModalBody} contentContainerStyle={styles.tripFormScrollContent} showsVerticalScrollIndicator={false}>
+                        <Text style={{ color: theme.colors.textSecondary, marginBottom: 12 }}>
+                            Fields marked with <Text style={{ color: theme.colors.danger }}>*</Text> are required
+                        </Text>
 
-                        {/* Multi-Day Toggle - Top as per screenshot */}
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Trip Name *</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g., Science Museum Visit"
+                                value={tripFormData.name}
+                                onChangeText={(text) => setTripFormData({ ...tripFormData, name: text })}
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 6 }}>
+                                Descriptive name for this trip or event
+                            </Text>
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Type *</Text>
+                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('type')}>
+                                <Text style={styles.typeSelectorText}>{tripTypeLabel(tripFormData.type)}</Text>
+                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Destination</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Where are you going?"
+                                value={tripFormData.destination}
+                                onChangeText={(text) => setTripFormData({ ...tripFormData, destination: text })}
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                        </View>
+
                         <View style={styles.toggleRow}>
                             <View style={{ flex: 1 }}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                     <MaterialCommunityIcons name="calendar-range" size={20} color={theme.colors.text} />
-                                    <Text style={styles.toggleLabel}>Multi-Day Event</Text>
+                                    <Text style={styles.toggleLabel}>Multi-Day Trip</Text>
                                 </View>
-                                <Text style={styles.toggleHelper}>Enable this for events spanning multiple days</Text>
+                                <Text style={styles.toggleHelper}>Enable this for trips spanning multiple days</Text>
                             </View>
                             <Switch
                                 value={tripFormData.is_multi_day}
-                                onValueChange={(val) => setTripFormData({ ...tripFormData, is_multi_day: val })}
+                                onValueChange={(val) =>
+                                    setTripFormData({
+                                        ...tripFormData,
+                                        is_multi_day: val,
+                                        end_date: val ? tripFormData.end_date : '',
+                                    })
+                                }
                                 trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
                                 thumbColor="#ffffff"
-                                // @ts-ignore
-                                activeThumbColor="#ffffff"
                                 ios_backgroundColor="#e2e8f0"
                             />
                         </View>
 
-                        {/* Dates Row */}
                         <View style={styles.row}>
                             <View style={[styles.formGroup, { flex: 1 }]}>
-                                <Text style={styles.label}>Start Date</Text>
+                                <Text style={styles.label}>{tripFormData.is_multi_day ? 'Start Date' : 'Date'}</Text>
                                 <TouchableOpacity style={styles.dateInputContainer} onPress={() => setActivePicker('startDate')}>
                                     <Text style={styles.dateInputText}>{tripFormData.date}</Text>
                                     <Ionicons name="calendar-outline" size={20} color={theme.colors.text} />
                                 </TouchableOpacity>
                             </View>
-                            <View style={[styles.formGroup, { flex: 1 }]}>
-                                <Text style={styles.label}>End Date</Text>
-                                <TouchableOpacity
-                                    style={[styles.dateInputContainer, !tripFormData.is_multi_day && { backgroundColor: theme.colors.background }]}
-                                    onPress={() => tripFormData.is_multi_day && setActivePicker('endDate')}
-                                    disabled={!tripFormData.is_multi_day}
-                                >
-                                    <Text style={[styles.dateInputText, !tripFormData.is_multi_day && { color: theme.colors.textSecondary }]}>
-                                        {tripFormData.is_multi_day ? (tripFormData.end_date || 'mm/dd/yyyy') : 'mm/dd/yyyy'}
-                                    </Text>
-                                    <Ionicons name="calendar-outline" size={20} color={!tripFormData.is_multi_day ? theme.colors.textSecondary : theme.colors.text} />
-                                </TouchableOpacity>
-                            </View>
+                            {tripFormData.is_multi_day ? (
+                                <View style={[styles.formGroup, { flex: 1 }]}>
+                                    <Text style={styles.label}>End Date</Text>
+                                    <TouchableOpacity style={styles.dateInputContainer} onPress={() => setActivePicker('endDate')}>
+                                        <Text style={styles.dateInputText}>{tripFormData.end_date || tripFormData.date}</Text>
+                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.text} />
+                                    </TouchableOpacity>
+                                </View>
+                            ) : null}
                         </View>
 
                         {tripFormData.is_multi_day ? (
@@ -1349,169 +1384,71 @@ export const TransportScreen = ({ navigation }: any) => {
                             </View>
                         ) : null}
 
-                        {/* Title */}
-                        <View style={[styles.formGroup, { marginTop: 16 }]}>
-                            <Text style={styles.label}>Title</Text>
+                        <View style={styles.row}>
+                            <View style={[styles.formGroup, { flex: 1 }]}>
+                                <Text style={styles.label}>Departure Time</Text>
+                                <TouchableOpacity style={styles.dateInputContainer} onPress={() => setActivePicker('departureTime')}>
+                                    <Text style={styles.dateInputText}>{tripFormData.departure_time || '--:-- --'}</Text>
+                                    <Ionicons name="time-outline" size={20} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                            <View style={[styles.formGroup, { flex: 1 }]}>
+                                <Text style={styles.label}>Return Time</Text>
+                                <TouchableOpacity style={styles.dateInputContainer} onPress={() => setActivePicker('returnTime')}>
+                                    <Text style={styles.dateInputText}>{tripFormData.return_time || '--:-- --'}</Text>
+                                    <Ionicons name="time-outline" size={20} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Staff</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="Junior Hershey/Dorney Trip"
-                                value={tripFormData.name}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, name: text })}
+                                placeholder="Search staff to assign..."
+                                value={staffSearchQuery}
+                                onChangeText={setStaffSearchQuery}
                                 placeholderTextColor={theme.colors.textSecondary}
                             />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Destination</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="City or venue"
-                                value={tripFormData.destination}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, destination: text })}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Chaperone</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Name or N/A"
-                                value={tripFormData.chaperone}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, chaperone: text })}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                        </View>
-
-                        {/* Activity Type */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Activity Type</Text>
-                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('type')}>
-                                <Text style={styles.typeSelectorText}>{tripTypeLabel(tripFormData.type)}</Text>
-                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Event type (e.g. Football, field-trip)</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Football"
-                                value={tripFormData.event_type}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, event_type: text })}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Duration (e.g. tournament)</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="tournament"
-                                value={tripFormData.event_length || ''}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, event_length: text })}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Transportation</Text>
-                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('transportation_type')}>
-                                <Text style={styles.typeSelectorText}>{tripFormData.transportation_type || 'None'}</Text>
-                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Driver / vehicle notes</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Rented, staff driver, etc."
-                                value={tripFormData.driver || ''}
-                                onChangeText={(text) => setTripFormData({ ...tripFormData, driver: text })}
-                                placeholderTextColor={theme.colors.textSecondary}
-                            />
+                            <View style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, marginTop: 8, maxHeight: 180 }}>
+                                <ScrollView nestedScrollEnabled>
+                                    {filteredStaffForTrip.map((staff: any) => {
+                                        const isSelected = selectedStaffIds.includes(String(staff.id));
+                                        return (
+                                            <TouchableOpacity
+                                                key={staff.id}
+                                                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}
+                                                onPress={() => toggleStaffSelection(String(staff.id))}
+                                            >
+                                                <View style={[styles.radioCircle, isSelected && styles.radioCircleSelected]}>
+                                                    {isSelected ? <View style={styles.radioInnerCircle} /> : null}
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={{ color: theme.colors.text, fontSize: 16 }}>{staff.name}</Text>
+                                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
+                                                        {[staff.role, staff.department].filter(Boolean).join(' / ') || 'Staff'}
+                                                    </Text>
+                                                </View>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                    {filteredStaffForTrip.length === 0 ? (
+                                        <Text style={{ padding: 12, color: theme.colors.textSecondary }}>No staff found</Text>
+                                    ) : null}
+                                </ScrollView>
+                            </View>
                         </View>
 
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Capacity</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="Optional max seats"
+                                placeholder="Maximum number of children"
                                 keyboardType="number-pad"
                                 value={tripFormData.capacity || ''}
                                 onChangeText={(text) => setTripFormData({ ...tripFormData, capacity: text })}
                                 placeholderTextColor={theme.colors.textSecondary}
                             />
-                        </View>
-
-                        <View style={styles.row}>
-                            <View style={[styles.formGroup, { flex: 1 }]}>
-                                <Text style={styles.label}>Departure</Text>
-                                <TouchableOpacity style={styles.dateInputContainer} onPress={() => setActivePicker('departureTime')}>
-                                    <Text style={styles.dateInputText}>{tripFormData.departure_time || 'Select time'}</Text>
-                                    <Ionicons name="time-outline" size={20} color={theme.colors.text} />
-                                </TouchableOpacity>
-                            </View>
-                            <View style={[styles.formGroup, { flex: 1 }]}>
-                                <Text style={styles.label}>Return</Text>
-                                <TouchableOpacity style={styles.dateInputContainer} onPress={() => setActivePicker('returnTime')}>
-                                    <Text style={styles.dateInputText}>{tripFormData.return_time || 'Select time'}</Text>
-                                    <Ionicons name="time-outline" size={20} color={theme.colors.text} />
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Status</Text>
-                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('status')}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                    <StatusBadge status={tripFormData.status} />
-                                </View>
-                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Meal</Text>
-                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('meal')}>
-                                <Text style={styles.typeSelectorText}>{tripFormData.meal || 'None'}</Text>
-                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Location Type (New Field) */}
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Location Type</Text>
-                            <TouchableOpacity style={styles.typeSelector} onPress={() => setActivePicker('locationType')}>
-                                <Text style={styles.typeSelectorText}>{tripFormData.location_type || 'AWAY'}</Text>
-                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Divisions (Select Multiple) */}
-                        <View style={styles.formGroup}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                <Text style={[styles.label, { marginBottom: 0 }]}>Divisions (select multiple)</Text>
-                                <View style={{ flexDirection: 'row', gap: 8 }}>
-                                    <TouchableOpacity
-                                        style={styles.actionButtonSecondary}
-                                        onPress={() =>
-                                            Alert.alert('Divisions', 'Division assignment for trips is managed on the web app. Trip roster below still works for attendee lists.')
-                                        }
-                                    >
-                                        <Text style={styles.actionButtonTextSecondary}>Select All</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.actionButtonSecondary}
-                                        onPress={() =>
-                                            Alert.alert('Divisions', 'Division assignment for trips is managed on the web app.')
-                                        }
-                                    >
-                                        <Text style={styles.actionButtonTextSecondary}>Deselect All</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
                         </View>
 
                         {/* Trip Attachments (edit only) */}
