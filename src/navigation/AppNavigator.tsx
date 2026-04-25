@@ -49,6 +49,7 @@ import { ElectiveSignUpScreen } from '../screens/ElectiveSignUpScreen';
 
 import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { useRole } from '../hooks/useRole';
+import { useRolePermissions } from '../api/permissions';
 import { supabase } from '../lib/supabase';
 import { theme } from '../theme/theme';
 import { getMenuDrawerThemeFromCompany } from '../theme/menuDrawerTheme';
@@ -61,19 +62,34 @@ const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const { data: roleData } = useRole();
     const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp } = useCompany();
+    const { data: rolePermissions = [] } = useRolePermissions(companyId);
     const [showCampPicker, setShowCampPicker] = useState(false);
     const [showYearPicker, setShowYearPicker] = useState(false);
 
-    // Role flags (default to showing Main Menu items while loading)
+    // Role flags
+    const roles = roleData?.roles ?? [];
     const isSuperAdmin = roleData?.isSuperAdmin ?? false;
     const isAdmin = roleData?.isAdmin ?? false;  // includes super_admin
-    const isStaff = roleData?.isStaff ?? false;
     const isRoleLoaded = !!roleData;
 
-    // Access helpers
-    const canSeeStaffScreens = isAdmin || isStaff || !isRoleLoaded; // staff+ or loading
-    const canSeeAdminScreens = isAdmin || !isRoleLoaded;             // admin+ or loading
-    const canSeeSuperAdminOnly = isSuperAdmin;                       // super_admin only
+    // Match web: menu visibility is driven by role_permissions per company.
+    const hasMenuAccess = (menuItem: string) => {
+        if (!isRoleLoaded) return true; // keep menu visible while role is loading
+        if (isSuperAdmin) return true;
+        if (!companyId) return false;
+        if (roles.length === 0) return false;
+
+        return rolePermissions.some(
+            (perm: any) =>
+                perm?.company_id === companyId &&
+                perm?.can_access === true &&
+                roles.includes(String(perm?.role ?? '')) &&
+                String(perm?.menu_item ?? '') === menuItem
+        );
+    };
+
+    // Web keeps admin section role-gated (admin/super_admin), not role_permissions-driven.
+    const canSeeAdminScreens = isAdmin || !isRoleLoaded;
 
     const menuTheme = getMenuDrawerThemeFromCompany({
         companySlug,
@@ -111,51 +127,101 @@ const CustomDrawerContent = (props: any) => {
         { key: 'notification-preferences', label: 'Notification Preferences', icon: 'notifications-outline', onPress: () => props.navigation.navigate('NotificationPreferences') },
     ];
 
-    if (canSeeStaffScreens) {
+    if (hasMenuAccess('activities')) {
         mainMenuItems.push(
-            { key: 'activities-field-trips', label: 'Activities & Field Trips', icon: 'leaf-outline', onPress: () => props.navigation.navigate('ActivitiesFieldTrips') },
-            { key: 'appointments', label: 'Appointments', icon: 'calendar-outline', onPress: () => props.navigation.navigate('Appointments') },
-            { key: 'nurse', label: 'Nurse', icon: 'medical-outline', onPress: () => props.navigation.navigate('Health') },
-            { key: 'od-management', label: 'OD Management', icon: 'clipboard-outline', onPress: () => props.navigation.navigate('ODManagement') },
-            { key: 'special-events', label: 'Special Events & Evening Activities', icon: 'calendar-outline', onPress: () => props.navigation.navigate('SpecialEvents') },
-            { key: 'sports-academy', label: 'Sports Academy', icon: 'trophy-outline', onPress: () => props.navigation.navigate('Sports') },
-            { key: 'sports-calendar', label: companySlug === 'timber-lake-west' ? 'Athletics' : 'Sports Calendar', icon: 'trophy-outline', onPress: () => props.navigation.navigate('SportsCalendar') },
-            { key: 'staff', label: 'Staff', icon: 'person-outline', onPress: () => props.navigation.navigate('Staff') },
-            { key: 'transportation', label: 'Transportation', icon: 'car-outline', onPress: () => props.navigation.navigate('Transport') },
+            { key: 'activities-field-trips', label: 'Activities & Field Trips', icon: 'leaf-outline', onPress: () => props.navigation.navigate('ActivitiesFieldTrips') }
         );
+    }
+    if (hasMenuAccess('appointments')) {
+        mainMenuItems.push(
+            { key: 'appointments', label: 'Appointments', icon: 'calendar-outline', onPress: () => props.navigation.navigate('Appointments') }
+        );
+    }
+    if (hasMenuAccess('nurse')) {
+        mainMenuItems.push(
+            { key: 'nurse', label: 'Nurse', icon: 'medical-outline', onPress: () => props.navigation.navigate('Health') }
+        );
+    }
+    if (hasMenuAccess('od-management')) {
+        mainMenuItems.push(
+            { key: 'od-management', label: 'OD Management', icon: 'clipboard-outline', onPress: () => props.navigation.navigate('ODManagement') }
+        );
+    }
+    if (hasMenuAccess('special-events')) {
+        mainMenuItems.push(
+            { key: 'special-events', label: 'Special Events & Evening Activities', icon: 'calendar-outline', onPress: () => props.navigation.navigate('SpecialEvents') }
+        );
+    }
+    if (hasMenuAccess('sports-academy')) {
+        mainMenuItems.push(
+            { key: 'sports-academy', label: 'Sports Academy', icon: 'trophy-outline', onPress: () => props.navigation.navigate('Sports') }
+        );
+    }
+    if (hasMenuAccess('sports-calendar')) {
+        mainMenuItems.push(
+            { key: 'sports-calendar', label: companySlug === 'timber-lake-west' ? 'Athletics' : 'Sports Calendar', icon: 'trophy-outline', onPress: () => props.navigation.navigate('SportsCalendar') }
+        );
+    }
+    if (hasMenuAccess('staff')) {
+        mainMenuItems.push(
+            { key: 'staff', label: 'Staff', icon: 'person-outline', onPress: () => props.navigation.navigate('Staff') }
+        );
+    }
+    if (hasMenuAccess('transportation')) {
+        mainMenuItems.push(
+            { key: 'transportation', label: 'Transportation', icon: 'car-outline', onPress: () => props.navigation.navigate('Transport') }
+        );
+    }
 
-        if (companySlug === 'tyler-hill-camp') {
+    if (companySlug === 'tyler-hill-camp') {
+        if (hasMenuAccess('owl-pay')) {
             mainMenuItems.push(
-                { key: 'owl-pay', label: 'Owl Pay', icon: 'wallet-outline', onPress: () => props.navigation.navigate('OwlPay') },
-                { key: 'special-meals', label: 'Special Meals', icon: 'restaurant-outline', onPress: () => props.navigation.navigate('SpecialMeals') },
+                { key: 'owl-pay', label: 'Owl Pay', icon: 'wallet-outline', onPress: () => props.navigation.navigate('OwlPay') }
             );
         }
-        if (isTimberLakeCamp) {
+        if (hasMenuAccess('special-meals')) {
             mainMenuItems.push(
-                { key: 'daily-schedule', label: 'Daily Schedule', icon: 'calendar-outline', onPress: () => props.navigation.navigate('DailySchedule') },
-                { key: 'elective-sign-up', label: 'Elective Sign-Up', icon: 'link-outline', onPress: () => props.navigation.navigate('ElectiveSignUp') },
-                { key: 'tiger-times', label: 'Tiger Times', icon: 'newspaper-outline', onPress: () => props.navigation.navigate('TigerTimes') },
+                { key: 'special-meals', label: 'Special Meals', icon: 'restaurant-outline', onPress: () => props.navigation.navigate('SpecialMeals') }
+            );
+        }
+    }
+    if (isTimberLakeCamp) {
+        if (hasMenuAccess('daily-schedule')) {
+            mainMenuItems.push(
+                { key: 'daily-schedule', label: 'Daily Schedule', icon: 'calendar-outline', onPress: () => props.navigation.navigate('DailySchedule') }
+            );
+        }
+        if (hasMenuAccess('elective-signup')) {
+            mainMenuItems.push(
+                { key: 'elective-sign-up', label: 'Elective Sign-Up', icon: 'link-outline', onPress: () => props.navigation.navigate('ElectiveSignUp') }
+            );
+        }
+        // Keep Tiger Times paired with daily-wolf-management visibility used by web.
+        if (hasMenuAccess('daily-wolf-management')) {
+            mainMenuItems.push(
+                { key: 'tiger-times', label: 'Tiger Times', icon: 'newspaper-outline', onPress: () => props.navigation.navigate('TigerTimes') }
             );
         }
     }
 
     if (canSeeAdminScreens) {
-        mainMenuItems.push(
-            { key: 'awards', label: 'Awards', icon: 'ribbon-outline', onPress: () => props.navigation.navigate('Awards') },
-            { key: 'incident-reports', label: 'Incident Reports', icon: 'warning-outline', onPress: () => props.navigation.navigate('IncidentReports') },
-            { key: 'rainy-day-schedule', label: 'Rainy Day Schedule', icon: 'rainy-outline', onPress: () => props.navigation.navigate('RainyDaySchedule') },
-            { key: 'reports', label: 'Reports', icon: 'bar-chart-outline', onPress: () => props.navigation.navigate('Reports') },
-            { key: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', onPress: () => props.navigation.navigate('TutoringTherapy') },
-        );
+        if (hasMenuAccess('awards')) mainMenuItems.push({ key: 'awards', label: 'Awards', icon: 'ribbon-outline', onPress: () => props.navigation.navigate('Awards') });
+        if (hasMenuAccess('incidents')) mainMenuItems.push({ key: 'incident-reports', label: 'Incident Reports', icon: 'warning-outline', onPress: () => props.navigation.navigate('IncidentReports') });
+        if (hasMenuAccess('rainy-day')) mainMenuItems.push({ key: 'rainy-day-schedule', label: 'Rainy Day Schedule', icon: 'rainy-outline', onPress: () => props.navigation.navigate('RainyDaySchedule') });
+        if (hasMenuAccess('reports')) mainMenuItems.push({ key: 'reports', label: 'Reports', icon: 'bar-chart-outline', onPress: () => props.navigation.navigate('Reports') });
+        if (hasMenuAccess('tutoring-therapy')) mainMenuItems.push({ key: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', onPress: () => props.navigation.navigate('TutoringTherapy') });
+
         if (companySlug === 'tyler-hill-camp') {
-            mainMenuItems.push({
-                key: 'roster-templates',
-                label: 'Roster Templates',
-                icon: 'list-outline',
-                onPress: () => props.navigation.navigate('RosterTemplates'),
-            });
+            if (hasMenuAccess('roster-templates')) {
+                mainMenuItems.push({
+                    key: 'roster-templates',
+                    label: 'Roster Templates',
+                    icon: 'list-outline',
+                    onPress: () => props.navigation.navigate('RosterTemplates'),
+                });
+            }
         }
-        if (companySlug !== 'timber-lake-camp') {
+        if (companySlug !== 'timber-lake-camp' && hasMenuAccess('notes')) {
             mainMenuItems.push({
                 key: 'daily-news-notes',
                 label: companySlug === 'tyler-hill-camp' ? 'Daily News' : 'Daily Notes',
@@ -164,10 +230,16 @@ const CustomDrawerContent = (props: any) => {
             });
         }
         if (companySlug === 'timber-lake-west') {
-            mainMenuItems.push(
-                { key: 'daily-wolf-management', label: 'Daily Wolf Management', icon: 'newspaper-outline', onPress: () => props.navigation.navigate('DailyWolfManagement') },
-                { key: 'daily-wolf-printable', label: 'Daily Wolf Printable', icon: 'document-text-outline', onPress: () => props.navigation.navigate('DailyWolfPrintable') },
-            );
+            if (hasMenuAccess('daily-wolf-management')) {
+                mainMenuItems.push(
+                    { key: 'daily-wolf-management', label: 'Daily Wolf Management', icon: 'newspaper-outline', onPress: () => props.navigation.navigate('DailyWolfManagement') }
+                );
+            }
+            if (hasMenuAccess('daily-wolf-printable')) {
+                mainMenuItems.push(
+                    { key: 'daily-wolf-printable', label: 'Daily Wolf Printable', icon: 'document-text-outline', onPress: () => props.navigation.navigate('DailyWolfPrintable') }
+                );
+            }
         }
     }
 
