@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
@@ -195,8 +196,11 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const [description, setDescription] = useState('');
     const [staffSearchQuery, setStaffSearchQuery] = useState('');
     const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
-    const [showEventTypeDropdown, setShowEventTypeDropdown] = useState(false);
+    const [showEventTypePicker, setShowEventTypePicker] = useState(false);
     const [showEventDatePicker, setShowEventDatePicker] = useState(false);
+    const [fileUrl, setFileUrl] = useState('');
+    const [fileName, setFileName] = useState('');
+    const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
     const [eventToDelete, setEventToDelete] = useState<any>(null);
     const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -469,6 +473,8 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
             location: location || undefined,
             description: description || undefined,
             chaperone: chaperone || undefined,
+            file_url: fileUrl || undefined,
+            file_name: fileName || undefined,
             company_id: companyId,
             season,
             division_ids: selectedDivisions,
@@ -482,7 +488,8 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                         handleCloseAddEventModal();
                     },
                     onError: (error: any) => {
-                        Alert.alert('Error', error?.message || 'Failed to update event');
+                        const detail = [error?.message, error?.details, error?.hint].filter(Boolean).join('\n');
+                        Alert.alert('Error', detail || 'Failed to update event');
                     },
                 }
             );
@@ -494,7 +501,8 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                 handleCloseAddEventModal();
             },
             onError: (error: any) => {
-                Alert.alert('Error', error?.message || 'Failed to add event');
+                const detail = [error?.message, error?.details, error?.hint].filter(Boolean).join('\n');
+                Alert.alert('Error', detail || 'Failed to add event');
             },
         });
     };
@@ -511,8 +519,10 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         setDescription('');
         setSelectedStaffIds([]);
         setStaffSearchQuery('');
+        setFileUrl('');
+        setFileName('');
         setEditingEventId(null);
-        setShowEventTypeDropdown(false);
+        setShowEventTypePicker(false);
         setIsTimePickerOpen(false);
         setTimePickerField(null);
         setShowAddEventModal(false);
@@ -529,6 +539,8 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         setSelectedDivisions(Array.isArray(event.divisions) ? event.divisions.map((d: any) => d.id) : []);
         setLocation(event.location || '');
         setDescription(event.description || '');
+        setFileUrl(event.file_url || '');
+        setFileName(event.file_name || '');
         setStaffSearchQuery('');
         setEditingEventId(event.id);
 
@@ -541,6 +553,44 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
             .map((staff: any) => staff.id);
         setSelectedStaffIds(matchedIds);
         setShowAddEventModal(true);
+    };
+
+    const handleAttachFile = async () => {
+        if (!companyId) {
+            Alert.alert('Missing context', 'Company is not available yet.');
+            return;
+        }
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                copyToCacheDirectory: true,
+                type: ['application/pdf', 'image/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+            });
+            const file = result.assets?.[0];
+            if (!file) return;
+
+            setIsUploadingAttachment(true);
+            const ext = (file.name?.split('.').pop() || 'bin').toLowerCase();
+            const storagePath = `${companyId}/special-events/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+            const response = await fetch(file.uri);
+            const blob = await response.blob();
+
+            const { error: uploadError } = await supabase.storage
+                .from('rainy-day-documents')
+                .upload(storagePath, blob, { upsert: false });
+            if (uploadError) throw uploadError;
+
+            const { data: signed, error: signedError } = await supabase.storage
+                .from('rainy-day-documents')
+                .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
+            if (signedError) throw signedError;
+
+            setFileUrl(signed?.signedUrl || '');
+            setFileName(file.name || 'Attachment');
+        } catch (error: any) {
+            Alert.alert('Upload failed', error?.message || 'Could not upload attachment');
+        } finally {
+            setIsUploadingAttachment(false);
+        }
     };
 
     const closeDeleteConfirmModal = () => {
@@ -913,59 +963,26 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                             {/* Event Type */}
                             <View style={styles.formSection}>
                                 <Text style={styles.label}>Event Type</Text>
-                                <View style={styles.eventTypeContainer}>
-                                    <TouchableOpacity
-                                        style={styles.eventTypeDropdown}
-                                        onPress={() =>
-                                            setShowEventTypeDropdown((prev) => !prev)
-                                        }
+                                <TouchableOpacity
+                                    style={styles.eventTypeDropdown}
+                                    onPress={() => setShowEventTypePicker(true)}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.eventTypeDropdownText,
+                                            !eventType && styles.placeholder,
+                                        ]}
+                                        numberOfLines={1}
+                                        ellipsizeMode="tail"
                                     >
-                                        <Text
-                                            style={[
-                                                styles.eventTypeDropdownText,
-                                                !eventType && styles.placeholder,
-                                            ]}
-                                            numberOfLines={1}
-                                            ellipsizeMode="tail"
-                                        >
-                                            {eventType || 'Select event type'}
-                                        </Text>
-                                        <Ionicons
-                                            name={showEventTypeDropdown ? 'chevron-up' : 'chevron-down'}
-                                            size={20}
-                                            color={theme.colors.textSecondary}
-                                        />
-                                    </TouchableOpacity>
-                                    {showEventTypeDropdown ? (
-                                        <View style={styles.eventTypeDropdownMenu}>
-                                            {EVENT_TYPES.map((item) => {
-                                                const isSelected = eventType === item;
-                                                return (
-                                                    <TouchableOpacity
-                                                        key={item}
-                                                        style={[
-                                                            styles.eventTypeDropdownItem,
-                                                            isSelected && styles.eventTypeDropdownItemSelected,
-                                                        ]}
-                                                        onPress={() => {
-                                                            setEventType(item);
-                                                            setShowEventTypeDropdown(false);
-                                                        }}
-                                                    >
-                                                        <Text
-                                                            style={[
-                                                                styles.eventTypeDropdownItemText,
-                                                                isSelected && styles.eventTypeDropdownItemTextSelected,
-                                                            ]}
-                                                        >
-                                                            {item}
-                                                        </Text>
-                                                    </TouchableOpacity>
-                                                );
-                                            })}
-                                        </View>
-                                    ) : null}
-                                </View>
+                                        {eventType || 'Select event type'}
+                                    </Text>
+                                    <Ionicons
+                                        name="chevron-down"
+                                        size={20}
+                                        color={theme.colors.textSecondary}
+                                    />
+                                </TouchableOpacity>
                             </View>
 
                             {/* Emoji — vector icons (Unicode still stored for web); paste supported in field below */}
@@ -1300,6 +1317,35 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                     textAlignVertical="top"
                                 />
                             </View>
+
+                            {/* Attachment */}
+                            <View style={styles.formSection}>
+                                <Text style={styles.label}>Attachment (optional)</Text>
+                                {fileName ? (
+                                    <View style={styles.attachmentRow}>
+                                        <Ionicons name="document-attach-outline" size={18} color={theme.colors.textSecondary} />
+                                        <Text style={styles.attachmentName} numberOfLines={1}>{fileName}</Text>
+                                        <TouchableOpacity onPress={() => { setFileName(''); setFileUrl(''); }}>
+                                            <Ionicons name="close" size={18} color={theme.colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : (
+                                    <TouchableOpacity
+                                        style={[styles.attachButton, isUploadingAttachment && { opacity: 0.7 }]}
+                                        onPress={handleAttachFile}
+                                        disabled={isUploadingAttachment}
+                                    >
+                                        {isUploadingAttachment ? (
+                                            <ActivityIndicator size="small" color={theme.colors.text} />
+                                        ) : (
+                                            <Ionicons name="attach-outline" size={18} color={theme.colors.text} />
+                                        )}
+                                        <Text style={styles.attachButtonText}>
+                                            {isUploadingAttachment ? 'Uploading...' : 'Attach File'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
                         </ScrollView>
 
                         {/* Modal Footer */}
@@ -1321,6 +1367,40 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                                 <Text style={styles.submitButtonText}>{editingEventId ? 'Update Event' : 'Add Event'}</Text>
                             </TouchableOpacity>
                         </View>
+
+                        {showEventTypePicker ? (
+                            <View style={styles.inlinePickerOverlay} pointerEvents="box-none">
+                                <Pressable
+                                    style={styles.inlinePickerBackdrop}
+                                    onPress={() => setShowEventTypePicker(false)}
+                                />
+                                <View style={styles.inlinePickerSheet}>
+                                    <View style={styles.inlinePickerHeader}>
+                                        <Text style={styles.inlinePickerTitle}>Event Type</Text>
+                                        <TouchableOpacity onPress={() => setShowEventTypePicker(false)}>
+                                            <Ionicons name="close" size={22} color={theme.colors.text} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <ScrollView keyboardShouldPersistTaps="handled" style={styles.bunkPickerScroll}>
+                                        {EVENT_TYPES.map((item) => (
+                                            <TouchableOpacity
+                                                key={item}
+                                                style={[styles.pickerOption, styles.pickerOptionRow]}
+                                                onPress={() => {
+                                                    setEventType(item);
+                                                    setShowEventTypePicker(false);
+                                                }}
+                                            >
+                                                <Text style={[styles.pickerOptionText, { flex: 1 }]}>{item}</Text>
+                                                {eventType === item ? (
+                                                    <Ionicons name="checkmark" size={18} color={theme.colors.secondary} />
+                                                ) : null}
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                            </View>
+                        ) : null}
                         </View>
                     </KeyboardAvoidingView>
                 </View>
@@ -1854,6 +1934,39 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         minHeight: 100,
     },
+    attachmentRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        minHeight: 44,
+    },
+    attachmentName: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.text,
+        flex: 1,
+    },
+    attachButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: theme.spacing.sm,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        minHeight: 44,
+        paddingHorizontal: theme.spacing.md,
+        backgroundColor: theme.colors.surface,
+    },
+    attachButtonText: {
+        ...theme.typography.body,
+        color: theme.colors.text,
+        fontWeight: '600',
+    },
     placeholder: {
         color: theme.colors.textSecondary,
     },
@@ -1911,6 +2024,56 @@ const styles = StyleSheet.create({
     eventTypeDropdownItemTextSelected: {
         color: theme.colors.secondary,
         fontWeight: '600',
+    },
+    bunkPickerScroll: {
+        maxHeight: 380,
+    },
+    pickerOption: {
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    pickerOptionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+    },
+    pickerOptionText: {
+        ...theme.typography.body,
+        color: theme.colors.text,
+    },
+    inlinePickerOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'flex-end',
+        zIndex: 2000,
+        elevation: 2000,
+    },
+    inlinePickerBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+    },
+    inlinePickerSheet: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+        maxHeight: '62%',
+        borderTopWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    inlinePickerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    inlinePickerTitle: {
+        ...theme.typography.h3,
+        fontSize: 20,
+        color: theme.colors.text,
     },
     timeInput: {
         flexDirection: 'row',
