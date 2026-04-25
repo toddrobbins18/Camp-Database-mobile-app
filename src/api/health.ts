@@ -15,6 +15,10 @@ export interface MedicationLog {
     administered_by?: string | null;
     administered_at?: string | null;
     notes?: string | null;
+    is_recurring?: boolean | null;
+    frequency?: 'daily' | 'weekly' | 'custom' | string | null;
+    days_of_week?: string[] | null;
+    end_date?: string | null;
     alert_sent?: boolean;
     created_at?: string;
     children?: {

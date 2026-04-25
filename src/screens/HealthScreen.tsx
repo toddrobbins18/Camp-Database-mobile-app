@@ -18,6 +18,8 @@ const getChildDisplayName = (child: any) =>
         ? String(child.name)
         : [child?.first_name, child?.last_name].filter(Boolean).join(' ').trim() || 'Unknown';
 
+const RECURRENCE_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
 export const HealthScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const { companyId, season } = useCompany();
@@ -49,6 +51,10 @@ export const HealthScreen = ({ navigation }: any) => {
     const [mealTime, setMealTime] = useState<string>('');
     const [notes, setNotes] = useState('');
     const [isRecurring, setIsRecurring] = useState(false);
+    const [recurringFrequency, setRecurringFrequency] = useState<'daily' | 'weekly' | 'custom'>('daily');
+    const [recurringDays, setRecurringDays] = useState<string[]>([]);
+    const [recurringEndDate, setRecurringEndDate] = useState('');
+    const [showFrequencyPicker, setShowFrequencyPicker] = useState(false);
     const [showChildPicker, setShowChildPicker] = useState(false);
     const [medCsvUploading, setMedCsvUploading] = useState(false);
     const [expandedHistoryChildId, setExpandedHistoryChildId] = useState<string | null>(null);
@@ -232,6 +238,14 @@ export const HealthScreen = ({ navigation }: any) => {
 
     const handleAddMedication = () => {
         if (!selectedMedicationChild || !medicationName || !companyId) return;
+        if (!mealTime) {
+            Alert.alert('Missing meal time', 'Please select a meal time for this medication.');
+            return;
+        }
+        if (isRecurring && recurringFrequency === 'custom' && recurringDays.length === 0) {
+            Alert.alert('Custom days required', 'Please select at least one day for custom recurring medication.');
+            return;
+        }
 
         const child = safeCampers.find((c: any) => getChildDisplayName(c) === selectedMedicationChild);
         if (!child) return;
@@ -253,7 +267,11 @@ export const HealthScreen = ({ navigation }: any) => {
             scheduled_time: time,
             date: todayDateString,
             notes: notes || null,
-            alert_sent: false
+            alert_sent: false,
+            is_recurring: isRecurring,
+            frequency: isRecurring ? recurringFrequency : null,
+            days_of_week: isRecurring && recurringFrequency === 'custom' ? recurringDays : [],
+            end_date: isRecurring && recurringEndDate ? recurringEndDate : null,
         }, {
             onSuccess: () => {
                 setMedicationName('');
@@ -261,6 +279,10 @@ export const HealthScreen = ({ navigation }: any) => {
                 setNotes('');
                 setMealTime('');
                 setSelectedMedicationChild('');
+                setIsRecurring(false);
+                setRecurringFrequency('daily');
+                setRecurringDays([]);
+                setRecurringEndDate('');
             }
         });
     };
@@ -1013,7 +1035,16 @@ export const HealthScreen = ({ navigation }: any) => {
                                     {/* Recurring Medication Checkbox */}
                                     <TouchableOpacity
                                         style={styles.checkboxContainer}
-                                        onPress={() => setIsRecurring(!isRecurring)}
+                                        onPress={() => {
+                                            const next = !isRecurring;
+                                            setIsRecurring(next);
+                                            if (!next) {
+                                                setRecurringFrequency('daily');
+                                                setRecurringDays([]);
+                                                setRecurringEndDate('');
+                                                setShowFrequencyPicker(false);
+                                            }
+                                        }}
                                     >
                                         <View style={[
                                             styles.checkbox,
@@ -1023,6 +1054,62 @@ export const HealthScreen = ({ navigation }: any) => {
                                         </View>
                                         <Text style={styles.checkboxLabel}>Recurring medication</Text>
                                     </TouchableOpacity>
+
+                                    {isRecurring && (
+                                        <View style={styles.recurringSection}>
+                                            <View style={styles.formField}>
+                                                <Text style={styles.formLabel}>Frequency</Text>
+                                                <TouchableOpacity
+                                                    style={styles.childPickerButton}
+                                                    onPress={() => setShowFrequencyPicker(true)}
+                                                >
+                                                    <Text style={styles.childPickerText}>
+                                                        {recurringFrequency === 'daily' ? 'Daily' : recurringFrequency === 'weekly' ? 'Weekly' : 'Custom Days'}
+                                                    </Text>
+                                                    <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
+                                                </TouchableOpacity>
+                                            </View>
+
+                                            {recurringFrequency === 'custom' && (
+                                                <View style={styles.formField}>
+                                                    <Text style={styles.formLabel}>Days of Week</Text>
+                                                    <View style={styles.daysWrap}>
+                                                        {RECURRENCE_DAYS.map((day) => {
+                                                            const selected = recurringDays.includes(day);
+                                                            return (
+                                                                <TouchableOpacity
+                                                                    key={day}
+                                                                    style={[styles.dayChip, selected && styles.dayChipSelected]}
+                                                                    onPress={() => {
+                                                                        setRecurringDays((prev) => (
+                                                                            prev.includes(day)
+                                                                                ? prev.filter((d) => d !== day)
+                                                                                : [...prev, day]
+                                                                        ));
+                                                                    }}
+                                                                >
+                                                                    <Text style={[styles.dayChipText, selected && styles.dayChipTextSelected]}>
+                                                                        {day.slice(0, 3)}
+                                                                    </Text>
+                                                                </TouchableOpacity>
+                                                            );
+                                                        })}
+                                                    </View>
+                                                </View>
+                                            )}
+
+                                            <View style={styles.formField}>
+                                                <Text style={styles.formLabel}>End Date (optional)</Text>
+                                                <TextInput
+                                                    style={styles.formInput}
+                                                    placeholder="YYYY-MM-DD"
+                                                    placeholderTextColor={theme.colors.textSecondary}
+                                                    value={recurringEndDate}
+                                                    onChangeText={setRecurringEndDate}
+                                                />
+                                            </View>
+                                        </View>
+                                    )}
 
                                     {/* Add Medication Button */}
                                     <TouchableOpacity
@@ -1249,6 +1336,54 @@ export const HealthScreen = ({ navigation }: any) => {
                                 >
                                     <Text style={styles.pickerOptionText}>{child.name}</Text>
                                     {selectedMedicationChild === child.name && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            <Modal
+                visible={showFrequencyPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowFrequencyPicker(false)}
+            >
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={() => setShowFrequencyPicker(false)}
+                >
+                    <Pressable
+                        style={styles.pickerModal}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Frequency</Text>
+                            <TouchableOpacity onPress={() => setShowFrequencyPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.pickerContent}>
+                            {[
+                                { label: 'Daily', value: 'daily' },
+                                { label: 'Weekly', value: 'weekly' },
+                                { label: 'Custom Days', value: 'custom' },
+                            ].map((option) => (
+                                <TouchableOpacity
+                                    key={option.value}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setRecurringFrequency(option.value as 'daily' | 'weekly' | 'custom');
+                                        if (option.value !== 'custom') {
+                                            setRecurringDays([]);
+                                        }
+                                        setShowFrequencyPicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{option.label}</Text>
+                                    {recurringFrequency === option.value && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
                                     )}
                                 </TouchableOpacity>
@@ -2448,6 +2583,35 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.text,
+    },
+    recurringSection: {
+        marginTop: -theme.spacing.sm,
+        marginBottom: theme.spacing.md,
+    },
+    daysWrap: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.sm,
+    },
+    dayChip: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+    },
+    dayChipSelected: {
+        borderColor: theme.colors.secondary,
+        backgroundColor: theme.colors.secondary,
+    },
+    dayChipText: {
+        fontSize: 13,
+        color: theme.colors.text,
+        fontWeight: '600',
+    },
+    dayChipTextSelected: {
+        color: 'white',
     },
     addMedicationButton: {
         backgroundColor: theme.colors.secondary,

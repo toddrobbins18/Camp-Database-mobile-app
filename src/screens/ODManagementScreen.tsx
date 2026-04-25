@@ -122,7 +122,8 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 .select('id, bunk_number, bunk_name, division_id, divisions:division_id(id, name, gender)')
                 .eq('company_id', companyId)
                 .eq('season', season)
-                .eq('is_active', true)
+                // Keep parity with web list behavior and include legacy rows where is_active may be null.
+                .or('is_active.eq.true,is_active.is.null')
                 .order('bunk_number', { ascending: true });
             if (error) throw error;
             return (data || []) as BunkRow[];
@@ -196,6 +197,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     bunk_number: bunkNumber,
                     bunk_name: bunkName || null,
                     division_id: newBunkDivision === 'none' ? null : newBunkDivision,
+                    is_active: true,
                 }]);
             if (error) throw error;
         },
@@ -209,7 +211,9 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 Alert.alert('Duplicate bunk number', 'That bunk number already exists for this season.');
                 return;
             }
-            Alert.alert('Error', error.message || 'Failed to add bunk');
+            const detail = [error?.message, error?.details, error?.hint].filter(Boolean).join('\n');
+            console.error('bunks insert failed:', error);
+            Alert.alert('Error', detail || 'Failed to add bunk');
         },
     });
 
