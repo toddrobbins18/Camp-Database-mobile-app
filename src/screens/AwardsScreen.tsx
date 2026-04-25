@@ -61,17 +61,18 @@ const ScreenHeader = ({ title, navigation }: { title: string, navigation: any })
 export const AwardsScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
+    const activeSeason = season || new Date().getFullYear().toString();
 
     // Fetch awards from Supabase (children table has "name", not first_name/last_name)
     const { data: awards = [], isLoading: isLoadingAwards } = useQuery({
-        queryKey: ['awards', companyId, season],
+        queryKey: ['awards', companyId, activeSeason],
         queryFn: async () => {
-            if (!companyId || !season) return [];
+            if (!companyId) return [];
             const { data, error } = await supabase
                 .from('awards')
                 .select('*, children(id, name)')
                 .eq('company_id', companyId)
-                .eq('season', season)
+                .or(`season.eq.${activeSeason},season.is.null`)
                 .order('date', { ascending: false });
             if (error) throw error;
             return (data || []).map((award: any) => ({
@@ -80,19 +81,19 @@ export const AwardsScreen = ({ navigation }: any) => {
                 childName: award.children?.name?.trim() || 'Unknown',
             }));
         },
-        enabled: !!companyId && !!season,
+        enabled: !!companyId,
     });
 
     // Fetch children for Add Award dropdown (children table has "name", filter by season)
     const { data: children = [] } = useQuery({
-        queryKey: ['children', companyId, season],
+        queryKey: ['children', companyId, activeSeason],
         queryFn: async () => {
-            if (!companyId || !season) return [];
+            if (!companyId) return [];
             const { data, error } = await supabase
                 .from('children')
                 .select('id, name')
                 .eq('company_id', companyId)
-                .eq('season', season)
+                .eq('season', activeSeason)
                 .order('name', { ascending: true });
             if (error) throw error;
             return (data || []).map((c: any) => ({
@@ -100,7 +101,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                 name: (c.name || '').trim() || 'Unnamed',
             }));
         },
-        enabled: !!companyId && !!season,
+        enabled: !!companyId,
     });
 
     // Convert MM/DD/YYYY to YYYY-MM-DD for DB
@@ -116,6 +117,7 @@ export const AwardsScreen = ({ navigation }: any) => {
     // Add award mutation
     const addAwardMutation = useMutation({
         mutationFn: async (newAward: any) => {
+            if (!companyId) throw new Error('Company context missing');
             const dateForDb = toDateString(newAward.date);
             const titleParts = [
                 newAward.yearEndAward,
@@ -128,7 +130,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                 .from('awards')
                 .insert([{
                     company_id: companyId,
-                    season: season,
+                    season: activeSeason,
                     child_id: newAward.childId,
                     title,
                     category: newAward.yearEndStarfishValues?.length
@@ -142,13 +144,23 @@ export const AwardsScreen = ({ navigation }: any) => {
             if (error) throw error;
             return data;
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['awards'] });
+        onSuccess: (created: any) => {
+            const child = children.find((c: any) => c.id === created?.child_id);
+            const decorated = {
+                ...created,
+                childId: created?.child_id,
+                childName: child?.name?.trim() || 'Unknown',
+                children: child ? { id: child.id, name: child.name } : null,
+            };
+            queryClient.setQueryData(['awards', companyId, activeSeason], (prev: any[] = []) => [decorated, ...prev]);
+            queryClient.invalidateQueries({ queryKey: ['awards', companyId, activeSeason] });
             Alert.alert('Success', 'Award added successfully');
             handleCloseAddAward();
         },
         onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to add award');
+            console.error('awards insert failed:', error);
+            const details = [error?.message, error?.details, error?.hint].filter(Boolean).join('\n');
+            Alert.alert('Error', details || 'Failed to add award');
         },
     });
 
