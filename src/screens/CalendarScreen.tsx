@@ -7,6 +7,7 @@ import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCalendarEvents, useDivisions, type CalendarEvent, type EventSource } from '../api/calendar_events';
 import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
+import { AIChatWidgetMobile } from '../components/AIChatWidgetMobile';
 
 interface Event {
     id: string;
@@ -431,10 +432,7 @@ export const CalendarScreen = ({ navigation }: any) => {
 
             </ScrollView>
 
-            {/* Floating Action Button */}
-            <TouchableOpacity style={styles.fab}>
-                <Ionicons name="chatbubble" size={24} color="white" />
-            </TouchableOpacity>
+            <AIChatWidgetMobile />
 
             {/* Division Picker Modal */}
             <Modal
@@ -751,21 +749,6 @@ const styles = StyleSheet.create({
     dropdownText: {
         fontSize: 14,
         color: theme.colors.text,
-    },
-    fab: {
-        position: 'absolute',
-        bottom: theme.spacing.xl,
-        right: theme.spacing.xl,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: theme.colors.secondary,
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
     },
     // Picker Modal Styles
     modalOverlay: {

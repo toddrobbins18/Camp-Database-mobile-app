@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Switch, Pressable, ActivityIndicator, Platform, Alert } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,12 +8,32 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 import { supabase } from '../lib/supabase';
+import { notifyStaffAssignment } from '../lib/notifyStaffAssignment';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
 import * as DocumentPicker from 'expo-document-picker';
 import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 
 export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
+    const ACTIVITY_TYPE_OPTIONS = [
+        { value: 'field-trip', label: 'Field Trip' },
+        { value: 'arts-crafts', label: 'Arts & Crafts' },
+        { value: 'nature', label: 'Nature Activity' },
+        { value: 'water', label: 'Water Activity' },
+        { value: 'outdoor', label: 'Outdoor Adventure' },
+        { value: 'cultural', label: 'Cultural Activity' },
+        { value: 'staff-bus', label: 'Staff Bus' },
+        { value: 'sporting-event', label: 'Sporting Event' },
+        { value: 'other', label: 'Other' },
+    ];
+    const LOCATION_TYPE_OPTIONS = [
+        { value: 'none', label: 'Not Specified' },
+        { value: 'home', label: 'HOME' },
+        { value: 'away', label: 'AWAY' },
+    ];
+    const MEAL_OPTIONS = ['Breakfast', 'Snack', 'Lunch', 'Dinner', 'Other'];
+    const EMOJI_PRESETS = ["🚌", "🏕️", "🎨", "🌊", "⛺", "🎭", "🏆", "🎯", "🌲", "🎪", "🏊", "🚶"];
+
     const queryClient = useQueryClient();
     const { companyId, season } = useCompany();
 
@@ -22,21 +43,58 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         return s.length ? s : null;
     };
 
+    /** DB CHECK: home_away IN ('home','away') only — never send "", "none", etc. */
+    const toHomeAway = (v: any): 'home' | 'away' | null => {
+        const s = String(v ?? '').trim().toLowerCase();
+        if (s === 'home' || s === 'away') return s;
+        return null;
+    };
+
+    const formatSupabaseWriteError = (error: any): string => {
+        const parts = [error?.message, error?.details, error?.hint].filter(Boolean);
+        return parts.length ? parts.join('\n') : 'Request failed';
+    };
+    const shouldRetryWithoutEmoji = (error: any) => {
+        const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+        return text.includes('emoji') && (text.includes('column') || text.includes('schema cache') || text.includes('not exist'));
+    };
+
+    const isIsoDateString = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
+
     const buildSubmitData = (data: any) => {
+        let capacity: number | null = null;
+        if (data.capacity != null && String(data.capacity).trim() !== '') {
+            const n = parseInt(String(data.capacity), 10);
+            if (Number.isFinite(n) && n >= 0) capacity = n;
+        }
+        const mealList = Array.isArray(data.meal_options) ? data.meal_options.filter(Boolean) : [];
+        // Postgres text[]: prefer null over [] for optional column (avoids some PostgREST edge cases).
+        const meal_options = mealList.length ? mealList : null;
+
+        const eventDate = String(data.event_date ?? '').trim();
+        if (!isIsoDateString(eventDate)) {
+            throw new Error('Event date must be in YYYY-MM-DD format. Re-pick the date from the calendar.');
+        }
+        const endRaw = data.is_multi_day ? toNullableString(data.end_date) : null;
+        if (endRaw && !isIsoDateString(endRaw)) {
+            throw new Error('End date must be in YYYY-MM-DD format. Re-pick the date from the calendar.');
+        }
+
         return {
-            event_date: data.event_date,
-            end_date: data.is_multi_day ? toNullableString(data.end_date) : null,
+            event_date: eventDate,
+            end_date: endRaw,
             is_multi_day: !!data.is_multi_day,
-            title: data.title,
+            title: String(data.title).trim(),
             description: toNullableString(data.description),
             activity_type: data.activity_type,
+            emoji: toNullableString(data.emoji),
             depart_from_camp: toNullableString(data.depart_from_camp),
             depart_from_activity: toNullableString(data.depart_from_activity),
             location: toNullableString(data.location),
-            capacity: data.capacity ? parseInt(String(data.capacity), 10) || null : null,
+            capacity,
             chaperone: toNullableString(data.chaperone),
-            home_away: toNullableString(data.home_away),
-            meal_options: Array.isArray(data.meal_options) ? data.meal_options : [],
+            home_away: toHomeAway(data.home_away),
+            meal_options,
             meal_notes: toNullableString(data.meal_notes),
             season: selectedYear,
             company_id: companyId,
@@ -46,13 +104,24 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const addActivityMutation = useMutation({
         mutationFn: async (newActivity: any) => {
             const { division_ids, ...activityData } = newActivity;
+            const payload = buildSubmitData(activityData);
 
             // 1. Insert activity
-            const { data: activity, error: activityError } = await supabase
+            let { data: activity, error: activityError } = await supabase
                 .from('activities_field_trips')
-                .insert(buildSubmitData(activityData))
+                .insert(payload)
                 .select()
                 .single();
+            if (activityError && shouldRetryWithoutEmoji(activityError)) {
+                const { emoji: _ignoreEmoji, ...fallbackPayload } = payload as any;
+                const retry = await supabase
+                    .from('activities_field_trips')
+                    .insert(fallbackPayload)
+                    .select()
+                    .single();
+                activity = retry.data as any;
+                activityError = retry.error as any;
+            }
 
             if (activityError) throw activityError;
 
@@ -68,6 +137,19 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     .insert(links);
                 if (linksError) throw linksError;
             }
+            const staffNames = (activityData.chaperone || '')
+                .split(',')
+                .map((s: string) => s.trim())
+                .filter(Boolean);
+            if (staffNames.length > 0) {
+                await notifyStaffAssignment({
+                    staffNames,
+                    eventTitle: activityData.title,
+                    eventDate: activityData.event_date,
+                    eventType: 'activity',
+                    companyId,
+                });
+            }
             return activity;
         },
         onSuccess: () => {
@@ -78,19 +160,29 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             resetFormData();
         },
         onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to add activity');
+            console.error('activities_field_trips insert failed:', error);
+            Alert.alert('Error', formatSupabaseWriteError(error) || 'Failed to add activity');
         }
     });
 
     const updateActivityMutation = useMutation({
         mutationFn: async (updatedActivity: any) => {
             const { id, division_ids, divisions: _, ...activityData } = updatedActivity;
+            const payload = buildSubmitData(activityData);
 
             // 1. Update activity
-            const { error: activityError } = await supabase
+            let { error: activityError } = await supabase
                 .from('activities_field_trips')
-                .update(buildSubmitData(activityData))
+                .update(payload)
                 .eq('id', id);
+            if (activityError && shouldRetryWithoutEmoji(activityError)) {
+                const { emoji: _ignoreEmoji, ...fallbackPayload } = payload as any;
+                const retry = await supabase
+                    .from('activities_field_trips')
+                    .update(fallbackPayload)
+                    .eq('id', id);
+                activityError = retry.error as any;
+            }
 
             if (activityError) throw activityError;
 
@@ -113,6 +205,19 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     .insert(links);
                 if (linksError) throw linksError;
             }
+            const staffNames = (activityData.chaperone || '')
+                .split(',')
+                .map((s: string) => s.trim())
+                .filter(Boolean);
+            if (staffNames.length > 0) {
+                await notifyStaffAssignment({
+                    staffNames,
+                    eventTitle: activityData.title,
+                    eventDate: activityData.event_date,
+                    eventType: 'activity',
+                    companyId,
+                });
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['activities'] });
@@ -122,7 +227,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             setEditingActivity(null);
         },
         onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to update activity');
+            console.error('activities_field_trips update failed:', error);
+            Alert.alert('Error', formatSupabaseWriteError(error) || 'Failed to update activity');
         }
     });
 
@@ -134,6 +240,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             end_date: todayStr,
             is_multi_day: false,
             activity_type: '',
+            emoji: '',
             home_away: '',
             division_ids: [],
             depart_from_camp: '',
@@ -145,6 +252,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             meal_options: [],
             meal_notes: ''
         });
+        setSelectedStaffIds([]);
+        setStaffSearchQuery('');
     };
 
     const selectedYear = season || '2026';
@@ -162,6 +271,20 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             if (error) throw error;
             // Simplified sorting for now, can add sort_order logic later
             return data.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        },
+        enabled: !!companyId
+    });
+    const { data: staffData = [] } = useQuery({
+        queryKey: ['staff', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('staff')
+                .select('id, name, role')
+                .eq('company_id', companyId)
+                .order('name', { ascending: true });
+            if (error) throw error;
+            return data || [];
         },
         enabled: !!companyId
     });
@@ -221,6 +344,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         enabled: !!companyId
     });
 
+    // Web subscribes to postgres_changes for this table; mobile uses React Query cache only.
+    // Refetch when the screen is opened so rows added on web show up without restarting the app.
+    useFocusEffect(
+        useCallback(() => {
+            void queryClient.invalidateQueries({ queryKey: ['activities'] });
+        }, [queryClient])
+    );
+
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [isDivisionDropdownOpen, setIsDivisionDropdownOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');
@@ -245,6 +376,27 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
     const [datePickerField, setDatePickerField] = useState<'event_date' | 'end_date' | null>(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
+    const [staffSearchQuery, setStaffSearchQuery] = useState('');
+    const selectedStaff = useMemo(
+        () => staffData.filter((staff: any) => selectedStaffIds.includes(staff.id)),
+        [staffData, selectedStaffIds]
+    );
+    const filteredStaff = useMemo(() => {
+        const q = staffSearchQuery.trim().toLowerCase();
+        if (!q) return staffData;
+        return staffData.filter((s: any) =>
+            String(s.name || '').toLowerCase().includes(q) ||
+            String(s.role || '').toLowerCase().includes(q)
+        );
+    }, [staffData, staffSearchQuery]);
+    const toggleStaffSelection = (staffId: string) => {
+        setSelectedStaffIds((prev) =>
+            prev.includes(staffId)
+                ? prev.filter((id) => id !== staffId)
+                : [...prev, staffId]
+        );
+    };
     const closeActivityTransientUi = () => {
         setIsActivityTypeDropdownOpen(false);
         setIsLocationTypeDropdownOpen(false);
@@ -259,6 +411,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         is_multi_day: false,
         title: '',
         activity_type: '',
+        emoji: '',
         home_away: '',
         division_ids: [] as string[],
         depart_from_camp: '',
@@ -580,21 +733,22 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
     /** In-modal bottom sheet overlay; avoids stacked RN Modal touch issues on iOS. */
     const renderActivitySelectOverlay = () => {
-        const isVisible = isActivityTypeDropdownOpen;
-        const title = 'Select Type';
+        const isVisible = isActivityTypeDropdownOpen || isLocationTypeDropdownOpen;
+        const title = isLocationTypeDropdownOpen ? 'Select Location Type' : 'Select Type';
 
-        let options: { value: string, label: string }[] = [];
-        let currentValue = '';
-        let onSelect: (val: string) => void = () => { };
-
-        options = [
-            { value: 'field-trip', label: 'Field Trip' },
-            { value: 'sporting-event', label: 'Sporting Event' },
-            { value: 'staff-bus', label: 'Staff Bus' },
-            { value: 'other', label: 'Other' },
-        ];
-        currentValue = formData.activity_type;
-        onSelect = (val) => setFormData({ ...formData, activity_type: val });
+        const options: { value: string, label: string }[] = isLocationTypeDropdownOpen
+            ? LOCATION_TYPE_OPTIONS
+            : ACTIVITY_TYPE_OPTIONS;
+        const currentValue = isLocationTypeDropdownOpen
+            ? (formData.home_away || 'none')
+            : formData.activity_type;
+        const onSelect = (val: string) => {
+            if (isLocationTypeDropdownOpen) {
+                setFormData({ ...formData, home_away: val === 'none' ? '' : val });
+            } else {
+                setFormData({ ...formData, activity_type: val });
+            }
+        };
 
         return (
             <ModalPickerOverlay
@@ -619,6 +773,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                             onPress={() => {
                                 onSelect(option.value);
                                 setIsActivityTypeDropdownOpen(false);
+                                setIsLocationTypeDropdownOpen(false);
                             }}
                         >
                             <Text style={[
@@ -869,6 +1024,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     is_multi_day: activity.is_multi_day || false,
                                     title: activity.title,
                                     activity_type: activity.activity_type,
+                                    emoji: activity.emoji || '',
                                     home_away: activity.home_away || '',
                                     division_ids: activity.divisions?.map((d: any) => d.id) || [],
                                     depart_from_camp: activity.depart_from_camp || '',
@@ -880,6 +1036,10 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     meal_options: activity.meal_options || [],
                                     meal_notes: activity.meal_notes || '',
                                 });
+                                const chaperoneNames = (activity.chaperone || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+                                const matchedIds = staffData.filter((staff: any) => chaperoneNames.includes(staff.name)).map((staff: any) => staff.id);
+                                setSelectedStaffIds(matchedIds);
+                                setStaffSearchQuery('');
                                 setIsEditModalOpen(true);
                             }
                         }}
@@ -926,6 +1086,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                                                 is_multi_day: activity.is_multi_day || false,
                                                                 title: activity.title,
                                                                 activity_type: activity.activity_type,
+                                                                emoji: activity.emoji || '',
                                                                 home_away: activity.home_away || '',
                                                                 division_ids: activity.divisions?.map((d: any) => d.id) || [],
                                                                 depart_from_camp: activity.depart_from_camp || '',
@@ -937,6 +1098,10 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                                                 meal_options: activity.meal_options || [],
                                                                 meal_notes: activity.meal_notes || '',
                                                             });
+                                                            const chaperoneNames = (activity.chaperone || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+                                                            const matchedIds = staffData.filter((staff: any) => chaperoneNames.includes(staff.name)).map((staff: any) => staff.id);
+                                                            setSelectedStaffIds(matchedIds);
+                                                            setStaffSearchQuery('');
                                                             setIsEditModalOpen(true);
                                                         }}
                                                     >
@@ -1280,6 +1445,92 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     </View>
                                 </View>
 
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Emoji Icon (optional)</Text>
+                                    <TextInput
+                                        style={styles.formTextInput}
+                                        value={formData.emoji}
+                                        onChangeText={(text) => setFormData({ ...formData, emoji: text })}
+                                        placeholder="Paste an emoji e.g. 🚌 🏕️ 🎨"
+                                        maxLength={4}
+                                    />
+                                    <View style={styles.emojiPresetsRow}>
+                                        {EMOJI_PRESETS.map((emoji) => (
+                                            <TouchableOpacity
+                                                key={emoji}
+                                                style={[styles.emojiPresetButton, formData.emoji === emoji && styles.emojiPresetButtonSelected]}
+                                                onPress={() => setFormData({ ...formData, emoji: formData.emoji === emoji ? '' : emoji })}
+                                            >
+                                                <Text style={styles.emojiPresetText}>{emoji}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Location Type</Text>
+                                    <View style={styles.dropdownContainer}>
+                                        <TouchableOpacity
+                                            style={styles.formInput}
+                                            onPress={() => {
+                                                setIsLocationTypeDropdownOpen(true);
+                                                setIsActivityTypeDropdownOpen(false);
+                                            }}
+                                        >
+                                            <Text style={formData.home_away ? styles.formInputText : styles.formInputPlaceholder}>
+                                                {formData.home_away ? formData.home_away.toUpperCase() : 'Not Specified'}
+                                            </Text>
+                                            <Ionicons
+                                                name={isLocationTypeDropdownOpen ? "chevron-up" : "chevron-down"}
+                                                size={20}
+                                                color={theme.colors.textSecondary}
+                                            />
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+
+                                <View style={styles.formField}>
+                                    <View style={styles.divisionsHeader}>
+                                        <Text style={styles.formLabel}>Divisions</Text>
+                                        <View style={styles.divisionsActions}>
+                                            <TouchableOpacity style={styles.selectAllButton} onPress={() => setFormData({ ...formData, division_ids: divisions.map((d: any) => d.id) })}>
+                                                <Text style={styles.selectAllButtonText}>Select All</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity style={styles.selectAllButton} onPress={() => setFormData({ ...formData, division_ids: [] })}>
+                                                <Text style={styles.selectAllButtonText}>Clear</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                    <View style={styles.divisionsList}>
+                                        <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                            {divisions.map((division: any) => {
+                                                const isSelected = formData.division_ids.includes(division.id);
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={division.id}
+                                                        style={styles.divisionCheckbox}
+                                                        onPress={() => {
+                                                            setFormData({
+                                                                ...formData,
+                                                                division_ids: isSelected
+                                                                    ? formData.division_ids.filter((id) => id !== division.id)
+                                                                    : [...formData.division_ids, division.id]
+                                                            });
+                                                        }}
+                                                    >
+                                                        <Ionicons
+                                                            name={isSelected ? 'checkbox' : 'square-outline'}
+                                                            size={18}
+                                                            color={isSelected ? theme.colors.secondary : theme.colors.textSecondary}
+                                                        />
+                                                        <Text style={styles.divisionCheckboxText}>{division.name}</Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </ScrollView>
+                                    </View>
+                                </View>
+
 
                                 {/* Optional Fields */}
                                 <View style={styles.formField}>
@@ -1350,15 +1601,100 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
                                 <View style={styles.formField}>
                                     <Text style={styles.formLabel}>Staff</Text>
+                                    {selectedStaff.length > 0 && (
+                                        <View style={styles.selectedStaffChips}>
+                                            {selectedStaff.map((staff: any) => (
+                                                <TouchableOpacity key={staff.id} style={styles.staffChip} onPress={() => toggleStaffSelection(staff.id)}>
+                                                    <Text style={styles.staffChipText}>{staff.name}</Text>
+                                                    <Ionicons name="close" size={14} color={theme.colors.surface} />
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                    )}
+                                    <View style={styles.staffSearchContainer}>
+                                        <Ionicons name="search-outline" size={18} color={theme.colors.textSecondary} />
+                                        <TextInput
+                                            style={styles.staffSearchInput}
+                                            value={staffSearchQuery}
+                                            onChangeText={setStaffSearchQuery}
+                                            placeholder="Search staff to assign..."
+                                        />
+                                    </View>
+                                    <View style={styles.staffListContainer}>
+                                        <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                            {filteredStaff.map((staff: any) => {
+                                                const isSelected = selectedStaffIds.includes(staff.id);
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={staff.id}
+                                                        style={[styles.staffRow, isSelected && styles.staffRowSelected]}
+                                                        onPress={() => toggleStaffSelection(staff.id)}
+                                                    >
+                                                        <Ionicons
+                                                            name={isSelected ? 'checkbox' : 'square-outline'}
+                                                            size={18}
+                                                            color={isSelected ? theme.colors.secondary : theme.colors.textSecondary}
+                                                        />
+                                                        <View style={{ flex: 1 }}>
+                                                            <Text style={styles.staffName}>{staff.name}</Text>
+                                                            {!!staff.role && <Text style={styles.staffRole}>{staff.role}</Text>}
+                                                        </View>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </ScrollView>
+                                    </View>
+                                </View>
+
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Description (optional)</Text>
                                     <TextInput
-                                        style={styles.formInput}
-                                        value={formData.chaperone}
-                                        onChangeText={(text) => setFormData({ ...formData, chaperone: text })}
-                                        placeholder="Search staff to assign..."
+                                        style={[styles.formTextInput, styles.formTextArea]}
+                                        value={formData.description}
+                                        onChangeText={(text) => setFormData({ ...formData, description: text })}
+                                        multiline
                                     />
                                 </View>
 
-                                
+                                <View style={styles.mealOptionsSection}>
+                                    <Text style={styles.mealOptionsTitle}>Meal Options</Text>
+                                    {MEAL_OPTIONS.map((meal) => {
+                                        const selected = formData.meal_options.includes(meal);
+                                        return (
+                                            <TouchableOpacity
+                                                key={meal}
+                                                style={styles.mealOption}
+                                                onPress={() => {
+                                                    setFormData({
+                                                        ...formData,
+                                                        meal_options: selected
+                                                            ? formData.meal_options.filter((m) => m !== meal)
+                                                            : [...formData.meal_options, meal]
+                                                    });
+                                                }}
+                                            >
+                                                <Ionicons
+                                                    name={selected ? 'radio-button-on-outline' : 'radio-button-off-outline'}
+                                                    size={20}
+                                                    color={theme.colors.secondary}
+                                                />
+                                                <Text style={styles.mealOptionText}>{meal}</Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                    {formData.meal_options.includes('Other') && (
+                                        <View style={{ marginTop: theme.spacing.sm }}>
+                                            <Text style={styles.formLabel}>Meal Notes</Text>
+                                            <TextInput
+                                                style={[styles.formTextInput, styles.formTextArea]}
+                                                value={formData.meal_notes}
+                                                onChangeText={(text) => setFormData({ ...formData, meal_notes: text })}
+                                                placeholder="e.g., Other location serves lunch"
+                                                multiline
+                                            />
+                                        </View>
+                                    )}
+                                </View>
 
                                 {/* Action Buttons */}
                                 <View style={styles.addActivityBottomSheetActions}>
@@ -1384,10 +1720,10 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             }
 
                                             try {
-                                                await addActivityMutation.mutateAsync(formData as any);
+                                                const selectedNames = selectedStaff.map((s: any) => s.name).join(', ');
+                                                await addActivityMutation.mutateAsync({ ...formData, chaperone: selectedNames } as any);
                                             } catch (error: any) {
-                                                const message = error?.message || 'Failed to add activity';
-                                                Alert.alert('Error', message);
+                                                Alert.alert('Error', formatSupabaseWriteError(error) || 'Failed to add activity');
                                             }
                                         }}
                                     >
@@ -1413,6 +1749,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     closeActivityTransientUi();
                     setIsEditModalOpen(false);
                     setEditingActivity(null);
+                    setSelectedStaffIds([]);
+                    setStaffSearchQuery('');
                 }}
             >
                 <View style={{ flex: 1 }}>
@@ -1443,6 +1781,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         closeActivityTransientUi();
                                         setIsEditModalOpen(false);
                                         setEditingActivity(null);
+                                        setSelectedStaffIds([]);
+                                        setStaffSearchQuery('');
                                     }}
                                 >
                                     <Ionicons name="close" size={24} color={theme.colors.text} />
@@ -1568,6 +1908,92 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 </View>
                             </View>
 
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Emoji Icon (optional)</Text>
+                                <TextInput
+                                    style={styles.formTextInput}
+                                    value={formData.emoji}
+                                    onChangeText={(text) => setFormData({ ...formData, emoji: text })}
+                                    placeholder="Paste an emoji e.g. 🚌 🏕️ 🎨"
+                                    maxLength={4}
+                                />
+                                <View style={styles.emojiPresetsRow}>
+                                    {EMOJI_PRESETS.map((emoji) => (
+                                        <TouchableOpacity
+                                            key={emoji}
+                                            style={[styles.emojiPresetButton, formData.emoji === emoji && styles.emojiPresetButtonSelected]}
+                                            onPress={() => setFormData({ ...formData, emoji: formData.emoji === emoji ? '' : emoji })}
+                                        >
+                                            <Text style={styles.emojiPresetText}>{emoji}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Location Type</Text>
+                                <View style={styles.dropdownContainer}>
+                                    <TouchableOpacity
+                                        style={styles.formInput}
+                                        onPress={() => {
+                                            setIsLocationTypeDropdownOpen(true);
+                                            setIsActivityTypeDropdownOpen(false);
+                                        }}
+                                    >
+                                        <Text style={formData.home_away ? styles.formInputText : styles.formInputPlaceholder}>
+                                            {formData.home_away ? formData.home_away.toUpperCase() : 'Not Specified'}
+                                        </Text>
+                                        <Ionicons
+                                            name={isLocationTypeDropdownOpen ? "chevron-up" : "chevron-down"}
+                                            size={20}
+                                            color={theme.colors.textSecondary}
+                                        />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            <View style={styles.formField}>
+                                <View style={styles.divisionsHeader}>
+                                    <Text style={styles.formLabel}>Divisions</Text>
+                                    <View style={styles.divisionsActions}>
+                                        <TouchableOpacity style={styles.selectAllButton} onPress={() => setFormData({ ...formData, division_ids: divisions.map((d: any) => d.id) })}>
+                                            <Text style={styles.selectAllButtonText}>Select All</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={styles.selectAllButton} onPress={() => setFormData({ ...formData, division_ids: [] })}>
+                                            <Text style={styles.selectAllButtonText}>Clear</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                                <View style={styles.divisionsList}>
+                                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                        {divisions.map((division: any) => {
+                                            const isSelected = formData.division_ids.includes(division.id);
+                                            return (
+                                                <TouchableOpacity
+                                                    key={division.id}
+                                                    style={styles.divisionCheckbox}
+                                                    onPress={() => {
+                                                        setFormData({
+                                                            ...formData,
+                                                            division_ids: isSelected
+                                                                ? formData.division_ids.filter((id) => id !== division.id)
+                                                                : [...formData.division_ids, division.id]
+                                                        });
+                                                    }}
+                                                >
+                                                    <Ionicons
+                                                        name={isSelected ? 'checkbox' : 'square-outline'}
+                                                        size={18}
+                                                        color={isSelected ? theme.colors.secondary : theme.colors.textSecondary}
+                                                    />
+                                                    <Text style={styles.divisionCheckboxText}>{division.name}</Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </ScrollView>
+                                </View>
+                            </View>
+
 
                             {/* Optional Fields */}
                             <View style={styles.formField}>
@@ -1647,15 +2073,100 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
                             <View style={styles.formField}>
                                 <Text style={styles.formLabel}>Staff</Text>
+                                {selectedStaff.length > 0 && (
+                                    <View style={styles.selectedStaffChips}>
+                                        {selectedStaff.map((staff: any) => (
+                                            <TouchableOpacity key={staff.id} style={styles.staffChip} onPress={() => toggleStaffSelection(staff.id)}>
+                                                <Text style={styles.staffChipText}>{staff.name}</Text>
+                                                <Ionicons name="close" size={14} color={theme.colors.surface} />
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                )}
+                                <View style={styles.staffSearchContainer}>
+                                    <Ionicons name="search-outline" size={18} color={theme.colors.textSecondary} />
+                                    <TextInput
+                                        style={styles.staffSearchInput}
+                                        value={staffSearchQuery}
+                                        onChangeText={setStaffSearchQuery}
+                                        placeholder="Search staff to assign..."
+                                    />
+                                </View>
+                                <View style={styles.staffListContainer}>
+                                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                        {filteredStaff.map((staff: any) => {
+                                            const isSelected = selectedStaffIds.includes(staff.id);
+                                            return (
+                                                <TouchableOpacity
+                                                    key={staff.id}
+                                                    style={[styles.staffRow, isSelected && styles.staffRowSelected]}
+                                                    onPress={() => toggleStaffSelection(staff.id)}
+                                                >
+                                                    <Ionicons
+                                                        name={isSelected ? 'checkbox' : 'square-outline'}
+                                                        size={18}
+                                                        color={isSelected ? theme.colors.secondary : theme.colors.textSecondary}
+                                                    />
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={styles.staffName}>{staff.name}</Text>
+                                                        {!!staff.role && <Text style={styles.staffRole}>{staff.role}</Text>}
+                                                    </View>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </ScrollView>
+                                </View>
+                            </View>
+
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Description (optional)</Text>
                                 <TextInput
-                                    style={styles.formInput}
-                                    value={formData.chaperone}
-                                    onChangeText={(text) => setFormData({ ...formData, chaperone: text })}
-                                    placeholder="Search staff to assign..."
+                                    style={[styles.formTextInput, styles.formTextArea]}
+                                    value={formData.description}
+                                    onChangeText={(text) => setFormData({ ...formData, description: text })}
+                                    multiline
                                 />
                             </View>
 
-                            
+                            <View style={styles.mealOptionsSection}>
+                                <Text style={styles.mealOptionsTitle}>Meal Options</Text>
+                                {MEAL_OPTIONS.map((meal) => {
+                                    const selected = formData.meal_options.includes(meal);
+                                    return (
+                                        <TouchableOpacity
+                                            key={meal}
+                                            style={styles.mealOption}
+                                            onPress={() => {
+                                                setFormData({
+                                                    ...formData,
+                                                    meal_options: selected
+                                                        ? formData.meal_options.filter((m) => m !== meal)
+                                                        : [...formData.meal_options, meal]
+                                                });
+                                            }}
+                                        >
+                                            <Ionicons
+                                                name={selected ? 'radio-button-on-outline' : 'radio-button-off-outline'}
+                                                size={20}
+                                                color={theme.colors.secondary}
+                                            />
+                                            <Text style={styles.mealOptionText}>{meal}</Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                                {formData.meal_options.includes('Other') && (
+                                    <View style={{ marginTop: theme.spacing.sm }}>
+                                        <Text style={styles.formLabel}>Meal Notes</Text>
+                                        <TextInput
+                                            style={[styles.formTextInput, styles.formTextArea]}
+                                            value={formData.meal_notes}
+                                            onChangeText={(text) => setFormData({ ...formData, meal_notes: text })}
+                                            placeholder="e.g., Other location serves lunch"
+                                            multiline
+                                        />
+                                    </View>
+                                )}
+                            </View>
 
                             {/* Action Buttons */}
                             <View style={styles.modalActions}>
@@ -1669,6 +2180,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         setEditingActivity(null);
                                         setIsActivityTypeDropdownOpen(false);
                                         setIsLocationTypeDropdownOpen(false);
+                                        setSelectedStaffIds([]);
+                                        setStaffSearchQuery('');
                                     }}
                                 >
                                     <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -1676,12 +2189,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 <TouchableOpacity
                                     style={styles.updateButton}
                                     onPress={() => {
-                                        if (!formData.title || !formData.event_date) {
-                                            Alert.alert('Error', 'Please fill in required fields (Title and Event Date)');
+                                        if (!formData.title || !formData.event_date || !formData.activity_type) {
+                                            Alert.alert('Error', 'Please fill in required fields (Activity Type, Title, and Event Date)');
                                             return;
                                         }
                                         if (editingActivity) {
-                                            updateActivityMutation.mutate({ ...formData, id: editingActivity.id });
+                                            const selectedNames = selectedStaff.map((s: any) => s.name).join(', ');
+                                            updateActivityMutation.mutate({ ...formData, chaperone: selectedNames, id: editingActivity.id });
                                         }
                                     }}
                                 >
@@ -2764,6 +3278,96 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.text,
+    },
+    emojiPresetsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.xs,
+        marginTop: theme.spacing.sm,
+    },
+    emojiPresetButton: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: theme.spacing.xs,
+        backgroundColor: theme.colors.surface,
+    },
+    emojiPresetButtonSelected: {
+        borderColor: theme.colors.secondary,
+        backgroundColor: '#e8f0ff',
+    },
+    emojiPresetText: {
+        fontSize: 18,
+    },
+    selectedStaffChips: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.xs,
+        marginBottom: theme.spacing.sm,
+    },
+    staffChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        backgroundColor: theme.colors.secondary,
+        borderRadius: 999,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 6,
+    },
+    staffChipText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.surface,
+        fontWeight: '600',
+    },
+    staffSearchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+        minHeight: 40,
+    },
+    staffSearchInput: {
+        flex: 1,
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+        paddingVertical: theme.spacing.xs,
+    },
+    staffListContainer: {
+        marginTop: theme.spacing.sm,
+        maxHeight: 180,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.surface,
+    },
+    staffRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: theme.spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    staffRowSelected: {
+        backgroundColor: '#f5f8ff',
+    },
+    staffName: {
+        ...theme.typography.body,
+        fontSize: 14,
+        color: theme.colors.text,
+        fontWeight: '500',
+    },
+    staffRole: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
     },
     modalActions: {
         flexDirection: 'row',

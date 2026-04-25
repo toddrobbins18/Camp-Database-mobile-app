@@ -51,7 +51,7 @@ import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { useRole } from '../hooks/useRole';
 import { supabase } from '../lib/supabase';
 import { theme } from '../theme/theme';
-import { getMenuDrawerTheme } from '../theme/menuDrawerTheme';
+import { getMenuDrawerThemeFromCompany } from '../theme/menuDrawerTheme';
 
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
@@ -60,7 +60,7 @@ const Stack = createNativeStackNavigator();
 const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const { data: roleData } = useRole();
-    const { availableCompanies, switchCompany, companyId, companySlug, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp } = useCompany();
+    const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp } = useCompany();
     const [showCampPicker, setShowCampPicker] = useState(false);
     const [showYearPicker, setShowYearPicker] = useState(false);
 
@@ -75,7 +75,10 @@ const CustomDrawerContent = (props: any) => {
     const canSeeAdminScreens = isAdmin || !isRoleLoaded;             // admin+ or loading
     const canSeeSuperAdminOnly = isSuperAdmin;                       // super_admin only
 
-    const menuTheme = getMenuDrawerTheme(companySlug);
+    const menuTheme = getMenuDrawerThemeFromCompany({
+        companySlug,
+        companyThemeColor,
+    });
 
     const drawerItemProps = {
         labelStyle: styles.drawerLabel,

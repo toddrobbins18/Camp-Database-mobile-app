@@ -13,6 +13,11 @@ export type MenuDrawerTheme = {
     sectionHeader: string;
 };
 
+type MenuDrawerThemeInput = {
+    companySlug: string | null | undefined;
+    companyThemeColor?: string | null;
+};
+
 const DEFAULT: MenuDrawerTheme = {
     drawerBackground: '#0f172a',
     menuItemInactive: '#e2e8f0',
@@ -71,4 +76,21 @@ export function getMenuDrawerTheme(companySlug: string | null | undefined): Menu
         default:
             return DEFAULT;
     }
+}
+
+export function getMenuDrawerThemeFromCompany({
+    companySlug,
+    companyThemeColor,
+}: MenuDrawerThemeInput): MenuDrawerTheme {
+    const baseTheme = getMenuDrawerTheme(companySlug);
+    if (!companyThemeColor) return baseTheme;
+
+    // Use Supabase as source of truth for camp branding color.
+    return {
+        ...baseTheme,
+        drawerBackground: companyThemeColor,
+        menuActiveBackground: companyThemeColor,
+        dropdownSelectionBg: companyThemeColor,
+        campSwitcherBorderColor: companyThemeColor,
+    };
 }

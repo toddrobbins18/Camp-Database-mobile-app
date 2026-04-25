@@ -17,6 +17,7 @@ import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { MobileUserMenu } from '../components/MobileUserMenu';
 import { TigerTimesCategoryCards } from '../components/TigerTimesCategoryCards';
+import { AIChatWidgetMobile } from '../components/AIChatWidgetMobile';
 import {
     useTodayBirthdays,
     useTodayEvents,
@@ -661,16 +662,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                 )}
             </ScrollView>
 
-            {/* Floating Action Button — Timber Lake Camp green; Timber Lake West maroon */}
-            <TouchableOpacity
-                style={[
-                    styles.fab,
-                    isTimberLakeCamp && styles.fabTimberLake,
-                    isTimberLakeWest && styles.fabTimberWest,
-                ]}
-            >
-                <Ionicons name="chatbubble-ellipses" size={20} color="white" />
-            </TouchableOpacity>
+            <AIChatWidgetMobile />
         </>
     );
 
@@ -775,9 +767,6 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
         fontStyle: 'italic',
         lineHeight: 20,
-    },
-    fabTimberWest: {
-        backgroundColor: '#991b1b',
     },
     scrollContent: {
         padding: theme.spacing.md,
@@ -1055,27 +1044,5 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
         fontSize: 13,
         fontStyle: 'italic',
-    },
-    fabTimberLake: {
-        backgroundColor: '#286422',
-    },
-    fab: {
-        position: 'absolute',
-        bottom: 24,
-        right: 24,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#2563eb',
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: "#000",
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
     },
 });

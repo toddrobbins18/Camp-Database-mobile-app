@@ -21,6 +21,7 @@ import {
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
 import { getSignedUrl } from '../api/storage';
+import { AIChatWidgetMobile } from '../components/AIChatWidgetMobile';
 
 export const AdminPanelScreen = ({ navigation }: any) => {
 
@@ -445,9 +446,6 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 <Text style={styles.aboutTagsText}>
                     Tags allow you to organize users for targeted messaging. Users can have multiple tags. Click on a tag badge to remove it, or use the dropdown to add new tags.
                 </Text>
-                <View style={styles.chatIconBubble}>
-                    <Ionicons name="chatbubble-ellipses" size={20} color="white" />
-                </View>
             </View>
         </View>
     );
@@ -2551,6 +2549,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
+            <AIChatWidgetMobile />
         </SafeAreaView>
     );
 };
@@ -2854,22 +2853,6 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: theme.colors.textSecondary,
         lineHeight: 20,
-    },
-    chatIconBubble: {
-        position: 'absolute',
-        bottom: 16,
-        right: 16,
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#2563eb',
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 3,
-        elevation: 4,
     },
     // Modal Styles
     modalOverlay: {
