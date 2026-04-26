@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput, Pressable, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, Modal, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -593,14 +593,13 @@ export const AwardsScreen = ({ navigation }: any) => {
                 animationType="fade"
                 onRequestClose={handleCloseAddAward}
             >
-                <Pressable
-                    style={styles.centeredOverlay}
-                    onPress={handleCloseAddAward}
-                >
+                <View style={styles.addAwardScreenRoot}>
                     <Pressable
-                        style={styles.centeredModal}
-                        onPress={(e) => e.stopPropagation()}
-                    >
+                        style={styles.addAwardBackdrop}
+                        onPress={handleCloseAddAward}
+                        accessibilityRole="button"
+                    />
+                    <View style={styles.centeredModal}>
                         {/* Modal Header */}
                         <View style={styles.addAwardModalHeader}>
                             <Text style={styles.addAwardModalTitle}>{editingAwardId ? 'Edit Award' : 'Add New Award'}</Text>
@@ -616,7 +615,8 @@ export const AwardsScreen = ({ navigation }: any) => {
                             style={styles.addAwardBottomSheetScroll}
                             contentContainerStyle={styles.addAwardModalContent}
                             showsVerticalScrollIndicator={true}
-                            keyboardShouldPersistTaps="handled"
+                            keyboardShouldPersistTaps="always"
+                            nestedScrollEnabled
                         >
                             {/* Child Selection */}
                             <View style={styles.formField}>
@@ -776,177 +776,167 @@ export const AwardsScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Child Selection Bottom Sheet */}
-            <Modal
-                visible={showChildDropdown}
-                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowChildDropdown(false)}
-            >
-                <Pressable
-                    style={styles.bottomSheetOverlay}
-                    onPress={() => setShowChildDropdown(false)}
-                >
-                    <Pressable
-                        style={[styles.bottomSheet, { maxHeight: '80%' }]}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        {/* Header */}
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select Child</Text>
-                        </View>
-
-                        {/* Search Input */}
-                        <View style={styles.dropdownSearchContainer}>
-                            <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.dropdownSearchIcon} />
-                            <TextInput
-                                style={styles.dropdownSearchInput}
-                                placeholder="Type to search for a child..."
-                                placeholderTextColor={theme.colors.textSecondary}
-                                value={childSearchText}
-                                onChangeText={setChildSearchText}
-                                autoFocus={true}
-                            />
-                        </View>
-
-                        {/* List */}
-                        <ScrollView style={{ marginTop: 16 }} showsVerticalScrollIndicator={false}>
-                            {filteredChildren.length > 0 ? (
-                                filteredChildren.map((child) => (
-                                    <TouchableOpacity
-                                        key={child.id}
-                                        style={styles.bottomSheetOption}
-                                        onPress={() => {
-                                            setSelectedChild(child.id);
-                                            setChildSearchText(''); // Reset search on select or keep it? user prefs. resetting for clean next time.
-                                            setShowChildDropdown(false);
-                                        }}
+                    </View>
+                    {/* Picker layers live in the same Modal as the form (no nested Modals for iOS). */}
+                    {showWeeklyCamperDropdown && (
+                        <View style={styles.addAwardSubOverlay} pointerEvents="box-none">
+                            <Pressable
+                                style={styles.bottomSheetOverlay}
+                                onPress={() => setShowWeeklyCamperDropdown(false)}
+                            >
+                                <Pressable
+                                    style={[styles.bottomSheet, styles.awardDropdownBottomSheet]}
+                                    onPress={(e) => e.stopPropagation()}
+                                >
+                                    <View style={styles.bottomSheetHeader}>
+                                        <Text style={styles.bottomSheetTitle}>Select weekly award</Text>
+                                    </View>
+                                    <ScrollView
+                                        style={styles.awardDropdownScroll}
+                                        contentContainerStyle={styles.awardDropdownScrollContent}
+                                        showsVerticalScrollIndicator
+                                        keyboardShouldPersistTaps="handled"
                                     >
-                                        <Ionicons
-                                            name={selectedChild === child.id ? "radio-button-on" : "radio-button-off"}
-                                            size={24}
-                                            color={selectedChild === child.id ? theme.colors.secondary : theme.colors.textSecondary}
+                                        {WEEKLY_CAMPER_AWARDS.map((award) => (
+                                            <TouchableOpacity
+                                                key={award}
+                                                style={[
+                                                    styles.bottomSheetOption,
+                                                    weeklyCamperAward === award && styles.bottomSheetOptionSelected,
+                                                ]}
+                                                onPress={() => {
+                                                    setWeeklyCamperAward(award);
+                                                    setShowWeeklyCamperDropdown(false);
+                                                }}
+                                            >
+                                                <Ionicons
+                                                    name={weeklyCamperAward === award ? 'radio-button-on' : 'radio-button-off'}
+                                                    size={24}
+                                                    color={weeklyCamperAward === award ? theme.colors.secondary : theme.colors.textSecondary}
+                                                />
+                                                <Text
+                                                    style={[
+                                                        styles.bottomSheetOptionText,
+                                                        weeklyCamperAward === award && styles.bottomSheetOptionTextSelected,
+                                                    ]}
+                                                >
+                                                    {award}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </Pressable>
+                            </Pressable>
+                        </View>
+                    )}
+                    {showYearEndDropdown && (
+                        <View style={styles.addAwardSubOverlay} pointerEvents="box-none">
+                            <Pressable
+                                style={styles.bottomSheetOverlay}
+                                onPress={() => setShowYearEndDropdown(false)}
+                            >
+                                <Pressable
+                                    style={[styles.bottomSheet, styles.awardDropdownBottomSheet]}
+                                    onPress={(e) => e.stopPropagation()}
+                                >
+                                    <View style={styles.bottomSheetHeader}>
+                                        <Text style={styles.bottomSheetTitle}>Select award type</Text>
+                                    </View>
+                                    <ScrollView
+                                        style={styles.awardDropdownScroll}
+                                        contentContainerStyle={styles.awardDropdownScrollContent}
+                                        showsVerticalScrollIndicator
+                                        keyboardShouldPersistTaps="handled"
+                                    >
+                                        {YEAR_END_AWARDS.map((award) => (
+                                            <TouchableOpacity
+                                                key={award}
+                                                style={styles.bottomSheetOption}
+                                                onPress={() => {
+                                                    setYearEndAward(award);
+                                                    if (award !== 'Starfish') setYearEndStarfishValues([]);
+                                                    setShowYearEndDropdown(false);
+                                                }}
+                                            >
+                                                <Ionicons
+                                                    name={yearEndAward === award ? 'radio-button-on' : 'radio-button-off'}
+                                                    size={24}
+                                                    color={yearEndAward === award ? theme.colors.secondary : theme.colors.textSecondary}
+                                                />
+                                                <Text style={styles.bottomSheetOptionText}>{award}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </Pressable>
+                            </Pressable>
+                        </View>
+                    )}
+                    {showChildDropdown && (
+                        <View style={styles.addAwardSubOverlay} pointerEvents="box-none">
+                            <Pressable
+                                style={styles.bottomSheetOverlay}
+                                onPress={() => setShowChildDropdown(false)}
+                            >
+                                <Pressable
+                                    style={[styles.bottomSheet, { maxHeight: '80%' }]}
+                                    onPress={(e) => e.stopPropagation()}
+                                >
+                                    <View style={styles.bottomSheetHeader}>
+                                        <Text style={styles.bottomSheetTitle}>Select Child</Text>
+                                    </View>
+                                    <View style={styles.dropdownSearchContainer}>
+                                        <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.dropdownSearchIcon} />
+                                        <TextInput
+                                            style={styles.dropdownSearchInput}
+                                            placeholder="Type to search for a child..."
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={childSearchText}
+                                            onChangeText={setChildSearchText}
+                                            autoFocus
                                         />
-                                        <Text style={styles.bottomSheetOptionText}>{child.name}</Text>
-                                    </TouchableOpacity>
-                                ))
-                            ) : (
-                                <Text style={{ textAlign: 'center', marginTop: 20, color: theme.colors.textSecondary }}>
-                                    No children found
-                                </Text>
-                            )}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Weekly Camper Award Bottom Sheet */}
-            <Modal
-                visible={showWeeklyCamperDropdown}
-                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowWeeklyCamperDropdown(false)}
-            >
-                <Pressable
-                    style={styles.bottomSheetOverlay}
-                    onPress={() => setShowWeeklyCamperDropdown(false)}
-                >
-                    <Pressable
-                        style={[styles.bottomSheet, styles.awardDropdownBottomSheet]}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select weekly award</Text>
+                                    </View>
+                                    <ScrollView
+                                        style={styles.addAwardChildListScroll}
+                                        contentContainerStyle={styles.addAwardChildListContent}
+                                        showsVerticalScrollIndicator
+                                        keyboardShouldPersistTaps="handled"
+                                    >
+                                        {filteredChildren.length > 0 ? (
+                                            filteredChildren.map((child) => (
+                                                <TouchableOpacity
+                                                    key={child.id}
+                                                    style={styles.bottomSheetOption}
+                                                    onPress={() => {
+                                                        setSelectedChild(child.id);
+                                                        setChildSearchText('');
+                                                        setShowChildDropdown(false);
+                                                    }}
+                                                >
+                                                    <Ionicons
+                                                        name={selectedChild === child.id ? 'radio-button-on' : 'radio-button-off'}
+                                                        size={24}
+                                                        color={selectedChild === child.id ? theme.colors.secondary : theme.colors.textSecondary}
+                                                    />
+                                                    <Text style={styles.bottomSheetOptionText}>{child.name}</Text>
+                                                </TouchableOpacity>
+                                            ))
+                                        ) : (
+                                            <Text
+                                                style={{
+                                                    textAlign: 'center',
+                                                    marginTop: 20,
+                                                    color: theme.colors.textSecondary,
+                                                }}
+                                            >
+                                                No children found
+                                            </Text>
+                                        )}
+                                    </ScrollView>
+                                </Pressable>
+                            </Pressable>
                         </View>
-                        <ScrollView
-                            style={styles.awardDropdownScroll}
-                            contentContainerStyle={styles.awardDropdownScrollContent}
-                            showsVerticalScrollIndicator={true}
-                            nestedScrollEnabled={true}
-                        >
-                            {WEEKLY_CAMPER_AWARDS.map((award) => (
-                                <TouchableOpacity
-                                    key={award}
-                                    style={[
-                                        styles.bottomSheetOption,
-                                        weeklyCamperAward === award && styles.bottomSheetOptionSelected
-                                    ]}
-                                    onPress={() => {
-                                        setWeeklyCamperAward(award);
-                                        setShowWeeklyCamperDropdown(false);
-                                    }}
-                                >
-                                    <Ionicons
-                                        name={weeklyCamperAward === award ? "radio-button-on" : "radio-button-off"}
-                                        size={24}
-                                        color={weeklyCamperAward === award ? theme.colors.secondary : theme.colors.textSecondary}
-                                    />
-                                    <Text style={[
-                                        styles.bottomSheetOptionText,
-                                        weeklyCamperAward === award && styles.bottomSheetOptionTextSelected
-                                    ]}>
-                                        {award}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            {/* Year End Award Bottom Sheet */}
-            <Modal
-                visible={showYearEndDropdown}
-                presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowYearEndDropdown(false)}
-            >
-                <Pressable
-                    style={styles.bottomSheetOverlay}
-                    onPress={() => setShowYearEndDropdown(false)}
-                >
-                    <Pressable
-                        style={[styles.bottomSheet, styles.awardDropdownBottomSheet]}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        <View style={styles.bottomSheetHeader}>
-                            <Text style={styles.bottomSheetTitle}>Select award type</Text>
-                        </View>
-
-                        <ScrollView
-                            style={styles.awardDropdownScroll}
-                            contentContainerStyle={styles.awardDropdownScrollContent}
-                            showsVerticalScrollIndicator={true}
-                            nestedScrollEnabled={true}
-                        >
-                            {YEAR_END_AWARDS.map((award) => (
-                                <TouchableOpacity
-                                    key={award}
-                                    style={styles.bottomSheetOption}
-                                    onPress={() => {
-                                        setYearEndAward(award);
-                                        if (award !== 'Starfish') setYearEndStarfishValues([]);
-                                        setShowYearEndDropdown(false);
-                                    }}
-                                >
-                                    <Ionicons
-                                        name={yearEndAward === award ? "radio-button-on" : "radio-button-off"}
-                                        size={24}
-                                        color={yearEndAward === award ? theme.colors.secondary : theme.colors.textSecondary}
-                                    />
-                                    <Text style={styles.bottomSheetOptionText}>{award}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
+                    )}
+                </View>
             </Modal>
 
             {/* Date Picker Modal */}
@@ -1533,25 +1523,45 @@ const styles = StyleSheet.create({
         height: '50%',
         overflow: 'hidden',
     },
-    // Centered Modal Styles
-    centeredOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    // Add Award: root fills Modal; dim tap target is a sibling behind the card so ScrollView/dropdowns work.
+    addAwardScreenRoot: {
+        flex: 1,
+        width: '100%',
         justifyContent: 'center',
         alignItems: 'center',
         padding: theme.spacing.md,
-        zIndex: 1000,
+    },
+    addAwardBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        zIndex: 0,
+    },
+    addAwardSubOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 5000,
+        elevation: 25,
     },
     centeredModal: {
+        zIndex: 1,
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,
         width: '100%',
         maxWidth: 600,
-        height: '90%',
         maxHeight: '90%',
+        height: '90%',
+        flexDirection: 'column',
+        minHeight: 0,
         ...theme.shadows.card,
         elevation: 5,
         overflow: 'hidden',
+    },
+    addAwardChildListScroll: {
+        marginTop: 16,
+        flexGrow: 0,
+        maxHeight: 360,
+    },
+    addAwardChildListContent: {
+        paddingBottom: theme.spacing.lg,
     },
     modalHeader: {
         flexDirection: 'row',
@@ -2091,6 +2101,7 @@ const styles = StyleSheet.create({
     },
     addAwardBottomSheetScroll: {
         flex: 1,
+        minHeight: 0,
     },
     deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
     deleteModalContent: { backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '85%', maxWidth: 340 },
