@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ccom.thenest.camp.unlisted",
+      "bundleIdentifier": "com.thenest.camp.unlisted ",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
