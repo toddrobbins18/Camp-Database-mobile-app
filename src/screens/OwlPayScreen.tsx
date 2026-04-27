@@ -45,6 +45,9 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const [lowBalanceAlertsEnabled, setLowBalanceAlertsEnabled] = useState(false);
     const [staffReportsEnabled, setStaffReportsEnabled] = useState(false);
     const [staffReportFrequency, setStaffReportFrequency] = useState('daily');
+    const [lowBalanceThreshold, setLowBalanceThreshold] = useState('5');
+    const [lowBalanceRecipientEmail, setLowBalanceRecipientEmail] = useState('');
+    const [staffReportRecipientEmail, setStaffReportRecipientEmail] = useState('');
     const [itemToDelete, setItemToDelete] = useState<OwlPayItem | null>(null);
     const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -64,6 +67,49 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const { data: settings, isLoading: settingsLoading } = useOwlPayEmailConfig(companyId);
     const saveItemMutation = useSaveOwlPayItem();
     const saveSettingsMutation = useSaveOwlPayEmailConfig();
+
+    useEffect(() => {
+        if (!companyId) return;
+
+        const channel = supabase
+            .channel(`owlpay-mobile-${companyId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'children', filter: `company_id=eq.${companyId}` },
+                () => {
+                    queryClient.invalidateQueries({ queryKey: ['owlpay_campers'] });
+                    queryClient.invalidateQueries({ queryKey: ['owlpay_reports'] });
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'owl_pay_items', filter: `company_id=eq.${companyId}` },
+                () => {
+                    queryClient.invalidateQueries({ queryKey: ['owlpay_items'] });
+                    queryClient.invalidateQueries({ queryKey: ['owlpay_reports'] });
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'owl_pay_transactions', filter: `company_id=eq.${companyId}` },
+                () => {
+                    queryClient.invalidateQueries({ queryKey: ['owlpay_reports'] });
+                    queryClient.invalidateQueries({ queryKey: ['owlpay_campers'] });
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'owl_pay_email_config', filter: `company_id=eq.${companyId}` },
+                () => {
+                    queryClient.invalidateQueries({ queryKey: ['owlpay_email_config'] });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [companyId, queryClient]);
 
     const reportRange = useMemo(() => {
         const now = new Date();
@@ -146,22 +192,29 @@ export const OwlPayScreen = ({ navigation }: any) => {
         setLowBalanceAlertsEnabled(settings.low_balance_alerts_enabled);
         setStaffReportsEnabled(settings.staff_purchase_reports_enabled);
         setStaffReportFrequency(settings.staff_report_frequency || 'daily');
+        setLowBalanceThreshold(String(settings.low_balance_threshold ?? 5));
+        setLowBalanceRecipientEmail(settings.low_balance_recipient_email ?? '');
+        setStaffReportRecipientEmail(settings.staff_report_recipient_email ?? '');
     }, [
         settings?.low_balance_alerts_enabled,
         settings?.staff_purchase_reports_enabled,
         settings?.staff_report_frequency,
+        settings?.low_balance_threshold,
+        settings?.low_balance_recipient_email,
+        settings?.staff_report_recipient_email,
     ]);
 
     const saveSettings = () => {
         if (!companyId) return;
+        const parsedThreshold = Number(lowBalanceThreshold);
         const payload: OwlPayEmailConfig = {
             company_id: companyId,
             low_balance_alerts_enabled: lowBalanceAlertsEnabled,
-            low_balance_threshold: settings?.low_balance_threshold ?? 5,
-            low_balance_recipient_email: settings?.low_balance_recipient_email ?? null,
+            low_balance_threshold: Number.isFinite(parsedThreshold) ? parsedThreshold : 5,
+            low_balance_recipient_email: lowBalanceRecipientEmail.trim() || null,
             staff_purchase_reports_enabled: staffReportsEnabled,
             staff_report_frequency: staffReportFrequency,
-            staff_report_recipient_email: settings?.staff_report_recipient_email ?? null,
+            staff_report_recipient_email: staffReportRecipientEmail.trim() || null,
         };
         saveSettingsMutation.mutate(payload, {
             onSuccess: () => Alert.alert('Owl Pay', 'Settings saved successfully'),
@@ -450,6 +503,36 @@ export const OwlPayScreen = ({ navigation }: any) => {
                         <View style={[styles.toggleKnob, lowBalanceAlertsEnabled && styles.toggleKnobOn]} />
                     </TouchableOpacity>
                 </View>
+                {lowBalanceAlertsEnabled && (
+                    <View style={styles.settingInputsWrap}>
+                        <Text style={styles.settingFieldLabel}>Balance Threshold ($)</Text>
+                        <TextInput
+                            value={lowBalanceThreshold}
+                            onChangeText={setLowBalanceThreshold}
+                            keyboardType="decimal-pad"
+                            style={styles.settingInput}
+                            placeholder="5"
+                            placeholderTextColor={theme.colors.textSecondary}
+                        />
+                        <Text style={styles.settingHintText}>
+                            Alert triggers when balance falls below this amount.
+                        </Text>
+
+                        <Text style={styles.settingFieldLabel}>Recipient Email</Text>
+                        <TextInput
+                            value={lowBalanceRecipientEmail}
+                            onChangeText={setLowBalanceRecipientEmail}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            style={styles.settingInput}
+                            placeholder="admin@camp.com"
+                            placeholderTextColor={theme.colors.textSecondary}
+                        />
+                        <Text style={styles.settingHintText}>
+                            Leave blank to send to the camper&apos;s guardian email on file.
+                        </Text>
+                    </View>
+                )}
             </StyledCard>
 
             <StyledCard>
@@ -471,6 +554,41 @@ export const OwlPayScreen = ({ navigation }: any) => {
                         <View style={[styles.toggleKnob, staffReportsEnabled && styles.toggleKnobOn]} />
                     </TouchableOpacity>
                 </View>
+                {staffReportsEnabled && (
+                    <View style={styles.settingInputsWrap}>
+                        <Text style={styles.settingFieldLabel}>Report Frequency</Text>
+                        <View style={styles.frequencyRow}>
+                            {(['daily', 'weekly', 'monthly'] as const).map((freq) => {
+                                const isActive = staffReportFrequency === freq;
+                                return (
+                                    <TouchableOpacity
+                                        key={freq}
+                                        style={[styles.frequencyBtn, isActive && styles.frequencyBtnActive]}
+                                        onPress={() => setStaffReportFrequency(freq)}
+                                    >
+                                        <Text style={[styles.frequencyBtnText, isActive && styles.frequencyBtnTextActive]}>
+                                            {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        <Text style={styles.settingFieldLabel}>Recipient Email</Text>
+                        <TextInput
+                            value={staffReportRecipientEmail}
+                            onChangeText={setStaffReportRecipientEmail}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            style={styles.settingInput}
+                            placeholder="director@camp.com"
+                            placeholderTextColor={theme.colors.textSecondary}
+                        />
+                        <Text style={styles.settingHintText}>
+                            Who should receive the staff purchase summary.
+                        </Text>
+                    </View>
+                )}
             </StyledCard>
 
             <View style={styles.saveRow}>
@@ -862,6 +980,36 @@ const styles = StyleSheet.create({
     settingSubtitle: { color: theme.colors.textSecondary, fontSize: 14, marginTop: 2, lineHeight: 19 },
     settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
     settingLabel: { color: theme.colors.text, fontWeight: '600', fontSize: 15 },
+    settingInputsWrap: {
+        marginTop: 12,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        gap: 8,
+    },
+    settingFieldLabel: { color: theme.colors.text, fontWeight: '600', fontSize: 14 },
+    settingInput: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        backgroundColor: '#fff',
+        color: theme.colors.text,
+    },
+    settingHintText: { color: theme.colors.textSecondary, fontSize: 12, marginTop: -2 },
+    frequencyRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+    frequencyBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: '#eef2f7',
+    },
+    frequencyBtnActive: { borderColor: theme.colors.secondary, backgroundColor: '#fff' },
+    frequencyBtnText: { color: theme.colors.text, fontWeight: '600', fontSize: 13 },
+    frequencyBtnTextActive: { color: theme.colors.secondary },
     toggle: {
         width: 44,
         height: 24,

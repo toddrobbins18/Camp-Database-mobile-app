@@ -7,6 +7,7 @@ const CM_STAFF_URL = 'https://api.campminder.com/staff';
 const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
 const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
 const CM_BUNKS_URL = 'https://api.campminder.com/bunks';
+const CM_FINANCIALS_URL = 'https://api.campminder.com/financials/transactionreporting/transactiondetails';
 
 
 // Rate limiting: 300ms between calls (~3.3 calls/sec = ~200/min)
@@ -1821,6 +1822,201 @@ async function performFullSync(
       console.error('[Cleanup] Error during cleanup phase:', error);
     }
 
+    // =====================================================
+    // PHASE 10: Financial Sync - Owl Pay Balances from CampMinder
+    // =====================================================
+    let financialDeposits = 0;
+    let financialReversals = 0;
+    let financialSkipped = 0;
+
+    if (syncType === 'full' || syncType === 'campers') {
+      console.log('\n--- SYNCING FINANCIALS (Owl Pay Balances) ---');
+      await updateSyncJob(supabase, jobId, {
+        progress: { step: 'Syncing financial transactions for Owl Pay', season },
+      });
+
+      try {
+        // Canteen spending money category ID
+        const CANTEEN_CATEGORY_ID = '9076';
+
+        // Fetch all financial transactions - CampMinder may not honour the categoryid
+        // query param, so we always filter client-side as well.
+        const allFinancialTransactions = await fetchAllPaginated(
+          CM_FINANCIALS_URL,
+          token,
+          subscriptionKey,
+          { clientid: clientId, categoryid: CANTEEN_CATEGORY_ID, season: season }
+        );
+
+        console.log(`[Financials] Fetched ${allFinancialTransactions.length} total financial transactions from CampMinder`);
+
+        // Log a sample to help debug field names
+        if (allFinancialTransactions.length > 0) {
+          console.log(`[Financials DEBUG] Sample transaction keys: ${JSON.stringify(Object.keys(allFinancialTransactions[0]))}`);
+          console.log(`[Financials DEBUG] Sample transaction: ${JSON.stringify(allFinancialTransactions[0]).substring(0, 2000)}`);
+        }
+
+        // Helper to get field value with inconsistent casing from CampMinder
+        const getFieldEarly = (obj: any, ...names: string[]): any => {
+          for (const name of names) {
+            if (obj[name] !== undefined) return obj[name];
+            const lower = name.toLowerCase();
+            const upper = name.charAt(0).toUpperCase() + name.slice(1);
+            const allCaps = name.toUpperCase();
+            if (obj[lower] !== undefined) return obj[lower];
+            if (obj[upper] !== undefined) return obj[upper];
+            if (obj[allCaps] !== undefined) return obj[allCaps];
+          }
+          const lowerNames = names.map(n => n.toLowerCase());
+          for (const key of Object.keys(obj)) {
+            if (lowerNames.includes(key.toLowerCase())) return obj[key];
+          }
+          return undefined;
+        };
+
+        // Client-side filter: only keep canteen/spending transactions
+        const financialTransactions = allFinancialTransactions.filter((tx: any) => {
+          const catId = String(getFieldEarly(tx, 'financialCategoryId', 'FinancialCategoryId', 'FinancialCategoryID', 'categoryId', 'CategoryId', 'CategoryID') || '');
+          const desc = String(getFieldEarly(tx, 'description', 'Description') || '').toLowerCase();
+
+          // Match by category ID or description keywords
+          if (catId === CANTEEN_CATEGORY_ID) return true;
+          if (desc.includes('canteen') || desc.includes('spending')) return true;
+          return false;
+        });
+
+        console.log(`[Financials] After canteen filter: ${financialTransactions.length} of ${allFinancialTransactions.length} transactions`);
+
+        if (financialTransactions.length > 0) {
+          // Get already-synced transaction IDs to avoid double-counting
+          const { data: existingSynced } = await supabase
+            .from('campminder_transactions')
+            .select('cm_transaction_id')
+            .eq('company_id', companyId);
+
+          const syncedIds = new Set((existingSynced || []).map((t: any) => t.cm_transaction_id));
+
+          // Build a person_id -> child_id map from our camper data
+          const { data: allCampers } = await supabase
+            .from('children')
+            .select('id, person_id, owl_pay_balance')
+            .eq('company_id', companyId)
+            .eq('season', season);
+
+          const personToChildMap = new Map<string, { id: string; balance: number }>();
+          (allCampers || []).forEach((c: any) => {
+            personToChildMap.set(String(c.person_id), { id: c.id, balance: Number(c.owl_pay_balance) });
+          });
+
+          // Process new transactions
+          const newTransactions: any[] = [];
+          const balanceAdjustments = new Map<string, number>(); // child_id -> total adjustment
+
+          // Helper to get field value with inconsistent casing from CampMinder
+          const getField = (obj: any, ...names: string[]): any => {
+            for (const name of names) {
+              // Try exact match first
+              if (obj[name] !== undefined) return obj[name];
+              // Try common casing variants
+              const lower = name.toLowerCase();
+              const upper = name.charAt(0).toUpperCase() + name.slice(1);
+              const allCaps = name.toUpperCase();
+              if (obj[lower] !== undefined) return obj[lower];
+              if (obj[upper] !== undefined) return obj[upper];
+              if (obj[allCaps] !== undefined) return obj[allCaps];
+            }
+            // Last resort: case-insensitive search through all keys
+            const lowerNames = names.map(n => n.toLowerCase());
+            for (const key of Object.keys(obj)) {
+              if (lowerNames.includes(key.toLowerCase())) return obj[key];
+            }
+            return undefined;
+          };
+
+          // Log first transaction to discover field names
+          if (financialTransactions.length > 0) {
+            const sample = financialTransactions[0];
+            console.log(`[Financials DEBUG] First tx keys: ${JSON.stringify(Object.keys(sample))}`);
+            console.log(`[Financials DEBUG] First tx full: ${JSON.stringify(sample).substring(0, 2000)}`);
+            const personVal = getField(sample, 'personId', 'PersonId', 'PersonID');
+            console.log(`[Financials DEBUG] getField personId result: ${personVal}`);
+          }
+
+          for (const tx of financialTransactions) {
+            const txId = String(getField(tx, 'transactionId', 'TransactionId', 'TransactionID', 'Id', 'ID') || '');
+            if (!txId || syncedIds.has(txId)) {
+              financialSkipped++;
+              continue;
+            }
+
+            const personId = String(getField(tx, 'personId', 'PersonId', 'PersonID') || '');
+            const amount = Number(getField(tx, 'amount', 'Amount') || 0);
+            const isReversed = getField(tx, 'isReversed', 'IsReversed', 'Reversed') || false;
+            const isDeleted = getField(tx, 'isDeleted', 'IsDeleted', 'Deleted') || false;
+
+            const child = personToChildMap.get(personId);
+            if (!child) {
+              console.log(`[Financials] Skipping tx ${txId} - person ${personId} not found as camper`);
+              financialSkipped++;
+              continue;
+            }
+
+            let adjustAmount = Math.abs(amount);
+            let txType = 'deposit';
+
+            if (isReversed || isDeleted) {
+              adjustAmount = -Math.abs(amount);
+              txType = 'reversal';
+              financialReversals++;
+            } else {
+              financialDeposits++;
+            }
+
+            // Accumulate adjustments per child
+            const currentAdj = balanceAdjustments.get(child.id) || 0;
+            balanceAdjustments.set(child.id, currentAdj + adjustAmount);
+
+            newTransactions.push({
+              company_id: companyId,
+              cm_transaction_id: txId,
+              person_id: personId,
+              amount: adjustAmount,
+              transaction_type: txType,
+            });
+          }
+
+          // Batch insert new transaction records
+          if (newTransactions.length > 0) {
+            const batchSize = 50;
+            for (let i = 0; i < newTransactions.length; i += batchSize) {
+              const batch = newTransactions.slice(i, i + batchSize);
+              const { error: insertError } = await supabase
+                .from('campminder_transactions')
+                .insert(batch);
+              if (insertError) {
+                console.error(`[Financials] Error inserting transaction batch:`, insertError);
+              }
+            }
+          }
+
+          // Apply balance adjustments atomically via RPC
+          for (const [childId, adjustment] of balanceAdjustments.entries()) {
+            if (adjustment === 0) continue;
+            const { error: rpcError } = await supabase
+              .rpc('increment_camper_balance', { _child_id: childId, _amount: adjustment });
+            if (rpcError) {
+              console.error(`[Financials] Error adjusting balance for ${childId}:`, rpcError);
+            }
+          }
+
+          console.log(`[Financials] Processed: ${financialDeposits} deposits, ${financialReversals} reversals, ${financialSkipped} skipped (already synced or no match)`);
+          console.log(`[Financials] Balance adjustments applied to ${balanceAdjustments.size} campers`);
+        }
+      } catch (finError) {
+        console.error('[Financials] Error during financial sync:', finError);
+      }
+    }
+
     // Update company sync timestamp
     await supabase
       .from('companies')
@@ -1850,6 +2046,9 @@ async function performFullSync(
       staff_updated: staffUpdatedCount,
       parentEmails: parentEmailMap.size,
       parentPhones: parentPhoneMap.size,
+      financial_deposits: financialDeposits,
+      financial_reversals: financialReversals,
+      financial_skipped: financialSkipped,
       season: season,
       missing_campers_count: missingCamperIds.length,
       fallback_data_used: {
@@ -1888,6 +2087,7 @@ async function performFullSync(
     console.log(`  - Inserted: ${staffInsertedCount}, Updated: ${staffUpdatedCount}, Fallback: ${usedFallbackData}`);
     console.log(`Parent Emails: ${parentEmailMap.size}`);
     console.log(`Parent Phones: ${parentPhoneMap.size}`);
+    console.log(`Financials: ${financialDeposits} deposits, ${financialReversals} reversals, ${financialSkipped} skipped`);
     console.log(`Total changes detected: ${allChanges.length}`);
     console.log(`Season: ${season}`);
     console.log(`========================================\n`);
