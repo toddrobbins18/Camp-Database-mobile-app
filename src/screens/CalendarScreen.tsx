@@ -424,6 +424,7 @@ export const CalendarScreen = ({ navigation }: any) => {
                             if (calEvt) setSelectedEvent(calEvt);
                         }}
                         views={['Month', 'Week', 'Day', 'Agenda']}
+                        showZoom={true}
                         showNavigation={true}
                         getEventAccent={(evt) => evt.accent || { bg: '#e5e7eb', text: '#1e293b', marker: '#6b7280' }}
                         getTagStyle={getTagStyle}

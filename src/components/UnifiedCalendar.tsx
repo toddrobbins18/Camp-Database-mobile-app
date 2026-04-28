@@ -9,7 +9,7 @@ const DEFAULT_VIEWS: NonNullable<CalendarWidgetProps['views']> = ['Month', 'Week
  */
 export function UnifiedCalendar({
     views = DEFAULT_VIEWS,
-    showZoom = false,
+    showZoom = true,
     showNavigation = true,
     ...props
 }: CalendarWidgetProps) {
