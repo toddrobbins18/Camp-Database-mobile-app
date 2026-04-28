@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, Alert, Pressable, Keyboard, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,8 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStaff, useAddStaff, useEditStaff, type StaffMember } from '../api/staff';
 import { supabase } from '../lib/supabase';
-import { buildStaffInsertRow, formatIsoDateToUs, formatStaffTypeFromDb } from '../api/staffPayload';
+import { buildStaffInsertRow, formatIsoDateToUs, formatStaffTypeFromDb, mapUiStaffTypeToDb, toIsoDateOrNull } from '../api/staffPayload';
+import { fetchBunksForCompanySeason, syncStaffBunkStaff, fetchPrimaryBunkIdForStaff, type BunkListItem } from '../lib/staffBunkSync';
 import { useRole } from '../hooks/useRole';
 import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { StaffLeaderAssignmentModal } from '../components/StaffLeaderAssignmentModal';
@@ -128,9 +129,117 @@ export const StaffScreen = ({ navigation }: any) => {
     const [isStaffTypePickerVisible, setIsStaffTypePickerVisible] = useState(false);
     const STAFF_TYPES = ['Not Specified', 'General Counselor', 'Specialist', 'Support', 'Leadership', 'Both'];
 
-    // Reports To Picker State
+    const [isBunkPickerVisible, setIsBunkPickerVisible] = useState(false);
+    /** Which form opened the bunk picker (add vs edit share one modal). */
+    const [bunkPickerFor, setBunkPickerFor] = useState<'add' | 'edit'>('edit');
+    const [bunkOptions, setBunkOptions] = useState<BunkListItem[]>([]);
+    const [addStaffBunkId, setAddStaffBunkId] = useState('');
+    const [editStaffBunkId, setEditStaffBunkId] = useState('');
+    const [showAddBunkModal, setShowAddBunkModal] = useState(false);
+    const [newBunkNumber, setNewBunkNumber] = useState('');
+    const [newBunkName, setNewBunkName] = useState('');
+    const [bunkLoadError, setBunkLoadError] = useState<string | null>(null);
     const [isReportsToPickerVisible, setIsReportsToPickerVisible] = useState(false);
     const SUPERVISORS = ['No Supervisor', 'Wendy Siegel - Director'];
+
+    const seasonKeyForBunks = modalVisible.editStaff ? editStaffData.season : addStaffData.season;
+
+    /** Load bunk dropdown for whichever staff modal is open (OD `bunks` table). */
+    useEffect(() => {
+        if (!companyId || (!modalVisible.addStaff && !modalVisible.editStaff)) return;
+        let cancelled = false;
+        setBunkLoadError(null);
+        const key = (seasonKeyForBunks || '2026').trim();
+        fetchBunksForCompanySeason(companyId, key)
+            .then((rows) => {
+                if (!cancelled) setBunkOptions(rows);
+            })
+            .catch((e: Error) => {
+                if (!cancelled) {
+                    setBunkLoadError(e?.message ?? 'Could not load bunks');
+                    setBunkOptions([]);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [companyId, modalVisible.addStaff, modalVisible.editStaff, seasonKeyForBunks]);
+
+    /** Current bunk from `bunk_staff` when editing (refresh when season changes). */
+    useEffect(() => {
+        if (!modalVisible.editStaff) {
+            setEditStaffBunkId('');
+            return;
+        }
+        if (!companyId || !editStaffData.id) return;
+
+        let cancelled = false;
+        fetchPrimaryBunkIdForStaff(editStaffData.id, companyId, editStaffData.season)
+            .then((id) => {
+                if (!cancelled) setEditStaffBunkId(id || '');
+            })
+            .catch(() => {
+                if (!cancelled) setEditStaffBunkId('');
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [modalVisible.editStaff, companyId, editStaffData.id, editStaffData.season]);
+
+    const bunkLabel = (bunkId: string) => {
+        if (!bunkId) return 'No bunk';
+        const b = bunkOptions.find((x) => x.id === bunkId);
+        return b ? `#${b.bunk_number}${b.bunk_name ? ` — ${b.bunk_name}` : ''}` : 'Select bunk';
+    };
+
+    const openBunkPicker = (forForm: 'add' | 'edit') => {
+        Keyboard.dismiss();
+        setBunkPickerFor(forForm);
+        setIsBunkPickerVisible(true);
+    };
+
+    const handleAddNewBunk = async () => {
+        if (!companyId) {
+            Alert.alert('Missing company', 'Choose a camp first.');
+            return;
+        }
+        const seasonKey = modalVisible.editStaff ? editStaffData.season : addStaffData.season;
+        const bunkNumber = Number(newBunkNumber);
+        if (!Number.isInteger(bunkNumber) || bunkNumber <= 0) {
+            Alert.alert('Invalid', 'Enter a positive whole number for the bunk.');
+            return;
+        }
+        try {
+            const { data, error } = await supabase
+                .from('bunks')
+                .insert([
+                    {
+                        company_id: companyId,
+                        season: seasonKey || '2026',
+                        bunk_number: bunkNumber,
+                        bunk_name: newBunkName.trim() || null,
+                        is_active: true,
+                    },
+                ])
+                .select('id, bunk_number, bunk_name')
+                .single();
+
+            if (error) throw error;
+            if (data) {
+                const row = data as BunkListItem;
+                setBunkOptions((prev) => [...prev.filter((p) => p.id !== row.id), row].sort((a, b) => a.bunk_number - b.bunk_number));
+                if (modalVisible.editStaff) setEditStaffBunkId(row.id);
+                else setAddStaffBunkId(row.id);
+            }
+            setShowAddBunkModal(false);
+            setNewBunkNumber('');
+            setNewBunkName('');
+            Alert.alert('Success', 'Bunk added');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Try again.';
+            Alert.alert('Could not add bunk', msg);
+        }
+    };
 
     // Delete Modal State
     const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
@@ -240,14 +349,20 @@ export const StaffScreen = ({ navigation }: any) => {
                     {isAdmin && (
                         <Pressable
                             onPress={() => toggleModal('assignLeaders', true)}
-                            style={({ pressed, hovered }) => [
-                                styles.actionBtn,
-                                styles.secondaryBtn,
-                                (Boolean(hovered) || pressed) && styles.assignLeadersBtnHover,
-                            ]}
+                            style={(state) => {
+                                const hovered = 'hovered' in state && !!(state as { hovered?: boolean }).hovered;
+                                const pressed = state.pressed;
+                                return [
+                                    styles.actionBtn,
+                                    styles.secondaryBtn,
+                                    (hovered || pressed) && styles.assignLeadersBtnHover,
+                                ];
+                            }}
                         >
-                            {({ pressed, hovered }) => {
-                                const hot = Boolean(hovered) || pressed;
+                            {(state) => {
+                                const hovered = 'hovered' in state && !!(state as { hovered?: boolean }).hovered;
+                                const pressed = state.pressed;
+                                const hot = hovered || pressed;
                                 return (
                                     <>
                                         <Ionicons name="people" size={18} color={hot ? '#fff' : theme.colors.text} />
@@ -275,7 +390,14 @@ export const StaffScreen = ({ navigation }: any) => {
                     </TouchableOpacity>
 
                     {isAdmin && (
-                        <TouchableOpacity style={styles.primaryBtn} onPress={() => toggleModal('addStaff', true)}>
+                        <TouchableOpacity
+                        style={styles.primaryBtn}
+                        onPress={() => {
+                            setAddStaffBunkId('');
+                            setAddStaffData((prev) => ({ ...prev, season: season || '2026' }));
+                            toggleModal('addStaff', true);
+                        }}
+                    >
                             <Ionicons name="add" size={18} color="white" />
                             <Text style={styles.primaryBtnText}>Add Staff Member</Text>
                         </TouchableOpacity>
@@ -610,6 +732,32 @@ export const StaffScreen = ({ navigation }: any) => {
                             </View>
 
                             <View style={styles.formGroup}>
+                                <Text style={styles.label}>Bunk</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8 }}>
+                                    <TouchableOpacity
+                                        style={[styles.inputContainer, { flex: 1, marginBottom: 0 }]}
+                                        activeOpacity={0.7}
+                                        onPress={() => openBunkPicker('add')}
+                                    >
+                                        <TextInput
+                                            style={[styles.input, { marginBottom: 0 }]}
+                                            placeholder="No bunk"
+                                            value={bunkLabel(addStaffBunkId)}
+                                            editable={false}
+                                            pointerEvents="none"
+                                        />
+                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.secondaryBtn, { paddingHorizontal: 12, justifyContent: 'center' }]} onPress={() => setShowAddBunkModal(true)}>
+                                        <Ionicons name="add-outline" size={18} color={theme.colors.text} />
+                                        <Text style={{ fontSize: 13, color: theme.colors.text }}>Add bunk</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                {bunkLoadError ? <Text style={[styles.helperText, { color: '#b91c1c' }]}>{bunkLoadError}</Text> : null}
+                                <Text style={styles.helperText}>Links this staff member to OD bunk coverage for the selected season.</Text>
+                            </View>
+
+                            <View style={styles.formGroup}>
                                 <Text style={styles.label}>Allergies</Text>
                                 <TextInput
                                     style={[styles.input, styles.textAreaSmall]}
@@ -654,7 +802,8 @@ export const StaffScreen = ({ navigation }: any) => {
                                         return;
                                     }
                                     try {
-                                        const row = buildStaffInsertRow(companyId, season, {
+                                        const insertSeason = addStaffData.season?.trim() || season || '2026';
+                                        const row = buildStaffInsertRow(companyId, insertSeason, {
                                             name: addStaffData.name,
                                             role: addStaffData.role,
                                             department: addStaffData.department,
@@ -666,7 +815,20 @@ export const StaffScreen = ({ navigation }: any) => {
                                             allergies: addStaffData.allergies,
                                             rfid: addStaffData.rfid,
                                         });
-                                        await addStaffMutation.mutateAsync(row);
+                                        const inserted = (await addStaffMutation.mutateAsync(row)) as {
+                                            id: string;
+                                            season?: string;
+                                        };
+                                        const bunkSeason = inserted?.season ?? insertSeason;
+                                        if (addStaffBunkId) {
+                                            await syncStaffBunkStaff({
+                                                staffId: inserted.id,
+                                                companyId,
+                                                seasonKey: String(bunkSeason),
+                                                bunkId: addStaffBunkId,
+                                            });
+                                        }
+                                        setAddStaffBunkId('');
                                         setAddStaffData({
                                             name: '',
                                             role: '',
@@ -983,6 +1145,32 @@ export const StaffScreen = ({ navigation }: any) => {
                             </View>
 
                             <View style={styles.formGroup}>
+                                <Text style={styles.label}>Bunk</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8 }}>
+                                    <TouchableOpacity
+                                        style={[styles.inputContainer, { flex: 1, marginBottom: 0 }]}
+                                        activeOpacity={0.7}
+                                        onPress={() => openBunkPicker('edit')}
+                                    >
+                                        <TextInput
+                                            style={[styles.input, { marginBottom: 0 }]}
+                                            placeholder="No bunk"
+                                            value={bunkLabel(editStaffBunkId)}
+                                            editable={false}
+                                            pointerEvents="none"
+                                        />
+                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.secondaryBtn, { paddingHorizontal: 12, justifyContent: 'center' }]} onPress={() => setShowAddBunkModal(true)}>
+                                        <Ionicons name="add-outline" size={18} color={theme.colors.text} />
+                                        <Text style={{ fontSize: 13, color: theme.colors.text }}>Add bunk</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                {bunkLoadError ? <Text style={[styles.helperText, { color: '#b91c1c' }]}>{bunkLoadError}</Text> : null}
+                                <Text style={styles.helperText}>Same bunk assignment as OD Management for this season.</Text>
+                            </View>
+
+                            <View style={styles.formGroup}>
                                 <Text style={styles.label}>Allergies</Text>
                                 <TextInput
                                     style={[styles.input, styles.textAreaSmall]}
@@ -1032,13 +1220,54 @@ export const StaffScreen = ({ navigation }: any) => {
                                     <Text style={styles.confirmCancelText}>Cancel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
-                                    style={[styles.confirmDeleteBtn, { backgroundColor: theme.colors.primary }]}
-                                    onPress={() => {
-                                        console.log('Saving Edit:', editStaffData);
-                                        toggleModal('editStaff', false);
+                                    style={[
+                                        styles.confirmDeleteBtn,
+                                        { backgroundColor: theme.colors.primary },
+                                        editStaffMutation.isPending && { opacity: 0.65 },
+                                    ]}
+                                    disabled={editStaffMutation.isPending}
+                                    onPress={async () => {
+                                        if (!companyId || !editStaffData.id?.trim()) {
+                                            Alert.alert('Error', 'Missing company or staff record.');
+                                            return;
+                                        }
+                                        if (!editStaffData.name?.trim()) {
+                                            Alert.alert('Required', 'Please enter a name.');
+                                            return;
+                                        }
+                                        try {
+                                            const st = mapUiStaffTypeToDb(editStaffData.staffType);
+                                            await editStaffMutation.mutateAsync({
+                                                id: editStaffData.id,
+                                                name: editStaffData.name.trim(),
+                                                role: (editStaffData.role || '').trim() || 'Staff',
+                                                department: editStaffData.department?.trim() || null,
+                                                email: editStaffData.email?.trim() || null,
+                                                phone: editStaffData.phone?.trim() || null,
+                                                hire_date: toIsoDateOrNull(editStaffData.hireDate),
+                                                date_of_birth: toIsoDateOrNull(editStaffData.dob),
+                                                season: editStaffData.season,
+                                                staff_type: st,
+                                                allergies: editStaffData.allergies?.trim() || null,
+                                                rfid: editStaffData.rfid?.trim() || null,
+                                            } as Partial<StaffMember> & { id: string });
+                                            await syncStaffBunkStaff({
+                                                staffId: editStaffData.id,
+                                                companyId,
+                                                seasonKey: editStaffData.season,
+                                                bunkId: editStaffBunkId || null,
+                                            });
+                                            toggleModal('editStaff', false);
+                                            await queryClient.invalidateQueries({ queryKey: ['staff'] });
+                                        } catch (e: unknown) {
+                                            const msg = e instanceof Error ? e.message : 'Try again.';
+                                            Alert.alert('Save failed', msg);
+                                        }
                                     }}
                                 >
-                                    <Text style={styles.confirmDeleteText}>Save Changes</Text>
+                                    <Text style={styles.confirmDeleteText}>
+                                        {editStaffMutation.isPending ? 'Saving…' : 'Save Changes'}
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
@@ -1250,6 +1479,122 @@ export const StaffScreen = ({ navigation }: any) => {
                         </ScrollView>
                     </Pressable>
                 </Pressable>
+            </Modal>
+
+            {/* Bunk picker (add + edit staff) */}
+            <Modal
+                visible={isBunkPickerVisible}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setIsBunkPickerVisible(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setIsBunkPickerVisible(false)}>
+                    <Pressable style={styles.modalContent} onPress={(e: any) => e.stopPropagation()}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select Bunk</Text>
+                            <TouchableOpacity onPress={() => setIsBunkPickerVisible(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={{ maxHeight: 350 }}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.pickerItem,
+                                    (bunkPickerFor === 'edit' ? !editStaffBunkId : !addStaffBunkId) && styles.selectedPickerItem,
+                                ]}
+                                onPress={() => {
+                                    if (bunkPickerFor === 'edit') setEditStaffBunkId('');
+                                    else setAddStaffBunkId('');
+                                    setIsBunkPickerVisible(false);
+                                }}
+                            >
+                                <Text
+                                    style={[
+                                        styles.pickerItemText,
+                                        (bunkPickerFor === 'edit' ? !editStaffBunkId : !addStaffBunkId) && styles.selectedPickerItemText,
+                                    ]}
+                                >
+                                    No bunk
+                                </Text>
+                                {(bunkPickerFor === 'edit' ? !editStaffBunkId : !addStaffBunkId) && (
+                                    <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                )}
+                            </TouchableOpacity>
+                            {bunkOptions.map((b) => (
+                                <TouchableOpacity
+                                    key={b.id}
+                                    style={[
+                                        styles.pickerItem,
+                                        (bunkPickerFor === 'edit' ? editStaffBunkId : addStaffBunkId) === b.id && styles.selectedPickerItem,
+                                    ]}
+                                    onPress={() => {
+                                        if (bunkPickerFor === 'edit') setEditStaffBunkId(b.id);
+                                        else setAddStaffBunkId(b.id);
+                                        setIsBunkPickerVisible(false);
+                                    }}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.pickerItemText,
+                                            (bunkPickerFor === 'edit' ? editStaffBunkId : addStaffBunkId) === b.id && styles.selectedPickerItemText,
+                                        ]}
+                                    >
+                                        #{b.bunk_number}
+                                        {b.bunk_name ? ` — ${b.bunk_name}` : ''}
+                                    </Text>
+                                    {(bunkPickerFor === 'edit' ? editStaffBunkId : addStaffBunkId) === b.id && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Create bunk (OD Management) */}
+            <Modal
+                visible={showAddBunkModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowAddBunkModal(false)}
+            >
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={styles.modalOverlay}
+                >
+                    <Pressable style={styles.modalOverlay} onPress={() => setShowAddBunkModal(false)}>
+                        <Pressable style={styles.modalContent} onPress={(e: any) => e.stopPropagation()}>
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>Add Bunk</Text>
+                                <TouchableOpacity onPress={() => setShowAddBunkModal(false)}>
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                            <Text style={styles.helperText}>
+                                Season {modalVisible.editStaff ? editStaffData.season : addStaffData.season} — new bunk is available in OD for this year.
+                            </Text>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Bunk number *</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    keyboardType="number-pad"
+                                    placeholder="e.g. 12"
+                                    value={newBunkNumber}
+                                    onChangeText={setNewBunkNumber}
+                                />
+                            </View>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Name (optional)</Text>
+                                <TextInput style={styles.input} placeholder="e.g. Seniors A" value={newBunkName} onChangeText={setNewBunkName} />
+                            </View>
+                            <TouchableOpacity style={styles.primaryBtnBlock} onPress={() => void handleAddNewBunk()}>
+                                <Text style={styles.primaryBtnText}>Create bunk</Text>
+                            </TouchableOpacity>
+                        </Pressable>
+                    </Pressable>
+                </KeyboardAvoidingView>
             </Modal>
 
             {/* 11. Reports To Picker Modal */}
