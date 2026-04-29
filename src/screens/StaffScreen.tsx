@@ -160,6 +160,10 @@ export const StaffScreen = ({ navigation }: any) => {
                     setBunkOptions([]);
                 }
             });
+        
+    
+
+    
         return () => {
             cancelled = true;
         };
@@ -326,955 +330,8 @@ export const StaffScreen = ({ navigation }: any) => {
         navigation.navigate('StaffDetail', { staff });
     };
 
-    return (
-        <SafeAreaView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <ScreenHeader title="Staff & Evaluations" navigation={navigation} />
-
-                {/* Description */}
-                <Text style={styles.description}>Manage team members and performance reviews</Text>
-
-                {/* Action Bar - Horizontal Scroll for Mobile */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.actionScrollView} contentContainerStyle={styles.actionButtons}>
-                    <TouchableOpacity
-                        style={[styles.actionBtn, isScannerActive ? styles.activeScannerBtn : styles.secondaryBtn]}
-                        onPress={() => setIsScannerActive(!isScannerActive)}
-                    >
-                        <Ionicons name={isScannerActive ? "radio" : "scan-outline"} size={18} color={isScannerActive ? "white" : theme.colors.text} />
-                        <Text style={isScannerActive ? styles.activeScannerText : styles.btnText}>
-                            {isScannerActive ? "Scanner Active" : "Scan Wristband"}
-                        </Text>
-                    </TouchableOpacity>
-
-                    {isAdmin && (
-                        <Pressable
-                            onPress={() => toggleModal('assignLeaders', true)}
-                            style={(state) => {
-                                const hovered = 'hovered' in state && !!(state as { hovered?: boolean }).hovered;
-                                const pressed = state.pressed;
-                                return [
-                                    styles.actionBtn,
-                                    styles.secondaryBtn,
-                                    (hovered || pressed) && styles.assignLeadersBtnHover,
-                                ];
-                            }}
-                        >
-                            {(state) => {
-                                const hovered = 'hovered' in state && !!(state as { hovered?: boolean }).hovered;
-                                const pressed = state.pressed;
-                                const hot = hovered || pressed;
-                                return (
-                                    <>
-                                        <Ionicons name="people" size={18} color={hot ? '#fff' : theme.colors.text} />
-                                        <Text style={[styles.btnText, hot && styles.assignLeadersBtnHotText]}>
-                                            Assign Leaders
-                                        </Text>
-                                    </>
-                                );
-                            }}
-                        </Pressable>
-                    )}
-
-                    <TouchableOpacity style={styles.secondaryBtn} onPress={() => toggleModal('assignWristband', true)}>
-                        <Ionicons name="radio-outline" size={18} color={theme.colors.text} />
-                        <Text style={styles.btnText}>Assign Wristbands</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => toggleModal('formatGuide', true)}>
-                        <Ionicons name="help-circle-outline" size={24} color={theme.colors.textSecondary} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.secondaryBtn} onPress={() => toggleModal('uploadCsv', true)}>
-                        <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} />
-                        <Text style={styles.btnText}>Upload CSV</Text>
-                    </TouchableOpacity>
-
-                    {isAdmin && (
-                        <TouchableOpacity
-                        style={styles.primaryBtn}
-                        onPress={() => {
-                            setAddStaffBunkId('');
-                            setAddStaffData((prev) => ({ ...prev, season: season || '2026' }));
-                            toggleModal('addStaff', true);
-                        }}
-                    >
-                            <Ionicons name="add" size={18} color="white" />
-                            <Text style={styles.primaryBtnText}>Add Staff Member</Text>
-                        </TouchableOpacity>
-                    )}
-                </ScrollView>
-
-                {/* Scanner Section */}
-                {isScannerActive && (
-                    <View style={styles.scannerSection}>
-                        <View style={styles.scannerHeader}>
-                            <Text style={styles.scannerTitle}>Ready to scan wristband (ISO 14443 Type A)</Text>
-                            <View style={styles.liveIndicator} />
-                        </View>
-                        <View style={styles.scannerInputRow}>
-                            <TextInput
-                                style={styles.scannerInput}
-                                placeholder="Scan wristband or enter RFID..."
-                                value={scanInput}
-                                onChangeText={setScanInput}
-                                autoFocus
-                            />
-                            <TouchableOpacity style={styles.findBtn}>
-                                <Text style={styles.findBtnText}>Find Staff</Text>
-                            </TouchableOpacity>
-                        </View>
-                        <Text style={styles.scannerHint}>Bluetooth scanner ready. Scans auto-submit. Tap input if focus is lost.</Text>
-                    </View>
-                )}
-
-                {/* Search Bar */}
-                <View style={styles.searchBar}>
-                    <Ionicons name="search" size={20} color={theme.colors.textSecondary} />
-                    <TextInput
-                        style={styles.searchInput}
-                        placeholder="Search staff by name, role, or department..."
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                    />
-                </View>
-
-                {isLoading ? (
-                    <Text style={styles.resultsText}>Loading staff...</Text>
-                ) : (
-                    <Text style={styles.resultsText}>Showing {staffData.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase())).length} of {staffData.length} staff members for {season}</Text>
-                )}
-
-                {/* Staff List Grid */}
-                <View style={styles.grid}>
-                    {staffData.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase())).map((staff, index) => (
-                        <View key={index} style={styles.staffCardWrapper}>
-                            <TouchableOpacity
-                                style={styles.staffCard}
-                                activeOpacity={0.85}
-                                onPress={() => openStaffProfile(staff)}
-                            >
-                                <View style={styles.staffHeader}>
-                                    <View style={styles.avatar}>
-                                        <Text style={styles.avatarText}>{staff.name?.substring(0, 2).toUpperCase() || 'NA'}</Text>
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={styles.staffName} numberOfLines={2}>{staff.name}</Text>
-                                        <Text style={styles.staffRole} numberOfLines={1}>{staff.role}</Text>
-                                    </View>
-                                    <View style={styles.cardActions}>
-                                        <TouchableOpacity
-                                            style={styles.evalIconBtn}
-                                            onPress={() => setIsEvalErrorVisible(true)}
-                                        >
-                                            <Ionicons name="clipboard-outline" size={14} color="white" />
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={styles.cardActionBtn}
-                                            onPress={() => {
-                                                setEditStaffData({
-                                                    ...staff,
-                                                    id: staff.id!,
-                                                    name: staff.name || '',
-                                                    role: staff.role || '',
-                                                    department: staff.department || '',
-                                                    email: staff.email || '',
-                                                    phone: staff.phone || '',
-                                                    hireDate: formatIsoDateToUs((staff as any).hire_date),
-                                                    dob: formatIsoDateToUs((staff as any).date_of_birth),
-                                                    season: staff.season || season || '2026',
-                                                    staffType: formatStaffTypeFromDb((staff as any).staff_type),
-                                                    allergies: staff.allergies || '',
-                                                    reportsTo: '',
-                                                    rfid: staff.rfid || '',
-                                                });
-                                                toggleModal('editStaff', true);
-                                            }}
-                                        >
-                                            <Ionicons name="pencil-outline" size={14} color={theme.colors.textSecondary} />
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={styles.cardActionBtn}
-                                            onPress={() => {
-                                                setItemToDelete(staff);
-                                                setIsDeleteConfirmVisible(true);
-                                            }}
-                                        >
-                                            <Ionicons name="trash-outline" size={14} color="#ef4444" />
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-
-                                <View style={styles.tagRow}>
-                                    <View style={[styles.redTag, (staff as any).staff_type ? { backgroundColor: '#e0e7ff' } : null]}>
-                                        <Text style={[styles.redTagText, (staff as any).staff_type ? { color: '#3730a3' } : null]}>
-                                            {formatStaffTypeFromDb((staff as any).staff_type) || 'No Type Set'}
-                                        </Text>
-                                    </View>
-                                    <View style={styles.greenTag}>
-                                        <Text style={styles.greenTagText}>{(staff.status || 'active').toLowerCase()}</Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.ratingBox}>
-                                    <Ionicons name="star" size={16} color={theme.colors.warning} />
-                                    <View style={{ marginLeft: 8 }}>
-                                        <Text style={styles.ratingTitle}>0.0 Average Rating</Text>
-                                        <Text style={styles.ratingSub}>0 evaluations</Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.trendRow}>
-                                    <Ionicons name="trending-up" size={16} color={theme.colors.success} />
-                                    <Text style={styles.trendText}>Recent Evaluation</Text>
-                                </View>
-                                <Text style={styles.trendSub}>No evaluations yet</Text>
-                            </TouchableOpacity>
-                        </View>
-                    ))}
-                </View>
-            </ScrollView>
-
-            {/* --- MODALS --- */}
-
-            {companyId ? (
-                <StaffLeaderAssignmentModal
-                    visible={modalVisible.assignLeaders}
-                    onClose={() => toggleModal('assignLeaders', false)}
-                    companyId={companyId}
-                    season={season}
-                />
-            ) : null}
-
-            {/* 1. Assign Wristbands Modal */}
-            <Modal
-                animationType="slide"
-                transparent={true}
-                visible={modalVisible.assignWristband}
-                onRequestClose={() => toggleModal('assignWristband', false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Assign RFID Wristbands</Text>
-                            <TouchableOpacity onPress={() => toggleModal('assignWristband', false)} style={styles.closeButton}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Tabs */}
-                        <View style={styles.tabContainer}>
-                            <TouchableOpacity
-                                style={[styles.tab, assignTab === 'individual' && styles.activeTab]}
-                                onPress={() => setAssignTab('individual')}
-                            >
-                                <Ionicons name="person-outline" size={16} color={assignTab === 'individual' ? theme.colors.secondary : theme.colors.textSecondary} />
-                                <Text style={[styles.tabText, assignTab === 'individual' && styles.activeTabText]}>Individual</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.tab, assignTab === 'bulk' && styles.activeTab]}
-                                onPress={() => setAssignTab('bulk')}
-                            >
-                                <Ionicons name="cloud-upload-outline" size={16} color={assignTab === 'bulk' ? theme.colors.secondary : theme.colors.textSecondary} />
-                                <Text style={[styles.tabText, assignTab === 'bulk' && styles.activeTabText]}>Bulk CSV</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {assignTab === 'individual' ? (
-                            <View style={styles.modalBody}>
-                                <Text style={styles.label}>Search for Staff</Text>
-                                <View style={styles.searchBar}>
-                                    <TextInput style={styles.searchInput} placeholder="Search staff by name..." />
-                                    <TouchableOpacity style={styles.primaryBtnSmall}>
-                                        <Text style={styles.primaryBtnText}>Search</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        ) : (
-                            <View style={styles.modalBody}>
-                                <Text style={styles.label}>Upload CSV or paste data</Text>
-                                <Text style={styles.helperText}>Format: name,rfid or person_id,rfid (one per line)</Text>
-
-                                <TouchableOpacity style={styles.fileUploadBtn} onPress={handleFileUpload}>
-                                    <Ionicons name="document-text-outline" size={24} color={theme.colors.textSecondary} />
-                                    <Text style={styles.fileUploadText}>Choose File (CSV)</Text>
-                                </TouchableOpacity>
-
-                                <TextInput
-                                    style={styles.textArea}
-                                    multiline
-                                    placeholder="John Smith,ABC123DEF456..."
-                                    numberOfLines={6}
-                                />
-
-                                <TouchableOpacity style={styles.primaryBtnBlock}>
-                                    <Text style={styles.primaryBtnText}>Assign Wristbands</Text>
-                                </TouchableOpacity>
-                            </View>
-                        )}
-                    </View>
-                </View>
-            </Modal>
-
-            {/* 2. Add Staff Member Modal */}
-            <Modal
-                animationType="slide"
-                transparent={true}
-                visible={modalVisible.addStaff}
-                onRequestClose={() => toggleModal('addStaff', false)}
-            >
-                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.centeredModalOverlay}>
-                    <View style={styles.centeredModalContent}>
-                        <ScrollView>
-                            <View style={styles.modalHeader}>
-                                <Text style={styles.modalTitle}>Add Staff Member</Text>
-                                <TouchableOpacity onPress={() => toggleModal('addStaff', false)} style={styles.closeButton}>
-                                    <Ionicons name="close" size={24} color={theme.colors.text} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Full Name</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="e.g. Jane Doe"
-                                    value={addStaffData.name}
-                                    onChangeText={(text) => setAddStaffData(prev => ({ ...prev, name: text }))}
-                                />
-                            </View>
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Department</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="e.g. Activities"
-                                    value={addStaffData.department}
-                                    onChangeText={(text) => setAddStaffData(prev => ({ ...prev, department: text }))}
-                                />
-                            </View>
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Email</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="jane@example.com"
-                                    keyboardType="email-address"
-                                    value={addStaffData.email}
-                                    onChangeText={(text) => setAddStaffData(prev => ({ ...prev, email: text }))}
-                                />
-                            </View>
-                            <View style={styles.formRow}>
-                                <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                                    <Text style={styles.label}>Phone</Text>
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="555-0123"
-                                        keyboardType="phone-pad"
-                                        value={addStaffData.phone}
-                                        onChangeText={(text) => setAddStaffData(prev => ({ ...prev, phone: text }))}
-                                    />
-                                </View>
-                                <View style={[styles.formGroup, { flex: 1 }]}>
-                                    <Text style={styles.label}>Hire Date</Text>
-                                    <TouchableOpacity
-                                        style={styles.inputContainer}
-                                        activeOpacity={0.7}
-                                        onPress={openHireDatePicker}
-                                    >
-                                        <TextInput
-                                            style={[styles.input, { marginBottom: 0 }]}
-                                            placeholder="mm/dd/yyyy"
-                                            value={addStaffData.hireDate}
-                                            editable={false}
-                                            pointerEvents="none"
-                                        />
-                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Season (Year)</Text>
-                                <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    activeOpacity={0.7}
-                                    onPress={() => {
-                                        Keyboard.dismiss();
-                                        setIsSeasonPickerVisible(true);
-                                    }}
-                                >
-                                    <TextInput
-                                        style={[styles.input, { marginBottom: 0 }]}
-                                        placeholder="Select Year"
-                                        value={addStaffData.season}
-                                        editable={false}
-                                        pointerEvents="none"
-                                    />
-                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Staff Type</Text>
-                                <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    activeOpacity={0.7}
-                                    onPress={() => {
-                                        Keyboard.dismiss();
-                                        setIsStaffTypePickerVisible(true);
-                                    }}
-                                >
-                                    <TextInput
-                                        style={[styles.input, { marginBottom: 0 }]}
-                                        placeholder="Not Specified"
-                                        value={addStaffData.staffType}
-                                        editable={false}
-                                        pointerEvents="none"
-                                    />
-                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Bunk</Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8 }}>
-                                    <TouchableOpacity
-                                        style={[styles.inputContainer, { flex: 1, marginBottom: 0 }]}
-                                        activeOpacity={0.7}
-                                        onPress={() => openBunkPicker('add')}
-                                    >
-                                        <TextInput
-                                            style={[styles.input, { marginBottom: 0 }]}
-                                            placeholder="No bunk"
-                                            value={bunkLabel(addStaffBunkId)}
-                                            editable={false}
-                                            pointerEvents="none"
-                                        />
-                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={[styles.secondaryBtn, { paddingHorizontal: 12, justifyContent: 'center' }]} onPress={() => setShowAddBunkModal(true)}>
-                                        <Ionicons name="add-outline" size={18} color={theme.colors.text} />
-                                        <Text style={{ fontSize: 13, color: theme.colors.text }}>Add bunk</Text>
-                                    </TouchableOpacity>
-                                </View>
-                                {bunkLoadError ? <Text style={[styles.helperText, { color: '#b91c1c' }]}>{bunkLoadError}</Text> : null}
-                                <Text style={styles.helperText}>Links this staff member to OD bunk coverage for the selected season.</Text>
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Allergies</Text>
-                                <TextInput
-                                    style={[styles.input, styles.textAreaSmall]}
-                                    multiline
-                                    placeholder="List any allergies (optional)"
-                                    value={addStaffData.allergies}
-                                    onChangeText={(text) => setAddStaffData(prev => ({ ...prev, allergies: text }))}
-                                />
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Reports To (Supervisor)</Text>
-                                <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    activeOpacity={0.7}
-                                    onPress={() => {
-                                        Keyboard.dismiss();
-                                        setIsReportsToPickerVisible(true);
-                                    }}
-                                >
-                                    <TextInput
-                                        style={[styles.input, { marginBottom: 0 }]}
-                                        placeholder="No Supervisor"
-                                        value={addStaffData.reportsTo}
-                                        editable={false}
-                                        pointerEvents="none"
-                                    />
-                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <TouchableOpacity
-                                style={[styles.primaryBtnBlock, addStaffMutation.isPending && { opacity: 0.7 }]}
-                                disabled={addStaffMutation.isPending}
-                                onPress={async () => {
-                                    if (!companyId) {
-                                        Alert.alert('Error', 'No company selected. Sign in again or choose a camp.');
-                                        return;
-                                    }
-                                    if (!addStaffData.name?.trim()) {
-                                        Alert.alert('Required', 'Please enter a name.');
-                                        return;
-                                    }
-                                    try {
-                                        const insertSeason = addStaffData.season?.trim() || season || '2026';
-                                        const row = buildStaffInsertRow(companyId, insertSeason, {
-                                            name: addStaffData.name,
-                                            role: addStaffData.role,
-                                            department: addStaffData.department,
-                                            email: addStaffData.email,
-                                            phone: addStaffData.phone,
-                                            hireDate: addStaffData.hireDate,
-                                            dob: addStaffData.dob,
-                                            staffType: addStaffData.staffType,
-                                            allergies: addStaffData.allergies,
-                                            rfid: addStaffData.rfid,
-                                        });
-                                        const inserted = (await addStaffMutation.mutateAsync(row)) as {
-                                            id: string;
-                                            season?: string;
-                                        };
-                                        const bunkSeason = inserted?.season ?? insertSeason;
-                                        if (addStaffBunkId) {
-                                            await syncStaffBunkStaff({
-                                                staffId: inserted.id,
-                                                companyId,
-                                                seasonKey: String(bunkSeason),
-                                                bunkId: addStaffBunkId,
-                                            });
-                                        }
-                                        setAddStaffBunkId('');
-                                        setAddStaffData({
-                                            name: '',
-                                            role: '',
-                                            department: '',
-                                            email: '',
-                                            phone: '',
-                                            hireDate: '',
-                                            dob: '',
-                                            season: season || '2026',
-                                            staffType: '',
-                                            allergies: '',
-                                            reportsTo: '',
-                                            rfid: '',
-                                        });
-                                        toggleModal('addStaff', false);
-                                    } catch (e: any) {
-                                        Alert.alert(
-                                            'Could not add staff',
-                                            e?.message || 'Check staff type and dates, then try again.'
-                                        );
-                                    }
-                                }}
-                            >
-                                <Text style={styles.primaryBtnText}>
-                                    {addStaffMutation.isPending ? 'Saving…' : 'Save Staff Member'}
-                                </Text>
-                            </TouchableOpacity>
-                        </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
-
-            {/* 3. Upload CSV / Format Guide Modal */}
-            <Modal
-                animationType="slide"
-                transparent={true}
-                visible={modalVisible.uploadCsv}
-                onRequestClose={() => toggleModal('uploadCsv', false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContentLarge}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Staff Directory Upload</Text>
-                            <TouchableOpacity onPress={() => toggleModal('uploadCsv', false)} style={styles.closeButton}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <ScrollView style={styles.modalBody}>
-                            <Text style={styles.sectionTitle}>Upload CSV</Text>
-                            <TouchableOpacity
-                                style={[styles.fileUploadBtnLarge, staffCsvUploading && { opacity: 0.65 }]}
-                                onPress={() => void handleFileUpload()}
-                                disabled={staffCsvUploading}
-                            >
-                                <View style={styles.uploadIconCircle}>
-                                    <Ionicons name="cloud-upload" size={32} color={theme.colors.secondary} />
-                                </View>
-                                <Text style={styles.fileUploadTextPrimary}>
-                                    {staffCsvUploading ? 'Uploading…' : 'Tap to Select CSV File'}
-                                </Text>
-                                <Text style={styles.fileUploadSubText}>Person ID, First/Last name, or name column (see web format guide)</Text>
-                            </TouchableOpacity>
-
-                            <View style={styles.divider} />
-
-                            <Text style={styles.sectionTitle}>Format Guide</Text>
-
-                            <View style={styles.guideBox}>
-                                <Text style={styles.guideLabel}>Required Columns (first row):</Text>
-                                <View style={styles.codeBlock}>
-                                    <Text style={styles.codeText}>name, email, phone, role, department, hire_date, leader_id, status, season</Text>
-                                </View>
-
-                                <Text style={styles.guideLabel}>Example Data Row:</Text>
-                                <View style={styles.codeBlock}>
-                                    <Text style={styles.codeText}>Jane Smith, jane@thenest.com, 555-9876, Counselor, Activities, 2024-01-15, &lt;leader_id&gt;, active, Summer 2024</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.infoBox}>
-                                <Ionicons name="information-circle" size={20} color={theme.colors.secondary} style={{ marginRight: 8 }} />
-                                <Text style={styles.infoText}>
-                                    Important: leader_id must be a valid UUID. hire_date format: YYYY-MM-DD.
-                                </Text>
-                            </View>
-
-                            <View style={{ height: 20 }} />
-                        </ScrollView>
-
-                        <View style={styles.modalFooter}>
-                            <TouchableOpacity style={styles.primaryBtnBlock} onPress={() => toggleModal('uploadCsv', false)}>
-                                <Text style={styles.primaryBtnText}>Done</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-            {/* 4. Format Guide Modal */}
-            <Modal
-                animationType="slide"
-                transparent={true}
-                visible={modalVisible.formatGuide}
-                onRequestClose={() => toggleModal('formatGuide', false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContentLarge}>
-                        <View style={styles.modalHeader}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <Ionicons name="document-text-outline" size={20} color={theme.colors.text} />
-                                <Text style={styles.modalTitle}>CSV Upload Format Guide</Text>
-                            </View>
-                            <TouchableOpacity onPress={() => toggleModal('formatGuide', false)} style={styles.closeButton}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Tabs for Guide */}
-                        <View style={{ marginBottom: 16 }}>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                {['Children', 'Staff', 'Medications', 'Trips', 'Menu', 'Awards', 'Daily Notes', 'Incidents', 'Calendar', 'Sports'].map((tab) => (
-                                    <TouchableOpacity
-                                        key={tab}
-                                        style={[
-                                            styles.guideTab,
-                                            tab === 'Staff' && styles.activeGuideTab
-                                        ]}
-                                    >
-                                        <Text style={[
-                                            styles.guideTabText,
-                                            tab === 'Staff' && styles.activeGuideTabText
-                                        ]}>{tab}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        </View>
-
-                        <ScrollView style={styles.modalBody}>
-                            <View style={styles.guideCard}>
-                                <Text style={styles.guideCardTitle}>Staff Directory</Text>
-                                <Text style={styles.guideCardSubtitle}>CSV format for staff directory upload</Text>
-
-                                <Text style={styles.guideLabel}>Required Columns (first row):</Text>
-                                <View style={styles.codeBlock}>
-                                    <Text style={styles.codeText}>name, email, phone, role, department, hire_date, leader_id, status, season</Text>
-                                </View>
-
-                                <Text style={styles.guideLabel}>Example Data Row:</Text>
-                                <View style={styles.codeBlock}>
-                                    <Text style={styles.codeText}>Jane Smith, jane@thenest.com, 555-9876, Counselor, Activities, 2024-01-15, &lt;leader_id&gt;, active, Summer 2024</Text>
-                                </View>
-
-                                <View style={[styles.infoBox, { marginTop: 16 }]}>
-                                    <Text style={styles.infoText}>
-                                        <Text style={{ fontWeight: 'bold' }}>Important Notes: </Text>
-                                        leader_id must be a valid UUID from staff table. hire_date format: YYYY-MM-DD
-                                    </Text>
-                                </View>
-
-                                <View style={styles.tipsBox}>
-                                    <Text style={styles.tipsTitle}>General Tips:</Text>
-                                    <Text style={styles.tipsText}>• First row must contain column names exactly as shown</Text>
-                                    <Text style={styles.tipsText}>• Use commas to separate values</Text>
-                                    <Text style={styles.tipsText}>• Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
-                                </View>
-                            </View>
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
-
-
-            {/* 9. Edit Staff Member Modal */}
-            <Modal
-                animationType="slide"
-                transparent={true}
-                visible={modalVisible.editStaff}
-                onRequestClose={() => toggleModal('editStaff', false)}
-            >
-                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.centeredModalOverlay}>
-                    <View style={styles.centeredModalContent}>
-                        <ScrollView>
-                            <View style={styles.modalHeader}>
-                                <Text style={styles.modalTitle}>Edit Staff Member</Text>
-                                <TouchableOpacity onPress={() => toggleModal('editStaff', false)} style={styles.closeButton}>
-                                    <Ionicons name="close" size={24} color={theme.colors.text} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Name *</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Abel Hernandez Gallardo"
-                                    value={editStaffData.name}
-                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, name: text }))}
-                                />
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Role *</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Soccer / General Counselor"
-                                    value={editStaffData.role}
-                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, role: text }))}
-                                />
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Department</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="e.g. Activities"
-                                    value={editStaffData.department}
-                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, department: text }))}
-                                />
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Email</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="abel_hdez09@hotmail.com"
-                                    keyboardType="email-address"
-                                    value={editStaffData.email}
-                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, email: text }))}
-                                />
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Phone</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="7442040788"
-                                    keyboardType="phone-pad"
-                                    value={editStaffData.phone}
-                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, phone: text }))}
-                                />
-                            </View>
-
-                            <View style={styles.formRow}>
-                                <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                                    <Text style={styles.label}>Hire Date</Text>
-                                    <TouchableOpacity
-                                        style={styles.inputContainer}
-                                        onPress={openHireDatePicker}
-                                    >
-                                        <TextInput
-                                            style={[styles.input, { marginBottom: 0 }]}
-                                            placeholder="mm/dd/yyyy"
-                                            value={editStaffData.hireDate}
-                                            editable={false}
-                                            pointerEvents="none"
-                                        />
-                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={[styles.formGroup, { flex: 1 }]}>
-                                    <Text style={styles.label}>Date of Birth</Text>
-                                    <TouchableOpacity
-                                        style={styles.inputContainer}
-                                        activeOpacity={0.7}
-                                        onPress={openDobPicker}
-                                    >
-                                        <TextInput
-                                            style={[styles.input, { marginBottom: 0 }]}
-                                            placeholder="10/05/1997"
-                                            value={editStaffData.dob}
-                                            editable={false}
-                                            pointerEvents="none"
-                                        />
-                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Season (Year)</Text>
-                                <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    onPress={() => setIsSeasonPickerVisible(true)}
-                                >
-                                    <TextInput
-                                        style={[styles.input, { marginBottom: 0 }]}
-                                        placeholder="2026"
-                                        value={editStaffData.season}
-                                        editable={false}
-                                        pointerEvents="none"
-                                    />
-                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Staff Type</Text>
-                                <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    activeOpacity={0.7}
-                                    onPress={() => {
-                                        Keyboard.dismiss();
-                                        setIsStaffTypePickerVisible(true);
-                                    }}
-                                >
-                                    <TextInput
-                                        style={[styles.input, { marginBottom: 0 }]}
-                                        placeholder="Not Specified"
-                                        value={editStaffData.staffType}
-                                        editable={false}
-                                        pointerEvents="none"
-                                    />
-                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Bunk</Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8 }}>
-                                    <TouchableOpacity
-                                        style={[styles.inputContainer, { flex: 1, marginBottom: 0 }]}
-                                        activeOpacity={0.7}
-                                        onPress={() => openBunkPicker('edit')}
-                                    >
-                                        <TextInput
-                                            style={[styles.input, { marginBottom: 0 }]}
-                                            placeholder="No bunk"
-                                            value={bunkLabel(editStaffBunkId)}
-                                            editable={false}
-                                            pointerEvents="none"
-                                        />
-                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={[styles.secondaryBtn, { paddingHorizontal: 12, justifyContent: 'center' }]} onPress={() => setShowAddBunkModal(true)}>
-                                        <Ionicons name="add-outline" size={18} color={theme.colors.text} />
-                                        <Text style={{ fontSize: 13, color: theme.colors.text }}>Add bunk</Text>
-                                    </TouchableOpacity>
-                                </View>
-                                {bunkLoadError ? <Text style={[styles.helperText, { color: '#b91c1c' }]}>{bunkLoadError}</Text> : null}
-                                <Text style={styles.helperText}>Same bunk assignment as OD Management for this season.</Text>
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Allergies</Text>
-                                <TextInput
-                                    style={[styles.input, styles.textAreaSmall]}
-                                    multiline
-                                    placeholder="List any allergies (optional)"
-                                    value={editStaffData.allergies}
-                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, allergies: text }))}
-                                />
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Reports To (Supervisor)</Text>
-                                <TouchableOpacity
-                                    style={styles.inputContainer}
-                                    activeOpacity={0.7}
-                                    onPress={() => {
-                                        Keyboard.dismiss();
-                                        setIsReportsToPickerVisible(true);
-                                    }}
-                                >
-                                    <TextInput
-                                        style={[styles.input, { marginBottom: 0 }]}
-                                        placeholder="No Supervisor"
-                                        value={editStaffData.reportsTo}
-                                        editable={false}
-                                        pointerEvents="none"
-                                    />
-                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>
-                                    <Ionicons name="radio" size={14} color={theme.colors.textSecondary} /> RFID Wristband
-                                </Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Scan wristband or enter RFID..."
-                                    value={editStaffData.rfid}
-                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, rfid: text }))}
-                                />
-                                <Text style={styles.helperText}>Scan the staff member's ISO 14443 Type A wristband</Text>
-                            </View>
-
-                            <View style={styles.confirmActions}>
-                                <TouchableOpacity style={styles.confirmCancelBtn} onPress={() => toggleModal('editStaff', false)}>
-                                    <Text style={styles.confirmCancelText}>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[
-                                        styles.confirmDeleteBtn,
-                                        { backgroundColor: theme.colors.primary },
-                                        editStaffMutation.isPending && { opacity: 0.65 },
-                                    ]}
-                                    disabled={editStaffMutation.isPending}
-                                    onPress={async () => {
-                                        if (!companyId || !editStaffData.id?.trim()) {
-                                            Alert.alert('Error', 'Missing company or staff record.');
-                                            return;
-                                        }
-                                        if (!editStaffData.name?.trim()) {
-                                            Alert.alert('Required', 'Please enter a name.');
-                                            return;
-                                        }
-                                        try {
-                                            const st = mapUiStaffTypeToDb(editStaffData.staffType);
-                                            await editStaffMutation.mutateAsync({
-                                                id: editStaffData.id,
-                                                name: editStaffData.name.trim(),
-                                                role: (editStaffData.role || '').trim() || 'Staff',
-                                                department: editStaffData.department?.trim() || null,
-                                                email: editStaffData.email?.trim() || null,
-                                                phone: editStaffData.phone?.trim() || null,
-                                                hire_date: toIsoDateOrNull(editStaffData.hireDate),
-                                                date_of_birth: toIsoDateOrNull(editStaffData.dob),
-                                                season: editStaffData.season,
-                                                staff_type: st,
-                                                allergies: editStaffData.allergies?.trim() || null,
-                                                rfid: editStaffData.rfid?.trim() || null,
-                                            } as Partial<StaffMember> & { id: string });
-                                            await syncStaffBunkStaff({
-                                                staffId: editStaffData.id,
-                                                companyId,
-                                                seasonKey: editStaffData.season,
-                                                bunkId: editStaffBunkId || null,
-                                            });
-                                            toggleModal('editStaff', false);
-                                            await queryClient.invalidateQueries({ queryKey: ['staff'] });
-                                        } catch (e: unknown) {
-                                            const msg = e instanceof Error ? e.message : 'Try again.';
-                                            Alert.alert('Save failed', msg);
-                                        }
-                                    }}
-                                >
-                                    <Text style={styles.confirmDeleteText}>
-                                        {editStaffMutation.isPending ? 'Saving…' : 'Save Changes'}
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-                        </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
-
+const pickersModals = (
+        <>
             {/* 5. Date Picker Modal */}
             <Modal
                 visible={isDatePickerVisible || isDOBPickerVisible}
@@ -1639,7 +696,971 @@ export const StaffScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
-        </SafeAreaView>
+        
+        </>
+    );
+
+    return (
+        <SafeAreaView style={styles.container}>
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+                <ScreenHeader title="Staff & Evaluations" navigation={navigation} />
+
+                {/* Description */}
+                <Text style={styles.description}>Manage team members and performance reviews</Text>
+
+                {/* Action Bar - Horizontal Scroll for Mobile */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.actionScrollView} contentContainerStyle={styles.actionButtons}>
+                    <TouchableOpacity
+                        style={[styles.actionBtn, isScannerActive ? styles.activeScannerBtn : styles.secondaryBtn]}
+                        onPress={() => setIsScannerActive(!isScannerActive)}
+                    >
+                        <Ionicons name={isScannerActive ? "radio" : "scan-outline"} size={18} color={isScannerActive ? "white" : theme.colors.text} />
+                        <Text style={isScannerActive ? styles.activeScannerText : styles.btnText}>
+                            {isScannerActive ? "Scanner Active" : "Scan Wristband"}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {isAdmin && (
+                        <Pressable
+                            onPress={() => toggleModal('assignLeaders', true)}
+                            style={(state) => {
+                                const hovered = 'hovered' in state && !!(state as { hovered?: boolean }).hovered;
+                                const pressed = state.pressed;
+                                return [
+                                    styles.actionBtn,
+                                    styles.secondaryBtn,
+                                    (hovered || pressed) && styles.assignLeadersBtnHover,
+                                ];
+                            }}
+                        >
+                            {(state) => {
+                                const hovered = 'hovered' in state && !!(state as { hovered?: boolean }).hovered;
+                                const pressed = state.pressed;
+                                const hot = hovered || pressed;
+                                
+
+
+    return (
+                                    <>
+                                        <Ionicons name="people" size={18} color={hot ? '#fff' : theme.colors.text} />
+                                        <Text style={[styles.btnText, hot && styles.assignLeadersBtnHotText]}>
+                                            Assign Leaders
+                                        </Text>
+                                    </>
+                                );
+                            }}
+                        </Pressable>
+                    )}
+
+                    <TouchableOpacity style={styles.secondaryBtn} onPress={() => toggleModal('assignWristband', true)}>
+                        <Ionicons name="radio-outline" size={18} color={theme.colors.text} />
+                        <Text style={styles.btnText}>Assign Wristbands</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => toggleModal('formatGuide', true)}>
+                        <Ionicons name="help-circle-outline" size={24} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.secondaryBtn} onPress={() => toggleModal('uploadCsv', true)}>
+                        <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} />
+                        <Text style={styles.btnText}>Upload CSV</Text>
+                    </TouchableOpacity>
+
+                    {isAdmin && (
+                        <TouchableOpacity
+                        style={styles.primaryBtn}
+                        onPress={() => {
+                            setAddStaffBunkId('');
+                            setAddStaffData((prev) => ({ ...prev, season: season || '2026' }));
+                            toggleModal('addStaff', true);
+                        }}
+                    >
+                            <Ionicons name="add" size={18} color="white" />
+                            <Text style={styles.primaryBtnText}>Add Staff Member</Text>
+                        </TouchableOpacity>
+                    )}
+                </ScrollView>
+
+                {/* Scanner Section */}
+                {isScannerActive && (
+                    <View style={styles.scannerSection}>
+                        <View style={styles.scannerHeader}>
+                            <Text style={styles.scannerTitle}>Ready to scan wristband (ISO 14443 Type A)</Text>
+                            <View style={styles.liveIndicator} />
+                        </View>
+                        <View style={styles.scannerInputRow}>
+                            <TextInput
+                                style={styles.scannerInput}
+                                placeholder="Scan wristband or enter RFID..."
+                                value={scanInput}
+                                onChangeText={setScanInput}
+                                autoFocus
+                            />
+                            <TouchableOpacity style={styles.findBtn}>
+                                <Text style={styles.findBtnText}>Find Staff</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.scannerHint}>Bluetooth scanner ready. Scans auto-submit. Tap input if focus is lost.</Text>
+                    </View>
+                )}
+
+                {/* Search Bar */}
+                <View style={styles.searchBar}>
+                    <Ionicons name="search" size={20} color={theme.colors.textSecondary} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search staff by name, role, or department..."
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </View>
+
+                {isLoading ? (
+                    <Text style={styles.resultsText}>Loading staff...</Text>
+                ) : (
+                    <Text style={styles.resultsText}>Showing {staffData.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase())).length} of {staffData.length} staff members for {season}</Text>
+                )}
+
+                {/* Staff List Grid */}
+                <View style={styles.grid}>
+                    {staffData.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase())).map((staff, index) => (
+                        <View key={index} style={styles.staffCardWrapper}>
+                            <TouchableOpacity
+                                style={styles.staffCard}
+                                activeOpacity={0.85}
+                                onPress={() => openStaffProfile(staff)}
+                            >
+                                <View style={styles.staffHeader}>
+                                    <View style={styles.avatar}>
+                                        <Text style={styles.avatarText}>{staff.name?.substring(0, 2).toUpperCase() || 'NA'}</Text>
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={styles.staffName} numberOfLines={2}>{staff.name}</Text>
+                                        <Text style={styles.staffRole} numberOfLines={1}>{staff.role}</Text>
+                                    </View>
+                                    <View style={styles.cardActions}>
+                                        <TouchableOpacity
+                                            style={styles.evalIconBtn}
+                                            onPress={() => setIsEvalErrorVisible(true)}
+                                        >
+                                            <Ionicons name="clipboard-outline" size={14} color="white" />
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.cardActionBtn}
+                                            onPress={() => {
+                                                setEditStaffData({
+                                                    ...staff,
+                                                    id: staff.id!,
+                                                    name: staff.name || '',
+                                                    role: staff.role || '',
+                                                    department: staff.department || '',
+                                                    email: staff.email || '',
+                                                    phone: staff.phone || '',
+                                                    hireDate: formatIsoDateToUs((staff as any).hire_date),
+                                                    dob: formatIsoDateToUs((staff as any).date_of_birth),
+                                                    season: staff.season || season || '2026',
+                                                    staffType: formatStaffTypeFromDb((staff as any).staff_type),
+                                                    allergies: staff.allergies || '',
+                                                    reportsTo: '',
+                                                    rfid: staff.rfid || '',
+                                                });
+                                                toggleModal('editStaff', true);
+                                            }}
+                                        >
+                                            <Ionicons name="pencil-outline" size={14} color={theme.colors.textSecondary} />
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.cardActionBtn}
+                                            onPress={() => {
+                                                setItemToDelete(staff);
+                                                setIsDeleteConfirmVisible(true);
+                                            }}
+                                        >
+                                            <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+
+                                <View style={styles.tagRow}>
+                                    <View style={[styles.redTag, (staff as any).staff_type ? { backgroundColor: '#e0e7ff' } : null]}>
+                                        <Text style={[styles.redTagText, (staff as any).staff_type ? { color: '#3730a3' } : null]}>
+                                            {formatStaffTypeFromDb((staff as any).staff_type) || 'No Type Set'}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.greenTag}>
+                                        <Text style={styles.greenTagText}>{(staff.status || 'active').toLowerCase()}</Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.ratingBox}>
+                                    <Ionicons name="star" size={16} color={theme.colors.warning} />
+                                    <View style={{ marginLeft: 8 }}>
+                                        <Text style={styles.ratingTitle}>0.0 Average Rating</Text>
+                                        <Text style={styles.ratingSub}>0 evaluations</Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.trendRow}>
+                                    <Ionicons name="trending-up" size={16} color={theme.colors.success} />
+                                    <Text style={styles.trendText}>Recent Evaluation</Text>
+                                </View>
+                                <Text style={styles.trendSub}>No evaluations yet</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ))}
+                </View>
+            </ScrollView>
+
+            {/* --- MODALS --- */}
+
+            {companyId ? (
+                <StaffLeaderAssignmentModal
+                    visible={modalVisible.assignLeaders}
+                    onClose={() => toggleModal('assignLeaders', false)}
+                    companyId={companyId}
+                    season={season}
+                />
+            ) : null}
+
+            {/* 1. Assign Wristbands Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={modalVisible.assignWristband}
+                onRequestClose={() => toggleModal('assignWristband', false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Assign RFID Wristbands</Text>
+                            <TouchableOpacity onPress={() => toggleModal('assignWristband', false)} style={styles.closeButton}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Tabs */}
+                        <View style={styles.tabContainer}>
+                            <TouchableOpacity
+                                style={[styles.tab, assignTab === 'individual' && styles.activeTab]}
+                                onPress={() => setAssignTab('individual')}
+                            >
+                                <Ionicons name="person-outline" size={16} color={assignTab === 'individual' ? theme.colors.secondary : theme.colors.textSecondary} />
+                                <Text style={[styles.tabText, assignTab === 'individual' && styles.activeTabText]}>Individual</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tab, assignTab === 'bulk' && styles.activeTab]}
+                                onPress={() => setAssignTab('bulk')}
+                            >
+                                <Ionicons name="cloud-upload-outline" size={16} color={assignTab === 'bulk' ? theme.colors.secondary : theme.colors.textSecondary} />
+                                <Text style={[styles.tabText, assignTab === 'bulk' && styles.activeTabText]}>Bulk CSV</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {assignTab === 'individual' ? (
+                            <View style={styles.modalBody}>
+                                <Text style={styles.label}>Search for Staff</Text>
+                                <View style={styles.searchBar}>
+                                    <TextInput style={styles.searchInput} placeholder="Search staff by name..." />
+                                    <TouchableOpacity style={styles.primaryBtnSmall}>
+                                        <Text style={styles.primaryBtnText}>Search</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ) : (
+                            <View style={styles.modalBody}>
+                                <Text style={styles.label}>Upload CSV or paste data</Text>
+                                <Text style={styles.helperText}>Format: name,rfid or person_id,rfid (one per line)</Text>
+
+                                <TouchableOpacity style={styles.fileUploadBtn} onPress={handleFileUpload}>
+                                    <Ionicons name="document-text-outline" size={24} color={theme.colors.textSecondary} />
+                                    <Text style={styles.fileUploadText}>Choose File (CSV)</Text>
+                                </TouchableOpacity>
+
+                                <TextInput
+                                    style={styles.textArea}
+                                    multiline
+                                    placeholder="John Smith,ABC123DEF456..."
+                                    numberOfLines={6}
+                                />
+
+                                <TouchableOpacity style={styles.primaryBtnBlock}>
+                                    <Text style={styles.primaryBtnText}>Assign Wristbands</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* 2. Add Staff Member Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={modalVisible.addStaff}
+                onRequestClose={() => toggleModal('addStaff', false)}
+            >
+                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.centeredModalOverlay}>
+                    <View style={styles.centeredModalContent}>
+                        <ScrollView style={{ width: '100%' }} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>Add Staff Member</Text>
+                                <TouchableOpacity onPress={() => toggleModal('addStaff', false)} style={styles.closeButton}>
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Full Name</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="e.g. Jane Doe"
+                                    value={addStaffData.name}
+                                    onChangeText={(text) => setAddStaffData(prev => ({ ...prev, name: text }))}
+                                />
+                            </View>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Department</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="e.g. Activities"
+                                    value={addStaffData.department}
+                                    onChangeText={(text) => setAddStaffData(prev => ({ ...prev, department: text }))}
+                                />
+                            </View>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Email</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="jane@example.com"
+                                    keyboardType="email-address"
+                                    value={addStaffData.email}
+                                    onChangeText={(text) => setAddStaffData(prev => ({ ...prev, email: text }))}
+                                />
+                            </View>
+                            <View style={styles.formRow}>
+                                <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+                                    <Text style={styles.label}>Phone</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="555-0123"
+                                        keyboardType="phone-pad"
+                                        value={addStaffData.phone}
+                                        onChangeText={(text) => setAddStaffData(prev => ({ ...prev, phone: text }))}
+                                    />
+                                </View>
+                                <View style={[styles.formGroup, { flex: 1 }]}>
+                                    <Text style={styles.label}>Hire Date</Text>
+                                    <TouchableOpacity
+                                        style={styles.inputContainer}
+                                        activeOpacity={0.7}
+                                        onPress={openHireDatePicker}
+                                    >
+                                        <TextInput
+                                            style={[styles.input, { marginBottom: 0 }]}
+                                            placeholder="mm/dd/yyyy"
+                                            value={addStaffData.hireDate}
+                                            editable={false}
+                                            pointerEvents="none"
+                                        />
+                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Season (Year)</Text>
+                                <TouchableOpacity
+                                    style={styles.inputContainer}
+                                    activeOpacity={0.7}
+                                    onPress={() => {
+                                        Keyboard.dismiss();
+                                        setIsSeasonPickerVisible(true);
+                                    }}
+                                >
+                                    <TextInput
+                                        style={[styles.input, { marginBottom: 0 }]}
+                                        placeholder="Select Year"
+                                        value={addStaffData.season}
+                                        editable={false}
+                                        pointerEvents="none"
+                                    />
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Staff Type</Text>
+                                <TouchableOpacity
+                                    style={styles.inputContainer}
+                                    activeOpacity={0.7}
+                                    onPress={() => {
+                                        Keyboard.dismiss();
+                                        setIsStaffTypePickerVisible(true);
+                                    }}
+                                >
+                                    <TextInput
+                                        style={[styles.input, { marginBottom: 0 }]}
+                                        placeholder="Not Specified"
+                                        value={addStaffData.staffType}
+                                        editable={false}
+                                        pointerEvents="none"
+                                    />
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Bunk</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8 }}>
+                                    <TouchableOpacity
+                                        style={[styles.inputContainer, { flex: 1, marginBottom: 0 }]}
+                                        activeOpacity={0.7}
+                                        onPress={() => { Keyboard.dismiss(); openBunkPicker('add'); }}
+                                    >
+                                        <TextInput
+                                            style={[styles.input, { marginBottom: 0 }]}
+                                            placeholder="No bunk"
+                                            value={bunkLabel(addStaffBunkId)}
+                                            editable={false}
+                                            pointerEvents="none"
+                                        />
+                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.secondaryBtn, { paddingHorizontal: 12, justifyContent: 'center' }]} onPress={() => setShowAddBunkModal(true)}>
+                                        <Ionicons name="add-outline" size={18} color={theme.colors.text} />
+                                        <Text style={{ fontSize: 13, color: theme.colors.text }}>Add bunk</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                {bunkLoadError ? <Text style={[styles.helperText, { color: '#b91c1c' }]}>{bunkLoadError}</Text> : null}
+                                <Text style={styles.helperText}>Links this staff member to OD bunk coverage for the selected season.</Text>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Allergies</Text>
+                                <TextInput
+                                    style={[styles.input, styles.textAreaSmall]}
+                                    multiline
+                                    placeholder="List any allergies (optional)"
+                                    value={addStaffData.allergies}
+                                    onChangeText={(text) => setAddStaffData(prev => ({ ...prev, allergies: text }))}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Reports To (Supervisor)</Text>
+                                <TouchableOpacity
+                                    style={styles.inputContainer}
+                                    activeOpacity={0.7}
+                                    onPress={() => {
+                                        Keyboard.dismiss();
+                                        setIsReportsToPickerVisible(true);
+                                    }}
+                                >
+                                    <TextInput
+                                        style={[styles.input, { marginBottom: 0 }]}
+                                        placeholder="No Supervisor"
+                                        value={addStaffData.reportsTo}
+                                        editable={false}
+                                        pointerEvents="none"
+                                    />
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <TouchableOpacity
+                                style={[styles.primaryBtnBlock, addStaffMutation.isPending && { opacity: 0.7 }]}
+                                disabled={addStaffMutation.isPending}
+                                onPress={async () => {
+                                    if (!companyId) {
+                                        Alert.alert('Error', 'No company selected. Sign in again or choose a camp.');
+                                        return;
+                                    }
+                                    if (!addStaffData.name?.trim()) {
+                                        Alert.alert('Required', 'Please enter a name.');
+                                        return;
+                                    }
+                                    try {
+                                        const insertSeason = addStaffData.season?.trim() || season || '2026';
+                                        const row = buildStaffInsertRow(companyId, insertSeason, {
+                                            name: addStaffData.name,
+                                            role: addStaffData.role,
+                                            department: addStaffData.department,
+                                            email: addStaffData.email,
+                                            phone: addStaffData.phone,
+                                            hireDate: addStaffData.hireDate,
+                                            dob: addStaffData.dob,
+                                            staffType: addStaffData.staffType,
+                                            allergies: addStaffData.allergies,
+                                            rfid: addStaffData.rfid,
+                                        });
+                                        const inserted = (await addStaffMutation.mutateAsync(row)) as {
+                                            id: string;
+                                            season?: string;
+                                        };
+                                        const bunkSeason = inserted?.season ?? insertSeason;
+                                        if (addStaffBunkId) {
+                                            await syncStaffBunkStaff({
+                                                staffId: inserted.id,
+                                                companyId,
+                                                seasonKey: String(bunkSeason),
+                                                bunkId: addStaffBunkId,
+                                            });
+                                        }
+                                        setAddStaffBunkId('');
+                                        setAddStaffData({
+                                            name: '',
+                                            role: '',
+                                            department: '',
+                                            email: '',
+                                            phone: '',
+                                            hireDate: '',
+                                            dob: '',
+                                            season: season || '2026',
+                                            staffType: '',
+                                            allergies: '',
+                                            reportsTo: '',
+                                            rfid: '',
+                                        });
+                                        toggleModal('addStaff', false);
+                                    } catch (e: any) {
+                                        Alert.alert(
+                                            'Could not add staff',
+                                            e?.message || 'Check staff type and dates, then try again.'
+                                        );
+                                    }
+                                }}
+                            >
+                                <Text style={styles.primaryBtnText}>
+                                    {addStaffMutation.isPending ? 'Saving…' : 'Save Staff Member'}
+                                </Text>
+                            </TouchableOpacity>
+                        </ScrollView>
+                    </View>
+                </KeyboardAvoidingView>
+            
+                {/* Nested Pickers */}
+                {pickersModals}
+            </Modal>
+
+            {/* 3. Upload CSV / Format Guide Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={modalVisible.uploadCsv}
+                onRequestClose={() => toggleModal('uploadCsv', false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContentLarge}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Staff Directory Upload</Text>
+                            <TouchableOpacity onPress={() => toggleModal('uploadCsv', false)} style={styles.closeButton}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.modalBody}>
+                            <Text style={styles.sectionTitle}>Upload CSV</Text>
+                            <TouchableOpacity
+                                style={[styles.fileUploadBtnLarge, staffCsvUploading && { opacity: 0.65 }]}
+                                onPress={() => void handleFileUpload()}
+                                disabled={staffCsvUploading}
+                            >
+                                <View style={styles.uploadIconCircle}>
+                                    <Ionicons name="cloud-upload" size={32} color={theme.colors.secondary} />
+                                </View>
+                                <Text style={styles.fileUploadTextPrimary}>
+                                    {staffCsvUploading ? 'Uploading…' : 'Tap to Select CSV File'}
+                                </Text>
+                                <Text style={styles.fileUploadSubText}>Person ID, First/Last name, or name column (see web format guide)</Text>
+                            </TouchableOpacity>
+
+                            <View style={styles.divider} />
+
+                            <Text style={styles.sectionTitle}>Format Guide</Text>
+
+                            <View style={styles.guideBox}>
+                                <Text style={styles.guideLabel}>Required Columns (first row):</Text>
+                                <View style={styles.codeBlock}>
+                                    <Text style={styles.codeText}>name, email, phone, role, department, hire_date, leader_id, status, season</Text>
+                                </View>
+
+                                <Text style={styles.guideLabel}>Example Data Row:</Text>
+                                <View style={styles.codeBlock}>
+                                    <Text style={styles.codeText}>Jane Smith, jane@thenest.com, 555-9876, Counselor, Activities, 2024-01-15, &lt;leader_id&gt;, active, Summer 2024</Text>
+                                </View>
+                            </View>
+
+                            <View style={styles.infoBox}>
+                                <Ionicons name="information-circle" size={20} color={theme.colors.secondary} style={{ marginRight: 8 }} />
+                                <Text style={styles.infoText}>
+                                    Important: leader_id must be a valid UUID. hire_date format: YYYY-MM-DD.
+                                </Text>
+                            </View>
+
+                            <View style={{ height: 20 }} />
+                        </ScrollView>
+
+                        <View style={styles.modalFooter}>
+                            <TouchableOpacity style={styles.primaryBtnBlock} onPress={() => toggleModal('uploadCsv', false)}>
+                                <Text style={styles.primaryBtnText}>Done</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+            {/* 4. Format Guide Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={modalVisible.formatGuide}
+                onRequestClose={() => toggleModal('formatGuide', false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContentLarge}>
+                        <View style={styles.modalHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <Ionicons name="document-text-outline" size={20} color={theme.colors.text} />
+                                <Text style={styles.modalTitle}>CSV Upload Format Guide</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => toggleModal('formatGuide', false)} style={styles.closeButton}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Tabs for Guide */}
+                        <View style={{ marginBottom: 16 }}>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                {['Children', 'Staff', 'Medications', 'Trips', 'Menu', 'Awards', 'Daily Notes', 'Incidents', 'Calendar', 'Sports'].map((tab) => (
+                                    <TouchableOpacity
+                                        key={tab}
+                                        style={[
+                                            styles.guideTab,
+                                            tab === 'Staff' && styles.activeGuideTab
+                                        ]}
+                                    >
+                                        <Text style={[
+                                            styles.guideTabText,
+                                            tab === 'Staff' && styles.activeGuideTabText
+                                        ]}>{tab}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+
+                        <ScrollView style={styles.modalBody}>
+                            <View style={styles.guideCard}>
+                                <Text style={styles.guideCardTitle}>Staff Directory</Text>
+                                <Text style={styles.guideCardSubtitle}>CSV format for staff directory upload</Text>
+
+                                <Text style={styles.guideLabel}>Required Columns (first row):</Text>
+                                <View style={styles.codeBlock}>
+                                    <Text style={styles.codeText}>name, email, phone, role, department, hire_date, leader_id, status, season</Text>
+                                </View>
+
+                                <Text style={styles.guideLabel}>Example Data Row:</Text>
+                                <View style={styles.codeBlock}>
+                                    <Text style={styles.codeText}>Jane Smith, jane@thenest.com, 555-9876, Counselor, Activities, 2024-01-15, &lt;leader_id&gt;, active, Summer 2024</Text>
+                                </View>
+
+                                <View style={[styles.infoBox, { marginTop: 16 }]}>
+                                    <Text style={styles.infoText}>
+                                        <Text style={{ fontWeight: 'bold' }}>Important Notes: </Text>
+                                        leader_id must be a valid UUID from staff table. hire_date format: YYYY-MM-DD
+                                    </Text>
+                                </View>
+
+                                <View style={styles.tipsBox}>
+                                    <Text style={styles.tipsTitle}>General Tips:</Text>
+                                    <Text style={styles.tipsText}>• First row must contain column names exactly as shown</Text>
+                                    <Text style={styles.tipsText}>• Use commas to separate values</Text>
+                                    <Text style={styles.tipsText}>• Use backslash before commas within text fields (e.g., "Item 1\, Item 2")</Text>
+                                </View>
+                            </View>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+
+            {/* 9. Edit Staff Member Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={modalVisible.editStaff}
+                onRequestClose={() => toggleModal('editStaff', false)}
+            >
+                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.centeredModalOverlay}>
+                    <View style={styles.centeredModalContent}>
+                        <ScrollView style={{ width: '100%' }} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>Edit Staff Member</Text>
+                                <TouchableOpacity onPress={() => toggleModal('editStaff', false)} style={styles.closeButton}>
+                                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Name *</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Abel Hernandez Gallardo"
+                                    value={editStaffData.name}
+                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, name: text }))}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Role *</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Soccer / General Counselor"
+                                    value={editStaffData.role}
+                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, role: text }))}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Department</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="e.g. Activities"
+                                    value={editStaffData.department}
+                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, department: text }))}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Email</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="abel_hdez09@hotmail.com"
+                                    keyboardType="email-address"
+                                    value={editStaffData.email}
+                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, email: text }))}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Phone</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="7442040788"
+                                    keyboardType="phone-pad"
+                                    value={editStaffData.phone}
+                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, phone: text }))}
+                                />
+                            </View>
+
+                            <View style={styles.formRow}>
+                                <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+                                    <Text style={styles.label}>Hire Date</Text>
+                                    <TouchableOpacity
+                                        style={styles.inputContainer}
+                                        activeOpacity={0.7}
+                                        onPress={() => { Keyboard.dismiss(); openHireDatePicker(); }}
+                                    >
+                                        <TextInput
+                                            style={[styles.input, { marginBottom: 0 }]}
+                                            placeholder="mm/dd/yyyy"
+                                            value={editStaffData.hireDate}
+                                            editable={false}
+                                            pointerEvents="none"
+                                        />
+                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                    </TouchableOpacity>
+                                </View>
+                                <View style={[styles.formGroup, { flex: 1 }]}>
+                                    <Text style={styles.label}>Date of Birth</Text>
+                                    <TouchableOpacity
+                                        style={styles.inputContainer}
+                                        activeOpacity={0.7}
+                                        onPress={() => { Keyboard.dismiss(); openDobPicker(); }}
+                                    >
+                                        <TextInput
+                                            style={[styles.input, { marginBottom: 0 }]}
+                                            placeholder="10/05/1997"
+                                            value={editStaffData.dob}
+                                            editable={false}
+                                            pointerEvents="none"
+                                        />
+                                        <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Season (Year)</Text>
+                                <TouchableOpacity
+                                    style={styles.inputContainer}
+                                    activeOpacity={0.7}
+                                    onPress={() => { Keyboard.dismiss(); setIsSeasonPickerVisible(true); }}
+                                >
+                                    <TextInput
+                                        style={[styles.input, { marginBottom: 0 }]}
+                                        placeholder="2026"
+                                        value={editStaffData.season}
+                                        editable={false}
+                                        pointerEvents="none"
+                                    />
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Staff Type</Text>
+                                <TouchableOpacity
+                                    style={styles.inputContainer}
+                                    activeOpacity={0.7}
+                                    onPress={() => {
+                                        Keyboard.dismiss();
+                                        setIsStaffTypePickerVisible(true);
+                                    }}
+                                >
+                                    <TextInput
+                                        style={[styles.input, { marginBottom: 0 }]}
+                                        placeholder="Not Specified"
+                                        value={editStaffData.staffType}
+                                        editable={false}
+                                        pointerEvents="none"
+                                    />
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Bunk</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8 }}>
+                                    <TouchableOpacity
+                                        style={[styles.inputContainer, { flex: 1, marginBottom: 0 }]}
+                                        activeOpacity={0.7}
+                                        onPress={() => { Keyboard.dismiss(); openBunkPicker('edit'); }}
+                                    >
+                                        <TextInput
+                                            style={[styles.input, { marginBottom: 0 }]}
+                                            placeholder="No bunk"
+                                            value={bunkLabel(editStaffBunkId)}
+                                            editable={false}
+                                            pointerEvents="none"
+                                        />
+                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.secondaryBtn, { paddingHorizontal: 12, justifyContent: 'center' }]} onPress={() => setShowAddBunkModal(true)}>
+                                        <Ionicons name="add-outline" size={18} color={theme.colors.text} />
+                                        <Text style={{ fontSize: 13, color: theme.colors.text }}>Add bunk</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                {bunkLoadError ? <Text style={[styles.helperText, { color: '#b91c1c' }]}>{bunkLoadError}</Text> : null}
+                                <Text style={styles.helperText}>Same bunk assignment as OD Management for this season.</Text>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Allergies</Text>
+                                <TextInput
+                                    style={[styles.input, styles.textAreaSmall]}
+                                    multiline
+                                    placeholder="List any allergies (optional)"
+                                    value={editStaffData.allergies}
+                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, allergies: text }))}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>Reports To (Supervisor)</Text>
+                                <TouchableOpacity
+                                    style={styles.inputContainer}
+                                    activeOpacity={0.7}
+                                    onPress={() => {
+                                        Keyboard.dismiss();
+                                        setIsReportsToPickerVisible(true);
+                                    }}
+                                >
+                                    <TextInput
+                                        style={[styles.input, { marginBottom: 0 }]}
+                                        placeholder="No Supervisor"
+                                        value={editStaffData.reportsTo}
+                                        editable={false}
+                                        pointerEvents="none"
+                                    />
+                                    <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.label}>
+                                    <Ionicons name="radio" size={14} color={theme.colors.textSecondary} /> RFID Wristband
+                                </Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Scan wristband or enter RFID..."
+                                    value={editStaffData.rfid}
+                                    onChangeText={(text) => setEditStaffData(prev => ({ ...prev, rfid: text }))}
+                                />
+                                <Text style={styles.helperText}>Scan the staff member's ISO 14443 Type A wristband</Text>
+                            </View>
+
+                            <View style={styles.confirmActions}>
+                                <TouchableOpacity style={styles.confirmCancelBtn} onPress={() => toggleModal('editStaff', false)}>
+                                    <Text style={styles.confirmCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.confirmDeleteBtn,
+                                        { backgroundColor: theme.colors.primary },
+                                        editStaffMutation.isPending && { opacity: 0.65 },
+                                    ]}
+                                    disabled={editStaffMutation.isPending}
+                                    onPress={async () => {
+                                        if (!companyId || !editStaffData.id?.trim()) {
+                                            Alert.alert('Error', 'Missing company or staff record.');
+                                            return;
+                                        }
+                                        if (!editStaffData.name?.trim()) {
+                                            Alert.alert('Required', 'Please enter a name.');
+                                            return;
+                                        }
+                                        try {
+                                            const st = mapUiStaffTypeToDb(editStaffData.staffType);
+                                            await editStaffMutation.mutateAsync({
+                                                id: editStaffData.id,
+                                                name: editStaffData.name.trim(),
+                                                role: (editStaffData.role || '').trim() || 'Staff',
+                                                department: editStaffData.department?.trim() || null,
+                                                email: editStaffData.email?.trim() || null,
+                                                phone: editStaffData.phone?.trim() || null,
+                                                hire_date: toIsoDateOrNull(editStaffData.hireDate),
+                                                date_of_birth: toIsoDateOrNull(editStaffData.dob),
+                                                season: editStaffData.season,
+                                                staff_type: st,
+                                                allergies: editStaffData.allergies?.trim() || null,
+                                                rfid: editStaffData.rfid?.trim() || null,
+                                            } as Partial<StaffMember> & { id: string });
+                                            await syncStaffBunkStaff({
+                                                staffId: editStaffData.id,
+                                                companyId,
+                                                seasonKey: editStaffData.season,
+                                                bunkId: editStaffBunkId || null,
+                                            });
+                                            toggleModal('editStaff', false);
+                                            await queryClient.invalidateQueries({ queryKey: ['staff'] });
+                                        } catch (e: unknown) {
+                                            const msg = e instanceof Error ? e.message : 'Try again.';
+                                            Alert.alert('Save failed', msg);
+                                        }
+                                    }}
+                                >
+                                    <Text style={styles.confirmDeleteText}>
+                                        {editStaffMutation.isPending ? 'Saving…' : 'Save Changes'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
+                    </View>
+                </KeyboardAvoidingView>
+            
+                {/* Nested Pickers */}
+                {pickersModals}
+            </Modal>
+
+            </SafeAreaView>
     );
 };
 
@@ -1953,6 +1974,7 @@ const styles = StyleSheet.create({
         width: '100%',
     },
     centeredModalContent: {
+        flex: 1,
         backgroundColor: 'white',
         borderRadius: 24,
         paddingHorizontal: 20,
