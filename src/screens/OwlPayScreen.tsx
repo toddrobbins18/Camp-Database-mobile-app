@@ -19,11 +19,13 @@ import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
 import {
     OwlPayEmailConfig,
+    OwlPayStaff,
     OwlPayItem,
     useOwlPayCampers,
     useOwlPayEmailConfig,
     useOwlPayItems,
     useOwlPayReports,
+    useOwlPayStaff,
     useSaveOwlPayEmailConfig,
     useSaveOwlPayItem,
 } from '../api/owlpay';
@@ -38,6 +40,10 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const [activeTab, setActiveTab] = useState<OwlPayTab>('pos');
     const [camperQuery, setCamperQuery] = useState('');
     const [selectedCamperId, setSelectedCamperId] = useState<string | null>(null);
+    const [selectedIsStaff, setSelectedIsStaff] = useState(false);
+    const [isFirstScanToday, setIsFirstScanToday] = useState(false);
+    const [cart, setCart] = useState<Array<OwlPayItem & { quantity: number }>>([]);
+    const [isCompletingTransaction, setIsCompletingTransaction] = useState(false);
     const [showAddItemModal, setShowAddItemModal] = useState(false);
     const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
     const [itemForm, setItemForm] = useState({ name: '', price: '', category: 'Snacks' as ItemCategory });
@@ -63,6 +69,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
     ];
 
     const { data: campers = [], isLoading: campersLoading } = useOwlPayCampers(companyId, season, camperQuery);
+    const { data: staffMembers = [], isLoading: staffLoading } = useOwlPayStaff(companyId, season, camperQuery);
     const { data: allItems = [], isLoading: itemsLoading } = useOwlPayItems(companyId, true);
     const { data: settings, isLoading: settingsLoading } = useOwlPayEmailConfig(companyId);
     const saveItemMutation = useSaveOwlPayItem();
@@ -79,6 +86,13 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 () => {
                     queryClient.invalidateQueries({ queryKey: ['owlpay_campers'] });
                     queryClient.invalidateQueries({ queryKey: ['owlpay_reports'] });
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'staff', filter: `company_id=eq.${companyId}` },
+                () => {
+                    queryClient.invalidateQueries({ queryKey: ['owlpay_staff'] });
                 }
             )
             .on(
@@ -138,8 +152,14 @@ export const OwlPayScreen = ({ navigation }: any) => {
     );
 
     const selectedCamper = campers.find((c) => c.id === selectedCamperId) || null;
+    const selectedStaff = selectedIsStaff ? staffMembers.find((s) => s.id === selectedCamperId) || null : null;
+    const selectedDisplayName = selectedIsStaff ? selectedStaff?.name : selectedCamper?.name;
     const totalBalance = campers.reduce((sum, camper) => sum + Number(camper.owl_pay_balance || 0), 0);
     const averageBalance = campers.length ? totalBalance / campers.length : 0;
+    const subtotal = cart.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
+    const total = isFirstScanToday ? 0 : subtotal;
+    const currentBalance = Number(selectedCamper?.owl_pay_balance || 0);
+    const newBalance = selectedIsStaff ? currentBalance + total : currentBalance - total;
 
     const addItem = () => {
         const name = itemForm.name.trim();
@@ -184,6 +204,155 @@ export const OwlPayScreen = ({ navigation }: any) => {
             Alert.alert('Owl Pay', err?.message || 'Failed to delete item');
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    const checkFirstScanToday = async (childId: string) => {
+        const today = new Date().toISOString().split('T')[0];
+        const { data, error } = await supabase
+            .from('owl_pay_daily_scans')
+            .select('id')
+            .eq('child_id', childId)
+            .eq('scan_date', today)
+            .maybeSingle();
+        if (error) throw error;
+        return !data;
+    };
+
+    const handleSelectCamper = async (camperId: string) => {
+        setSelectedCamperId(camperId);
+        setSelectedIsStaff(false);
+        setCart([]);
+        try {
+            const isFirst = await checkFirstScanToday(camperId);
+            setIsFirstScanToday(isFirst);
+        } catch (err: any) {
+            setIsFirstScanToday(false);
+            Alert.alert('Owl Pay', err?.message || 'Unable to check first scan status');
+        }
+    };
+
+    const handleSelectStaff = (staffId: string) => {
+        setSelectedCamperId(staffId);
+        setSelectedIsStaff(true);
+        setIsFirstScanToday(false);
+        setCart([]);
+    };
+
+    const addToCart = (item: OwlPayItem) => {
+        if (!item.active) return;
+        setCart((prev) => {
+            const existing = prev.find((p) => p.id === item.id);
+            if (existing) {
+                return prev.map((p) => (p.id === item.id ? { ...p, quantity: p.quantity + 1 } : p));
+            }
+            return [...prev, { ...item, quantity: 1 }];
+        });
+    };
+
+    const updateCartQty = (itemId: string, change: number) => {
+        setCart((prev) =>
+            prev
+                .map((item) => (item.id === itemId ? { ...item, quantity: Math.max(0, item.quantity + change) } : item))
+                .filter((item) => item.quantity > 0)
+        );
+    };
+
+    const completeTransaction = async () => {
+        if (!companyId || !selectedCamperId) return;
+        if (!selectedIsStaff && !selectedCamper) {
+            Alert.alert('Owl Pay', 'Select a camper first');
+            return;
+        }
+        if (cart.length === 0 && !isFirstScanToday) {
+            Alert.alert('Owl Pay', 'Add at least one item');
+            return;
+        }
+        if (!selectedIsStaff && !isFirstScanToday && newBalance < 0) {
+            Alert.alert('Owl Pay', 'Insufficient funds');
+            return;
+        }
+
+        setIsCompletingTransaction(true);
+        try {
+            const { data: authData } = await supabase.auth.getUser();
+            const createdBy = authData.user?.id;
+
+            if (!selectedIsStaff && isFirstScanToday) {
+                const { error: scanError } = await supabase.from('owl_pay_daily_scans').insert({
+                    child_id: selectedCamperId,
+                    company_id: companyId,
+                });
+                if (scanError) throw scanError;
+
+                const { error: firstScanTxError } = await supabase.from('owl_pay_transactions').insert({
+                    child_id: selectedCamperId,
+                    staff_id: null,
+                    company_id: companyId,
+                    amount: 0,
+                    is_free: true,
+                    transaction_type: 'first_scan',
+                    notes: 'First scan of the day - free entry',
+                    created_by: createdBy,
+                });
+                if (firstScanTxError) throw firstScanTxError;
+            }
+
+            if (cart.length > 0 && !isFirstScanToday) {
+                const txRows = cart.flatMap((item) =>
+                    Array(item.quantity)
+                        .fill(null)
+                        .map(() => ({
+                            child_id: selectedIsStaff ? null : selectedCamperId,
+                            staff_id: selectedIsStaff ? selectedCamperId : null,
+                            company_id: companyId,
+                            item_id: item.id,
+                            amount: Number(item.price),
+                            is_free: false,
+                            transaction_type: 'purchase',
+                            created_by: createdBy,
+                        }))
+                );
+                const { error: txError } = await supabase.from('owl_pay_transactions').insert(txRows);
+                if (txError) throw txError;
+            }
+
+            if (!selectedIsStaff && selectedCamper && !isFirstScanToday && cart.length > 0) {
+                const { error: balError } = await supabase
+                    .from('children')
+                    .update({ owl_pay_balance: newBalance, updated_at: new Date().toISOString() })
+                    .eq('id', selectedCamper.id);
+                if (balError) throw balError;
+            }
+
+            if (cart.length > 0 && !isFirstScanToday) {
+                try {
+                    await supabase.functions.invoke('send-owlpay-notifications', {
+                        body: {
+                            company_id: companyId,
+                            transaction_type: 'purchase',
+                            child_id: selectedIsStaff ? null : selectedCamperId,
+                            staff_id: selectedIsStaff ? selectedCamperId : null,
+                            amount: total,
+                            new_balance: selectedIsStaff ? null : newBalance,
+                        },
+                    });
+                } catch (notifyErr) {
+                    console.error('Owl Pay notification call failed:', notifyErr);
+                }
+            }
+
+            Alert.alert('Owl Pay', `Transaction complete for ${selectedDisplayName || 'selection'}`);
+            setCart([]);
+            setSelectedCamperId(null);
+            setSelectedIsStaff(false);
+            setIsFirstScanToday(false);
+            queryClient.invalidateQueries({ queryKey: ['owlpay_campers'] });
+            queryClient.invalidateQueries({ queryKey: ['owlpay_reports'] });
+        } catch (err: any) {
+            Alert.alert('Owl Pay', err?.message || 'Transaction failed');
+        } finally {
+            setIsCompletingTransaction(false);
         }
     };
 
@@ -285,18 +454,19 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     <Ionicons name="scan-outline" size={18} color={theme.colors.secondary} />
                 </View>
 
+                <Text style={styles.posSectionLabel}>Campers</Text>
                 <ScrollView style={styles.camperList} contentContainerStyle={styles.camperListContent}>
                     {campersLoading ? (
                         <View style={styles.loaderWrap}>
                             <ActivityIndicator size="small" color={theme.colors.secondary} />
                         </View>
                     ) : campers.map((camper) => {
-                        const isSelected = camper.id === selectedCamperId;
+                        const isSelected = !selectedIsStaff && camper.id === selectedCamperId;
                         return (
                             <TouchableOpacity
                                 key={camper.id}
                                 style={[styles.camperCard, isSelected && styles.camperCardSelected]}
-                                onPress={() => setSelectedCamperId(camper.id)}
+                                onPress={() => handleSelectCamper(camper.id)}
                             >
                                 <View style={styles.avatarCircle}>
                                     <Ionicons name="person-outline" size={18} color={theme.colors.secondary} />
@@ -311,13 +481,117 @@ export const OwlPayScreen = ({ navigation }: any) => {
                         );
                     })}
                 </ScrollView>
+
+                <Text style={styles.posSectionLabel}>Staff (Running Tab)</Text>
+                <ScrollView style={styles.camperList} contentContainerStyle={styles.camperListContent}>
+                    {staffLoading ? (
+                        <View style={styles.loaderWrap}>
+                            <ActivityIndicator size="small" color={theme.colors.secondary} />
+                        </View>
+                    ) : staffMembers.map((staff: OwlPayStaff) => {
+                        const isSelected = selectedIsStaff && staff.id === selectedCamperId;
+                        return (
+                            <TouchableOpacity
+                                key={staff.id}
+                                style={[styles.camperCard, isSelected && styles.camperCardSelected]}
+                                onPress={() => handleSelectStaff(staff.id)}
+                            >
+                                <View style={styles.avatarCircle}>
+                                    <Ionicons name="briefcase-outline" size={18} color={theme.colors.secondary} />
+                                </View>
+                                <View style={styles.camperCardText}>
+                                    <Text style={styles.camperName}>{staff.name}</Text>
+                                </View>
+                                <View style={styles.balancePill}>
+                                    <Text style={styles.balancePillText}>Tab</Text>
+                                </View>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
             </StyledCard>
 
             <StyledCard style={styles.selectionCard}>
-                <Ionicons name="search-outline" size={42} color={theme.colors.textSecondary} />
+                <Ionicons name="wallet-outline" size={42} color={theme.colors.textSecondary} />
                 <Text style={styles.selectionText}>
-                    {selectedCamper ? `Selected: ${selectedCamper.name}` : 'Select a camper to begin'}
+                    {selectedDisplayName ? `Selected: ${selectedDisplayName}` : 'Select a camper/staff to begin'}
                 </Text>
+                {isFirstScanToday && !selectedIsStaff && (
+                    <Text style={styles.firstScanBadge}>First scan today - total will be $0.00</Text>
+                )}
+            </StyledCard>
+
+            <StyledCard>
+                <View style={styles.sectionHeaderRow}>
+                    <View style={styles.sectionTitleWrap}>
+                        <Ionicons name="fast-food-outline" size={20} color={theme.colors.text} />
+                        <Text style={styles.sectionTitle}>Quick Items</Text>
+                    </View>
+                </View>
+                <View style={styles.quickItemWrap}>
+                    {allItems.filter((i) => i.active).map((item) => (
+                        <TouchableOpacity
+                            key={item.id}
+                            style={styles.quickItemBtn}
+                            onPress={() => addToCart(item)}
+                            disabled={!selectedCamperId}
+                        >
+                            <Text style={styles.quickItemName}>{item.name}</Text>
+                            <Text style={styles.quickItemPrice}>{currency(Number(item.price))}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </StyledCard>
+
+            <StyledCard>
+                <View style={styles.sectionHeaderRow}>
+                    <View style={styles.sectionTitleWrap}>
+                        <Ionicons name="receipt-outline" size={20} color={theme.colors.text} />
+                        <Text style={styles.sectionTitle}>Transaction</Text>
+                    </View>
+                </View>
+                {cart.length === 0 && !isFirstScanToday ? (
+                    <Text style={styles.emptyStateText}>No items added yet.</Text>
+                ) : (
+                    <View style={styles.itemsList}>
+                        {cart.map((item) => (
+                            <View key={item.id} style={styles.itemRowMain}>
+                                <View>
+                                    <Text style={styles.itemName}>{item.name}</Text>
+                                    <Text style={styles.itemMeta}>{currency(Number(item.price))} each</Text>
+                                </View>
+                                <View style={styles.qtyControlRow}>
+                                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateCartQty(item.id, -1)}>
+                                        <Ionicons name="remove" size={16} color={theme.colors.text} />
+                                    </TouchableOpacity>
+                                    <Text style={styles.qtyText}>{item.quantity}</Text>
+                                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateCartQty(item.id, 1)}>
+                                        <Ionicons name="add" size={16} color={theme.colors.text} />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
+                <View style={styles.totalsBox}>
+                    <Text style={styles.totalsLine}>Subtotal: {currency(subtotal)}</Text>
+                    <Text style={styles.totalsLine}>Total: {currency(total)}</Text>
+                    {!selectedIsStaff && selectedCamper && (
+                        <Text style={styles.totalsLine}>New Balance: {currency(newBalance)}</Text>
+                    )}
+                    {selectedIsStaff && selectedStaff && <Text style={styles.totalsLine}>Staff Running Tab</Text>}
+                </View>
+
+                <TouchableOpacity
+                    style={[styles.primarySaveButton, (!selectedCamperId || isCompletingTransaction) && { opacity: 0.6 }]}
+                    onPress={completeTransaction}
+                    disabled={!selectedCamperId || isCompletingTransaction}
+                >
+                    <Text style={styles.primaryButtonText}>
+                        {isCompletingTransaction ? 'Processing...' : 'Complete Transaction'}
+                    </Text>
+                </TouchableOpacity>
             </StyledCard>
         </View>
     );
@@ -789,6 +1063,14 @@ const styles = StyleSheet.create({
     tabTextActive: { color: theme.colors.secondary },
     posLayout: { gap: theme.spacing.md },
     posListContainer: { marginBottom: 0 },
+    posSectionLabel: {
+        marginTop: 12,
+        marginBottom: 6,
+        color: theme.colors.textSecondary,
+        fontSize: 13,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+    },
     searchInputWrap: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -858,6 +1140,13 @@ const styles = StyleSheet.create({
         gap: 10,
     },
     selectionText: { color: theme.colors.textSecondary, fontSize: 20, textAlign: 'center' },
+    firstScanBadge: {
+        marginTop: 8,
+        color: theme.colors.success,
+        fontSize: 14,
+        fontWeight: '700',
+        textAlign: 'center',
+    },
     sectionHeaderRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -898,6 +1187,31 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     itemRowActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    quickItemWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    quickItemBtn: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: '#fff',
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+    },
+    quickItemName: { color: theme.colors.text, fontWeight: '600', fontSize: 13 },
+    quickItemPrice: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 },
+    qtyControlRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    qtyBtn: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#fff',
+    },
+    qtyText: { minWidth: 20, textAlign: 'center', color: theme.colors.text, fontWeight: '700' },
+    totalsBox: { marginTop: 12, marginBottom: 12, gap: 6 },
+    totalsLine: { color: theme.colors.text, fontWeight: '600', fontSize: 14 },
     itemDeleteBtn: { padding: 6 },
     itemName: { color: theme.colors.text, fontWeight: '600', fontSize: 15 },
     itemMeta: { color: theme.colors.textSecondary, fontSize: 13 },

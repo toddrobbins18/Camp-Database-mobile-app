@@ -9,6 +9,12 @@ export type OwlPayCamper = {
     owl_pay_balance: number;
 };
 
+export type OwlPayStaff = {
+    id: string;
+    name: string;
+    rfid: string | null;
+};
+
 export type OwlPayItem = {
     id: string;
     company_id: string;
@@ -75,6 +81,32 @@ export const useOwlPayItems = (companyId: string | null, includeInactive = false
             return (data || []) as OwlPayItem[];
         },
         enabled: !!companyId,
+    });
+};
+
+export const useOwlPayStaff = (companyId: string | null, season: string, search = '') => {
+    return useQuery({
+        queryKey: ['owlpay_staff', companyId, season, search],
+        queryFn: async () => {
+            if (!companyId) return [] as OwlPayStaff[];
+            let query = supabase
+                .from('staff')
+                .select('id, name, rfid')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .neq('status', 'inactive')
+                .order('name', { ascending: true });
+
+            const q = search.trim();
+            if (q) {
+                query = query.or(`name.ilike.%${q}%,rfid.ilike.%${q}%`);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return (data || []) as OwlPayStaff[];
+        },
+        enabled: !!companyId && !!season,
     });
 };
 
@@ -197,7 +229,7 @@ export const useOwlPayReports = (companyId: string | null, fromISO: string, toIS
 
             const { data, error } = await supabase
                 .from('owl_pay_transactions')
-                .select('id, amount, is_free, created_at, item_id, owl_pay_items(name, category), children(name)')
+                .select('id, amount, is_free, created_at, item_id, owl_pay_items(name, category), children(name), staff(name)')
                 .eq('company_id', companyId)
                 .eq('transaction_type', 'purchase')
                 .gte('created_at', fromISO)
@@ -208,7 +240,7 @@ export const useOwlPayReports = (companyId: string | null, fromISO: string, toIS
 
             const purchases = (data || []).map((tx: any) => ({
                 id: tx.id,
-                camper_name: tx.children?.name || 'Unknown',
+                camper_name: tx.children?.name || tx.staff?.name || 'Unknown',
                 item_name: tx.owl_pay_items?.name || 'Unknown',
                 item_category: tx.owl_pay_items?.category || 'other',
                 amount: Number(tx.amount || 0),

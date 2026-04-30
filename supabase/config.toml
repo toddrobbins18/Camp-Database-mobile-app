@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.send-tutoring-notification]
 verify_jwt = false
+
+[functions.send-owlpay-notifications]
+verify_jwt = false
