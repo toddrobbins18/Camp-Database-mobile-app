@@ -91,6 +91,20 @@ export interface Camper {
     created_at?: string;
 }
 
+/** Resolves division label whether `division` is a joined `{ name }` row or a legacy string. */
+export function getCamperDivisionName(child: {
+    division?: string | { name?: string | null } | null;
+    group_name?: string | null;
+}): string | undefined {
+    const d = child.division;
+    if (d != null && typeof d === 'object' && typeof d.name === 'string' && d.name.trim()) {
+        return d.name.trim();
+    }
+    if (typeof d === 'string' && d.trim()) return d.trim();
+    const g = child.group_name?.trim();
+    return g || undefined;
+}
+
 const CAMPERS_PAGE_SIZE = 1000;
 
 function useCampersPaged(

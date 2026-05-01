@@ -7,11 +7,16 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { useCompany } from '../contexts/CompanyContext';
-import { useCampers, useDivisions } from '../api/campers';
+import { useCampers, useDivisions, getCamperDivisionName } from '../api/campers';
 import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
 import { supabase } from '../lib/supabase';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
+import {
+    STANDARD_MEAL_SCHEDULE_HHMM,
+    STANDARD_MEAL_LABEL_ORDER,
+    resolveBedtimeOptionFromDivisionName,
+} from '../constants/medicationBedtimeOptions';
 
 const getChildDisplayName = (child: any) =>
     (child?.name != null && child.name !== '')
@@ -19,6 +24,22 @@ const getChildDisplayName = (child: any) =>
         : [child?.first_name, child?.last_name].filter(Boolean).join(' ').trim() || 'Unknown';
 
 const RECURRENCE_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function medicationScheduleLabel(med: any): string {
+    const mt = med.meal_time;
+    const first = Array.isArray(mt) ? mt[0] : mt;
+    if (typeof first === 'string' && first.trim().length > 0) {
+        return first;
+    }
+    const st = med.scheduled_time;
+    if (st === '08:00') return 'Before Breakfast';
+    if (st === '09:00') return 'After Breakfast';
+    if (st === '12:00') return 'Before Lunch';
+    if (st === '13:00') return 'After Lunch';
+    if (st === '18:00') return 'Before Dinner';
+    if (st === '19:00') return 'After Dinner';
+    return typeof st === 'string' ? st : '';
+}
 
 export const HealthScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
@@ -48,7 +69,7 @@ export const HealthScreen = ({ navigation }: any) => {
     const [selectedMedicationChild, setSelectedMedicationChild] = useState<string>('');
     const [medicationName, setMedicationName] = useState('');
     const [dosage, setDosage] = useState('');
-    const [mealTime, setMealTime] = useState<string>('');
+    const [mealTimesSelected, setMealTimesSelected] = useState<string[]>([]);
     const [notes, setNotes] = useState('');
     const [isRecurring, setIsRecurring] = useState(false);
     const [recurringFrequency, setRecurringFrequency] = useState<'daily' | 'weekly' | 'custom'>('daily');
@@ -236,10 +257,46 @@ export const HealthScreen = ({ navigation }: any) => {
         }
     };
 
-    const handleAddMedication = () => {
+    const handleAddMedication = async () => {
         if (!selectedMedicationChild || !medicationName || !companyId) return;
-        if (!mealTime) {
-            Alert.alert('Missing meal time', 'Please select a meal time for this medication.');
+
+        const child = safeCampers.find((c: any) => getChildDisplayName(c) === selectedMedicationChild);
+        if (!child) return;
+
+        const standardSlots = mealTimesSelected
+            .filter((m) => m !== 'Bedtime')
+            .map((m) => {
+                const hhmm = STANDARD_MEAL_SCHEDULE_HHMM[m];
+                return hhmm ? { scheduled_time: hhmm, meal_time: [m] } : null;
+            })
+            .filter(Boolean) as { scheduled_time: string; meal_time: string[] }[];
+
+        const hasBedtime = mealTimesSelected.includes('Bedtime');
+        const divisionName = getCamperDivisionName(child);
+        const bedtimeOpt = hasBedtime ? resolveBedtimeOptionFromDivisionName(divisionName) : undefined;
+        const bedtimeSlots =
+            hasBedtime && bedtimeOpt
+                ? [{ scheduled_time: bedtimeOpt.scheduledTimeHHmm, meal_time: [bedtimeOpt.mealTimeLabel] }]
+                : [];
+
+        if (standardSlots.length === 0 && bedtimeSlots.length === 0) {
+            Alert.alert('Schedule required', 'Select at least one meal time.');
+            return;
+        }
+        if (hasBedtime && !divisionName) {
+            Alert.alert(
+                'No division on file',
+                'Assign a roster division to this camper before scheduling Bedtime.'
+            );
+            return;
+        }
+        if (hasBedtime && !bedtimeOpt) {
+            Alert.alert(
+                'Bedtime not mapped',
+                divisionName
+                    ? `No bedtime rule matched "${divisionName}".`
+                    : 'Could not resolve bedtime for this camper.'
+            );
             return;
         }
         if (isRecurring && recurringFrequency === 'custom' && recurringDays.length === 0) {
@@ -247,24 +304,12 @@ export const HealthScreen = ({ navigation }: any) => {
             return;
         }
 
-        const child = safeCampers.find((c: any) => getChildDisplayName(c) === selectedMedicationChild);
-        if (!child) return;
-
-        let time = '08:00';
-        if (mealTime === 'Before Breakfast') time = '08:00';
-        if (mealTime === 'After Breakfast') time = '09:00';
-        if (mealTime === 'Before Lunch') time = '12:00';
-        if (mealTime === 'After Lunch') time = '13:00';
-        if (mealTime === 'Before Dinner') time = '18:00';
-        if (mealTime === 'After Dinner') time = '19:00';
-        if (mealTime === 'Bedtime') time = '21:00';
-
-        addMedicationMutation.mutate({
+        const slots = [...standardSlots, ...bedtimeSlots];
+        const basePayload = {
             company_id: companyId,
             child_id: child.id as string,
             medication_name: medicationName,
             dosage: dosage || null,
-            scheduled_time: time,
             date: todayDateString,
             notes: notes || null,
             alert_sent: false,
@@ -272,19 +317,28 @@ export const HealthScreen = ({ navigation }: any) => {
             frequency: isRecurring ? recurringFrequency : null,
             days_of_week: isRecurring && recurringFrequency === 'custom' ? recurringDays : [],
             end_date: isRecurring && recurringEndDate ? recurringEndDate : null,
-        }, {
-            onSuccess: () => {
-                setMedicationName('');
-                setDosage('');
-                setNotes('');
-                setMealTime('');
-                setSelectedMedicationChild('');
-                setIsRecurring(false);
-                setRecurringFrequency('daily');
-                setRecurringDays([]);
-                setRecurringEndDate('');
+        };
+
+        try {
+            for (const slot of slots) {
+                await addMedicationMutation.mutateAsync({
+                    ...basePayload,
+                    scheduled_time: slot.scheduled_time,
+                    meal_time: slot.meal_time,
+                });
             }
-        });
+            setMedicationName('');
+            setDosage('');
+            setNotes('');
+            setMealTimesSelected([]);
+            setSelectedMedicationChild('');
+            setIsRecurring(false);
+            setRecurringFrequency('daily');
+            setRecurringDays([]);
+            setRecurringEndDate('');
+        } catch (error: any) {
+            Alert.alert('Error', error?.message ?? 'Could not add medication.');
+        }
     };
 
     const handleMarkAdministered = (medId: string) => {
@@ -607,7 +661,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                             </View>
                                             <Text style={styles.medicationCardDetail}>{med.medication_name}{med.dosage ? ` - ${med.dosage}` : ''}</Text>
                                             <Text style={styles.medicationCardTime}>
-                                                {med.scheduled_time === '08:00' ? 'Before Breakfast' : med.scheduled_time === '12:00' ? 'Before Lunch' : med.scheduled_time === '18:00' ? 'Before Dinner' : med.scheduled_time === '21:00' ? 'Bedtime' : med.scheduled_time}
+                                                {medicationScheduleLabel(med)}
                                             </Text>
                                             {med.date ? (
                                                 <View style={styles.medicationCardDateRow}>
@@ -926,96 +980,95 @@ export const HealthScreen = ({ navigation }: any) => {
                                     {/* Meal Time */}
                                     <View style={styles.formField}>
                                         <Text style={styles.formLabel}>Meal Time</Text>
-                                        <View style={styles.mealTimeContainer}>
-                                            <View style={styles.mealTimeColumn}>
-                                                <TouchableOpacity
-                                                    style={styles.radioButton}
-                                                    onPress={() => setMealTime('Before Breakfast')}
+                                        <View style={styles.mealChipsWrap}>
+                                            {STANDARD_MEAL_LABEL_ORDER.map((label) => {
+                                                const selected = mealTimesSelected.includes(label);
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={label}
+                                                        style={[styles.mealChip, selected && styles.mealChipSelected]}
+                                                        onPress={() => {
+                                                            setMealTimesSelected((prev) =>
+                                                                prev.includes(label)
+                                                                    ? prev.filter((x) => x !== label)
+                                                                    : [...prev, label]
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Text style={[styles.mealChipText, selected && styles.mealChipTextSelected]}>
+                                                            {label}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.mealChip,
+                                                    mealTimesSelected.includes('Bedtime') && styles.mealChipSelected,
+                                                ]}
+                                                onPress={() => {
+                                                    setMealTimesSelected((prev) => {
+                                                        if (prev.includes('Bedtime')) {
+                                                            return prev.filter((x) => x !== 'Bedtime');
+                                                        }
+                                                        return [...prev, 'Bedtime'];
+                                                    });
+                                                }}
+                                            >
+                                                <Text
+                                                    style={[
+                                                        styles.mealChipText,
+                                                        mealTimesSelected.includes('Bedtime') && styles.mealChipTextSelected,
+                                                    ]}
                                                 >
-                                                    <View style={[
-                                                        styles.radioCircle,
-                                                        mealTime === 'Before Breakfast' && styles.radioCircleSelected
-                                                    ]}>
-                                                        {mealTime === 'Before Breakfast' && <View style={styles.radioInner} />}
-                                                    </View>
-                                                    <Text style={styles.radioLabel}>Before Breakfast</Text>
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={styles.radioButton}
-                                                    onPress={() => setMealTime('Before Lunch')}
-                                                >
-                                                    <View style={[
-                                                        styles.radioCircle,
-                                                        mealTime === 'Before Lunch' && styles.radioCircleSelected
-                                                    ]}>
-                                                        {mealTime === 'Before Lunch' && <View style={styles.radioInner} />}
-                                                    </View>
-                                                    <Text style={styles.radioLabel}>Before Lunch</Text>
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={styles.radioButton}
-                                                    onPress={() => setMealTime('Before Dinner')}
-                                                >
-                                                    <View style={[
-                                                        styles.radioCircle,
-                                                        mealTime === 'Before Dinner' && styles.radioCircleSelected
-                                                    ]}>
-                                                        {mealTime === 'Before Dinner' && <View style={styles.radioInner} />}
-                                                    </View>
-                                                    <Text style={styles.radioLabel}>Before Dinner</Text>
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={styles.radioButton}
-                                                    onPress={() => setMealTime('Bedtime')}
-                                                >
-                                                    <View style={[
-                                                        styles.radioCircle,
-                                                        mealTime === 'Bedtime' && styles.radioCircleSelected
-                                                    ]}>
-                                                        {mealTime === 'Bedtime' && <View style={styles.radioInner} />}
-                                                    </View>
-                                                    <Text style={styles.radioLabel}>Bedtime</Text>
-                                                </TouchableOpacity>
-                                            </View>
-                                            <View style={styles.mealTimeColumn}>
-                                                <TouchableOpacity
-                                                    style={styles.radioButton}
-                                                    onPress={() => setMealTime('After Breakfast')}
-                                                >
-                                                    <View style={[
-                                                        styles.radioCircle,
-                                                        mealTime === 'After Breakfast' && styles.radioCircleSelected
-                                                    ]}>
-                                                        {mealTime === 'After Breakfast' && <View style={styles.radioInner} />}
-                                                    </View>
-                                                    <Text style={styles.radioLabel}>After Breakfast</Text>
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={styles.radioButton}
-                                                    onPress={() => setMealTime('After Lunch')}
-                                                >
-                                                    <View style={[
-                                                        styles.radioCircle,
-                                                        mealTime === 'After Lunch' && styles.radioCircleSelected
-                                                    ]}>
-                                                        {mealTime === 'After Lunch' && <View style={styles.radioInner} />}
-                                                    </View>
-                                                    <Text style={styles.radioLabel}>After Lunch</Text>
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={styles.radioButton}
-                                                    onPress={() => setMealTime('After Dinner')}
-                                                >
-                                                    <View style={[
-                                                        styles.radioCircle,
-                                                        mealTime === 'After Dinner' && styles.radioCircleSelected
-                                                    ]}>
-                                                        {mealTime === 'After Dinner' && <View style={styles.radioInner} />}
-                                                    </View>
-                                                    <Text style={styles.radioLabel}>After Dinner</Text>
-                                                </TouchableOpacity>
-                                            </View>
+                                                    Bedtime
+                                                </Text>
+                                            </TouchableOpacity>
                                         </View>
+                                        {mealTimesSelected.includes('Bedtime') ? (
+                                            <View style={[styles.bedtimeInfoBox, { marginTop: theme.spacing.md }]}>
+                                                {!selectedMedicationChild ? (
+                                                    <Text style={styles.bedtimeInfoMuted}>
+                                                        Select a camper to see their bedtime (from roster division, US Eastern).
+                                                    </Text>
+                                                ) : (
+                                                    (() => {
+                                                        const row = safeCampers.find(
+                                                            (c: any) => getChildDisplayName(c) === selectedMedicationChild
+                                                        );
+                                                        const divName = row ? getCamperDivisionName(row) : undefined;
+                                                        const resolved = resolveBedtimeOptionFromDivisionName(divName);
+                                                        if (!divName) {
+                                                            return (
+                                                                <Text style={styles.bedtimeInfoError}>
+                                                                    This camper has no roster division — assign one before using
+                                                                    Bedtime.
+                                                                </Text>
+                                                            );
+                                                        }
+                                                        if (!resolved) {
+                                                            return (
+                                                                <Text style={styles.bedtimeInfoError}>
+                                                                    No bedtime mapped for division &quot;{divName}&quot;.
+                                                                </Text>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <>
+                                                                <Text style={styles.bedtimeInfoTitle}>
+                                                                    BEDTIME:{' '}
+                                                                    <Text style={styles.bedtimeInfoBody}>{resolved.mealTimeLabel}</Text>
+                                                                </Text>
+                                                                <Text style={styles.bedtimeInfoCaption}>
+                                                                    Uses camper division ({divName}). Missed-dose alerts use US Eastern
+                                                                    (America/New_York).
+                                                                </Text>
+                                                            </>
+                                                        );
+                                                    })()
+                                                )}
+                                            </View>
+                                        ) : null}
                                     </View>
 
                                     {/* Notes */}
@@ -1114,7 +1167,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     {/* Add Medication Button */}
                                     <TouchableOpacity
                                         style={styles.addMedicationButton}
-                                        onPress={handleAddMedication}
+                                        onPress={() => void handleAddMedication()}
                                     >
                                         <Text style={styles.addMedicationButtonText}>Add Medication</Text>
                                     </TouchableOpacity>
@@ -1150,7 +1203,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                             <View key={med.id} style={styles.dailyLogMedRow}>
                                                                 <Text style={styles.dailyLogMedDetail}>{med.medication_name}{med.dosage ? ` - ${med.dosage}` : ''}</Text>
                                                                 <Text style={styles.dailyLogMedTime}>
-                                                                    {med.scheduled_time === '08:00' ? 'Before Breakfast' : med.scheduled_time === '12:00' ? 'Before Lunch' : med.scheduled_time === '18:00' ? 'Before Dinner' : med.scheduled_time === '21:00' ? 'Bedtime' : med.scheduled_time}
+                                                                    {medicationScheduleLabel(med)}
                                                                 </Text>
                                                                 {med.administered ? (
                                                                     <View style={[styles.statusBadge, styles.statusBadgeGiven, { alignSelf: 'flex-start', marginTop: 4 }]}>
@@ -2516,6 +2569,31 @@ const styles = StyleSheet.create({
     mealTimeColumn: {
         flex: 1,
     },
+    mealChipsWrap: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.sm,
+    },
+    mealChip: {
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+    },
+    mealChipSelected: {
+        borderColor: theme.colors.secondary,
+        backgroundColor: theme.colors.secondary,
+    },
+    mealChipText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    mealChipTextSelected: {
+        color: 'white',
+    },
     radioButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -2587,6 +2665,39 @@ const styles = StyleSheet.create({
     recurringSection: {
         marginTop: -theme.spacing.sm,
         marginBottom: theme.spacing.md,
+    },
+    bedtimeInfoBox: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+    },
+    bedtimeInfoMuted: {
+        ...theme.typography.body,
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+    },
+    bedtimeInfoError: {
+        ...theme.typography.body,
+        fontSize: 13,
+        color: '#b91c1c',
+    },
+    bedtimeInfoTitle: {
+        ...theme.typography.body,
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    bedtimeInfoBody: {
+        fontWeight: '400',
+    },
+    bedtimeInfoCaption: {
+        ...theme.typography.body,
+        fontSize: 11,
+        color: theme.colors.textSecondary,
+        marginTop: theme.spacing.xs,
     },
     daysWrap: {
         flexDirection: 'row',

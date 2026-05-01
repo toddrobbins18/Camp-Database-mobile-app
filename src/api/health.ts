@@ -10,6 +10,7 @@ export interface MedicationLog {
     medication_name: string;
     dosage: string | null;
     scheduled_time: string;
+    meal_time?: string[] | null;
     date: string;
     administered?: boolean;
     administered_by?: string | null;
