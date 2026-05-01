@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Image,
     Modal,
     Pressable,
     SafeAreaView,
@@ -35,6 +36,13 @@ type OwlPayTab = 'pos' | 'items' | 'balances' | 'reports' | 'settings';
 type ItemCategory = 'Food' | 'Snacks' | 'Drinks' | 'Other';
 
 const currency = (amount: number) => `$${amount.toFixed(2)}`;
+const getInitials = (name?: string | null) =>
+    (name || '')
+        .split(' ')
+        .map((part) => part[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase();
 
 export const OwlPayScreen = ({ navigation }: any) => {
     const [activeTab, setActiveTab] = useState<OwlPayTab>('pos');
@@ -57,6 +65,17 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const [itemToDelete, setItemToDelete] = useState<OwlPayItem | null>(null);
     const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [successData, setSuccessData] = useState<{
+        camperName: string;
+        chargedAmount: number;
+        newBalance: number;
+        isFirstScan: boolean;
+        isStaff: boolean;
+    } | null>(null);
+    const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
+    const [scanBuffer, setScanBuffer] = useState('');
+    const [lastScanInputAt, setLastScanInputAt] = useState(0);
+    const scanResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
 
@@ -160,6 +179,15 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const total = isFirstScanToday ? 0 : subtotal;
     const currentBalance = Number(selectedCamper?.owl_pay_balance || 0);
     const newBalance = selectedIsStaff ? currentBalance + total : currentBalance - total;
+    const hasInsufficientFunds = !selectedIsStaff && !isFirstScanToday && cart.length > 0 && newBalance < 0;
+    const scanStatusLabel =
+        scanStatus === 'scanning'
+            ? 'Reading scanner input...'
+            : scanStatus === 'success'
+              ? 'RFID matched successfully'
+              : scanStatus === 'error'
+                ? 'RFID not found'
+                : 'Ready to scan RFID';
 
     const addItem = () => {
         const name = itemForm.name.trim();
@@ -239,6 +267,62 @@ export const OwlPayScreen = ({ navigation }: any) => {
         setCart([]);
     };
 
+    const resetScanStatus = (delayMs = 1200) => {
+        if (scanResetTimeoutRef.current) {
+            clearTimeout(scanResetTimeoutRef.current);
+        }
+        scanResetTimeoutRef.current = setTimeout(() => {
+            setScanStatus('idle');
+            setScanBuffer('');
+        }, delayMs);
+    };
+
+    const selectByRFID = async (rfidRaw: string) => {
+        const rfid = rfidRaw.trim().toLowerCase();
+        if (!rfid) return false;
+
+        const camperMatch = campers.find((c) => c.rfid?.toLowerCase() === rfid);
+        if (camperMatch) {
+            setScanStatus('success');
+            await handleSelectCamper(camperMatch.id);
+            setCamperQuery('');
+            resetScanStatus(1000);
+            return true;
+        }
+
+        const staffMatch = staffMembers.find((s) => s.rfid?.toLowerCase() === rfid);
+        if (staffMatch) {
+            setScanStatus('success');
+            handleSelectStaff(staffMatch.id);
+            setCamperQuery('');
+            resetScanStatus(1000);
+            return true;
+        }
+
+        setScanStatus('error');
+        Alert.alert('RFID not found', `No camper or staff with RFID: ${rfidRaw}`);
+        resetScanStatus(1800);
+        return false;
+    };
+
+    const handleCamperQueryChange = (value: string) => {
+        setCamperQuery(value);
+        const now = Date.now();
+        const timeDiff = now - lastScanInputAt;
+        setLastScanInputAt(now);
+
+        if (!value) {
+            setScanStatus('idle');
+            setScanBuffer('');
+            return;
+        }
+
+        if (timeDiff < 100 && value.length > 1) {
+            setScanStatus('scanning');
+        }
+        setScanBuffer(value);
+    };
+
     const addToCart = (item: OwlPayItem) => {
         if (!item.active) return;
         setCart((prev) => {
@@ -298,7 +382,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 if (firstScanTxError) throw firstScanTxError;
             }
 
-            if (cart.length > 0 && !isFirstScanToday) {
+            if (cart.length > 0) {
                 const txRows = cart.flatMap((item) =>
                     Array(item.quantity)
                         .fill(null)
@@ -307,8 +391,8 @@ export const OwlPayScreen = ({ navigation }: any) => {
                             staff_id: selectedIsStaff ? selectedCamperId : null,
                             company_id: companyId,
                             item_id: item.id,
-                            amount: Number(item.price),
-                            is_free: false,
+                            amount: isFirstScanToday ? 0 : Number(item.price),
+                            is_free: isFirstScanToday,
                             transaction_type: 'purchase',
                             created_by: createdBy,
                         }))
@@ -317,11 +401,11 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 if (txError) throw txError;
             }
 
-            if (!selectedIsStaff && selectedCamper && !isFirstScanToday && cart.length > 0) {
-                const { error: balError } = await supabase
-                    .from('children')
-                    .update({ owl_pay_balance: newBalance, updated_at: new Date().toISOString() })
-                    .eq('id', selectedCamper.id);
+            if (!selectedIsStaff && selectedCamper && total !== 0) {
+                const { error: balError } = await supabase.rpc('increment_camper_balance', {
+                    _child_id: selectedCamper.id,
+                    _amount: -total,
+                });
                 if (balError) throw balError;
             }
 
@@ -342,7 +426,13 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 }
             }
 
-            Alert.alert('Owl Pay', `Transaction complete for ${selectedDisplayName || 'selection'}`);
+            setSuccessData({
+                camperName: selectedDisplayName || 'Selection',
+                chargedAmount: total,
+                newBalance,
+                isFirstScan: isFirstScanToday,
+                isStaff: selectedIsStaff,
+            });
             setCart([]);
             setSelectedCamperId(null);
             setSelectedIsStaff(false);
@@ -355,6 +445,20 @@ export const OwlPayScreen = ({ navigation }: any) => {
             setIsCompletingTransaction(false);
         }
     };
+
+    useEffect(() => {
+        return () => {
+            if (scanResetTimeoutRef.current) {
+                clearTimeout(scanResetTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!successData) return;
+        const timer = setTimeout(() => setSuccessData(null), 2600);
+        return () => clearTimeout(timer);
+    }, [successData]);
 
     useEffect(() => {
         if (!settings) return;
@@ -446,13 +550,55 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     <Ionicons name="search-outline" size={18} color={theme.colors.textSecondary} />
                     <TextInput
                         value={camperQuery}
-                        onChangeText={setCamperQuery}
+                        onChangeText={handleCamperQueryChange}
+                        onSubmitEditing={() => {
+                            if (scanBuffer.trim()) {
+                                void selectByRFID(scanBuffer);
+                            }
+                        }}
                         placeholder="Scan RFID or search..."
                         placeholderTextColor={theme.colors.textSecondary}
                         style={styles.searchInput}
                     />
-                    <Ionicons name="scan-outline" size={18} color={theme.colors.secondary} />
+                    <TouchableOpacity
+                        onPress={() => {
+                            if (camperQuery.trim()) {
+                                void selectByRFID(camperQuery);
+                            }
+                        }}
+                        accessibilityLabel="Process RFID scan"
+                    >
+                        <Ionicons
+                            name={
+                                scanStatus === 'success'
+                                    ? 'checkmark-circle'
+                                    : scanStatus === 'error'
+                                      ? 'close-circle'
+                                      : 'scan-outline'
+                            }
+                            size={18}
+                            color={
+                                scanStatus === 'success'
+                                    ? theme.colors.success
+                                    : scanStatus === 'error'
+                                      ? '#dc2626'
+                                      : theme.colors.secondary
+                            }
+                        />
+                    </TouchableOpacity>
                 </View>
+                <Text
+                    style={[
+                        styles.scanStatusText,
+                        scanStatus === 'success'
+                            ? styles.scanStatusSuccess
+                            : scanStatus === 'error'
+                              ? styles.scanStatusError
+                              : undefined,
+                    ]}
+                >
+                    {scanStatusLabel}
+                </Text>
 
                 <Text style={styles.posSectionLabel}>Campers</Text>
                 <ScrollView style={styles.camperList} contentContainerStyle={styles.camperListContent}>
@@ -468,13 +614,27 @@ export const OwlPayScreen = ({ navigation }: any) => {
                                 style={[styles.camperCard, isSelected && styles.camperCardSelected]}
                                 onPress={() => handleSelectCamper(camper.id)}
                             >
-                                <View style={styles.avatarCircle}>
-                                    <Ionicons name="person-outline" size={18} color={theme.colors.secondary} />
-                                </View>
+                                {(camper.photo_url && (
+                                    <Image source={{ uri: camper.photo_url }} style={styles.avatarImage} />
+                                )) || (
+                                    <View style={styles.avatarCircle}>
+                                        <Text style={styles.avatarInitials}>{getInitials(camper.name)}</Text>
+                                    </View>
+                                )}
                                 <View style={styles.camperCardText}>
                                     <Text style={styles.camperName}>{camper.name}</Text>
+                                    <Text style={styles.camperMetaText}>{camper.rfid || 'No RFID'}</Text>
                                 </View>
-                                <View style={styles.balancePill}>
+                                <View
+                                    style={[
+                                        styles.balancePill,
+                                        Number(camper.owl_pay_balance || 0) < 5
+                                            ? styles.balancePillLow
+                                            : Number(camper.owl_pay_balance || 0) < 15
+                                              ? styles.balancePillMedium
+                                              : styles.balancePillHealthy,
+                                    ]}
+                                >
                                     <Text style={styles.balancePillText}>{currency(Number(camper.owl_pay_balance || 0))}</Text>
                                 </View>
                             </TouchableOpacity>
@@ -501,6 +661,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                                 </View>
                                 <View style={styles.camperCardText}>
                                     <Text style={styles.camperName}>{staff.name}</Text>
+                                    <Text style={styles.camperMetaText}>{staff.rfid || 'No RFID'}</Text>
                                 </View>
                                 <View style={styles.balancePill}>
                                     <Text style={styles.balancePillText}>Tab</Text>
@@ -538,6 +699,11 @@ export const OwlPayScreen = ({ navigation }: any) => {
                         >
                             <Text style={styles.quickItemName}>{item.name}</Text>
                             <Text style={styles.quickItemPrice}>{currency(Number(item.price))}</Text>
+                            {cart.some((c) => c.id === item.id) && (
+                                <Text style={styles.quickItemQtyBadge}>
+                                    x{cart.find((c) => c.id === item.id)?.quantity || 1}
+                                </Text>
+                            )}
                         </TouchableOpacity>
                     ))}
                 </View>
@@ -578,18 +744,30 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     <Text style={styles.totalsLine}>Subtotal: {currency(subtotal)}</Text>
                     <Text style={styles.totalsLine}>Total: {currency(total)}</Text>
                     {!selectedIsStaff && selectedCamper && (
-                        <Text style={styles.totalsLine}>New Balance: {currency(newBalance)}</Text>
+                        <Text
+                            style={[
+                                styles.totalsLine,
+                                newBalance < 5 ? styles.balanceTextLow : newBalance < 15 ? styles.balanceTextMedium : styles.balanceTextHealthy,
+                            ]}
+                        >
+                            New Balance: {currency(newBalance)}
+                        </Text>
                     )}
                     {selectedIsStaff && selectedStaff && <Text style={styles.totalsLine}>Staff Running Tab</Text>}
+                    {hasInsufficientFunds && <Text style={styles.insufficientFundsText}>Insufficient funds for this checkout</Text>}
                 </View>
 
                 <TouchableOpacity
-                    style={[styles.primarySaveButton, (!selectedCamperId || isCompletingTransaction) && { opacity: 0.6 }]}
+                    style={[styles.primarySaveButton, (!selectedCamperId || isCompletingTransaction || hasInsufficientFunds) && { opacity: 0.6 }]}
                     onPress={completeTransaction}
-                    disabled={!selectedCamperId || isCompletingTransaction}
+                    disabled={!selectedCamperId || isCompletingTransaction || hasInsufficientFunds}
                 >
                     <Text style={styles.primaryButtonText}>
-                        {isCompletingTransaction ? 'Processing...' : 'Complete Transaction'}
+                        {isCompletingTransaction
+                            ? 'Processing...'
+                            : isFirstScanToday && cart.length === 0
+                              ? 'Record First Scan'
+                              : 'Complete Transaction'}
                     </Text>
                 </TouchableOpacity>
             </StyledCard>
@@ -964,6 +1142,32 @@ export const OwlPayScreen = ({ navigation }: any) => {
             </Modal>
 
             <Modal
+                visible={!!successData}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setSuccessData(null)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setSuccessData(null)}>
+                    <Pressable style={styles.successCard} onPress={(e) => e.stopPropagation()}>
+                        <Ionicons name="checkmark-circle" size={48} color={theme.colors.success} />
+                        <Text style={styles.successTitle}>{successData?.camperName}</Text>
+                        {successData?.isFirstScan ? (
+                            <Text style={styles.successSubtext}>First scan recorded for free entry</Text>
+                        ) : (
+                            <Text style={styles.successSubtext}>
+                                Charged: {currency(successData?.chargedAmount || 0)}
+                            </Text>
+                        )}
+                        {!successData?.isStaff && (
+                            <Text style={styles.successBalance}>
+                                New Balance: {currency(successData?.newBalance || 0)}
+                            </Text>
+                        )}
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            <Modal
                 visible={isDeleteConfirmVisible}
                 transparent
                 animationType="fade"
@@ -1122,8 +1326,16 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginRight: 10,
     },
+    avatarImage: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        marginRight: 10,
+    },
+    avatarInitials: { color: theme.colors.secondary, fontWeight: '700', fontSize: 12 },
     camperCardText: { flex: 1 },
     camperName: { fontSize: 16, color: theme.colors.text, fontWeight: '600' },
+    camperMetaText: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 },
     balancePill: {
         paddingHorizontal: 12,
         paddingVertical: 4,
@@ -1132,7 +1344,13 @@ const styles = StyleSheet.create({
         borderColor: theme.colors.border,
         backgroundColor: '#fff',
     },
-    balancePillText: { color: '#dc2626', fontWeight: '700', fontSize: 13 },
+    balancePillLow: { backgroundColor: '#fee2e2', borderColor: '#ef4444' },
+    balancePillMedium: { backgroundColor: '#fef9c3', borderColor: '#f59e0b' },
+    balancePillHealthy: { backgroundColor: '#dcfce7', borderColor: '#22c55e' },
+    balancePillText: { color: '#111827', fontWeight: '700', fontSize: 13 },
+    scanStatusText: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 8 },
+    scanStatusSuccess: { color: '#16a34a' },
+    scanStatusError: { color: '#dc2626' },
     selectionCard: {
         alignItems: 'center',
         justifyContent: 'center',
@@ -1198,6 +1416,12 @@ const styles = StyleSheet.create({
     },
     quickItemName: { color: theme.colors.text, fontWeight: '600', fontSize: 13 },
     quickItemPrice: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 },
+    quickItemQtyBadge: {
+        marginTop: 4,
+        color: '#1d4ed8',
+        fontWeight: '700',
+        fontSize: 11,
+    },
     qtyControlRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     qtyBtn: {
         width: 28,
@@ -1212,6 +1436,10 @@ const styles = StyleSheet.create({
     qtyText: { minWidth: 20, textAlign: 'center', color: theme.colors.text, fontWeight: '700' },
     totalsBox: { marginTop: 12, marginBottom: 12, gap: 6 },
     totalsLine: { color: theme.colors.text, fontWeight: '600', fontSize: 14 },
+    balanceTextLow: { color: '#dc2626' },
+    balanceTextMedium: { color: '#b45309' },
+    balanceTextHealthy: { color: '#16a34a' },
+    insufficientFundsText: { color: '#dc2626', fontWeight: '700', fontSize: 13 },
     itemDeleteBtn: { padding: 6 },
     itemName: { color: theme.colors.text, fontWeight: '600', fontSize: 15 },
     itemMeta: { color: theme.colors.textSecondary, fontSize: 13 },
@@ -1467,4 +1695,18 @@ const styles = StyleSheet.create({
         backgroundColor: '#dc2626',
     },
     deleteConfirmDangerText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+    successCard: {
+        width: '100%',
+        maxWidth: 380,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: 20,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        gap: 8,
+    },
+    successTitle: { ...theme.typography.h3, textAlign: 'center' },
+    successSubtext: { color: theme.colors.textSecondary, fontSize: 14, textAlign: 'center' },
+    successBalance: { color: theme.colors.text, fontSize: 16, fontWeight: '700', textAlign: 'center' },
 });

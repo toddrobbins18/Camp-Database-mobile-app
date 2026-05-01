@@ -553,7 +553,7 @@ async function performFullSync(
       progress: { step: 'Starting sync', syncType: syncType, isIncremental },
     });
 
-    const season = '2026';
+    const season = seasonId ? String(seasonId) : '2026';
     console.log(`\n[Season] Using season: ${season}\n`);
     
     await updateSyncJob(supabase, jobId, {
@@ -984,12 +984,12 @@ async function performFullSync(
       const currentSeason = season;
       const fallbackSeason = '2025';
       
-      // IMPORTANT: Do NOT change these statuses without verifying expected counts!
-      // Expected counts (2026): Tyler Hill=291, Timber Lake Camp=226, Timber Lake West=182
-      // CampMinder Status IDs: 1=Active, 2=Hired, 3=Applied, 4=Pending, 5=Returning
-      // We sync Active, Hired, and Returning staff (skip Applied, Pending)
-      const allStatuses = [1, 2, 5];
-      console.log(`[Staff Sync] Fetching Active, Hired & Returning staff (statuses: ${allStatuses.join(', ')}) for season ${currentSeason}...`);
+      // IMPORTANT: Per CampMinder Staff API docs, status IDs are:
+      // 1=Active, 2=Resigned, 3=Dismissed, 4=Cancelled
+      // We ONLY sync Active staff (status=1) - Resigned/Dismissed/Cancelled are not current staff
+      // Expected counts (2026): Tyler Hill~290, Timber Lake Camp~230, Timber Lake West~180
+      const allStatuses = [1]; // Only Active staff
+      console.log(`[Staff Sync] Fetching Active staff (status: 1) for season ${currentSeason}...`);
       
       const staffMap = new Map<string, any>();
       
@@ -1010,13 +1010,11 @@ async function performFullSync(
       }
       
       staffAssignments = Array.from(staffMap.values());
-      console.log(`Combined ${staffAssignments.length} unique staff (Active, Hired & Returning) for season ${currentSeason}`);
+      console.log(`Combined ${staffAssignments.length} unique Active staff for season ${currentSeason}`);
 
-      // SAFEGUARD: Warn if count looks like pagination truncation (common caps: 200, 500, 1000)
-      const suspiciousCounts = [100, 200, 500, 1000];
-      if (suspiciousCounts.includes(staffAssignments.length)) {
-        console.warn(`⚠️ [PAGINATION WARNING] Staff count is exactly ${staffAssignments.length} - this may indicate API pagination truncation!`);
-        console.warn(`   Expected counts: Tyler Hill=291, Timber Lake Camp=226+. If count is lower, investigate pagination.`);
+      // SAFEGUARD: Warn if count looks unusually low (expected ~250-300 for camps)
+      if (staffAssignments.length < 100) {
+        console.warn(`⚠️ [LOW COUNT WARNING] Only ${staffAssignments.length} Active staff found - expected 200-300 for camps`);
       }
 
       if (staffAssignments.length === 0) {
@@ -1037,7 +1035,7 @@ async function performFullSync(
           }
         }
         staffAssignments = Array.from(fallbackMap.values());
-        console.log(`Combined ${staffAssignments.length} unique staff (Active, Hired & Returning) for fallback season ${fallbackSeason}`);
+        console.log(`Combined ${staffAssignments.length} unique Active staff for fallback season ${fallbackSeason}`);
       }
 
       if (staffAssignments.length > 0) {
@@ -1098,10 +1096,15 @@ async function performFullSync(
       const camperId = String(camper.ID);
       const relatives = camper.Relatives || [];
       
-      // Find guardian from Relatives array (IsGuardian=true or IsPrimary=true)
-      const guardian = relatives.find((r: any) => 
-        r.IsGuardian === true || r.IsPrimary === true
-      ) || relatives[0]; // Fallback to first relative
+      // Find P1 (Parent 1) from Relatives array
+      // Per CampMinder Persons API docs, Relative schema has: ID, IsPrimary, IsGuardian, IsWard
+      // IsPrimary: true = "parent 1" (P1)
+      // IsGuardian: true = guardian
+      // Priority: IsPrimary > IsGuardian > first relative
+      const p1Parent = relatives.find((r: any) => r.IsPrimary === true);
+      const guardian = p1Parent ||
+                      relatives.find((r: any) => r.IsGuardian === true) ||
+                      relatives[0]; // Fallback to first relative
       
       if (guardian && guardian.ID) {
         const parentId = String(guardian.ID);
@@ -1109,32 +1112,67 @@ async function performFullSync(
         parentPersonIds.add(parentId);
         campersWithParents++;
         
-        // Get parent details from personMap (if available)
-        const parentPerson = personMap.get(parentId);
-        if (parentPerson) {
-          // Extract parent name
-          const parentName = `${parentPerson.Name?.First || ''} ${parentPerson.Name?.Last || ''}`.trim();
-          if (parentName) {
-            parentNameMap.set(parentId, parentName);
-          }
-          
-          // Extract parent email from ContactDetails
-          if (parentPerson.ContactDetails?.Emails?.length > 0) {
-            const loginEmail = parentPerson.ContactDetails.Emails.find((e: any) => e.IsLogin);
-            const email = loginEmail?.Address || parentPerson.ContactDetails.Emails[0]?.Address;
-            if (email) {
-              parentEmailMap.set(parentId, email);
+        // FIRST: Check if email is directly on the Relative object (P1 Login Info)
+        // CampMinder often includes Login, LoginEmail, Email, EmailAddress fields directly on relatives
+        const directEmail = guardian.Login || guardian.LoginEmail || guardian.Email ||
+                           guardian.EmailAddress || guardian.PrimaryEmail || guardian.ParentEmail ||
+                           guardian.P1Login || guardian.P1Email;
+        if (directEmail) {
+          parentEmailMap.set(parentId, directEmail);
+        }
+
+        // Extract name from relative object
+        // Handle Name as object {First, Last} or as string
+        let directName = '';
+        if (guardian.Name && typeof guardian.Name === 'object') {
+          directName = `${guardian.Name.First || guardian.Name.first || ''} ${guardian.Name.Last || guardian.Name.last || ''}`.trim();
+        } else if (guardian.Name && typeof guardian.Name === 'string') {
+          directName = guardian.Name;
+        } else {
+          directName = guardian.FullName ||
+                      `${guardian.FirstName || guardian.First || ''} ${guardian.LastName || guardian.Last || ''}`.trim();
+        }
+        if (directName && typeof directName === 'string' && directName.trim()) {
+          parentNameMap.set(parentId, directName);
+        }
+
+        // Extract phone from relative object
+        const directPhone = guardian.Phone || guardian.PhoneNumber || guardian.MobilePhone ||
+                           guardian.CellPhone || guardian.PrimaryPhone;
+        if (directPhone) {
+          parentPhoneMap.set(parentId, directPhone);
+        }
+
+        // SECOND: If no direct email, try to get from personMap (for fetched persons)
+        if (!directEmail) {
+          const parentPerson = personMap.get(parentId);
+          if (parentPerson) {
+            // Extract parent name if not already set
+            if (!parentNameMap.has(parentId)) {
+              const parentName = `${parentPerson.Name?.First || ''} ${parentPerson.Name?.Last || ''}`.trim();
+              if (parentName) {
+                parentNameMap.set(parentId, parentName);
+              }
             }
-          }
-          
-          // Extract parent phone from ContactDetails
-          if (parentPerson.ContactDetails?.PhoneNumbers?.length > 0) {
-            const mobilePhone = parentPerson.ContactDetails.PhoneNumbers.find((p: any) => 
-              p.Type === 'Mobile' || p.Type === 'Cell' || p.TypeID === 0 || p.TypeID === 2
-            );
-            const phone = mobilePhone?.Number || parentPerson.ContactDetails.PhoneNumbers[0]?.Number;
-            if (phone) {
-              parentPhoneMap.set(parentId, phone);
+
+            // Extract parent email from ContactDetails
+            if (parentPerson.ContactDetails?.Emails?.length > 0) {
+              const loginEmail = parentPerson.ContactDetails.Emails.find((e: any) => e.IsLogin);
+              const email = loginEmail?.Address || parentPerson.ContactDetails.Emails[0]?.Address;
+              if (email) {
+                parentEmailMap.set(parentId, email);
+              }
+            }
+
+            // Extract parent phone from ContactDetails if not already set
+            if (!parentPhoneMap.has(parentId) && parentPerson.ContactDetails?.PhoneNumbers?.length > 0) {
+              const mobilePhone = parentPerson.ContactDetails.PhoneNumbers.find((p: any) =>
+                p.Type === 'Mobile' || p.Type === 'Cell' || p.TypeID === 0 || p.TypeID === 2
+              );
+              const phone = mobilePhone?.Number || parentPerson.ContactDetails.PhoneNumbers[0]?.Number;
+              if (phone) {
+                parentPhoneMap.set(parentId, phone);
+              }
             }
           }
         }
@@ -1280,10 +1318,8 @@ async function performFullSync(
       let guardianPhone = parentPersonId ? parentPhoneMap.get(parentPersonId) || '' : '';
       let guardianName = parentPersonId ? parentNameMap.get(parentPersonId) || '' : '';
       
-      // Fallback to camper's own contact info if parent not found
-      if (!guardianEmail && person.ContactDetails?.Emails?.length > 0) {
-        guardianEmail = person.ContactDetails.Emails[0].Address;
-      }
+      // NO FALLBACK to camper's own contact info - we only want P1 parent email
+      // If no P1 parent email found, leave guardian_email empty (do not use camper's email)
       if (!guardianPhone && person.ContactDetails?.PhoneNumbers?.length > 0) {
         guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
       }
@@ -1721,103 +1757,109 @@ async function performFullSync(
       progress: { step: 'Cleaning up old records', staff: staffPersonIds.size, campers: campers.length, divisions: divisions.length, season },
     });
 
-    let campersDeleted = 0;
-    let staffDeleted = 0;
+    let campersInactivated = 0;
+    let staffInactivated = 0;
 
     try {
       // Get all person_ids that were synced from CampMinder
       const syncedCamperPersonIds = camperData.map(c => c.person_id);
       const syncedStaffPersonIds = staffData.map(s => s.person_id);
 
-      // Delete campers that are no longer in CampMinder (only for full or campers sync)
+      // Inactivate campers that are no longer in CampMinder (only for full or campers sync)
       if ((syncType === 'full' || syncType === 'campers') && syncedCamperPersonIds.length > 0) {
         console.log(`[Cleanup] Checking for campers not in CampMinder sync (${syncedCamperPersonIds.length} valid campers)...`);
         
-        // Get campers that exist in DB but were NOT in this sync
+        // Get active campers that exist in DB but were NOT in this sync
         const { data: existingCampers, error: fetchError } = await supabase
           .from('children')
           .select('id, person_id, first_name, last_name')
           .eq('company_id', companyId)
-          .eq('season', season);
+          .eq('season', season)
+          .neq('status', 'inactive');
 
         if (fetchError) {
           console.error('[Cleanup] Error fetching existing campers:', fetchError);
         } else if (existingCampers) {
           const camperPersonIdSet = new Set(syncedCamperPersonIds);
-          const campersToDelete = existingCampers.filter((c: { id: string; person_id: string; first_name: string; last_name: string }) => !camperPersonIdSet.has(c.person_id));
+          const campersToInactivate = existingCampers.filter((c: { id: string; person_id: string; first_name: string; last_name: string }) => !camperPersonIdSet.has(c.person_id));
           
-          if (campersToDelete.length > 0) {
-            console.log(`[Cleanup] Found ${campersToDelete.length} campers to remove (not enrolled in CampMinder):`);
-            campersToDelete.slice(0, 10).forEach((c: { id: string; person_id: string; first_name: string; last_name: string }) => {
+          if (campersToInactivate.length > 0) {
+            console.log(`[Cleanup] Found ${campersToInactivate.length} campers to inactivate (not enrolled in CampMinder):`);
+            campersToInactivate.slice(0, 10).forEach((c: { id: string; person_id: string; first_name: string; last_name: string }) => {
               console.log(`  - ${c.first_name} ${c.last_name} (person_id: ${c.person_id})`);
             });
-            if (campersToDelete.length > 10) {
-              console.log(`  ... and ${campersToDelete.length - 10} more`);
+            if (campersToInactivate.length > 10) {
+              console.log(`  ... and ${campersToInactivate.length - 10} more`);
             }
 
-            const idsToDelete = campersToDelete.map((c: { id: string }) => c.id);
-            const { error: deleteError } = await supabase
-              .from('children')
-              .delete()
-              .in('id', idsToDelete);
-
-            if (deleteError) {
-              console.error('[Cleanup] Error deleting campers:', deleteError);
-            } else {
-              campersDeleted = campersToDelete.length;
-              console.log(`[Cleanup] Successfully deleted ${campersDeleted} campers`);
+            const BATCH_SIZE = 100;
+            for (let i = 0; i < campersToInactivate.length; i += BATCH_SIZE) {
+              const batchIds = campersToInactivate.slice(i, i + BATCH_SIZE).map((c: { id: string }) => c.id);
+              const { error: updateError } = await supabase
+                .from('children')
+                .update({ status: 'inactive', updated_at: new Date().toISOString() })
+                .in('id', batchIds);
+              if (updateError) {
+                throw updateError;
+              }
             }
+
+            campersInactivated = campersToInactivate.length;
+            console.log(`[Cleanup] Successfully inactivated ${campersInactivated} campers`);
           } else {
-            console.log('[Cleanup] No campers to remove - all match CampMinder data');
+            console.log('[Cleanup] No campers to inactivate - all match CampMinder data');
           }
         }
       }
 
-      // Delete staff that are no longer in CampMinder (only for full or staff sync)
+      // Inactivate staff that are no longer in CampMinder (only for full or staff sync)
       if ((syncType === 'full' || syncType === 'staff') && syncedStaffPersonIds.length > 0) {
         console.log(`[Cleanup] Checking for staff not in CampMinder sync (${syncedStaffPersonIds.length} valid staff)...`);
         
-        // Get staff that exist in DB but were NOT in this sync
+        // Get active staff that exist in DB but were NOT in this sync
         const { data: existingStaff, error: fetchError } = await supabase
           .from('staff')
           .select('id, person_id, name')
           .eq('company_id', companyId)
-          .eq('season', season);
+          .eq('season', season)
+          .neq('status', 'inactive');
 
         if (fetchError) {
           console.error('[Cleanup] Error fetching existing staff:', fetchError);
         } else if (existingStaff) {
           const staffPersonIdSet = new Set(syncedStaffPersonIds);
-          const staffToDelete = existingStaff.filter((s: { id: string; person_id: string; name: string }) => !staffPersonIdSet.has(s.person_id));
+          const staffToInactivate = existingStaff.filter((s: { id: string; person_id: string; name: string }) => !staffPersonIdSet.has(s.person_id));
           
-          if (staffToDelete.length > 0) {
-            console.log(`[Cleanup] Found ${staffToDelete.length} staff to remove (not hired/active in CampMinder):`);
-            staffToDelete.slice(0, 10).forEach((s: { id: string; person_id: string; name: string }) => {
+          if (staffToInactivate.length > 0) {
+            console.log(`[Cleanup] Found ${staffToInactivate.length} staff to inactivate (not hired/active in CampMinder):`);
+            staffToInactivate.slice(0, 10).forEach((s: { id: string; person_id: string; name: string }) => {
               console.log(`  - ${s.name} (person_id: ${s.person_id})`);
             });
-            if (staffToDelete.length > 10) {
-              console.log(`  ... and ${staffToDelete.length - 10} more`);
+            if (staffToInactivate.length > 10) {
+              console.log(`  ... and ${staffToInactivate.length - 10} more`);
             }
 
-            const idsToDelete = staffToDelete.map((s: { id: string }) => s.id);
-            const { error: deleteError } = await supabase
-              .from('staff')
-              .delete()
-              .in('id', idsToDelete);
-
-            if (deleteError) {
-              console.error('[Cleanup] Error deleting staff:', deleteError);
-            } else {
-              staffDeleted = staffToDelete.length;
-              console.log(`[Cleanup] Successfully deleted ${staffDeleted} staff`);
+            const BATCH_SIZE = 100;
+            for (let i = 0; i < staffToInactivate.length; i += BATCH_SIZE) {
+              const batchIds = staffToInactivate.slice(i, i + BATCH_SIZE).map((s: { id: string }) => s.id);
+              const { error: updateError } = await supabase
+                .from('staff')
+                .update({ status: 'inactive', updated_at: new Date().toISOString() })
+                .in('id', batchIds);
+              if (updateError) {
+                throw updateError;
+              }
             }
+
+            staffInactivated = staffToInactivate.length;
+            console.log(`[Cleanup] Successfully inactivated ${staffInactivated} staff`);
           } else {
-            console.log('[Cleanup] No staff to remove - all match CampMinder data');
+            console.log('[Cleanup] No staff to inactivate - all match CampMinder data');
           }
         }
       }
 
-      console.log(`[Cleanup Summary] Deleted ${campersDeleted} campers, ${staffDeleted} staff`);
+      console.log(`[Cleanup Summary] Inactivated ${campersInactivated} campers, inactivated ${staffInactivated} staff`);
     } catch (error) {
       console.error('[Cleanup] Error during cleanup phase:', error);
     }

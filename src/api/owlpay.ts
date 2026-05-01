@@ -6,6 +6,7 @@ export type OwlPayCamper = {
     name: string;
     person_id: string | null;
     rfid: string | null;
+    photo_url: string | null;
     owl_pay_balance: number;
 };
 
@@ -13,6 +14,7 @@ export type OwlPayStaff = {
     id: string;
     name: string;
     rfid: string | null;
+    photo_url: string | null;
 };
 
 export type OwlPayItem = {
@@ -42,7 +44,7 @@ export const useOwlPayCampers = (companyId: string | null, season: string, searc
             if (!companyId) return [] as OwlPayCamper[];
             let query = supabase
                 .from('children')
-                .select('id, name, person_id, rfid, owl_pay_balance')
+                .select('id, name, person_id, rfid, photo_url, owl_pay_balance')
                 .eq('company_id', companyId)
                 .eq('season', season)
                 .neq('status', 'inactive')
@@ -91,7 +93,7 @@ export const useOwlPayStaff = (companyId: string | null, season: string, search 
             if (!companyId) return [] as OwlPayStaff[];
             let query = supabase
                 .from('staff')
-                .select('id, name, rfid')
+                .select('id, name, rfid, photo_url')
                 .eq('company_id', companyId)
                 .eq('season', season)
                 .neq('status', 'inactive')
