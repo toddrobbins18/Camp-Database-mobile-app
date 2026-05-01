@@ -7,6 +7,7 @@ import {
     Pressable,
     SafeAreaView,
     ScrollView,
+    Share,
     StyleSheet,
     Text,
     TextInput,
@@ -22,11 +23,13 @@ import {
     OwlPayEmailConfig,
     OwlPayStaff,
     OwlPayItem,
+    ReportAudience,
     useOwlPayCampers,
     useOwlPayEmailConfig,
     useOwlPayItems,
     useOwlPayReports,
     useOwlPayStaff,
+    useOwlPayStaffSpendRows,
     useSaveOwlPayEmailConfig,
     useSaveOwlPayItem,
 } from '../api/owlpay';
@@ -36,6 +39,13 @@ type OwlPayTab = 'pos' | 'items' | 'balances' | 'reports' | 'settings';
 type ItemCategory = 'Food' | 'Snacks' | 'Drinks' | 'Other';
 
 const currency = (amount: number) => `$${amount.toFixed(2)}`;
+
+function toCsvCell(v: unknown): string {
+    const s = String(v ?? '');
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+}
+
 const getInitials = (name?: string | null) =>
     (name || '')
         .split(' ')
@@ -76,7 +86,13 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const [scanBuffer, setScanBuffer] = useState('');
     const [lastScanInputAt, setLastScanInputAt] = useState(0);
     const scanResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const { companyId, season } = useCompany();
+    const [balanceAudience, setBalanceAudience] = useState<'campers' | 'staff'>('campers');
+    const [balanceSearch, setBalanceSearch] = useState('');
+    const [reportAudience, setReportAudience] = useState<ReportAudience>('all');
+    const [reportsSubTab, setReportsSubTab] = useState<'by-item' | 'over-time' | 'purchases'>('by-item');
+    const [reportSearch, setReportSearch] = useState('');
+    const [settingsAudience, setSettingsAudience] = useState<'campers' | 'staff'>('campers');
+    const { companyId, season, companySlug } = useCompany();
     const queryClient = useQueryClient();
 
     const tabs: { key: OwlPayTab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -87,8 +103,21 @@ export const OwlPayScreen = ({ navigation }: any) => {
         { key: 'settings', label: 'Settings', icon: 'settings-outline' },
     ];
 
-    const { data: campers = [], isLoading: campersLoading } = useOwlPayCampers(companyId, season, camperQuery);
-    const { data: staffMembers = [], isLoading: staffLoading } = useOwlPayStaff(companyId, season, camperQuery);
+    const camperListSearch =
+        activeTab === 'pos'
+            ? camperQuery
+            : activeTab === 'balances' && balanceAudience === 'campers'
+              ? balanceSearch
+              : '';
+    const staffListSearch =
+        activeTab === 'pos'
+            ? camperQuery
+            : activeTab === 'balances' && balanceAudience === 'staff'
+              ? balanceSearch
+              : '';
+
+    const { data: campers = [], isLoading: campersLoading } = useOwlPayCampers(companyId, season, camperListSearch);
+    const { data: staffMembers = [], isLoading: staffLoading } = useOwlPayStaff(companyId, season, staffListSearch);
     const { data: allItems = [], isLoading: itemsLoading } = useOwlPayItems(companyId, true);
     const { data: settings, isLoading: settingsLoading } = useOwlPayEmailConfig(companyId);
     const saveItemMutation = useSaveOwlPayItem();
@@ -112,6 +141,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 { event: '*', schema: 'public', table: 'staff', filter: `company_id=eq.${companyId}` },
                 () => {
                     queryClient.invalidateQueries({ queryKey: ['owlpay_staff'] });
+                    queryClient.invalidateQueries({ queryKey: ['owlpay_staff_spend', companyId] });
                 }
             )
             .on(
@@ -128,6 +158,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 () => {
                     queryClient.invalidateQueries({ queryKey: ['owlpay_reports'] });
                     queryClient.invalidateQueries({ queryKey: ['owlpay_campers'] });
+                    queryClient.invalidateQueries({ queryKey: ['owlpay_staff_spend', companyId] });
                 }
             )
             .on(
@@ -147,6 +178,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const reportRange = useMemo(() => {
         const now = new Date();
         const end = new Date(now);
+        end.setHours(23, 59, 59, 999);
         const start = new Date(now);
         if (reportsRange === 'Today') {
             start.setHours(0, 0, 0, 0);
@@ -167,14 +199,20 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const { data: reportsData, isLoading: reportsLoading } = useOwlPayReports(
         companyId,
         reportRange.start.toISOString(),
-        reportRange.end.toISOString()
+        reportRange.end.toISOString(),
+        reportAudience,
+        reportSearch
     );
+
+    const { data: staffSpendRows = [], isLoading: staffSpendLoading } = useOwlPayStaffSpendRows(companyId, season);
 
     const selectedCamper = campers.find((c) => c.id === selectedCamperId) || null;
     const selectedStaff = selectedIsStaff ? staffMembers.find((s) => s.id === selectedCamperId) || null : null;
     const selectedDisplayName = selectedIsStaff ? selectedStaff?.name : selectedCamper?.name;
     const totalBalance = campers.reduce((sum, camper) => sum + Number(camper.owl_pay_balance || 0), 0);
     const averageBalance = campers.length ? totalBalance / campers.length : 0;
+    const totalStaffSpendAll = staffSpendRows.reduce((sum, r) => sum + r.total_spent, 0);
+    const avgStaffSpendDisplay = staffSpendRows.length ? totalStaffSpendAll / staffSpendRows.length : 0;
     const subtotal = cart.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
     const total = isFirstScanToday ? 0 : subtotal;
     const currentBalance = Number(selectedCamper?.owl_pay_balance || 0);
@@ -188,6 +226,53 @@ export const OwlPayScreen = ({ navigation }: any) => {
               : scanStatus === 'error'
                 ? 'RFID not found'
                 : 'Ready to scan RFID';
+
+    const exportReportsCsv = async () => {
+        if (!reportsData || !companyId) {
+            Alert.alert('Nothing to export', 'Load reports first.');
+            return;
+        }
+        const fromLabel = reportRange.start.toISOString().slice(0, 10);
+        const toLabel = reportRange.end.toISOString().slice(0, 10);
+        const aud = reportAudience === 'all' ? 'all-buyers' : reportAudience;
+        const slug = companySlug || 'camp';
+
+        const lines: (string | number | boolean)[][] = [
+            ['Report', 'Owl Pay'],
+            ['Camp slug', slug],
+            ['Date range', `${fromLabel} to ${toLabel}`],
+            ['Audience', reportAudience],
+            ['Total revenue', reportsData.totalRevenue.toFixed(2)],
+            ['Items sold', reportsData.totalItems],
+            ['Avg transaction', reportsData.avgTransaction.toFixed(2)],
+            ['Most popular item', reportsData.mostPopular],
+            [],
+            ['Sales by item — Item', 'Category', 'Qty sold', 'Revenue'],
+            ...reportsData.salesByItem.map((i) => [i.name, i.category, i.quantity, i.revenue.toFixed(2)]),
+            [],
+            ['Purchases — Date/time (UTC)', 'Buyer type', 'Name', 'Item', 'Category', 'Amount', 'Free'],
+            ...reportsData.purchasesAll.map((p: any) => [
+                new Date(p.purchased_at).toISOString().replace('T', ' ').slice(0, 19),
+                p.buyer_type,
+                p.camper_name,
+                p.item_name,
+                p.item_category,
+                p.is_free ? '0.00' : p.amount.toFixed(2),
+                p.is_free ? 'yes' : 'no',
+            ]),
+        ];
+
+        const body = '\uFEFF' + lines.map((row) => row.map(toCsvCell).join(',')).join('\r\n');
+
+        try {
+            await Share.share({
+                message: body,
+                title: `owlpay-report_${slug}_${fromLabel}_${toLabel}_${aud}.csv`,
+            });
+        } catch (e: any) {
+            Alert.alert('Export failed', e?.message || 'Could not open share sheet');
+        }
+    };
 
     const addItem = () => {
         const name = itemForm.name.trim();
@@ -827,44 +912,122 @@ export const OwlPayScreen = ({ navigation }: any) => {
 
     const renderBalances = () => (
         <>
-            <View style={styles.statsGrid}>
-                <StyledCard style={styles.statCard}>
-                    <Text style={styles.statLabel}>Total Campers</Text>
-                    <Text style={[styles.statValue, { color: theme.colors.secondary }]}>{campers.length}</Text>
-                </StyledCard>
-                <StyledCard style={styles.statCard}>
-                    <Text style={styles.statLabel}>Total Balance</Text>
-                    <Text style={[styles.statValue, { color: theme.colors.success }]}>{currency(totalBalance)}</Text>
-                </StyledCard>
-                <StyledCard style={styles.statCard}>
-                    <Text style={styles.statLabel}>Avg Balance</Text>
-                    <Text style={[styles.statValue, { color: theme.colors.secondary }]}>{currency(averageBalance)}</Text>
-                </StyledCard>
-            </View>
+            <StyledCard>
+                <View style={styles.reportFilterRow}>
+                    <Text style={styles.rangeButtonText}>View:</Text>
+                    <TouchableOpacity
+                        style={[styles.rangeButton, balanceAudience === 'campers' && styles.rangeButtonActive]}
+                        onPress={() => setBalanceAudience('campers')}
+                    >
+                        <Text style={[styles.rangeButtonText, balanceAudience === 'campers' && styles.rangeButtonTextActive]}>
+                            Campers
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.rangeButton, balanceAudience === 'staff' && styles.rangeButtonActive]}
+                        onPress={() => setBalanceAudience('staff')}
+                    >
+                        <Text style={[styles.rangeButtonText, balanceAudience === 'staff' && styles.rangeButtonTextActive]}>
+                            Staff
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            </StyledCard>
+
+            {balanceAudience === 'campers' ? (
+                <View style={styles.statsGrid}>
+                    <StyledCard style={styles.statCard}>
+                        <Text style={styles.statLabel}>Total campers</Text>
+                        <Text style={[styles.statValue, { color: theme.colors.secondary }]}>{campers.length}</Text>
+                    </StyledCard>
+                    <StyledCard style={styles.statCard}>
+                        <Text style={styles.statLabel}>Total balance</Text>
+                        <Text style={[styles.statValue, { color: theme.colors.success }]}>{currency(totalBalance)}</Text>
+                    </StyledCard>
+                    <StyledCard style={styles.statCard}>
+                        <Text style={styles.statLabel}>Avg balance</Text>
+                        <Text style={[styles.statValue, { color: theme.colors.secondary }]}>{currency(averageBalance)}</Text>
+                    </StyledCard>
+                </View>
+            ) : (
+                <View style={styles.statsGrid}>
+                    <StyledCard style={styles.statCard}>
+                        <Text style={styles.statLabel}>Total staff</Text>
+                        <Text style={[styles.statValue, { color: theme.colors.secondary }]}>{staffSpendRows.length}</Text>
+                    </StyledCard>
+                    <StyledCard style={styles.statCard}>
+                        <Text style={styles.statLabel}>Total POS spend</Text>
+                        <Text style={[styles.statValue, { color: theme.colors.success }]}>{currency(totalStaffSpendAll)}</Text>
+                    </StyledCard>
+                    <StyledCard style={styles.statCard}>
+                        <Text style={styles.statLabel}>Avg per staff</Text>
+                        <Text style={[styles.statValue, { color: theme.colors.secondary }]}>
+                            {currency(avgStaffSpendDisplay)}
+                        </Text>
+                    </StyledCard>
+                </View>
+            )}
 
             <StyledCard>
                 <View style={styles.sectionHeaderRow}>
                     <View style={styles.sectionTitleWrap}>
                         <Ionicons name="cash-outline" size={20} color={theme.colors.text} />
-                        <Text style={styles.sectionTitle}>Camper Balances</Text>
+                        <Text style={styles.sectionTitle}>
+                            {balanceAudience === 'campers' ? 'Camper balances' : 'Staff POS totals'}
+                        </Text>
                     </View>
+                </View>
+                <View style={styles.searchInputWrap}>
+                    <Ionicons name="search-outline" size={18} color={theme.colors.textSecondary} />
+                    <TextInput
+                        value={balanceSearch}
+                        onChangeText={setBalanceSearch}
+                        placeholder={balanceAudience === 'campers' ? 'Search campers…' : 'Search staff…'}
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={styles.searchInput}
+                    />
                 </View>
                 <View style={styles.tableHeader}>
                     <Text style={[styles.tableHeaderText, { flex: 2 }]}>Name</Text>
                     <Text style={[styles.tableHeaderText, { flex: 1.3 }]}>Person ID</Text>
-                    <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Balance</Text>
+                    <Text style={[styles.tableHeaderText, { flex: 1.2, textAlign: 'right' }]}>
+                        {balanceAudience === 'campers' ? 'Balance' : 'Spend'}
+                    </Text>
                 </View>
                 <ScrollView style={styles.balancesList} contentContainerStyle={styles.balancesListContent}>
-                    {campers.map((camper) => (
-                        <View key={camper.id} style={styles.tableRow}>
-                            <Text style={[styles.tableText, { flex: 2 }]}>{camper.name}</Text>
-                            <Text style={[styles.tableText, { flex: 1.3 }]}>{camper.person_id || '-'}</Text>
-                            <View style={styles.tableBalancePill}>
-                                <Text style={styles.tableBalancePillText}>{currency(Number(camper.owl_pay_balance || 0))}</Text>
+                    {balanceAudience === 'campers' ? (
+                        campersLoading ? (
+                            <ActivityIndicator size="small" color={theme.colors.secondary} style={{ marginVertical: 16 }} />
+                        ) : (
+                            campers.map((camper) => (
+                                <View key={camper.id} style={styles.tableRow}>
+                                    <Text style={[styles.tableText, { flex: 2 }]}>{camper.name}</Text>
+                                    <Text style={[styles.tableText, { flex: 1.3 }]}>{camper.person_id || '-'}</Text>
+                                    <View style={styles.tableBalancePill}>
+                                        <Text style={styles.tableBalancePillText}>
+                                            {currency(Number(camper.owl_pay_balance || 0))}
+                                        </Text>
+                                    </View>
+                                </View>
+                            ))
+                        )
+                    ) : staffSpendLoading ? (
+                        <ActivityIndicator size="small" color={theme.colors.secondary} style={{ marginVertical: 16 }} />
+                    ) : (
+                        staffSpendRows.map((s) => (
+                            <View key={s.id} style={styles.tableRow}>
+                                <Text style={[styles.tableText, { flex: 2 }]}>{s.name}</Text>
+                                <Text style={[styles.tableText, { flex: 1.3 }]}>{s.person_id || '-'}</Text>
+                                <View style={styles.tableBalancePill}>
+                                    <Text style={styles.tableBalancePillText}>{currency(s.total_spent)}</Text>
+                                </View>
                             </View>
-                        </View>
-                    ))}
+                        ))
+                    )}
                 </ScrollView>
+                {balanceAudience === 'staff' && (
+                    <Text style={styles.settingHintText}>Totals sum all OwlPay staff purchases for this camp.</Text>
+                )}
             </StyledCard>
         </>
     );
@@ -889,9 +1052,23 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     <Text style={styles.dateChip}>
                         {reportRange.start.toLocaleDateString()} - {reportRange.end.toLocaleDateString()}
                     </Text>
-                    <TouchableOpacity style={styles.customRangeBtn}>
-                        <Ionicons name="calendar-outline" size={16} color={theme.colors.text} />
-                        <Text style={styles.customRangeText}>Custom Range</Text>
+                </View>
+                <View style={[styles.reportFilterRow, { marginTop: 12 }]}>
+                    <Text style={{ fontWeight: '600', color: theme.colors.textSecondary }}>Purchasers:</Text>
+                    {(['all', 'campers', 'staff'] as const).map((a) => (
+                        <TouchableOpacity
+                            key={a}
+                            style={[styles.rangeButton, reportAudience === a && styles.rangeButtonActive]}
+                            onPress={() => setReportAudience(a)}
+                        >
+                            <Text style={[styles.rangeButtonText, reportAudience === a && styles.rangeButtonTextActive]}>
+                                {a === 'all' ? 'All' : a === 'campers' ? 'Campers' : 'Staff'}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity style={[styles.primaryButton, { marginLeft: 'auto', flexShrink: 1 }]} onPress={exportReportsCsv}>
+                        <Ionicons name="download-outline" size={16} color="#fff" />
+                        <Text style={styles.primaryButtonText}>CSV</Text>
                     </TouchableOpacity>
                 </View>
             </StyledCard>
@@ -902,34 +1079,144 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     <Text style={styles.statValue}>{currency(reportsData?.totalRevenue || 0)}</Text>
                 </StyledCard>
                 <StyledCard style={styles.statCard}>
-                    <Text style={styles.statLabel}>Items Sold</Text>
+                    <Text style={styles.statLabel}>Items sold</Text>
                     <Text style={styles.statValue}>{reportsData?.totalItems || 0}</Text>
                 </StyledCard>
                 <StyledCard style={styles.statCard}>
-                    <Text style={styles.statLabel}>Most Popular</Text>
-                    <Text style={styles.statValue}>{reportsData?.mostPopular || 'N/A'}</Text>
+                    <Text style={styles.statLabel}>Most popular</Text>
+                    <Text style={styles.statValue} numberOfLines={2}>
+                        {reportsData?.mostPopular || 'N/A'}
+                    </Text>
                 </StyledCard>
                 <StyledCard style={styles.statCard}>
-                    <Text style={styles.statLabel}>Avg Transaction</Text>
+                    <Text style={styles.statLabel}>Avg transaction</Text>
                     <Text style={styles.statValue}>{currency(reportsData?.avgTransaction || 0)}</Text>
                 </StyledCard>
             </View>
 
             <StyledCard>
                 <View style={styles.reportFilterRow}>
-                    {['By Item', 'Over Time', 'Purchases'].map((label) => (
-                        <TouchableOpacity key={label} style={styles.rangeButton}>
-                            <Text style={styles.rangeButtonText}>{label}</Text>
+                    {(
+                        [
+                            { key: 'by-item' as const, label: 'By Item' },
+                            { key: 'over-time' as const, label: 'Over Time' },
+                            { key: 'purchases' as const, label: 'Purchases' },
+                        ] as const
+                    ).map(({ key, label }) => (
+                        <TouchableOpacity
+                            key={key}
+                            style={[styles.rangeButton, reportsSubTab === key && styles.rangeButtonActive]}
+                            onPress={() => setReportsSubTab(key)}
+                        >
+                            <Text style={[styles.rangeButtonText, reportsSubTab === key && styles.rangeButtonTextActive]}>{label}</Text>
                         </TouchableOpacity>
                     ))}
                 </View>
-                <View style={styles.emptyStateBox}>
-                    {reportsLoading ? (
+
+                {reportsLoading ? (
+                    <View style={styles.emptyStateBox}>
                         <ActivityIndicator size="small" color={theme.colors.secondary} />
+                    </View>
+                ) : reportsSubTab === 'by-item' ? (
+                    (reportsData?.salesByItem?.length || 0) === 0 ? (
+                        <Text style={styles.emptyStateText}>No sales for this period.</Text>
                     ) : (
-                        <Text style={styles.emptyStateText}>No sales data for this period.</Text>
-                    )}
-                </View>
+                        <>
+                            <View style={styles.tableHeader}>
+                                <Text style={[styles.tableHeaderText, { flex: 2 }]}>Item</Text>
+                                <Text style={[styles.tableHeaderText, { flex: 1 }]}>Cat</Text>
+                                <Text style={[styles.tableHeaderText, { flex: 0.8, textAlign: 'right' }]}>Qty</Text>
+                                <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>$</Text>
+                            </View>
+                            <ScrollView style={{ maxHeight: 360 }}>
+                                {reportsData!.salesByItem.map((item) => (
+                                    <View key={item.id} style={styles.tableRow}>
+                                        <Text style={[styles.tableText, { flex: 2 }]}>{item.name}</Text>
+                                        <Text style={[styles.tableText, { flex: 1 }]}>{item.category}</Text>
+                                        <Text style={[styles.tableText, { flex: 0.8, textAlign: 'right' }]}>{item.quantity}</Text>
+                                        <Text style={[styles.tableText, { flex: 1, textAlign: 'right' }]}>
+                                            {currency(item.revenue)}
+                                        </Text>
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        </>
+                    )
+                ) : reportsSubTab === 'over-time' ? (
+                    (reportsData?.salesOverTime?.length || 0) === 0 ? (
+                        <Text style={styles.emptyStateText}>No data for this period.</Text>
+                    ) : (
+                        <>
+                            <View style={styles.tableHeader}>
+                                <Text style={[styles.tableHeaderText, { flex: 1.2 }]}>Date</Text>
+                                <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Revenue</Text>
+                                <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Txns</Text>
+                            </View>
+                            <ScrollView style={{ maxHeight: 360 }}>
+                                {reportsData!.salesOverTime.map((row) => (
+                                    <View key={row.date} style={styles.tableRow}>
+                                        <Text style={[styles.tableText, { flex: 1.2 }]}>{row.date}</Text>
+                                        <Text style={[styles.tableText, { flex: 1, textAlign: 'right' }]}>
+                                            {currency(row.revenue)}
+                                        </Text>
+                                        <Text style={[styles.tableText, { flex: 1, textAlign: 'right' }]}>{row.count}</Text>
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        </>
+                    )
+                ) : (
+                    <>
+                        <View style={styles.searchInputWrap}>
+                            <Ionicons name="search-outline" size={18} color={theme.colors.textSecondary} />
+                            <TextInput
+                                value={reportSearch}
+                                onChangeText={setReportSearch}
+                                placeholder="Search name or item…"
+                                placeholderTextColor={theme.colors.textSecondary}
+                                style={styles.searchInput}
+                            />
+                        </View>
+                        {(reportsData?.purchases?.length || 0) === 0 ? (
+                            <Text style={styles.emptyStateText}>No purchases for this period.</Text>
+                        ) : (
+                            <>
+                                <View style={styles.tableHeader}>
+                                    <Text style={[styles.tableHeaderText, { flex: 1.1 }]}>When</Text>
+                                    {reportAudience === 'all' && (
+                                        <Text style={[styles.tableHeaderText, { flex: 0.6 }]}>Type</Text>
+                                    )}
+                                    <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>Who</Text>
+                                    <Text style={[styles.tableHeaderText, { flex: 1.2 }]}>Item</Text>
+                                    <Text style={[styles.tableHeaderText, { flex: 0.7, textAlign: 'right' }]}>$</Text>
+                                </View>
+                                <ScrollView style={{ maxHeight: 400 }}>
+                                    {reportsData!.purchases.map((p: any) => (
+                                        <View key={p.id} style={styles.tableRow}>
+                                            <Text style={[styles.tableText, { flex: 1.1, fontSize: 11 }]}>
+                                                {new Date(p.purchased_at).toLocaleString()}
+                                            </Text>
+                                            {reportAudience === 'all' && (
+                                                <Text style={[styles.tableText, { flex: 0.6, fontSize: 11 }]}>
+                                                    {p.buyer_type}
+                                                </Text>
+                                            )}
+                                            <Text style={[styles.tableText, { flex: 1.4 }]} numberOfLines={2}>
+                                                {p.camper_name}
+                                            </Text>
+                                            <Text style={[styles.tableText, { flex: 1.2 }]} numberOfLines={2}>
+                                                {p.item_name}
+                                            </Text>
+                                            <Text style={[styles.tableText, { flex: 0.7, textAlign: 'right' }]}>
+                                                {p.is_free ? 'Free' : currency(p.amount)}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            </>
+                        )}
+                    </>
+                )}
             </StyledCard>
         </>
     );
@@ -937,111 +1224,136 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const renderSettings = () => (
         <>
             <StyledCard>
-                <View style={styles.settingHeader}>
-                    <Ionicons name="alert-circle-outline" size={22} color="#dc2626" />
-                    <View style={styles.settingHeaderTextWrap}>
-                        <Text style={styles.sectionTitle}>Low Balance Alerts</Text>
-                        <Text style={styles.settingSubtitle}>
-                            Send an email when a camper balance drops below a threshold after a purchase.
-                        </Text>
-                    </View>
-                </View>
-                <View style={styles.settingRow}>
-                    <Text style={styles.settingLabel}>Enable Low Balance Alerts</Text>
+                <Text style={styles.sectionTitle}>Email settings</Text>
+                <Text style={styles.settingSubtitle}>
+                    Low-balance alerts apply to campers; staff reports summarize POS purchases by staff.
+                </Text>
+                <View style={[styles.reportFilterRow, { marginTop: 12 }]}>
                     <TouchableOpacity
-                        style={[styles.toggle, lowBalanceAlertsEnabled && styles.toggleOn]}
-                        onPress={() => setLowBalanceAlertsEnabled((prev) => !prev)}
+                        style={[styles.rangeButton, settingsAudience === 'campers' && styles.rangeButtonActive]}
+                        onPress={() => setSettingsAudience('campers')}
                     >
-                        <View style={[styles.toggleKnob, lowBalanceAlertsEnabled && styles.toggleKnobOn]} />
+                        <Text style={[styles.rangeButtonText, settingsAudience === 'campers' && styles.rangeButtonTextActive]}>
+                            Campers
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.rangeButton, settingsAudience === 'staff' && styles.rangeButtonActive]}
+                        onPress={() => setSettingsAudience('staff')}
+                    >
+                        <Text style={[styles.rangeButtonText, settingsAudience === 'staff' && styles.rangeButtonTextActive]}>Staff</Text>
                     </TouchableOpacity>
                 </View>
-                {lowBalanceAlertsEnabled && (
-                    <View style={styles.settingInputsWrap}>
-                        <Text style={styles.settingFieldLabel}>Balance Threshold ($)</Text>
-                        <TextInput
-                            value={lowBalanceThreshold}
-                            onChangeText={setLowBalanceThreshold}
-                            keyboardType="decimal-pad"
-                            style={styles.settingInput}
-                            placeholder="5"
-                            placeholderTextColor={theme.colors.textSecondary}
-                        />
-                        <Text style={styles.settingHintText}>
-                            Alert triggers when balance falls below this amount.
-                        </Text>
-
-                        <Text style={styles.settingFieldLabel}>Recipient Email</Text>
-                        <TextInput
-                            value={lowBalanceRecipientEmail}
-                            onChangeText={setLowBalanceRecipientEmail}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            style={styles.settingInput}
-                            placeholder="admin@camp.com"
-                            placeholderTextColor={theme.colors.textSecondary}
-                        />
-                        <Text style={styles.settingHintText}>
-                            Leave blank to send to the camper&apos;s guardian email on file.
-                        </Text>
-                    </View>
-                )}
             </StyledCard>
 
-            <StyledCard>
-                <View style={styles.settingHeader}>
-                    <Ionicons name="document-text-outline" size={22} color={theme.colors.secondary} />
-                    <View style={styles.settingHeaderTextWrap}>
-                        <Text style={styles.sectionTitle}>Staff Purchase Reports</Text>
-                        <Text style={styles.settingSubtitle}>
-                            Send periodic reports summarizing staff purchases to an administrator.
-                        </Text>
-                    </View>
-                </View>
-                <View style={styles.settingRow}>
-                    <Text style={styles.settingLabel}>Enable Staff Reports</Text>
-                    <TouchableOpacity
-                        style={[styles.toggle, staffReportsEnabled && styles.toggleOn]}
-                        onPress={() => setStaffReportsEnabled((prev) => !prev)}
-                    >
-                        <View style={[styles.toggleKnob, staffReportsEnabled && styles.toggleKnobOn]} />
-                    </TouchableOpacity>
-                </View>
-                {staffReportsEnabled && (
-                    <View style={styles.settingInputsWrap}>
-                        <Text style={styles.settingFieldLabel}>Report Frequency</Text>
-                        <View style={styles.frequencyRow}>
-                            {(['daily', 'weekly', 'monthly'] as const).map((freq) => {
-                                const isActive = staffReportFrequency === freq;
-                                return (
-                                    <TouchableOpacity
-                                        key={freq}
-                                        style={[styles.frequencyBtn, isActive && styles.frequencyBtnActive]}
-                                        onPress={() => setStaffReportFrequency(freq)}
-                                    >
-                                        <Text style={[styles.frequencyBtnText, isActive && styles.frequencyBtnTextActive]}>
-                                            {freq.charAt(0).toUpperCase() + freq.slice(1)}
-                                        </Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
+            {settingsAudience === 'campers' ? (
+                <StyledCard>
+                    <View style={styles.settingHeader}>
+                        <Ionicons name="alert-circle-outline" size={22} color="#dc2626" />
+                        <View style={styles.settingHeaderTextWrap}>
+                            <Text style={styles.sectionTitle}>Low Balance Alerts</Text>
+                            <Text style={styles.settingSubtitle}>
+                                Send an email when a camper balance drops below a threshold after a purchase.
+                            </Text>
                         </View>
-
-                        <Text style={styles.settingFieldLabel}>Recipient Email</Text>
-                        <TextInput
-                            value={staffReportRecipientEmail}
-                            onChangeText={setStaffReportRecipientEmail}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            style={styles.settingInput}
-                            placeholder="director@camp.com"
-                            placeholderTextColor={theme.colors.textSecondary}
-                        />
-                        <Text style={styles.settingHintText}>
-                            Who should receive the staff purchase summary.
-                        </Text>
                     </View>
-                )}
-            </StyledCard>
+                    <View style={styles.settingRow}>
+                        <Text style={styles.settingLabel}>Enable Low Balance Alerts</Text>
+                        <TouchableOpacity
+                            style={[styles.toggle, lowBalanceAlertsEnabled && styles.toggleOn]}
+                            onPress={() => setLowBalanceAlertsEnabled((prev) => !prev)}
+                        >
+                            <View style={[styles.toggleKnob, lowBalanceAlertsEnabled && styles.toggleKnobOn]} />
+                        </TouchableOpacity>
+                    </View>
+                    {lowBalanceAlertsEnabled && (
+                        <View style={styles.settingInputsWrap}>
+                            <Text style={styles.settingFieldLabel}>Balance Threshold ($)</Text>
+                            <TextInput
+                                value={lowBalanceThreshold}
+                                onChangeText={setLowBalanceThreshold}
+                                keyboardType="decimal-pad"
+                                style={styles.settingInput}
+                                placeholder="5"
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                            <Text style={styles.settingHintText}>
+                                Alert triggers when balance falls below this amount.
+                            </Text>
+
+                            <Text style={styles.settingFieldLabel}>Recipient Email</Text>
+                            <TextInput
+                                value={lowBalanceRecipientEmail}
+                                onChangeText={setLowBalanceRecipientEmail}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                style={styles.settingInput}
+                                placeholder="admin@camp.com"
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                            <Text style={styles.settingHintText}>
+                                Leave blank to send to the camper&apos;s guardian email on file.
+                            </Text>
+                        </View>
+                    )}
+                </StyledCard>
+            ) : (
+                <StyledCard>
+                    <View style={styles.settingHeader}>
+                        <Ionicons name="document-text-outline" size={22} color={theme.colors.secondary} />
+                        <View style={styles.settingHeaderTextWrap}>
+                            <Text style={styles.sectionTitle}>Staff Purchase Reports</Text>
+                            <Text style={styles.settingSubtitle}>
+                                Send periodic reports summarizing staff purchases to an administrator.
+                            </Text>
+                        </View>
+                    </View>
+                    <View style={styles.settingRow}>
+                        <Text style={styles.settingLabel}>Enable Staff Reports</Text>
+                        <TouchableOpacity
+                            style={[styles.toggle, staffReportsEnabled && styles.toggleOn]}
+                            onPress={() => setStaffReportsEnabled((prev) => !prev)}
+                        >
+                            <View style={[styles.toggleKnob, staffReportsEnabled && styles.toggleKnobOn]} />
+                        </TouchableOpacity>
+                    </View>
+                    {staffReportsEnabled && (
+                        <View style={styles.settingInputsWrap}>
+                            <Text style={styles.settingFieldLabel}>Report Frequency</Text>
+                            <View style={styles.frequencyRow}>
+                                {(['daily', 'weekly', 'monthly'] as const).map((freq) => {
+                                    const isActive = staffReportFrequency === freq;
+                                    return (
+                                        <TouchableOpacity
+                                            key={freq}
+                                            style={[styles.frequencyBtn, isActive && styles.frequencyBtnActive]}
+                                            onPress={() => setStaffReportFrequency(freq)}
+                                        >
+                                            <Text style={[styles.frequencyBtnText, isActive && styles.frequencyBtnTextActive]}>
+                                                {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+
+                            <Text style={styles.settingFieldLabel}>Recipient Email</Text>
+                            <TextInput
+                                value={staffReportRecipientEmail}
+                                onChangeText={setStaffReportRecipientEmail}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                style={styles.settingInput}
+                                placeholder="director@camp.com"
+                                placeholderTextColor={theme.colors.textSecondary}
+                            />
+                            <Text style={styles.settingHintText}>
+                                Who should receive the staff purchase summary.
+                            </Text>
+                        </View>
+                    )}
+                </StyledCard>
+            )}
 
             <View style={styles.saveRow}>
                 <TouchableOpacity style={styles.primarySaveButton} onPress={saveSettings} disabled={saveSettingsMutation.isPending || settingsLoading}>

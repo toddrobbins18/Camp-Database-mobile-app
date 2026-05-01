@@ -13,9 +13,14 @@ export type OwlPayCamper = {
 export type OwlPayStaff = {
     id: string;
     name: string;
+    person_id: string | null;
     rfid: string | null;
     photo_url: string | null;
 };
+
+export type OwlPayStaffSpendRow = OwlPayStaff & { total_spent: number };
+
+export type ReportAudience = 'all' | 'campers' | 'staff';
 
 export type OwlPayItem = {
     id: string;
@@ -93,7 +98,7 @@ export const useOwlPayStaff = (companyId: string | null, season: string, search 
             if (!companyId) return [] as OwlPayStaff[];
             let query = supabase
                 .from('staff')
-                .select('id, name, rfid, photo_url')
+                .select('id, name, person_id, rfid, photo_url')
                 .eq('company_id', companyId)
                 .eq('season', season)
                 .neq('status', 'inactive')
@@ -101,7 +106,7 @@ export const useOwlPayStaff = (companyId: string | null, season: string, search 
 
             const q = search.trim();
             if (q) {
-                query = query.or(`name.ilike.%${q}%,rfid.ilike.%${q}%`);
+                query = query.or(`name.ilike.%${q}%,rfid.ilike.%${q}%,person_id.ilike.%${q}%`);
             }
 
             const { data, error } = await query;
@@ -215,23 +220,57 @@ export const useSaveOwlPayEmailConfig = () => {
     });
 };
 
-export const useOwlPayReports = (companyId: string | null, fromISO: string, toISO: string, search = '') => {
+function classifyPurchaseBuyer(tx: any): 'camper' | 'staff' | 'unknown' {
+    if (tx.staff_id) return 'staff';
+    if (tx.child_id) return 'camper';
+    return 'unknown';
+}
+
+function matchesAudience(buyer: 'camper' | 'staff' | 'unknown', audience: ReportAudience): boolean {
+    if (audience === 'all') return buyer === 'camper' || buyer === 'staff';
+    if (audience === 'campers') return buyer === 'camper';
+    return buyer === 'staff';
+}
+
+export type OwlPayReportsResult = {
+    totalRevenue: number;
+    totalItems: number;
+    mostPopular: string;
+    avgTransaction: number;
+    salesByItem: { id: string; name: string; category: string; quantity: number; revenue: number }[];
+    salesOverTime: { date: string; revenue: number; count: number }[];
+    purchases: any[];
+    purchasesAll: any[];
+};
+
+export const useOwlPayReports = (
+    companyId: string | null,
+    fromISO: string,
+    toISO: string,
+    audience: ReportAudience,
+    search = ''
+) => {
     return useQuery({
-        queryKey: ['owlpay_reports', companyId, fromISO, toISO, search],
-        queryFn: async () => {
-            if (!companyId) {
-                return {
-                    totalRevenue: 0,
-                    totalItems: 0,
-                    mostPopular: 'N/A',
-                    avgTransaction: 0,
-                    purchases: [] as any[],
-                };
-            }
+        queryKey: ['owlpay_reports', companyId, fromISO, toISO, audience, search],
+        queryFn: async (): Promise<OwlPayReportsResult> => {
+            const empty: OwlPayReportsResult = {
+                totalRevenue: 0,
+                totalItems: 0,
+                mostPopular: 'N/A',
+                avgTransaction: 0,
+                salesByItem: [],
+                salesOverTime: [],
+                purchases: [],
+                purchasesAll: [],
+            };
+
+            if (!companyId) return empty;
 
             const { data, error } = await supabase
                 .from('owl_pay_transactions')
-                .select('id, amount, is_free, created_at, item_id, owl_pay_items(name, category), children(name), staff(name)')
+                .select(
+                    'id, amount, is_free, created_at, item_id, child_id, staff_id, owl_pay_items(name, category), children(name), staff(name)'
+                )
                 .eq('company_id', companyId)
                 .eq('transaction_type', 'purchase')
                 .gte('created_at', fromISO)
@@ -240,36 +279,123 @@ export const useOwlPayReports = (companyId: string | null, fromISO: string, toIS
 
             if (error) throw error;
 
-            const purchases = (data || []).map((tx: any) => ({
-                id: tx.id,
-                camper_name: tx.children?.name || tx.staff?.name || 'Unknown',
-                item_name: tx.owl_pay_items?.name || 'Unknown',
-                item_category: tx.owl_pay_items?.category || 'other',
-                amount: Number(tx.amount || 0),
-                is_free: !!tx.is_free,
-                purchased_at: tx.created_at,
-            }));
+            const itemMap = new Map<string, { id: string; name: string; category: string; quantity: number; revenue: number }>();
+            const dateMap = new Map<string, { revenue: number; count: number }>();
+            const purchasesAll: any[] = [];
+            let totalRevenue = 0;
+            let totalItems = 0;
 
-            const filtered = purchases.filter((p) => {
-                const q = search.trim().toLowerCase();
+            (data || []).forEach((tx: any) => {
+                const buyer = classifyPurchaseBuyer(tx);
+                if (!matchesAudience(buyer, audience)) return;
+
+                const item = tx.owl_pay_items;
+                if (!item || !tx.item_id) return;
+
+                const amount = Number(tx.amount || 0);
+                const key = tx.item_id;
+
+                if (!itemMap.has(key)) {
+                    itemMap.set(key, {
+                        id: key,
+                        name: item.name || 'Unknown',
+                        category: item.category || 'other',
+                        quantity: 0,
+                        revenue: 0,
+                    });
+                }
+                const row = itemMap.get(key)!;
+                row.quantity += 1;
+                row.revenue += amount;
+
+                const dateKey = new Date(tx.created_at).toLocaleDateString();
+                if (!dateMap.has(dateKey)) dateMap.set(dateKey, { revenue: 0, count: 0 });
+                const dd = dateMap.get(dateKey)!;
+                dd.revenue += amount;
+                dd.count += 1;
+
+                purchasesAll.push({
+                    id: tx.id,
+                    buyer_type: buyer === 'staff' ? 'staff' : 'camper',
+                    camper_name: tx.children?.name || tx.staff?.name || 'Unknown',
+                    item_name: item.name || 'Unknown',
+                    item_category: item.category || 'other',
+                    amount,
+                    is_free: !!tx.is_free,
+                    purchased_at: tx.created_at,
+                });
+
+                totalRevenue += amount;
+                totalItems += 1;
+            });
+
+            const salesByItem = Array.from(itemMap.values()).sort((a, b) => b.quantity - a.quantity);
+            const salesOverTime = Array.from(dateMap.entries())
+                .map(([date, d]) => ({ date, revenue: d.revenue, count: d.count }))
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+            const q = search.trim().toLowerCase();
+            const purchases = purchasesAll.filter((p) => {
                 if (!q) return true;
                 return p.camper_name.toLowerCase().includes(q) || p.item_name.toLowerCase().includes(q);
             });
 
-            const totalRevenue = purchases.reduce((sum, p) => sum + p.amount, 0);
-            const totalItems = purchases.length;
-            const counts = new Map<string, number>();
-            purchases.forEach((p) => counts.set(p.item_name, (counts.get(p.item_name) || 0) + 1));
-            const mostPopular = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
-
             return {
                 totalRevenue,
                 totalItems,
-                mostPopular,
+                mostPopular: salesByItem[0]?.name || 'N/A',
                 avgTransaction: totalItems ? totalRevenue / totalItems : 0,
-                purchases: filtered,
+                salesByItem,
+                salesOverTime,
+                purchases,
+                purchasesAll,
             };
         },
         enabled: !!companyId,
+    });
+};
+
+export const useOwlPayStaffSpendRows = (companyId: string | null, season: string) => {
+    return useQuery({
+        queryKey: ['owlpay_staff_spend', companyId, season],
+        queryFn: async (): Promise<OwlPayStaffSpendRow[]> => {
+            if (!companyId || !season) return [];
+
+            const [{ data: staffList, error: staffErr }, { data: txs, error: txErr }] = await Promise.all([
+                supabase
+                    .from('staff')
+                    .select('id, name, person_id, rfid, photo_url')
+                    .eq('company_id', companyId)
+                    .eq('season', season)
+                    .neq('status', 'inactive')
+                    .order('name', { ascending: true }),
+                supabase
+                    .from('owl_pay_transactions')
+                    .select('staff_id, amount')
+                    .eq('company_id', companyId)
+                    .eq('transaction_type', 'purchase')
+                    .not('staff_id', 'is', null),
+            ]);
+
+            if (staffErr) throw staffErr;
+            if (txErr) throw txErr;
+
+            const spentByStaff = new Map<string, number>();
+            for (const tx of txs || []) {
+                const sid = (tx as any).staff_id as string;
+                if (!sid) continue;
+                spentByStaff.set(sid, (spentByStaff.get(sid) || 0) + Number((tx as any).amount || 0));
+            }
+
+            return (staffList || []).map((s: any) => ({
+                id: s.id,
+                name: s.name,
+                person_id: s.person_id ?? null,
+                rfid: s.rfid ?? null,
+                photo_url: s.photo_url ?? null,
+                total_spent: spentByStaff.get(s.id) || 0,
+            }));
+        },
+        enabled: !!companyId && !!season,
     });
 };
