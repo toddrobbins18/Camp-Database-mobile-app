@@ -1,4 +1,5 @@
 import { CAMP_SLUG } from '../constants/camps';
+import { sidebarBackgroundHexFromBrandHex } from './sidebarFromBrandColor';
 
 /** Drawer / camp-switcher look — aligned with Lovable “The Nest” per camp */
 export type MenuDrawerTheme = {
@@ -85,10 +86,15 @@ export function getMenuDrawerThemeFromCompany({
     const baseTheme = getMenuDrawerTheme(companySlug);
     if (!companyThemeColor) return baseTheme;
 
-    // Use Supabase as source of truth for camp branding color.
+    const drawerBackground =
+        companySlug === CAMP_SLUG.TIMBER_LAKE_CAMP
+            ? baseTheme.drawerBackground
+            : sidebarBackgroundHexFromBrandHex(companyThemeColor) ?? baseTheme.drawerBackground;
+
+    // Brand hex from Supabase for accents; drawer matches web (darkened from theme_color).
     return {
         ...baseTheme,
-        drawerBackground: companyThemeColor,
+        drawerBackground,
         menuActiveBackground: companyThemeColor,
         dropdownSelectionBg: companyThemeColor,
         campSwitcherBorderColor: companyThemeColor,
