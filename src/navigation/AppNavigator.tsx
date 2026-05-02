@@ -42,7 +42,7 @@ import { UserApprovalsScreen } from '../screens/UserApprovalsScreen';
 import { AccessDeniedScreen } from '../screens/AccessDeniedScreen';
 import { SpecialistSportAssignmentsScreen } from '../screens/SpecialistSportAssignmentsScreen';
 import { NotificationPreferencesScreen } from '../screens/NotificationPreferencesScreen';
-import { OwlPayScreen } from '../screens/OwlPayScreen';
+import { OwlPayGateScreen } from '../screens/OwlPayGateScreen';
 import { DailyScheduleScreen } from '../screens/DailyScheduleScreen';
 import { TigerTimesScreen } from '../screens/TigerTimesScreen';
 import { ElectiveSignUpScreen } from '../screens/ElectiveSignUpScreen';
@@ -537,7 +537,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="AccessDenied" component={AccessDeniedScreen} />
             <Drawer.Screen name="SpecialistSportAssignments" component={SpecialistSportAssignmentsScreen} />
             <Drawer.Screen name="ODManagement" component={ODManagementScreen} />
-            <Drawer.Screen name="OwlPay" component={OwlPayScreen} />
+            <Drawer.Screen name="OwlPay" component={OwlPayGateScreen} />
             <Drawer.Screen name="DailySchedule" component={DailyScheduleScreen} />
             <Drawer.Screen name="TigerTimes" component={TigerTimesScreen} />
             <Drawer.Screen name="ElectiveSignUp" component={ElectiveSignUpScreen} />

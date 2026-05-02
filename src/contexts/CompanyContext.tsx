@@ -11,6 +11,7 @@ interface Company {
     name: string;
     slug: string;
     theme_color?: string | null;
+    owl_pay_enabled?: boolean | null;
 }
 
 interface CompanyContextType {
@@ -23,6 +24,8 @@ interface CompanyContextType {
     isTylerHill: boolean;
     isTimberLakeCamp: boolean;
     isTimberLakeWest: boolean;
+    /** True when this company's row has Owl Pay enabled (or legacy fallback: Tyler Hill slug). */
+    owlPayEnabled: boolean;
     isLoading: boolean;
     profile: any | null;
     availableCompanies: Company[];
@@ -45,6 +48,7 @@ const CompanyContext = createContext<CompanyContextType>({
     isTylerHill: false,
     isTimberLakeCamp: false,
     isTimberLakeWest: false,
+    owlPayEnabled: false,
     isLoading: true,
     profile: null,
     availableCompanies: [],
@@ -66,6 +70,16 @@ const ALLOWED_COMPANY_SLUGS = new Set([
     'tyler-hill-camp',
 ]);
 
+function computeOwlPayEnabled(
+    row: { owl_pay_enabled?: boolean | null } | undefined,
+    slug: string | null,
+): boolean {
+    if (!slug) return false;
+    if (row?.owl_pay_enabled === true) return true;
+    if (row?.owl_pay_enabled === false) return false;
+    return isTylerHillCamp(slug);
+}
+
 export const CompanyProvider = ({ children }: CompanyProviderProps) => {
     /** Bumps on each fetch start so stale async completions cannot overwrite newer session/company. */
     const fetchGenerationRef = useRef(0);
@@ -84,6 +98,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
     const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [owlPayEnabled, setOwlPayEnabled] = useState(false);
 
     const switchCompany = useCallback((newCompanyId: string) => {
         const company = availableCompanies.find((c) => c.id === newCompanyId);
@@ -94,6 +109,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
             setIsTylerHill(isTylerHillCamp(company.slug));
             setIsTimberLakeCampState(isTimberLakeCamp(company.slug));
             setIsTimberLakeWestState(isTimberLakeWest(company.slug));
+            setOwlPayEnabled(computeOwlPayEnabled(company, company.slug));
             void AsyncStorage.setItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY, newCompanyId);
         }
     }, [availableCompanies]);
@@ -112,6 +128,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 setIsTylerHill(false);
                 setIsTimberLakeCampState(false);
                 setIsTimberLakeWestState(false);
+                setOwlPayEnabled(false);
                 return;
             }
             const fromList = allowedList.find((c) => c.id === effectiveId);
@@ -121,6 +138,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 setIsTylerHill(isTylerHillCamp(fromList.slug));
                 setIsTimberLakeCampState(isTimberLakeCamp(fromList.slug));
                 setIsTimberLakeWestState(isTimberLakeWest(fromList.slug));
+                setOwlPayEnabled(computeOwlPayEnabled(fromList, fromList.slug));
             }
         };
 
@@ -159,7 +177,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 if (superAdmin) {
                     const { data: allCompanies } = await supabase
                         .from('companies')
-                        .select('id, name, slug, theme_color')
+                        .select('id, name, slug, theme_color, owl_pay_enabled')
                         .order('name');
 
                     if (seq !== fetchGenerationRef.current) return;
@@ -204,7 +222,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 if (effectiveCompanyId && !allowedCompanies.find((c) => c.id === effectiveCompanyId)) {
                     const { data: companyData, error: companyError } = await supabase
                         .from('companies')
-                        .select('slug, name, theme_color')
+                        .select('slug, name, theme_color, owl_pay_enabled')
                         .eq('id', effectiveCompanyId)
                         .single();
 
@@ -216,6 +234,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                         setIsTylerHill(isTylerHillCamp(companyData.slug));
                         setIsTimberLakeCampState(isTimberLakeCamp(companyData.slug));
                         setIsTimberLakeWestState(isTimberLakeWest(companyData.slug));
+                        setOwlPayEnabled(computeOwlPayEnabled(companyData, companyData.slug));
                     }
                 }
             } catch (error: any) {
@@ -251,6 +270,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                     setProfile(null);
                     setAvailableCompanies([]);
                     setIsSuperAdmin(false);
+                    setOwlPayEnabled(false);
                     setIsLoading(false);
                     setLoadError(null);
                 }
@@ -279,6 +299,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
             isTylerHill,
             isTimberLakeCamp: isTimberLakeCampState,
             isTimberLakeWest: isTimberLakeWestState,
+            owlPayEnabled,
             isLoading,
             profile,
             availableCompanies,
@@ -297,6 +318,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
             isTylerHill,
             isTimberLakeCampState,
             isTimberLakeWestState,
+            owlPayEnabled,
             isLoading,
             profile,
             availableCompanies,
