@@ -25,6 +25,104 @@ const getChildDisplayName = (child: any) =>
 
 const RECURRENCE_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+/** Same copy as tyler-hill `CSVFormatGuide` — keeps Nurse CSV uploads consistent across web and mobile */
+const CSV_GUIDE_TAB_ORDER = [
+    'children',
+    'staff',
+    'medication_logs',
+    'trips',
+    'menu_items',
+    'awards',
+    'daily_notes',
+    'incident_reports',
+    'master_calendar',
+    'sports_calendar',
+] as const;
+
+type CsvGuideTab = (typeof CSV_GUIDE_TAB_ORDER)[number];
+
+const CSV_GUIDE_FORMATS: Record<
+    CsvGuideTab,
+    { title: string; columns: string; example: string; notes: string; shortLabel: string }
+> = {
+    children: {
+        title: 'Children Roster',
+        shortLabel: 'Children',
+        columns:
+            'first_name, last_name, person_id, age, grade, gender, guardian_phone, guardian_email, medical_notes, allergies, division_id, leader_id, emergency_contact, status, season',
+        example:
+            'John, Doe, P12345, 10, 5, Male, 555-1234, parent@email.com, None, Peanuts, <division_id>, <leader_id>, Jane Doe 555-5678, active, Summer 2024',
+        notes:
+            'REQUIRED: first_name, last_name, and person_id. division_id and leader_id must be valid UUIDs when provided.',
+    },
+    staff: {
+        title: 'Staff Directory',
+        shortLabel: 'Staff',
+        columns: 'name, email, phone, role, department, hire_date, leader_id, status, season',
+        example: 'Jane Smith, jane@thenest.com, 555-9876, Counselor, Activities, 2024-01-15, <leader_id>, active, Summer 2024',
+        notes: 'leader_id must be a valid UUID. hire_date: YYYY-MM-DD',
+    },
+    medication_logs: {
+        title: 'Medication Logs',
+        shortLabel: 'Meds',
+        columns: 'child_id, medication_name, dosage',
+        example: '<child_id>, Tylenol, 5ml',
+        notes:
+            'Required in header row: child_id (campers UUID — on mobile uploads you may use person_id instead and it maps to child_id), medication_name, dosage. Optional when you need scheduling details: meal_time or scheduled_time, date (YYYY-MM-DD), notes, is_recurring, frequency, days_of_week, end_date.',
+    },
+    trips: {
+        title: 'Transportation/Trips',
+        shortLabel: 'Trips',
+        columns:
+            'name, type, date, destination, departure_time, return_time, capacity, driver, chaperone, transportation_type, event_type, event_length, meal, status',
+        example:
+            'Zoo Trip, Field Trip, 2024-06-15, City Zoo, 09:00, 15:00, 30, John Driver, Jane Chaperone, Bus, Educational, Half Day, Packed Lunch, confirmed',
+        notes: 'date: YYYY-MM-DD. type: Field Trip, Sports Event, Other',
+    },
+    menu_items: {
+        title: 'Menu Items',
+        shortLabel: 'Menu',
+        columns: 'date, meal_type, items, allergens',
+        example: '2024-06-15, Lunch, Chicken Nuggets\\, Fries\\, Apple Slices, Contains: Wheat\\, Soy',
+        notes: 'meal_type: Breakfast, Lunch, Snack, Dinner. Use backslash before commas inside items/allergens.',
+    },
+    awards: {
+        title: 'Awards',
+        shortLabel: 'Awards',
+        columns: 'child_id, title, category, date, description',
+        example: '<child_id>, Best Sportsmanship, Sports, 2024-06-15, Showed excellent teamwork',
+        notes: 'child_id must be valid UUID. date: YYYY-MM-DD',
+    },
+    daily_notes: {
+        title: 'Daily Notes',
+        shortLabel: 'Notes',
+        columns: 'child_id, date, mood, activities, meals, nap, notes, created_by',
+        example: '<child_id>, 2024-06-15, Happy, Arts and crafts\\, Swimming, Ate well, 1 hour, Great day, <staff_id>',
+        notes: 'child_id and created_by must be UUIDs. Use backslash before commas in text fields.',
+    },
+    incident_reports: {
+        title: 'Incident Reports',
+        shortLabel: 'Incidents',
+        columns: 'child_id, date, type, severity, description, reported_by, status',
+        example: '<child_id>, 2024-06-15, Minor Injury, Low, Scraped knee on playground, Jane Smith, resolved',
+        notes: 'child_id UUID. type: Injury, Illness, Behavioral, Other.',
+    },
+    master_calendar: {
+        title: 'Master Calendar',
+        shortLabel: 'Calendar',
+        columns: 'event_date, title, type, description, time, location, division_id, created_by',
+        example: '2024-06-20, Swimming Day, Activity, Pool day for all divisions, 10:00, Main Pool, <division_id>, <staff_id>',
+        notes: 'event_date YYYY-MM-DD. division_id and created_by UUIDs may be empty.',
+    },
+    sports_calendar: {
+        title: 'Sports Calendar',
+        shortLabel: 'Sports',
+        columns: 'event_date, title, sport_type, description, time, location, team, opponent, division_id, created_by',
+        example: '2024-06-25, Championship Game, Basketball, Final game of season, 14:00, Main Court, Eagles, Hawks, <division_id>, <staff_id>',
+        notes: 'sport_type follows camp sports list. UUIDs may be empty.',
+    },
+};
+
 function medicationScheduleLabel(med: any): string {
     const mt = med.meal_time;
     const first = Array.isArray(mt) ? mt[0] : mt;
@@ -78,6 +176,8 @@ export const HealthScreen = ({ navigation }: any) => {
     const [showFrequencyPicker, setShowFrequencyPicker] = useState(false);
     const [showChildPicker, setShowChildPicker] = useState(false);
     const [medCsvUploading, setMedCsvUploading] = useState(false);
+    const [showCsvGuideModal, setShowCsvGuideModal] = useState(false);
+    const [csvGuideTab, setCsvGuideTab] = useState<CsvGuideTab>('medication_logs');
     const [expandedHistoryChildId, setExpandedHistoryChildId] = useState<string | null>(null);
     const [itemToDelete, setItemToDelete] = useState<{ id: string } | null>(null);
     const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
@@ -506,8 +606,16 @@ export const HealthScreen = ({ navigation }: any) => {
                             Calendar
                         </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.viewControlIcon}>
-                        <Ionicons name="time-outline" size={18} color={theme.colors.text} />
+                    <TouchableOpacity
+                        style={styles.csvHelpOutlineBtn}
+                        onPress={() => {
+                            setCsvGuideTab('medication_logs');
+                            setShowCsvGuideModal(true);
+                        }}
+                        accessibilityLabel="CSV upload format guide"
+                        accessibilityRole="button"
+                    >
+                        <Ionicons name="help-circle-outline" size={22} color={theme.colors.text} />
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={[styles.uploadBtn, medCsvUploading && { opacity: 0.65 }]}
@@ -1463,10 +1571,75 @@ export const HealthScreen = ({ navigation }: any) => {
                 </Pressable>
             </Modal>
 
-            {/* Floating Action Button */}
-            <TouchableOpacity style={styles.fab}>
-                <Ionicons name="notifications-outline" size={24} color="white" />
-            </TouchableOpacity>
+            {/* CSV format guide — matches web Nurse CSVUploader help (tyler-hill) */}
+            <Modal
+                visible={showCsvGuideModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowCsvGuideModal(false)}
+            >
+                <Pressable style={styles.csvGuideOverlay} onPress={() => setShowCsvGuideModal(false)}>
+                    <Pressable style={styles.csvGuideSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.csvGuideHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                                <Ionicons name="document-text-outline" size={22} color={theme.colors.text} />
+                                <Text style={styles.csvGuideTitle}>CSV Upload Format Guide</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setShowCsvGuideModal(false)} hitSlop={12}>
+                                <Ionicons name="close" size={26} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.csvGuideSubtitle}>Medications tab opens by default on Nurse</Text>
+
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.csvGuideTabRow}>
+                            {CSV_GUIDE_TAB_ORDER.map((key) => {
+                                const active = csvGuideTab === key;
+                                return (
+                                    <TouchableOpacity
+                                        key={key}
+                                        style={[styles.csvGuideTab, active && styles.csvGuideTabActive]}
+                                        onPress={() => setCsvGuideTab(key)}
+                                    >
+                                        <Text style={[styles.csvGuideTabText, active && styles.csvGuideTabTextActive]}>
+                                            {CSV_GUIDE_FORMATS[key].shortLabel}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+
+                        <ScrollView style={styles.csvGuideBody} showsVerticalScrollIndicator>
+                            <Text style={styles.csvGuideSectionTitle}>{CSV_GUIDE_FORMATS[csvGuideTab].title}</Text>
+                            <Text style={styles.csvGuideHint}>First row must be column headers</Text>
+
+                            <Text style={styles.csvGuideLabel}>Required columns</Text>
+                            <Text selectable style={styles.csvGuideMono}>
+                                {CSV_GUIDE_FORMATS[csvGuideTab].columns}
+                            </Text>
+
+                            <Text style={styles.csvGuideLabel}>Example row</Text>
+                            <Text selectable style={styles.csvGuideMono}>
+                                {CSV_GUIDE_FORMATS[csvGuideTab].example}
+                            </Text>
+
+                            <View style={styles.csvGuideNotesBox}>
+                                <Text style={styles.csvGuideNotesTitle}>Important</Text>
+                                <Text style={styles.csvGuideNotesBody}>{CSV_GUIDE_FORMATS[csvGuideTab].notes}</Text>
+                            </View>
+
+                            <View style={styles.csvGuideTipsBox}>
+                                <Text style={styles.csvGuideNotesTitle}>General tips</Text>
+                                <Text style={styles.csvGuideTipsBullet}>• First row matches column names exactly</Text>
+                                <Text style={styles.csvGuideTipsBullet}>• Commas separate values</Text>
+                                <Text style={styles.csvGuideTipsBullet}>• Backslash before commas inside text fields</Text>
+                                <Text style={styles.csvGuideTipsBullet}>• Max 1000 data rows per file</Text>
+                                <Text style={styles.csvGuideTipsBullet}>• Dates: YYYY-MM-DD</Text>
+                            </View>
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -1559,10 +1732,18 @@ const styles = StyleSheet.create({
     viewControlTextActive: {
         color: 'white',
     },
-    viewControlIcon: {
-        padding: theme.spacing.sm,
+    csvHelpOutlineBtn: {
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+        minHeight: 40,
+        minWidth: 44,
     },
     uploadBtn: {
         flexDirection: 'row',
@@ -1902,23 +2083,135 @@ const styles = StyleSheet.create({
         borderRadius: 3,
         backgroundColor: theme.colors.secondary,
     },
-    // Floating Action Button
-    fab: {
-        position: 'absolute',
-        bottom: theme.spacing.xl,
-        right: theme.spacing.xl,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: theme.colors.secondary,
+    csvGuideOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
+        padding: theme.spacing.md,
+    },
+    csvGuideSheet: {
+        maxHeight: '88%',
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        overflow: 'hidden',
+    },
+    csvGuideHeader: {
+        flexDirection: 'row',
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
-        zIndex: 1000,
+        justifyContent: 'space-between',
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+    },
+    csvGuideTitle: {
+        ...theme.typography.h3,
+        fontSize: 17,
+        fontWeight: '700',
+        color: theme.colors.text,
+        flexShrink: 1,
+    },
+    csvGuideSubtitle: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        paddingHorizontal: theme.spacing.md,
+        paddingTop: theme.spacing.sm,
+        paddingBottom: theme.spacing.xs,
+    },
+    csvGuideTabRow: {
+        maxHeight: 48,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        paddingVertical: theme.spacing.xs,
+        paddingHorizontal: theme.spacing.sm,
+    },
+    csvGuideTab: {
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        marginRight: theme.spacing.xs,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.background,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    csvGuideTabActive: {
+        backgroundColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+    },
+    csvGuideTabText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    csvGuideTabTextActive: {
+        color: '#fff',
+    },
+    csvGuideBody: {
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.md,
+        maxHeight: 420,
+    },
+    csvGuideSectionTitle: {
+        ...theme.typography.h3,
+        fontSize: 18,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: 4,
+    },
+    csvGuideHint: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.md,
+    },
+    csvGuideLabel: {
+        ...theme.typography.bodySmall,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginTop: theme.spacing.sm,
+        marginBottom: 6,
+    },
+    csvGuideMono: {
+        fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }) as string,
+        fontSize: 11,
+        lineHeight: 16,
+        color: theme.colors.text,
+        backgroundColor: theme.colors.background,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.sm,
+        padding: theme.spacing.sm,
+    },
+    csvGuideNotesBox: {
+        marginTop: theme.spacing.md,
+        backgroundColor: 'rgba(59, 130, 246, 0.08)',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.sm,
+    },
+    csvGuideTipsBox: {
+        marginTop: theme.spacing.md,
+        marginBottom: theme.spacing.xl,
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.sm,
+    },
+    csvGuideNotesTitle: {
+        fontWeight: '700',
+        fontSize: 13,
+        color: theme.colors.text,
+        marginBottom: 4,
+    },
+    csvGuideNotesBody: {
+        fontSize: 13,
+        color: theme.colors.text,
+        lineHeight: 18,
+    },
+    csvGuideTipsBullet: {
+        fontSize: 12,
+        color: theme.colors.text,
+        lineHeight: 17,
+        marginTop: 2,
     },
     // Health Center Styles
     healthCenterContainer: {

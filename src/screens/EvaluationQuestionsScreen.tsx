@@ -538,10 +538,6 @@ export const EvaluationQuestionsScreen = ({ navigation }: any) => {
                 </View>
             </ScrollView>
 
-            {/* Floating Action Button */}
-            <TouchableOpacity style={styles.fab}>
-                <Ionicons name="chatbubble-outline" size={24} color="white" />
-            </TouchableOpacity>
         </SafeAreaView>
     );
 };

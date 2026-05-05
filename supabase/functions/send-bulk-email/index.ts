@@ -117,12 +117,15 @@ const handler = async (req: Request): Promise<Response> => {
       // Continue - will skip email sending but still send in-app
     }
 
-    // Fetch recipients by tags
+    const companyId = senderProfile.company_id as string;
+
+    // Fetch recipients by tags (scoped to sender's company)
     let recipientsByTag: any[] = [];
     if (recipientTags && recipientTags.length > 0) {
       const { data: taggedUsers, error: tagError } = await supabase
         .from("user_tags")
-        .select("user_id, profiles!inner(id, email, full_name)")
+        .select("user_id, profiles!inner(id, email, full_name, company_id)")
+        .eq("company_id", companyId)
         .in("tag", recipientTags);
 
       if (tagError) {
@@ -132,12 +135,13 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Fetch recipients by IDs
+    // Fetch recipients by IDs (scoped to sender's company)
     let recipientsByIds: any[] = [];
     if (recipientIds && recipientIds.length > 0) {
       const { data: directUsers, error: idsError } = await supabase
         .from("profiles")
-        .select("id, email, full_name")
+        .select("id, email, full_name, company_id")
+        .eq("company_id", companyId)
         .in("id", recipientIds);
 
       if (idsError) {
@@ -147,53 +151,60 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Merge and deduplicate recipients
-    const allRecipients = new Map();
+    // Merge and deduplicate recipients.
+    // In-app delivery must not require email (many profiles only have username / no SMTP address yet).
+    const allRecipients = new Map<string, { id: string; email: string; full_name: string }>();
+
+    const addRecipientRow = (profile: { id?: string; email?: string | null; full_name?: string | null; company_id?: string | null }) => {
+      if (!profile?.id || profile.company_id !== companyId) return;
+      const email = typeof profile.email === "string" ? profile.email.trim() : "";
+      const prev = allRecipients.get(profile.id);
+      allRecipients.set(profile.id, {
+        id: profile.id,
+        email: email || prev?.email || "",
+        full_name: (profile.full_name as string) || prev?.full_name || "",
+      });
+    };
 
     recipientsByTag.forEach((item: any) => {
-      const profile = item.profiles;
-      if (profile && profile.email) {
-        allRecipients.set(profile.id, {
-          id: profile.id,
-          email: profile.email,
-          full_name: profile.full_name,
-        });
-      }
+      if (item?.profiles) addRecipientRow(item.profiles);
     });
 
     recipientsByIds.forEach((profile: any) => {
-      if (profile && profile.email) {
-        allRecipients.set(profile.id, {
-          id: profile.id,
-          email: profile.email,
-          full_name: profile.full_name,
-        });
-      }
+      addRecipientRow(profile);
     });
 
     const recipients = Array.from(allRecipients.values());
-    
+
+    if (recipients.length === 0) {
+      throw new Error(
+        "No recipients matched. If you used tags, ensure users are tagged for this camp. If you picked individuals, ensure they belong to your company.",
+      );
+    }
+
     // Enforce maximum recipients per request
     if (recipients.length > MAX_RECIPIENTS_PER_REQUEST) {
       throw new Error(`Too many recipients: maximum ${MAX_RECIPIENTS_PER_REQUEST} recipients per request. Please send in batches.`);
     }
 
-    const emails = recipients.map((r) => r.email);
+    const emailRecipients = recipients.filter((r) => r.email.length > 0);
+    const emails = emailRecipients.map((r) => r.email);
 
-    console.log(`Prepared ${recipients.length} unique recipients`);
+    console.log(`Prepared ${recipients.length} unique recipients (${emailRecipients.length} with email)`);
     console.log(`Email addresses: ${emails.join(", ")}`);
 
     const deliveryMethodsUsed: string[] = [];
 
     // Send in-app notifications if selected
     if (deliveryMethods.inApp) {
-      const messages = recipients.map(recipient => ({
+      const messages = recipients.map((recipient) => ({
         recipient_id: recipient.id,
+        sender_id: user.id,
         subject: subject,
         content: message,
         read: false,
-        notification_type: 'notification',
-        created_at: new Date().toISOString()
+        notification_type: "notification",
+        created_at: new Date().toISOString(),
       }));
 
       const { error: messagesError } = await supabase
@@ -214,6 +225,9 @@ const handler = async (req: Request): Promise<Response> => {
       if (!emailConfig || !emailConfig.is_configured) {
         console.warn("⚠️ Email sending requested but not configured for this company");
         deliveryMethodsUsed.push("email_not_configured");
+      } else if (emailRecipients.length === 0) {
+        console.warn("⚠️ Email sending requested but no recipients have an email on file");
+        deliveryMethodsUsed.push("email_skipped_no_addresses");
       } else {
         try {
           console.log("📤 Sending emails via Microsoft 365");
@@ -256,7 +270,7 @@ const handler = async (req: Request): Promise<Response> => {
           let failCount = 0;
 
           // Send emails via Microsoft Graph API
-          for (const recipient of recipients) {
+          for (const recipient of emailRecipients) {
             try {
               const emailPayload = {
                 message: {
@@ -342,6 +356,8 @@ const handler = async (req: Request): Promise<Response> => {
       ? "In-app notifications sent. Email not configured for your company."
       : deliveryMethodsUsed.includes("email_failed")
       ? "In-app notifications sent. Email sending failed - check configuration."
+      : deliveryMethodsUsed.includes("email_skipped_no_addresses")
+      ? "In-app notifications sent. No recipient email addresses on file for email delivery."
       : deliveryMethodsUsed.includes("email")
       ? "Notifications sent via in-app and email."
       : "In-app notifications sent successfully.";

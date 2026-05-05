@@ -7,7 +7,6 @@ import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCalendarEvents, useDivisions, type CalendarEvent, type EventSource } from '../api/calendar_events';
 import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
-import { AIChatWidgetMobile } from '../components/AIChatWidgetMobile';
 
 interface Event {
     id: string;
@@ -433,7 +432,6 @@ export const CalendarScreen = ({ navigation }: any) => {
 
             </ScrollView>
 
-            <AIChatWidgetMobile />
 
             {/* Division Picker Modal */}
             <Modal

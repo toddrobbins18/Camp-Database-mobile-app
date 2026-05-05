@@ -2932,10 +2932,6 @@ export const CamperScreen = ({ navigation }: any) => {
                 )}
 
             </ScrollView>
-            {/* Floating Action Button (Chat) mock */}
-            <TouchableOpacity style={styles.fab}>
-                <Ionicons name="chatbubble-ellipses" size={24} color="white" />
-            </TouchableOpacity>
         </SafeAreaView>
     );
 };

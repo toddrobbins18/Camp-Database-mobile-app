@@ -17,7 +17,6 @@ import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { MobileUserMenu } from '../components/MobileUserMenu';
 import { TigerTimesCategoryCards } from '../components/TigerTimesCategoryCards';
-import { AIChatWidgetMobile } from '../components/AIChatWidgetMobile';
 import {
     useTodayBirthdays,
     useTodayEvents,
@@ -662,7 +661,6 @@ export const DashboardScreen = ({ navigation }: any) => {
                 )}
             </ScrollView>
 
-            <AIChatWidgetMobile />
         </>
     );
 

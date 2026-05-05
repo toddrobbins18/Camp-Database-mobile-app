@@ -344,10 +344,6 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
                     )}
                 </View>
 
-                {/* Chat Bubble (Floating Action Button style placeholder) */}
-                <TouchableOpacity style={styles.chatButton}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={24} color="#fff" />
-                </TouchableOpacity>
 
             </ScrollView>
 

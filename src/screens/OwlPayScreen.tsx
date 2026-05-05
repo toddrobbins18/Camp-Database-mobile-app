@@ -1382,9 +1382,6 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 {activeTab === 'settings' && renderSettings()}
             </ScrollView>
 
-            <TouchableOpacity style={styles.fab}>
-                <Ionicons name="chatbubble-ellipses-outline" size={20} color="#fff" />
-            </TouchableOpacity>
 
             <Modal visible={showAddItemModal} transparent animationType="fade" onRequestClose={() => setShowAddItemModal(false)}>
                 <Pressable style={styles.modalOverlay} onPress={() => setShowAddItemModal(false)}>

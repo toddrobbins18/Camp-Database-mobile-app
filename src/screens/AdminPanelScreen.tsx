@@ -21,7 +21,6 @@ import {
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
 import { getSignedUrl } from '../api/storage';
-import { AIChatWidgetMobile } from '../components/AIChatWidgetMobile';
 
 export const AdminPanelScreen = ({ navigation }: any) => {
 
@@ -2549,7 +2548,6 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
-            <AIChatWidgetMobile />
         </SafeAreaView>
     );
 };

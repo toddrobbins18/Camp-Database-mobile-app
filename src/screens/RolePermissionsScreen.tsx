@@ -566,10 +566,6 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
                 )}
             </ScrollView>
 
-            {/* Floating Action Button */}
-            <TouchableOpacity style={styles.fab}>
-                <Ionicons name="chatbubble-outline" size={24} color="white" />
-            </TouchableOpacity>
         </SafeAreaView>
     );
 };

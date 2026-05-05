@@ -479,12 +479,6 @@ export const DailyScheduleScreen = ({ navigation }: { navigation: any }) => {
                 )}
             </ScrollView>
 
-            <TouchableOpacity
-                style={[styles.fab, isTimberLakeCamp && styles.fabTimberLake]}
-                activeOpacity={0.9}
-            >
-                <Ionicons name="chatbubble-ellipses" size={22} color="white" />
-            </TouchableOpacity>
 
             <Modal
                 visible={showDivisionModal}
