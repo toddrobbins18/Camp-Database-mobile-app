@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
@@ -59,8 +61,16 @@ function formatTime12Hour(timeStr?: string): string {
 
 export const CalendarScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
+    const queryClient = useQueryClient();
     const { data: liveEvents = [], isLoading: isLoadingEvents } = useCalendarEvents(companyId, season || '2026');
     const { data: divisionsList = [] } = useDivisions(companyId);
+
+    useFocusEffect(
+        useCallback(() => {
+            if (!companyId) return;
+            void queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
+        }, [companyId, queryClient]),
+    );
     const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1));
     const [selectedDate, setSelectedDate] = useState(new Date(2026, 6, 1));
     const [showEventList, setShowEventList] = useState(false);
@@ -422,7 +432,8 @@ export const CalendarScreen = ({ navigation }: any) => {
                             const calEvt = filteredAndSorted.find(e => e.id === evt.id);
                             if (calEvt) setSelectedEvent(calEvt);
                         }}
-                        views={['Month', 'Week', 'Day', 'Agenda']}
+                        views={['Week', 'Day']}
+                        initialView="Week"
                         showZoom={true}
                         showNavigation={true}
                         getEventAccent={(evt) => evt.accent || { bg: '#e5e7eb', text: '#1e293b', marker: '#6b7280' }}
@@ -595,8 +606,8 @@ export const CalendarScreen = ({ navigation }: any) => {
                                 <View style={styles.eventDetailRow}>
                                     <Ionicons name="people-outline" size={18} color={theme.colors.textSecondary} />
                                     <Text style={styles.eventDetailRowText}>
-                                        {selectedEvent?.originalData?.divisions?.length > 0
-                                            ? selectedEvent.originalData.divisions.map((d: any) => d.name).join(', ')
+                                        {(selectedEvent?.originalData?.divisions?.length ?? 0) > 0
+                                            ? (selectedEvent?.originalData?.divisions ?? []).map((d: any) => d.name).join(', ')
                                             : selectedEvent?.divisionName}
                                     </Text>
                                 </View>

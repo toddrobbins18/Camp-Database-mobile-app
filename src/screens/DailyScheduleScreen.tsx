@@ -142,10 +142,9 @@ export const DailyScheduleScreen = ({ navigation }: { navigation: any }) => {
             supabase
                 .from('special_events_activities')
                 .select(
-                    'id, title, event_type, event_date, start_time, end_time, time_slot, location, description, division_id'
+                    'id, title, event_type, event_date, start_time, end_time, time_slot, location, description, division_id, season'
                 )
                 .eq('company_id', companyId)
-                .eq('season', season)
                 .eq('event_date', dateStr),
             supabase
                 .from('master_calendar')
@@ -194,19 +193,24 @@ export const DailyScheduleScreen = ({ navigation }: { navigation: any }) => {
             }
         }
 
-        if (specialEventsRes.data) {
-            for (const event of specialEventsRes.data as any[]) {
-                allEvents.push({
-                    id: event.id,
-                    title: event.title,
-                    type: event.event_type || 'Special Event',
-                    time: event.start_time || event.time_slot,
-                    location: event.location,
-                    description: event.description,
-                    source: 'special_events',
-                    divisions: event.division_id ? [event.division_id] : [],
-                });
-            }
+        const specialRaw = (specialEventsRes.data || []) as any[];
+        let specialRows = specialRaw.filter(
+            (e) => e.season === season || e.season == null,
+        );
+        if (season && specialRows.length === 0 && specialRaw.length > 0) {
+            specialRows = specialRaw;
+        }
+        for (const event of specialRows) {
+            allEvents.push({
+                id: event.id,
+                title: event.title,
+                type: event.event_type || 'Special Event',
+                time: event.start_time || event.time_slot,
+                location: event.location,
+                description: event.description,
+                source: 'special_events',
+                divisions: event.division_id ? [event.division_id] : [],
+            });
         }
 
         if (masterCalendarRes.data) {

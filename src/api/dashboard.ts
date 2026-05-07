@@ -312,14 +312,21 @@ export const useTodaySpecialEventsActivities = (
             if (!companyId || !season) return [];
             const { data, error } = await supabase
                 .from('special_events_activities')
-                .select('id, title, time_slot, location, description, event_type')
+                .select('id, title, time_slot, location, description, event_type, season')
                 .eq('company_id', companyId)
                 .eq('event_date', todayString)
-                .eq('season', season);
+                .order('time_slot');
             if (error) throw error;
-            return data || [];
+            const rows = data || [];
+            const matched = rows.filter(
+                (e: { season?: string | null }) => e.season === season || e.season == null,
+            );
+            if (matched.length > 0) return matched;
+            return rows;
         },
         enabled: !!companyId && !!season && enabled,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
     });
 };
 

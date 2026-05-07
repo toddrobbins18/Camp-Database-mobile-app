@@ -125,8 +125,15 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                 .filter((e: any) => e.season === seasonFilter || e.season == null);
             const activitiesData = [...(activitiesBatch1.data || []), ...(activitiesBatch2.data || [])]
                 .filter((e: any) => e.season === seasonFilter || e.season == null);
-            const specialData = [...(specialBatch1.data || []), ...(specialBatch2.data || [])]
-                .filter((e: any) => e.season === seasonFilter || e.season == null);
+
+            const specialMerged = [...(specialBatch1.data || []), ...(specialBatch2.data || [])];
+            let specialData = specialMerged.filter(
+                (e: any) => e.season === seasonFilter || e.season == null,
+            );
+            // Web may save under a different season than the app's default — show rows anyway (parity with appointments).
+            if (seasonFilter && specialData.length === 0 && specialMerged.length > 0) {
+                specialData = specialMerged;
+            }
 
             const specialDivisionMap = new Map<string, Array<{ id: string; name: string; gender?: string }>>();
             (specialDivisionsRes.data || []).forEach((row: any) => {
@@ -258,6 +265,8 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
             return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         },
         enabled: !!companyId,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
     });
 };
 
@@ -305,9 +314,13 @@ export const useSpecialEvents = (companyId: string | null, season: string) => {
             if (linksRes.error) throw linksRes.error;
 
             const seasonFilter = season || '2026';
-            const events = (eventsRes.data || []).filter(
-                (e: any) => e.season === seasonFilter || e.season == null
+            const rawEvents = eventsRes.data || [];
+            let events = rawEvents.filter(
+                (e: any) => e.season === seasonFilter || e.season == null,
             );
+            if (seasonFilter && events.length === 0 && rawEvents.length > 0) {
+                events = rawEvents;
+            }
 
             const divisionMap = new Map<string, Array<{ id: string; name: string }>>();
             (linksRes.data || []).forEach((link: any) => {
@@ -326,6 +339,8 @@ export const useSpecialEvents = (companyId: string | null, season: string) => {
             })) as SpecialEvent[];
         },
         enabled: !!companyId,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
     });
 };
 

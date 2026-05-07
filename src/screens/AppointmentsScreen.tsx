@@ -367,11 +367,14 @@ export const AppointmentsScreen = ({ navigation }: any) => {
 
     // Filter appointments based on active tab, search, type, and status
     const filteredAppointments = appointments.filter((appointment: any) => {
-        // Tab filter
-        const now = new Date();
-        const appointmentDate = new Date(appointment.date);
-        if (activeTab === 'Upcoming' && appointmentDate < now) return false;
-        if (activeTab === 'Past' && appointmentDate >= now) return false;
+        // Tab filter — match web `Appointments.tsx`: YYYY-MM-DD is a local calendar day (not UTC-only parse).
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const aptDayStart = appointment.date
+            ? new Date(`${appointment.date}T00:00:00`)
+            : new Date(0);
+        if (activeTab === 'Upcoming' && aptDayStart < todayStart) return false;
+        if (activeTab === 'Past' && aptDayStart >= todayStart) return false;
 
         // Search filter
         if (searchQuery) {
@@ -390,8 +393,11 @@ export const AppointmentsScreen = ({ navigation }: any) => {
             return false;
         }
 
-        // Status filter
-        if (selectedStatus !== 'All Status' && appointment.status !== selectedStatus) {
+        // Status filter (web stores lowercase e.g. "scheduled"; UI labels are capitalized)
+        if (
+            selectedStatus !== 'All Status' &&
+            String(appointment.status || '').toLowerCase() !== selectedStatus.toLowerCase()
+        ) {
             return false;
         }
 

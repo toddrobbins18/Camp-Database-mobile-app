@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
     Alert,
     ActivityIndicator,
@@ -13,6 +14,7 @@ import {
     Pressable,
     Platform,
     KeyboardAvoidingView,
+    RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -161,7 +163,22 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
     const { data: divisionsData = [] } = useDivisions(companyId);
-    const { data: specialEventsData = [], isLoading: isLoadingEvents } = useSpecialEvents(companyId, season);
+    const {
+        data: specialEventsData = [],
+        isLoading: isLoadingEvents,
+        refetch: refetchSpecialEvents,
+        isRefetching: isRefetchingSpecialEvents,
+    } = useSpecialEvents(companyId, season);
+
+    useFocusEffect(
+        useCallback(() => {
+            if (!companyId) return;
+            void queryClient.invalidateQueries({ queryKey: ['special_events', companyId] });
+            void queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
+            void queryClient.invalidateQueries({ queryKey: ['dashboard_special_events_activities', companyId] });
+            void queryClient.invalidateQueries({ queryKey: ['dailyScheduleEvents', companyId] });
+        }, [companyId, queryClient]),
+    );
     const addSpecialEventMutation = useAddSpecialEvent();
     const updateSpecialEventMutation = useUpdateSpecialEvent();
 
@@ -173,7 +190,8 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
     ];
     const today = new Date();
     const initialDate = `${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}/${today.getFullYear()}`;
-    const [selectedDate, setSelectedDate] = useState(initialDate);
+    /** Empty = show all dates for this camp (matches web). */
+    const [selectedDate, setSelectedDate] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
@@ -229,9 +247,10 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
 
     const filteredEvents = useMemo(() => {
         let filtered = specialEventsData || [];
-        if (selectedDate) {
-            const parts = selectedDate.split('/');
-            const selectedIso = parts.length === 3 ? `${parts[2]}-${parts[0]}-${parts[1]}` : selectedDate;
+        const trimmed = selectedDate?.trim() ?? '';
+        if (trimmed) {
+            const parts = trimmed.split('/');
+            const selectedIso = parts.length === 3 ? `${parts[2]}-${parts[0]}-${parts[1]}` : trimmed;
             filtered = filtered.filter((event: any) => event.event_date === selectedIso);
         }
         if (selectedDivision !== 'All Divisions') {
@@ -253,6 +272,12 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
             return acc;
         }, {});
     }, [filteredEvents]);
+
+    /** Prefill add form from the screen date filter (same idea as web left column). */
+    useEffect(() => {
+        if (!showAddEventModal || editingEventId || !selectedDate?.trim()) return;
+        setEventDate(selectedDate);
+    }, [showAddEventModal, editingEventId, selectedDate]);
 
     const filteredStaff = useMemo(() => {
         if (!staffSearchQuery.trim()) return staffData;
@@ -422,6 +447,11 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         );
     };
 
+    const resetSpecialEventFilters = useCallback(() => {
+        setSelectedDate('');
+        setSelectedDivision('All Divisions');
+    }, []);
+
     const handleDivisionToggle = (division: string) => {
         if (division === 'All Divisions') {
             if (selectedDivisions.length === divisionsData.length) {
@@ -458,6 +488,11 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         // Parse date from MM/DD/YYYY to YYYY-MM-DD
         const dateParts = eventDate.split('/');
         const isoDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[0]}-${dateParts[1]}` : eventDate;
+        const filterDateFromIso = (iso: string) => {
+            const p = iso.split('-');
+            if (p.length !== 3) return selectedDate;
+            return `${p[1]}/${p[2]}/${p[0]}`;
+        };
         const chaperone = selectedStaff.map((s: any) => s.name).join(', ');
         const timeSlot = startTime && endTime
             ? `${startTime} - ${endTime}`
@@ -485,6 +520,7 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                 { id: editingEventId, ...payload },
                 {
                     onSuccess: () => {
+                        setSelectedDate(filterDateFromIso(isoDate));
                         handleCloseAddEventModal();
                     },
                     onError: (error: any) => {
@@ -497,7 +533,9 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
         }
 
         addSpecialEventMutation.mutate(payload, {
-            onSuccess: () => {
+            onSuccess: (created) => {
+                const ymd = created?.event_date ?? isoDate;
+                setSelectedDate(filterDateFromIso(ymd));
                 handleCloseAddEventModal();
             },
             onError: (error: any) => {
@@ -672,7 +710,17 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={isRefetchingSpecialEvents}
+                        onRefresh={() => void refetchSpecialEvents()}
+                        tintColor={theme.colors.primary}
+                        colors={[theme.colors.primary]}
+                    />
+                }
+            >
                 {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.openDrawer()}>
@@ -728,30 +776,55 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
 
                 {/* Filters Section */}
                 <View style={styles.filtersSection}>
-                    <View style={styles.filterItem}>
-                        <Text style={styles.filterLabel}>Date</Text>
-                        <TouchableOpacity
-                            style={styles.dateInput}
-                            onPress={() => setShowDatePicker(true)}
-                        >
-                            <Text style={styles.dateInputText}>{selectedDate}</Text>
-                            <Ionicons
-                                name="calendar-outline"
-                                size={20}
-                                color={theme.colors.textSecondary}
-                            />
-                        </TouchableOpacity>
+                    <View style={styles.filterBlock}>
+                        <Text style={styles.filterLabel}>
+                            Date{selectedDate?.trim() ? '' : ' (all dates)'}
+                        </Text>
+                        <View style={styles.filterDateRow}>
+                            <TouchableOpacity
+                                style={[styles.dateInput, styles.dateInputFlexible]}
+                                onPress={() => setShowDatePicker(true)}
+                                activeOpacity={0.7}
+                            >
+                                <Text
+                                    style={[
+                                        styles.dateInputText,
+                                        !selectedDate?.trim() && styles.dateInputPlaceholderMuted,
+                                    ]}
+                                    numberOfLines={1}
+                                >
+                                    {selectedDate?.trim() ? selectedDate : 'All dates'}
+                                </Text>
+                                <Ionicons
+                                    name="calendar-outline"
+                                    size={20}
+                                    color={theme.colors.textSecondary}
+                                />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.allDatesButton}
+                                onPress={() => setSelectedDate('')}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={styles.allDatesButtonText}>All dates</Text>
+                            </TouchableOpacity>
+                        </View>
                         {renderDatePicker('filter', showDatePicker, () => setShowDatePicker(false))}
                     </View>
 
-                    <View style={styles.filterItem}>
-                        <Text style={styles.filterLabel}>Division Filter</Text>
+                    <View style={styles.filterBlock}>
+                        <Text style={styles.filterLabel}>Division filter</Text>
                         <View style={styles.divisionDropdownContainer}>
                             <TouchableOpacity
                                 style={styles.divisionDropdownButton}
                                 onPress={() => setShowDivisionDropdown(true)}
                             >
-                                <Text style={styles.divisionDropdownText}>{selectedDivision === 'All Divisions' ? 'All Divisions' : divisionsData.find(d => d.id === selectedDivision)?.name || 'Select Division'}</Text>
+                                <Text style={styles.divisionDropdownText}>
+                                    {selectedDivision === 'All Divisions'
+                                        ? 'All Divisions'
+                                        : divisionsData.find((d) => d.id === selectedDivision)?.name ||
+                                          'Select Division'}
+                                </Text>
                                 <Ionicons
                                     name="chevron-down"
                                     size={20}
@@ -760,6 +833,21 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                             </TouchableOpacity>
                         </View>
                     </View>
+
+                    <TouchableOpacity
+                        style={styles.resetFiltersButton}
+                        onPress={resetSpecialEventFilters}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons name="refresh-outline" size={18} color={theme.colors.text} />
+                        <Text style={styles.resetFiltersButtonText}>Reset filters</Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.filterHelperText}>
+                        {selectedDate?.trim()
+                            ? 'Showing events on the selected day. Tap All dates or Reset to see the full schedule for this season.'
+                            : 'Showing every special event for this camp in the current app season. Pick a date or division to narrow the list.'}
+                    </Text>
                 </View>
 
                 {/* Events List */}
@@ -772,11 +860,15 @@ export const SpecialEventsScreen = ({ navigation }: SpecialEventsScreenProps) =>
                     ) : filteredEvents.length === 0 ? (
                         <StyledCard style={styles.emptyStateCard}>
                             <Text style={styles.emptyStateText}>
-                                No events scheduled for this period
+                                {selectedDate?.trim()
+                                    ? 'No events scheduled for this day.'
+                                    : 'No special events for this camp in the selected season.'}
                             </Text>
                         </StyledCard>
                     ) : (
-                        Object.entries(groupedEvents).map(([date, events]) => (
+                        [...Object.entries(groupedEvents)]
+                            .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+                            .map(([date, events]) => (
                             <View key={date} style={styles.dateGroup}>
                                 <Text style={styles.dateGroupTitle}>
                                     {new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
@@ -1666,9 +1758,63 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     filtersSection: {
-        flexDirection: 'row',
-        gap: theme.spacing.md,
+        flexDirection: 'column',
+        gap: theme.spacing.sm,
         marginBottom: theme.spacing.lg,
+    },
+    filterBlock: {
+        width: '100%',
+    },
+    filterDateRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+    },
+    dateInputFlexible: {
+        flex: 1,
+        minWidth: 0,
+    },
+    dateInputPlaceholderMuted: {
+        color: theme.colors.textSecondary,
+    },
+    allDatesButton: {
+        paddingHorizontal: theme.spacing.md,
+        justifyContent: 'center',
+        minHeight: 44,
+        paddingVertical: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+    },
+    allDatesButtonText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        fontWeight: '500',
+    },
+    resetFiltersButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        gap: theme.spacing.xs,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+        marginTop: theme.spacing.xs,
+    },
+    resetFiltersButtonText: {
+        ...theme.typography.body,
+        color: theme.colors.text,
+        fontWeight: '500',
+    },
+    filterHelperText: {
+        ...theme.typography.caption,
+        color: theme.colors.textSecondary,
+        lineHeight: 16,
+        marginTop: theme.spacing.xs,
     },
     filterItem: {
         flex: 1,
