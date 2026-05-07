@@ -447,65 +447,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </StyledCard>
 
-                        {/* Compose Notification Card */}
-                        <StyledCard style={styles.composeCard}>
-                            <View style={styles.cardHeader}>
-                                <View style={styles.blueDot} />
-                                <Text style={styles.sectionTitle}>Compose Notification</Text>
-                            </View>
-                            <Text style={styles.cardDescription}>Create and send notifications to selected recipients.</Text>
-
-                            <View style={styles.formField}>
-                                <Text style={styles.fieldLabel}>Subject</Text>
-                                <TextInput
-                                    style={styles.textInput}
-                                    placeholder="Message subject..."
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    value={subject}
-                                    onChangeText={setSubject}
-                                />
-                            </View>
-
-                            <View style={styles.formField}>
-                                <Text style={styles.fieldLabel}>Message</Text>
-                                <TextInput
-                                    style={styles.textArea}
-                                    placeholder="Write your message here..."
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    multiline
-                                    numberOfLines={6}
-                                    textAlignVertical="top"
-                                    value={message}
-                                    onChangeText={setMessage}
-                                />
-                            </View>
-
-                            <View style={styles.actionButtons}>
-                                <TouchableOpacity style={styles.clearBtn} onPress={handleClear}>
-                                    <Text style={styles.clearBtnText}>Clear</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.sendBtn} onPress={() => {
-                                    if (!subject.trim() || !message.trim() || selectedUsers.length === 0 || !currentUserId) {
-                                        Alert.alert('Error', 'Please fill in subject, message, and select recipients.');
-                                        return;
-                                    }
-                                    selectedUsers.forEach(recipientId => {
-                                        sendMutation.mutate({
-                                            sender_id: currentUserId,
-                                            recipient_id: recipientId,
-                                            subject: subject.trim(),
-                                            content: message.trim(),
-                                        });
-                                    });
-                                    Alert.alert('Success', 'Message sent!');
-                                    handleCloseCompose();
-                                }}>
-                                    <Ionicons name="send" size={18} color="white" />
-                                    <Text style={styles.sendBtnText}>Send Notification</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </StyledCard>
-
+                        {/* Recipients first — subject/message/send were above this and users tapped Send with no one selected */}
                         {/* Tag Groups Card */}
                         <StyledCard style={styles.tagGroupsCard}>
                             <View style={styles.cardHeader}>
@@ -522,7 +464,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                                 <Ionicons name="people-outline" size={20} color={theme.colors.text} />
                                 <Text style={styles.sectionTitle}>Individual Users</Text>
                             </View>
-                            <Text style={styles.cardDescription}>Select specific users</Text>
+                            <Text style={styles.cardDescription}>Tap people to include as recipients (required)</Text>
 
                             <TextInput
                                 style={styles.searchInput}
@@ -537,7 +479,14 @@ export const MessagesScreen = ({ navigation }: any) => {
                                 nestedScrollEnabled={true}
                                 showsVerticalScrollIndicator={true}
                             >
-                                {filteredUsers.map((user) => (
+                                {filteredUsers.length === 0 ? (
+                                    <Text style={styles.noTagsText}>
+                                        {users.length === 0
+                                            ? 'No staff found for this camp. Check your company access.'
+                                            : 'No users match your search.'}
+                                    </Text>
+                                ) : (
+                                    filteredUsers.map((user) => (
                                     <TouchableOpacity
                                         key={user.id}
                                         style={styles.userItem}
@@ -551,7 +500,8 @@ export const MessagesScreen = ({ navigation }: any) => {
                                             <Text style={styles.userEmail}>{user.email}</Text>
                                         </View>
                                     </TouchableOpacity>
-                                ))}
+                                    ))
+                                )}
                             </ScrollView>
                         </StyledCard>
 
@@ -586,6 +536,82 @@ export const MessagesScreen = ({ navigation }: any) => {
                                     })}
                                 </View>
                             )}
+                        </StyledCard>
+
+                        {/* Compose Notification Card */}
+                        <StyledCard style={styles.composeCard}>
+                            <View style={styles.cardHeader}>
+                                <View style={styles.blueDot} />
+                                <Text style={styles.sectionTitle}>Compose Notification</Text>
+                            </View>
+                            <Text style={styles.cardDescription}>
+                                Subject and body — recipients are selected in Individual Users above.
+                            </Text>
+
+                            <View style={styles.formField}>
+                                <Text style={styles.fieldLabel}>Subject</Text>
+                                <TextInput
+                                    style={styles.textInput}
+                                    placeholder="Message subject..."
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    value={subject}
+                                    onChangeText={setSubject}
+                                />
+                            </View>
+
+                            <View style={styles.formField}>
+                                <Text style={styles.fieldLabel}>Message</Text>
+                                <TextInput
+                                    style={styles.textArea}
+                                    placeholder="Write your message here..."
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    multiline
+                                    numberOfLines={6}
+                                    textAlignVertical="top"
+                                    value={message}
+                                    onChangeText={setMessage}
+                                />
+                            </View>
+
+                            <View style={styles.actionButtons}>
+                                <TouchableOpacity style={styles.clearBtn} onPress={handleClear}>
+                                    <Text style={styles.clearBtnText}>Clear</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.sendBtn} onPress={() => {
+                                    if (!currentUserId) {
+                                        Alert.alert('Error', 'You must be signed in to send notifications.');
+                                        return;
+                                    }
+                                    if (selectedUsers.length === 0) {
+                                        Alert.alert(
+                                            'Select recipients',
+                                            'Scroll up to Individual Users and tap one or more people before sending.'
+                                        );
+                                        return;
+                                    }
+                                    if (!subject.trim()) {
+                                        Alert.alert('Missing subject', 'Please enter a subject.');
+                                        return;
+                                    }
+                                    if (!message.trim()) {
+                                        Alert.alert('Missing message', 'Please enter a message.');
+                                        return;
+                                    }
+                                    selectedUsers.forEach(recipientId => {
+                                        sendMutation.mutate({
+                                            sender_id: currentUserId,
+                                            recipient_id: recipientId,
+                                            subject: subject.trim(),
+                                            content: message.trim(),
+                                        });
+                                    });
+                                    Alert.alert('Success', 'Message sent!');
+                                    handleCloseCompose();
+                                }}>
+                                    <Ionicons name="send" size={18} color="white" />
+                                    <Text style={styles.sendBtnText}>Send Notification</Text>
+                                </TouchableOpacity>
+                            </View>
                         </StyledCard>
 
                         {/* Email Integration Pending Banner */}

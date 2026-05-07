@@ -143,11 +143,34 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
 
             const events: CalendarEvent[] = [];
 
+            const firstSportsTimeField = (...vals: unknown[]): string => {
+                for (const v of vals) {
+                    if (v == null) continue;
+                    const s = String(v).trim();
+                    if (s) return s;
+                }
+                return '';
+            };
+
             sportsData.forEach((event: any) => {
                 const divisions =
                     event.sports_calendar_divisions?.map((d: any) => d.division).filter(Boolean)
                     || (event.division ? [event.division] : []);
                 const div = divisions[0];
+                const isHome = String(event.home_away ?? '').toLowerCase() === 'home';
+                const sportsTime = isHome
+                    ? firstSportsTimeField(
+                          event.time,
+                          event.start_time_field,
+                          event.start_time,
+                          event.depart_time,
+                      )
+                    : firstSportsTimeField(
+                          event.time,
+                          event.start_time_field,
+                          event.depart_time,
+                          event.start_time,
+                      );
                 events.push({
                     id: `sports_${event.id}`,
                     title: event.title || '',
@@ -155,7 +178,7 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                     location: event.location,
                     description: event.description,
                     type: event.sport_type || event.custom_sport_type || 'Sports',
-                    time: event.time || event.start_time_field || event.depart_time,
+                    time: sportsTime || undefined,
                     source: 'sports_calendar',
                     divisionId: div?.id,
                     divisionName: div?.name,

@@ -25,6 +25,8 @@
     "@types/jest": "29.5.14",
     "axios": "^1.13.4",
     "expo": "~54.0.33",
+    "expo-application": "~7.0.8",
+    "expo-constants": "~18.0.13",
     "expo-document-picker": "~14.0.8",
     "expo-local-authentication": "~17.0.8",
     "expo-secure-store": "~15.0.8",

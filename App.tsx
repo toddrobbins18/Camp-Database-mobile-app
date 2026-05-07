@@ -7,6 +7,12 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { CompanyProvider } from './src/contexts/CompanyContext';
+import { useAppUpdatePrompt } from './src/hooks/useAppUpdatePrompt';
+
+const AppUpdateGate = () => {
+  useAppUpdatePrompt();
+  return null;
+};
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +50,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <QueryFocusSync />
+        <AppUpdateGate />
         <CompanyProvider>
           <SafeAreaProvider>
             <StatusBar style="dark" />

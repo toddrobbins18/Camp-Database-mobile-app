@@ -50,6 +50,7 @@ import { ElectiveSignUpScreen } from '../screens/ElectiveSignUpScreen';
 import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { useRole } from '../hooks/useRole';
 import { useRolePermissions } from '../api/permissions';
+import { useMessagesRealtimeSync, useInboxUnreadCount } from '../api/messages';
 import { supabase } from '../lib/supabase';
 import { theme } from '../theme/theme';
 import { getMenuDrawerThemeFromCompany } from '../theme/menuDrawerTheme';
@@ -71,6 +72,19 @@ const CustomDrawerContent = (props: any) => {
     const isSuperAdmin = roleData?.isSuperAdmin ?? false;
     const isAdmin = roleData?.isAdmin ?? false;  // includes super_admin
     const isRoleLoaded = !!roleData;
+
+    const [drawerAuthUserId, setDrawerAuthUserId] = useState<string | null>(null);
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => setDrawerAuthUserId(data.user?.id ?? null));
+        const {
+            data: { subscription },
+        } = supabase.auth.onAuthStateChange((_event, session) => {
+            setDrawerAuthUserId(session?.user?.id ?? null);
+        });
+        return () => subscription.unsubscribe();
+    }, []);
+
+    const { data: inboxUnreadCount = 0 } = useInboxUnreadCount(drawerAuthUserId);
 
     // Match web: menu visibility is driven by role_permissions per company.
     const hasMenuAccess = (menuItem: string) => {
@@ -373,15 +387,21 @@ const CustomDrawerContent = (props: any) => {
                 <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Main Menu</Text>
                 {[...mainMenuItems]
                     .sort((a, b) => a.label.localeCompare(b.label))
-                    .map((item) => (
+                    .map((item) => {
+                        const label =
+                            item.key === 'messages' && inboxUnreadCount > 0
+                                ? `Messages (${inboxUnreadCount > 99 ? '99+' : inboxUnreadCount})`
+                                : item.label;
+                        return (
                         <DrawerItem
                             key={item.key}
-                            label={item.label}
+                            label={label}
                             icon={({ color }) => <Ionicons name={item.icon} size={22} color={color} />}
                             onPress={item.onPress}
                             {...drawerItemProps}
                         />
-                    ))}
+                        );
+                    })}
 
                 {/* ── Administration Section (Admin+) ── */}
                 {canSeeAdminScreens && (
@@ -494,6 +514,26 @@ const MenuStackNavigator = () => {
 
 // Main App Navigator (Drawer)
 const MainAppNavigator = () => {
+    const [realtimeUserId, setRealtimeUserId] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        supabase.auth.getUser().then(({ data }) => {
+            if (!cancelled) setRealtimeUserId(data.user?.id ?? null);
+        });
+        const {
+            data: { subscription },
+        } = supabase.auth.onAuthStateChange((_evt, session) => {
+            setRealtimeUserId(session?.user?.id ?? null);
+        });
+        return () => {
+            cancelled = true;
+            subscription.unsubscribe();
+        };
+    }, []);
+
+    useMessagesRealtimeSync(realtimeUserId);
+
     return (
         <Drawer.Navigator
             drawerContent={(props) => <CustomDrawerContent {...props} />}

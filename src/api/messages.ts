@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
@@ -23,6 +25,94 @@ export interface MessageGroup {
     created_by: string;
     created_at: string;
     updated_at?: string;
+}
+
+/** React Query key for unread inbox rows (all message rows where recipient = user & read=false). */
+export function inboxUnreadCountQueryKey(userId: string) {
+    return ['inboxUnreadCount', userId] as const;
+}
+
+export function useInboxUnreadCount(userId: string | null) {
+    return useQuery({
+        queryKey: userId ? inboxUnreadCountQueryKey(userId) : ['inboxUnreadCount', 'disabled'],
+        queryFn: async (): Promise<number> => {
+            if (!userId) return 0;
+            const { count, error } = await supabase
+                .from('messages')
+                .select('*', { count: 'exact', head: true })
+                .eq('recipient_id', userId)
+                .eq('read', false);
+            if (error) throw error;
+            return count ?? 0;
+        },
+        enabled: !!userId,
+        staleTime: 5000,
+        /** Fallback when Realtime misses events (sleep/network/publication quirks). */
+        refetchInterval: 30_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
+/** Subscribe to inbox/sent DB changes so lists update live (matches web `postgres_changes` behavior). */
+export function useMessagesRealtimeSync(userId: string | null) {
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+        if (!userId) return;
+
+        const invalidateInbox = () => {
+            queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+        };
+        const invalidateSent = () => {
+            queryClient.invalidateQueries({ queryKey: ['messages_sent', userId] });
+        };
+        const invalidateUnread = () => {
+            queryClient.invalidateQueries({ queryKey: inboxUnreadCountQueryKey(userId) });
+        };
+
+        const channel = supabase
+            .channel(`messages-mobile-${userId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `recipient_id=eq.${userId}`,
+                },
+                () => {
+                    invalidateInbox();
+                    invalidateUnread();
+                },
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `sender_id=eq.${userId}`,
+                },
+                invalidateSent,
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [userId, queryClient]);
+
+    useEffect(() => {
+        if (!userId) return;
+        const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+            if (next === 'active') {
+                queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+                queryClient.invalidateQueries({ queryKey: ['messages_sent', userId] });
+                queryClient.invalidateQueries({ queryKey: inboxUnreadCountQueryKey(userId) });
+            }
+        });
+        return () => sub.remove();
+    }, [userId, queryClient]);
 }
 
 export const useMessages = (userId: string | null) => {
@@ -100,6 +190,7 @@ export const useSendMessage = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages_sent'] });
+            queryClient.invalidateQueries({ queryKey: ['inboxUnreadCount'] });
         },
     });
 };
@@ -152,6 +243,7 @@ export const useMarkMessageRead = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] });
+            queryClient.invalidateQueries({ queryKey: ['inboxUnreadCount'] });
         },
     });
 };

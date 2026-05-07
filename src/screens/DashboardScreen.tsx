@@ -25,6 +25,7 @@ import {
     useTodaySpecialEventsActivities,
     useDailyWolfContentRow,
 } from '../api/dashboard';
+import { useInboxUnreadCount } from '../api/messages';
 import { supabase } from '../lib/supabase';
 
 const DEFAULT_WEATHER_ZIP = '18469';
@@ -45,6 +46,13 @@ export const DashboardScreen = ({ navigation }: any) => {
     const todayString = currentDate.toISOString().split('T')[0];
     const todayMonth = currentDate.getMonth() + 1;
     const todayDay = currentDate.getDate();
+
+    const [dashboardUserId, setDashboardUserId] = useState<string | null>(null);
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => setDashboardUserId(data.user?.id ?? null));
+    }, []);
+
+    const { data: inboxUnread = 0 } = useInboxUnreadCount(dashboardUserId);
 
     // Dashboard Notes (Tyler Hill)
     const [notesLoading, setNotesLoading] = useState(false);
@@ -295,9 +303,23 @@ export const DashboardScreen = ({ navigation }: any) => {
                     <View style={styles.headerRight}>
                         <TouchableOpacity
                             onPress={() => navigation.navigate('Messages')}
-                            style={styles.headerIconBtn}
+                            style={styles.headerBellWrap}
+                            accessibilityLabel={
+                                inboxUnread > 0
+                                    ? `Messages, ${inboxUnread} unread notifications`
+                                    : 'Messages'
+                            }
                         >
-                            <Ionicons name="notifications-outline" size={26} color={ink} />
+                            <View style={[styles.headerIconBtn, styles.headerBellInner]}>
+                                <Ionicons name="notifications-outline" size={26} color={ink} />
+                            </View>
+                            {inboxUnread > 0 && (
+                                <View style={styles.headerBellBadge} accessibilityLabel={`${inboxUnread} unread`}>
+                                    <Text style={styles.headerBellBadgeText}>
+                                        {inboxUnread > 99 ? '99+' : inboxUnread}
+                                    </Text>
+                                </View>
+                            )}
                         </TouchableOpacity>
                         <MobileUserMenu navigation={navigation} />
                     </View>
@@ -792,6 +814,31 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    headerBellWrap: {
+        position: 'relative',
+        alignSelf: 'center',
+    },
+    headerBellInner: {
+        width: 40,
+        height: 40,
+    },
+    headerBellBadge: {
+        position: 'absolute',
+        top: 2,
+        right: 2,
+        minWidth: 18,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: '#ef4444',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 4,
+    },
+    headerBellBadgeText: {
+        color: '#ffffff',
+        fontSize: 10,
+        fontWeight: '700',
     },
     titleSection: {
         marginBottom: theme.spacing.lg,
