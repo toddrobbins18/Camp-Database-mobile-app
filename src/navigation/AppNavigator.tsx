@@ -51,6 +51,11 @@ import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { useRole } from '../hooks/useRole';
 import { useRolePermissions } from '../api/permissions';
 import { useMessagesRealtimeSync, useInboxUnreadCount } from '../api/messages';
+import {
+    registerInboxNotificationPresentation,
+    ensureInboxNotificationChannel,
+    requestInboxNotificationPermission,
+} from '../lib/inboxLocalNotification';
 import { supabase } from '../lib/supabase';
 import { theme } from '../theme/theme';
 import { getMenuDrawerThemeFromCompany } from '../theme/menuDrawerTheme';
@@ -531,6 +536,15 @@ const MainAppNavigator = () => {
             subscription.unsubscribe();
         };
     }, []);
+
+    useEffect(() => {
+        if (!realtimeUserId) return;
+        registerInboxNotificationPresentation();
+        void (async () => {
+            await ensureInboxNotificationChannel();
+            await requestInboxNotificationPermission();
+        })();
+    }, [realtimeUserId]);
 
     useMessagesRealtimeSync(realtimeUserId);
 

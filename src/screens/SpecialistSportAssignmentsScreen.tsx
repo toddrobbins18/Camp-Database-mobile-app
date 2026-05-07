@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,36 +13,92 @@ const AVAILABLE_SPORTS = [
   'Hockey', 'Lacrosse', 'Soccer', 'Softball', 'Tennis', 'Volleyball', 'Waterfront'
 ];
 
+function normalizeStaffEmail(value: string | null | undefined): string | null {
+  if (!value || typeof value !== 'string') return null;
+  const t = value.trim().toLowerCase();
+  return t || null;
+}
+
 export const SpecialistSportAssignmentsScreen = ({ navigation }: any) => {
-  const { companyId, availableCompanies } = useCompany();
+  const { companyId, season, availableCompanies } = useCompany();
   const companyName = companyId ? availableCompanies.find(c => c.id === companyId)?.name : null;
   const queryClient = useQueryClient();
 
   const { data: specialists = [], isLoading } = useQuery({
-    queryKey: ['specialist_sport_assignments', companyId],
+    queryKey: ['specialist_sport_assignments', companyId, season],
     queryFn: async () => {
-      if (!companyId) return [];
+      if (!companyId || !season) return [];
+
       const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id')
         .eq('role', 'specialist')
         .eq('company_id', companyId);
       if (rolesError) throw rolesError;
-      const userIds = (rolesData || []).map((r: any) => r.user_id);
-      if (userIds.length === 0) return [];
+      const roleUserIds = (rolesData || []).map((r: any) => r.user_id).filter(Boolean);
 
-      const { data: profilesData, error: profError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', userIds);
+      const roleProfilesProm =
+        roleUserIds.length === 0
+          ? Promise.resolve({ data: [] as any[], error: null as Error | null })
+          : supabase.from('profiles').select('id, full_name, email').in('id', roleUserIds);
+
+      const { data: staffSpecialists, error: staffSpecError } = await supabase
+        .from('staff')
+        .select('email')
+        .eq('company_id', companyId)
+        .eq('status', 'active')
+        .eq('season', season)
+        .in('staff_type', ['specialist', 'both']);
+
+      if (staffSpecError) console.warn('[SpecialistSportAssignments] staff:', staffSpecError);
+
+      const staffEmails = new Set<string>();
+      (staffSpecialists || []).forEach((row: { email?: string | null }) => {
+        const n = normalizeStaffEmail(row.email);
+        if (n) staffEmails.add(n);
+      });
+
+      let emailToProfile = new Map<string, { id: string; full_name: string | null; email: string | null }>();
+      if (staffEmails.size > 0) {
+        const { data: companyProfiles, error: profErr } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .eq('company_id', companyId);
+        if (profErr) console.warn('[SpecialistSportAssignments] profiles:', profErr);
+        (companyProfiles || []).forEach((p: any) => {
+          const key = normalizeStaffEmail(p.email);
+          if (key && staffEmails.has(key)) {
+            emailToProfile.set(key, p);
+          }
+        });
+      }
+
+      const { data: roleProfiles, error: profError } = await roleProfilesProm;
       if (profError) throw profError;
-      return (profilesData || []).map((p: any) => ({
-        user_id: p.id,
-        full_name: p.full_name || p.email || 'Unknown',
-        email: p.email || ''
-      }));
+
+      const byUserId = new Map<string, { user_id: string; full_name: string; email: string }>();
+      for (const p of roleProfiles || []) {
+        byUserId.set(p.id, {
+          user_id: p.id,
+          full_name: p.full_name || p.email || 'Unknown',
+          email: p.email || '',
+        });
+      }
+      for (const em of staffEmails) {
+        const p = emailToProfile.get(em);
+        if (!p?.id || byUserId.has(p.id)) continue;
+        byUserId.set(p.id, {
+          user_id: p.id,
+          full_name: p.full_name || p.email || 'Unknown',
+          email: p.email || '',
+        });
+      }
+
+      return Array.from(byUserId.values()).sort((a, b) =>
+        (a.full_name || a.email).localeCompare(b.full_name || b.email, undefined, { sensitivity: 'base' }),
+      );
     },
-    enabled: !!companyId,
+    enabled: !!companyId && !!season,
   });
 
   const { data: assignmentsData = [] } = useQuery({
@@ -83,10 +139,11 @@ export const SpecialistSportAssignmentsScreen = ({ navigation }: any) => {
         if (error) throw error;
       }
       queryClient.invalidateQueries({ queryKey: ['specialist_sport_assignments_list', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['specialist_sport_assignments', companyId, season] });
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to update assignment');
     }
-  }, [companyId, queryClient]);
+  }, [companyId, season, queryClient]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -122,7 +179,8 @@ export const SpecialistSportAssignmentsScreen = ({ navigation }: any) => {
         ) : specialists.length === 0 ? (
           <StyledCard style={styles.emptyCard}>
             <Text style={styles.emptyText}>
-              No specialists found in this company. Users need to have the 'specialist' role to appear here.
+              No specialists found for this camp and season. Set Staff Type to specialist or both (with login email matching
+              staff), or assign the Specialist role in admin—then assign sports here.
             </Text>
           </StyledCard>
         ) : (

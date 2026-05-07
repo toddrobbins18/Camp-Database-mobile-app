@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     View,
     Text,
@@ -18,14 +18,38 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { useMessages, useSentMessages, useMessageGroups, useCreateMessageGroup, useSendMessage, useMarkMessageRead } from '../api/messages';
+import {
+    useMessages,
+    useSentMessages,
+    useMessageGroups,
+    useCreateMessageGroup,
+    useSendMessage,
+    useMarkMessageRead,
+    fetchMessageThread,
+} from '../api/messages';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { MobileUserMenu } from '../components/MobileUserMenu';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { inboxSenderDisplayName, sentRecipientDisplayName } from '../lib/messageProfiles';
+
+/** Inbox list second line: latest reply (web parity) or root message body. */
+function inboxThreadListSnippet(msg: {
+    latest_reply_content?: string | null;
+    latest_reply_sender_name?: string | null;
+    content?: string | null;
+}): string {
+    const raw = msg.latest_reply_content;
+    if (raw != null && String(raw).trim() !== '') {
+        const who = msg.latest_reply_sender_name?.trim();
+        return who ? `${who}: ${String(raw)}` : String(raw);
+    }
+    return String(msg.content ?? '').trim();
+}
 
 export const MessagesScreen = ({ navigation }: any) => {
     const insets = useSafeAreaInsets();
+    const queryClient = useQueryClient();
     /** Modal sometimes reports 0 top inset; use OS fallbacks so content clears the notch / Dynamic Island. */
     const modalTopInset =
         insets.top > 0
@@ -42,7 +66,8 @@ export const MessagesScreen = ({ navigation }: any) => {
     const [searchUsers, setSearchUsers] = useState('');
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
     const [showRecipientPreview, setShowRecipientPreview] = useState(false);
-    const [selectedMessage, setSelectedMessage] = useState<any>(null);
+    const [openThreadId, setOpenThreadId] = useState<string | null>(null);
+    const [threadReplies, setThreadReplies] = useState<any[]>([]);
     const [groupName, setGroupName] = useState('');
     const [groupDescription, setGroupDescription] = useState('');
     const [groupSearchUsers, setGroupSearchUsers] = useState('');
@@ -54,25 +79,57 @@ export const MessagesScreen = ({ navigation }: any) => {
         supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null));
     }, []);
 
-    const { data: messages = [], isLoading: messagesLoading } = useMessages(currentUserId);
-    const { data: sentMessages = [], isLoading: sentMessagesLoading } = useSentMessages(currentUserId);
+    const {
+        data: messages = [],
+        isLoading: messagesLoading,
+        dataUpdatedAt: inboxDataUpdatedAt,
+    } = useMessages(currentUserId, companyId ?? undefined);
+    const { data: sentMessages = [], isLoading: sentMessagesLoading } = useSentMessages(currentUserId, companyId ?? undefined);
     const { data: messageGroups = [], isLoading: groupsLoading } = useMessageGroups(currentUserId);
     const sendMutation = useSendMessage();
     const createGroupMutation = useCreateMessageGroup();
     const markReadMutation = useMarkMessageRead();
 
-    // Fetch users (profiles) for same company only, same as web
+    // Recipient list: prefer RPC (bypasses tight profiles RLS). If migration not applied on DB, fallback to SELECT (coworker RLS may surface peers).
     const { data: users = [] } = useQuery({
         queryKey: ['profiles_for_messages', companyId],
         queryFn: async () => {
             if (!companyId) return [];
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('id, full_name, email')
-                .eq('company_id', companyId)
-                .order('full_name', { ascending: true });
-            if (error) throw error;
-            return (data || []).map((p: any) => ({ id: p.id, name: p.full_name || p.email || 'Unknown', email: p.email || '' }));
+            const mapProfileRows = (rows: { id: string; full_name: string | null; email: string | null }[]) =>
+                rows.map((p) => ({
+                    id: p.id,
+                    name: p.full_name?.trim() || p.email?.split('@')[0] || 'Unknown',
+                    email: p.email || '',
+                }));
+
+            const { data, error } = await supabase.rpc('list_message_recipient_profiles', {
+                target_company_id: companyId,
+            });
+            if (!error && data) {
+                return mapProfileRows(data as { id: string; full_name: string | null; email: string | null }[]);
+            }
+
+            const missingRpc =
+                error?.code === 'PGRST202' ||
+                (typeof error?.message === 'string' && error.message.includes('could not find the function'));
+            if (missingRpc) {
+                console.warn(
+                    '[MessagesScreen] Run migration 20260508153000_rpc_list_message_recipient_profiles.sql on Supabase; using profiles fallback.',
+                );
+                const { data: rows, error: qErr } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, email')
+                    .eq('company_id', companyId)
+                    .order('full_name', { ascending: true, nullsFirst: false });
+                if (qErr) {
+                    console.error('[MessagesScreen] profiles fallback:', qErr);
+                    throw qErr;
+                }
+                return mapProfileRows((rows || []) as { id: string; full_name: string | null; email: string | null }[]);
+            }
+
+            console.error('[MessagesScreen] list_message_recipient_profiles:', error);
+            throw error;
         },
         enabled: !!companyId,
     });
@@ -83,19 +140,24 @@ export const MessagesScreen = ({ navigation }: any) => {
     const handleInbox = () => {
         setActiveView('inbox');
         setShowComposeModal(false);
+        setOpenThreadId(null);
     };
     const handleSent = () => {
         setActiveView('sent');
         setShowComposeModal(false);
+        setOpenThreadId(null);
+        queryClient.invalidateQueries({ queryKey: ['messages_sent'] });
     };
     const handleGroups = () => {
         setActiveView('groups');
         setShowComposeModal(false);
+        setOpenThreadId(null);
     };
 
     const handleCompose = () => {
         setActiveView('compose');
         setShowComposeModal(true);
+        setOpenThreadId(null);
     };
 
     const handleCloseCompose = () => {
@@ -134,13 +196,40 @@ export const MessagesScreen = ({ navigation }: any) => {
     const activeList = activeView === 'sent' ? sentMessages : messages;
     const activeLoading = activeView === 'sent' ? sentMessagesLoading : messagesLoading;
 
+    const detailMessage = useMemo(() => {
+        if (!openThreadId) return null;
+        return (activeList as any[]).find((m: any) => m.id === openThreadId) ?? null;
+    }, [activeList, openThreadId]);
+
+    useEffect(() => {
+        if (!openThreadId) {
+            setThreadReplies([]);
+            return;
+        }
+        let cancelled = false;
+        fetchMessageThread(openThreadId, companyId ?? undefined).then((rows) => {
+            if (!cancelled) setThreadReplies(rows);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [openThreadId, companyId, inboxDataUpdatedAt]);
+
+    useEffect(() => {
+        if (!openThreadId) return;
+        const list = activeView === 'sent' ? sentMessages : messages;
+        if (!list.some((m: any) => m.id === openThreadId)) {
+            setOpenThreadId(null);
+        }
+    }, [messages, sentMessages, activeView, openThreadId]);
+
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAwareScrollView
                 contentContainerStyle={styles.scrollContent}
                 enableOnAndroid={true}
                 extraScrollHeight={20}
-                keyboardShouldPersistTaps="handled"
+                keyboardShouldPersistTaps="always"
             >
                 {/* Header */}
                 <View style={styles.header}>
@@ -239,13 +328,21 @@ export const MessagesScreen = ({ navigation }: any) => {
                                     <Text style={styles.emptyText}>{activeView === 'sent' ? 'No sent messages yet' : 'No messages yet'}</Text>
                                 </View>
                             ) : (
-                                <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled>
-                                    {activeList.map((msg: any) => (
+                                <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled keyboardShouldPersistTaps="always">
+                                    {activeList.map((msg: any) => {
+                                        const inboxSnippet =
+                                            activeView === 'inbox' ? inboxThreadListSnippet(msg) : '';
+                                        return (
                                         <TouchableOpacity
                                             key={msg.id}
-                                            style={[styles.messageItem, !msg.read && styles.messageUnread]}
+                                            activeOpacity={0.75}
+                                            style={[
+                                                styles.messageItem,
+                                                !msg.read && activeView === 'inbox' && styles.messageUnread,
+                                                msg.id === openThreadId && styles.messageItemSelected,
+                                            ]}
                                             onPress={() => {
-                                                setSelectedMessage(msg);
+                                                setOpenThreadId(msg.id);
                                                 if (activeView === 'inbox' && !msg.read && msg.recipient_id === currentUserId) {
                                                     markReadMutation.mutate(msg.id);
                                                 }
@@ -253,28 +350,47 @@ export const MessagesScreen = ({ navigation }: any) => {
                                         >
                                             <Text style={styles.messageSender}>
                                                 {activeView === 'sent'
-                                                    ? `To: ${msg.recipient?.full_name || msg.recipient?.email || 'Unknown'}`
-                                                    : `From: ${msg.sender?.full_name || msg.sender?.email || 'Unknown'}`}
+                                                    ? `To: ${sentRecipientDisplayName(msg)}`
+                                                    : `From: ${inboxSenderDisplayName(msg)}`}
                                             </Text>
                                             <Text style={styles.messageSubject} numberOfLines={1}>{msg.subject}</Text>
+                                            {inboxSnippet ? (
+                                                <Text style={styles.messageSnippet} numberOfLines={2}>
+                                                    {inboxSnippet}
+                                                </Text>
+                                            ) : null}
                                             <Text style={styles.messageDate}>{new Date(msg.created_at).toLocaleDateString()}</Text>
                                         </TouchableOpacity>
-                                    ))}
+                                        );
+                                    })}
                                 </ScrollView>
                             )}
                         </StyledCard>
 
                         {/* Selected Message Card */}
                         <StyledCard style={styles.selectMessageCard}>
-                            {selectedMessage ? (
+                            {detailMessage ? (
                                 <View>
-                                    <Text style={styles.selectMessageTitle}>{selectedMessage.subject}</Text>
+                                    <Text style={styles.selectMessageTitle}>{detailMessage.subject}</Text>
                                     <Text style={styles.messageSender}>
                                         {activeView === 'sent'
-                                            ? `To: ${selectedMessage.recipient?.full_name || selectedMessage.recipient?.email || 'Unknown'}`
-                                            : `From: ${selectedMessage.sender?.full_name || selectedMessage.sender?.email || 'Unknown'}`}
+                                            ? `To: ${sentRecipientDisplayName(detailMessage)}`
+                                            : `From: ${inboxSenderDisplayName(detailMessage)}`}
                                     </Text>
-                                    <Text style={[styles.selectMessageText, { marginTop: 12, textAlign: 'left' }]}>{selectedMessage.content}</Text>
+                                    <Text style={[styles.selectMessageText, { marginTop: 12, textAlign: 'left' }]}>{detailMessage.content}</Text>
+                                    {threadReplies.length > 0 && (
+                                        <View style={{ marginTop: 20 }}>
+                                            <Text style={[styles.sectionTitleInline, { marginBottom: theme.spacing.sm }]}>Replies</Text>
+                                            {threadReplies.map((r: any) => (
+                                                <View key={r.id} style={styles.replyBubble}>
+                                                    <Text style={styles.replyMeta}>
+                                                        {`${r.sender_id === currentUserId ? 'You' : r.sender?.full_name || 'Unknown'} · ${new Date(r.created_at).toLocaleString()}`}
+                                                    </Text>
+                                                    <Text style={styles.replyBody}>{r.content}</Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
                                 </View>
                             ) : (
                                 <View>
@@ -1254,6 +1370,35 @@ const styles = StyleSheet.create({
     messageUnread: {
         backgroundColor: '#eef2ff',
     },
+    messageItemSelected: {
+        backgroundColor: '#e0e7ff',
+        borderRadius: theme.borderRadius.md,
+    },
+    sectionTitleInline: {
+        ...theme.typography.h2,
+        fontSize: 16,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    replyBubble: {
+        marginBottom: theme.spacing.sm,
+        padding: theme.spacing.md,
+        backgroundColor: '#f4f6f8',
+        borderRadius: theme.borderRadius.md,
+        borderLeftWidth: 3,
+        borderLeftColor: theme.colors.primary,
+    },
+    replyMeta: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginBottom: 6,
+    },
+    replyBody: {
+        ...theme.typography.body,
+        fontSize: 15,
+        color: theme.colors.text,
+    },
     messageSender: {
         ...theme.typography.body,
         fontSize: 14,
@@ -1264,6 +1409,12 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.text,
+        marginTop: 2,
+    },
+    messageSnippet: {
+        ...theme.typography.bodySmall,
+        fontSize: 13,
+        color: theme.colors.textSecondary,
         marginTop: 2,
     },
     messageDate: {

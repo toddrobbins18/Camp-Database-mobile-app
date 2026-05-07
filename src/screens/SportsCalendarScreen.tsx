@@ -1433,7 +1433,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     <View style={styles.eventItemContent}>
                                         <Text style={styles.eventItemTitle}>{event.emoji ? `${event.emoji} ` : ''}{event.title}</Text>
                                         <Text style={styles.eventItemDetails}>
-                                            {event.sport} • {event.location} • {event.division}
+                                            {[event.location, event.division].filter(Boolean).join(' • ')}
                                         </Text>
                                     </View>
                                     <TouchableOpacity onPress={() => handleDeleteClick(event.id)}>
@@ -1484,9 +1484,25 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                             </View>
 
                                             <View style={styles.eventTags}>
-                                                <View style={[styles.tag, { backgroundColor: '#2563eb' }]}>
-                                                    <Text style={styles.tagText}>{event.sport}</Text>
+                                                <View style={[styles.tag, { backgroundColor: '#dbeafe' }]}>
+                                                    <Text style={[styles.tagText, { color: '#1d4ed8' }]}>Sports</Text>
                                                 </View>
+                                                {!!event.sport && (
+                                                    <View
+                                                        style={[
+                                                            styles.tag,
+                                                            {
+                                                                backgroundColor: '#f3f4f6',
+                                                                borderWidth: 1,
+                                                                borderColor: '#e5e7eb',
+                                                            },
+                                                        ]}
+                                                    >
+                                                        <Text style={[styles.tagText, { color: theme.colors.text }]}>
+                                                            {event.sport}
+                                                        </Text>
+                                                    </View>
+                                                )}
                                                 {!!event.eventType && (
                                                     <View style={[styles.tag, { backgroundColor: '#f3f4f6' }]}>
                                                         <Text style={[styles.tagText, { color: theme.colors.text }]}>{event.eventType}</Text>
@@ -1970,9 +1986,25 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     </Text>
 
                                     <View style={styles.eventTags}>
-                                        <View style={[styles.tag, { backgroundColor: '#3b82f6' }]}>
-                                            <Text style={styles.tagText}>{event.sport}</Text>
+                                        <View style={[styles.tag, { backgroundColor: '#dbeafe' }]}>
+                                            <Text style={[styles.tagText, { color: '#1d4ed8' }]}>Sports</Text>
                                         </View>
+                                        {!!event.sport && (
+                                            <View
+                                                style={[
+                                                    styles.tag,
+                                                    {
+                                                        backgroundColor: '#f3f4f6',
+                                                        borderWidth: 1,
+                                                        borderColor: '#e5e7eb',
+                                                    },
+                                                ]}
+                                            >
+                                                <Text style={[styles.tagText, { color: theme.colors.text }]}>
+                                                    {event.sport}
+                                                </Text>
+                                            </View>
+                                        )}
                                         {!!event.eventType && (
                                             <View style={[styles.tag, { backgroundColor: '#f59e0b' }]}>
                                                 <Text style={styles.tagText}>{event.eventType}</Text>
