@@ -24,6 +24,7 @@ import {
     useTodaySportsCalendar,
     useTodaySpecialEventsActivities,
     useDailyWolfContentRow,
+    useUpcomingTripsForDashboard,
 } from '../api/dashboard';
 import { useInboxUnreadCount } from '../api/messages';
 import { supabase } from '../lib/supabase';
@@ -72,14 +73,21 @@ export const DashboardScreen = ({ navigation }: any) => {
     });
 
     const { data: birthdays = [] } = useTodayBirthdays(companyId, todayMonth, todayDay);
-    const { data: todayEvents = [] } = useTodayEvents(companyId, todayString);
+    const { data: todayEvents = [] } = useTodayEvents(companyId, todayString, season ?? null);
     const { data: meals = null } = useTodayMeals(companyId, todayString);
+
+    const { data: upcomingTrips = [] } = useUpcomingTripsForDashboard(
+        companyId,
+        todayString,
+        season ?? null,
+        isTimberLakeCamp,
+    );
 
     const { data: sportsToday = [] } = useTodaySportsCalendar(
         companyId,
         todayString,
         season ?? null,
-        isTimberLakeWest,
+        isTimberLakeWest || isTimberLakeCamp,
     );
     const { data: specialActivitiesToday = [] } = useTodaySpecialEventsActivities(
         companyId,
@@ -414,6 +422,77 @@ export const DashboardScreen = ({ navigation }: any) => {
                         </Text>
                     </TouchableOpacity>
                 </StyledCard>
+
+                {/* Timber Lake Camp: activities & field trips + upcoming trips */}
+                {isTimberLakeCamp && (
+                    <>
+                        <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
+                            <View style={styles.cardHeader}>
+                                <Ionicons name="leaf-outline" size={20} color="#059669" />
+                                <Text style={styles.cardTitle}>Activities & Field Trips</Text>
+                            </View>
+                            <Text style={styles.cardSubtitle}>Scheduled for today</Text>
+                            {todayEvents.length === 0 ? (
+                                <View style={styles.emptyState}>
+                                    <Text style={styles.emptyText}>No activities or field trips today</Text>
+                                </View>
+                            ) : (
+                                todayEvents.map((evt: any) => (
+                                    <View key={evt.id} style={{ marginBottom: 8 }}>
+                                        <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
+                                        <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                                            {(evt.time || 'Time TBD') + (evt.location ? ` · ${evt.location}` : '')}
+                                        </Text>
+                                    </View>
+                                ))
+                            )}
+                            <TouchableOpacity
+                                style={[styles.outlineBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
+                                onPress={() => navigation.navigate('ActivitiesFieldTrips')}
+                            >
+                                <Text style={[styles.outlineBtnText, hasDashboardHeroBg && styles.outlineBtnTextOnHero]}>
+                                    View Activities & Field Trips
+                                </Text>
+                            </TouchableOpacity>
+                        </StyledCard>
+
+                        <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
+                            <View style={styles.cardHeader}>
+                                <Ionicons name="bus-outline" size={20} color="#0284c7" />
+                                <Text style={styles.cardTitle}>Upcoming Trips</Text>
+                            </View>
+                            <Text style={styles.cardSubtitle}>Transportation & trip schedule</Text>
+                            {upcomingTrips.length === 0 ? (
+                                <View style={styles.emptyState}>
+                                    <Text style={styles.emptyText}>No upcoming trips</Text>
+                                </View>
+                            ) : (
+                                upcomingTrips.map((trip: any) => (
+                                    <View key={trip.id} style={{ marginBottom: 8 }}>
+                                        <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{trip.name}</Text>
+                                        <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                                            {trip.date
+                                                ? new Date(trip.date + 'T12:00:00').toLocaleDateString(undefined, {
+                                                      month: 'short',
+                                                      day: 'numeric',
+                                                  })
+                                                : ''}{' '}
+                                            {trip.type ? `· ${trip.type}` : ''}
+                                        </Text>
+                                    </View>
+                                ))
+                            )}
+                            <TouchableOpacity
+                                style={[styles.outlineBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
+                                onPress={() => navigation.navigate('Transport')}
+                            >
+                                <Text style={[styles.outlineBtnText, hasDashboardHeroBg && styles.outlineBtnTextOnHero]}>
+                                    View Transportation
+                                </Text>
+                            </TouchableOpacity>
+                        </StyledCard>
+                    </>
+                )}
 
                 {/* Athletics Schedule */}
                 <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>

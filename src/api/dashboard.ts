@@ -113,23 +113,58 @@ export const useTodayBirthdays = (companyId: string | null, todayMonth: number, 
     });
 };
 
-// Fetch today's events from activities_field_trips table
-export const useTodayEvents = (companyId: string | null, todayString: string) => {
+// Fetch today's activities / field trips (activities_field_trips — uses event_date + season, not legacy `date`)
+export const useTodayEvents = (companyId: string | null, todayString: string, season: string | null) => {
+    const seasonKey = season ?? '';
     return useQuery({
-        queryKey: ['dashboard_events', companyId, todayString],
+        queryKey: ['dashboard_events', companyId, todayString, seasonKey],
         queryFn: async () => {
             if (!companyId) return [];
-            const { data, error } = await supabase
+            let q = supabase
                 .from('activities_field_trips')
-                .select('id, title, description, date, time, location')
+                .select('id, title, description, event_date, time, location')
                 .eq('company_id', companyId)
-                .eq('date', todayString)
+                .eq('event_date', todayString)
                 .order('time', { ascending: true });
+            if (seasonKey) {
+                q = q.eq('season', seasonKey);
+            }
+            const { data, error } = await q;
 
             if (error) throw error;
             return data || [];
         },
         enabled: !!companyId,
+    });
+};
+
+/** Upcoming transportation trips from `trips` (Timber Lake Camp dashboard). */
+export const useUpcomingTripsForDashboard = (
+    companyId: string | null,
+    todayString: string,
+    season: string | null,
+    enabled: boolean,
+) => {
+    const seasonKey = season ?? '';
+    return useQuery({
+        queryKey: ['dashboard_upcoming_trips', companyId, todayString, seasonKey],
+        queryFn: async () => {
+            if (!companyId) return [];
+            let q = supabase
+                .from('trips')
+                .select('id, name, date, type, departure_time, destination')
+                .eq('company_id', companyId)
+                .gte('date', todayString)
+                .order('date', { ascending: true })
+                .limit(8);
+            if (seasonKey) {
+                q = q.eq('season', seasonKey);
+            }
+            const { data, error } = await q;
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!companyId && enabled,
     });
 };
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Pressable, Switch, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -57,6 +57,7 @@ type AppointmentTab = 'Upcoming' | 'Past' | 'All';
 export const AppointmentsScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
+    const appointmentSubmitLock = useRef(false);
 
     // Fetch appointments from Supabase
     const { data: appointments = [], isLoading: isLoadingAppointments } = useQuery({
@@ -65,28 +66,42 @@ export const AppointmentsScreen = ({ navigation }: any) => {
             if (!companyId) return [];
             const { data, error } = await supabase
                 .from('appointments')
-                .select('*')
+                .select(
+                    `
+                    *,
+                    child:child_id(id, name),
+                    staff:staff_id(id, name, department)
+                `,
+                )
                 .eq('company_id', companyId)
                 .eq('season', season)
                 .order('appointment_date', { ascending: true });
             if (error) throw error;
-            // Map Supabase columns to UI fields
-            return (data || []).map((apt: any) => ({
-                id: apt.id,
-                date: apt.appointment_date,
-                time: apt.appointment_time,
-                person: apt.person_name || '',
-                personId: apt.child_id || apt.staff_id || '',
-                personType: apt.child_id ? 'Camper' : 'Staff',
-                type: apt.appointment_type,
-                provider: apt.provider_name,
-                location: apt.location,
-                status: apt.status || 'Scheduled',
-                notes: apt.notes,
-                followUpRequired: apt.follow_up_required || false,
-                child_id: apt.child_id,
-                staff_id: apt.staff_id,
-            }));
+            // Map Supabase columns to UI fields — web often omits person_name; resolve from child/staff join (parity with web Appointments.tsx)
+            return (data || []).map((apt: any) => {
+                const fromJoin =
+                    (apt.child?.name && String(apt.child.name).trim()) ||
+                    (apt.staff?.name && String(apt.staff.name).trim()) ||
+                    '';
+                const personLabel =
+                    (apt.person_name && String(apt.person_name).trim()) || fromJoin || '';
+                return {
+                    id: apt.id,
+                    date: apt.appointment_date,
+                    time: apt.appointment_time,
+                    person: personLabel,
+                    personId: apt.child_id || apt.staff_id || '',
+                    personType: apt.child_id ? 'Camper' : 'Staff',
+                    type: apt.appointment_type,
+                    provider: apt.provider_name,
+                    location: apt.location,
+                    status: apt.status || 'Scheduled',
+                    notes: apt.notes,
+                    followUpRequired: apt.follow_up_required || false,
+                    child_id: apt.child_id,
+                    staff_id: apt.staff_id,
+                };
+            });
         },
         enabled: !!companyId,
     });
@@ -978,29 +993,55 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                     <Text style={styles.cancelButtonText}>Cancel</Text>
                                 </Pressable>
                                 <TouchableOpacity
-                                    style={styles.updateButton}
-                                    onPress={() => {
-                                        if (!formData.date || !formData.person || !formData.type) {
-                                            Alert.alert('Validation', 'Please fill in all required fields (Person, Type, Date)');
+                                    style={[
+                                        styles.updateButton,
+                                        (addAppointmentMutation.isPending || updateAppointmentMutation.isPending) &&
+                                            { opacity: 0.65 },
+                                    ]}
+                                    disabled={
+                                        addAppointmentMutation.isPending || updateAppointmentMutation.isPending
+                                    }
+                                    onPress={async () => {
+                                        if (appointmentSubmitLock.current) return;
+                                        if (
+                                            addAppointmentMutation.isPending ||
+                                            updateAppointmentMutation.isPending
+                                        ) {
                                             return;
                                         }
-                                        if (editingAppointment) {
-                                            updateAppointmentMutation.mutate({
-                                                id: editingAppointment.id,
-                                                ...formData,
-                                                appointmentFor,
-                                            });
-                                        } else {
-                                            addAppointmentMutation.mutate({
-                                                ...formData,
-                                                appointmentFor,
-                                            });
+                                        if (!formData.date || !formData.person || !formData.type) {
+                                            Alert.alert(
+                                                'Validation',
+                                                'Please fill in all required fields (Person, Type, Date)',
+                                            );
+                                            return;
+                                        }
+                                        appointmentSubmitLock.current = true;
+                                        try {
+                                            if (editingAppointment) {
+                                                await updateAppointmentMutation.mutateAsync({
+                                                    id: editingAppointment.id,
+                                                    ...formData,
+                                                    appointmentFor,
+                                                });
+                                            } else {
+                                                await addAppointmentMutation.mutateAsync({
+                                                    ...formData,
+                                                    appointmentFor,
+                                                });
+                                            }
+                                        } finally {
+                                            appointmentSubmitLock.current = false;
                                         }
                                     }}
                                 >
-                                    <Text style={styles.updateButtonText}>
-                                        {editingAppointment ? 'Update Appointment' : 'Create Appointment'}
-                                    </Text>
+                                    {addAppointmentMutation.isPending || updateAppointmentMutation.isPending ? (
+                                        <ActivityIndicator color="#fff" />
+                                    ) : (
+                                        <Text style={styles.updateButtonText}>
+                                            {editingAppointment ? 'Update Appointment' : 'Create Appointment'}
+                                        </Text>
+                                    )}
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
