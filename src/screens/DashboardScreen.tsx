@@ -40,6 +40,7 @@ function weatherIconName(condition: string | undefined): keyof typeof Ionicons.g
 
 export const DashboardScreen = ({ navigation }: any) => {
     const { companyId, season, isTylerHill, isTimberLakeCamp, isTimberLakeWest } = useCompany();
+    const hasDashboardHeroBg = isTimberLakeWest || isTylerHill;
     const currentDate = new Date();
     const todayString = currentDate.toISOString().split('T')[0];
     const todayMonth = currentDate.getMonth() + 1;
@@ -280,11 +281,11 @@ export const DashboardScreen = ({ navigation }: any) => {
         }
     };
 
-    const ink = isTimberLakeWest ? '#ffffff' : theme.colors.text;
+    const ink = hasDashboardHeroBg ? '#ffffff' : theme.colors.text;
 
     const scrollInner = (
         <>
-            <ScrollView contentContainerStyle={[styles.scrollContent, isTimberLakeWest && styles.scrollOnHero]}>
+            <ScrollView contentContainerStyle={[styles.scrollContent, hasDashboardHeroBg && styles.scrollOnHero]}>
                 {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.openDrawer()}>
@@ -304,16 +305,16 @@ export const DashboardScreen = ({ navigation }: any) => {
 
                 {/* Title Section */}
                 <View style={styles.titleSection}>
-                    <Text style={[styles.title, isTimberLakeWest && styles.titleOnHero]}>{dashboardTitle}</Text>
-                    <Text style={[styles.welcomeText, isTimberLakeWest && styles.welcomeOnHero]}>
-                        {isTimberLakeCamp || isTimberLakeWest
+                    <Text style={[styles.title, hasDashboardHeroBg && styles.titleOnHero]}>{dashboardTitle}</Text>
+                    <Text style={[styles.welcomeText, hasDashboardHeroBg && styles.welcomeOnHero]}>
+                        {isTimberLakeCamp || isTimberLakeWest || isTylerHill
                             ? formattedDateLong
                             : "Welcome back! Here's what's happening today."}
                     </Text>
                 </View>
 
                 {/* Weather Widget */}
-                <StyledCard style={[styles.widgetCard, isTimberLakeWest && styles.glassCard]}>
+                <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                     <View style={styles.cardHeader}>
                         <Ionicons name="cloud-outline" size={20} color={theme.colors.text} />
                         <Text style={styles.cardTitle}>Weather</Text>
@@ -362,7 +363,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                 </StyledCard>
 
                 {/* Today's Menu Widget */}
-                <StyledCard style={[styles.widgetCard, isTimberLakeWest && styles.glassCard]}>
+                <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                     <View style={styles.cardHeader}>
                         <Ionicons name="restaurant-outline" size={20} color={theme.colors.text} />
                         <Text style={styles.cardTitle}>Today's Menu</Text>
@@ -383,17 +384,17 @@ export const DashboardScreen = ({ navigation }: any) => {
                         </TouchableOpacity>
                     </View>
                     <TouchableOpacity
-                        style={[styles.viewMenuBtn, isTimberLakeWest && styles.glassOutlineBtn]}
+                        style={[styles.viewMenuBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
                         onPress={() => navigation.navigate('Menu')}
                     >
-                        <Text style={[styles.viewMenuText, isTimberLakeWest && styles.outlineBtnTextOnHero]}>
+                        <Text style={[styles.viewMenuText, hasDashboardHeroBg && styles.outlineBtnTextOnHero]}>
                             View Full Menu
                         </Text>
                     </TouchableOpacity>
                 </StyledCard>
 
                 {/* Athletics Schedule */}
-                <StyledCard style={[styles.widgetCard, isTimberLakeWest && styles.glassCard]}>
+                <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                     <View style={styles.cardHeader}>
                         <Ionicons name="trophy-outline" size={20} color="#fbbf24" />
                         <Text style={styles.cardTitle}>Athletics Schedule</Text>
@@ -415,17 +416,17 @@ export const DashboardScreen = ({ navigation }: any) => {
                         ))
                     )}
                     <TouchableOpacity
-                        style={[styles.outlineBtn, isTimberLakeWest && styles.glassOutlineBtn]}
+                        style={[styles.outlineBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
                         onPress={() => navigation.navigate('SportsCalendar')}
                     >
-                        <Text style={[styles.outlineBtnText, isTimberLakeWest && styles.outlineBtnTextOnHero]}>
+                        <Text style={[styles.outlineBtnText, hasDashboardHeroBg && styles.outlineBtnTextOnHero]}>
                             View Full Schedule
                         </Text>
                     </TouchableOpacity>
                 </StyledCard>
 
                 {/* Today's Birthdays */}
-                <StyledCard style={[styles.widgetCard, isTimberLakeWest && styles.glassCard]}>
+                <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                     <View style={styles.cardHeader}>
                         <Ionicons name="gift-outline" size={20} color="#10b981" />
                         <Text style={styles.cardTitle}>Today's Birthdays</Text>
@@ -467,7 +468,7 @@ export const DashboardScreen = ({ navigation }: any) => {
 
                 {/* Evening Activities — Timber Lake West only (matches web) */}
                 {isTimberLakeWest && (
-                    <StyledCard style={[styles.widgetCard, isTimberLakeWest && styles.glassCard]}>
+                    <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                         <View style={styles.cardHeader}>
                             <Ionicons name="moon-outline" size={20} color="#a855f7" />
                             <Text style={styles.cardTitle}>Evening Activities</Text>
@@ -489,10 +490,10 @@ export const DashboardScreen = ({ navigation }: any) => {
                             ))
                         )}
                         <TouchableOpacity
-                            style={[styles.outlineBtn, isTimberLakeWest && styles.glassOutlineBtn]}
+                            style={[styles.outlineBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
                             onPress={() => navigation.navigate('SpecialEvents')}
                         >
-                            <Text style={[styles.outlineBtnText, isTimberLakeWest && styles.outlineBtnTextOnHero]}>
+                            <Text style={[styles.outlineBtnText, hasDashboardHeroBg && styles.outlineBtnTextOnHero]}>
                                 View All Events
                             </Text>
                         </TouchableOpacity>
@@ -500,7 +501,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                 )}
 
                 {/* Special Events & Activities */}
-                <StyledCard style={[styles.widgetCard, isTimberLakeWest && styles.glassCard]}>
+                <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                     <View style={styles.cardHeader}>
                         <Ionicons name="calendar-outline" size={20} color={theme.colors.secondary} />
                         <Text style={styles.cardTitle}>Special Events & Activities</Text>
@@ -522,10 +523,10 @@ export const DashboardScreen = ({ navigation }: any) => {
                         ))
                     )}
                     <TouchableOpacity
-                        style={[styles.outlineBtn, isTimberLakeWest && styles.glassOutlineBtn]}
+                        style={[styles.outlineBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
                         onPress={() => navigation.navigate('SpecialEvents')}
                     >
-                        <Text style={[styles.outlineBtnText, isTimberLakeWest && styles.outlineBtnTextOnHero]}>
+                        <Text style={[styles.outlineBtnText, hasDashboardHeroBg && styles.outlineBtnTextOnHero]}>
                             View All Events
                         </Text>
                     </TouchableOpacity>
@@ -533,7 +534,7 @@ export const DashboardScreen = ({ navigation }: any) => {
 
                 {/* Notes (Tyler Hill only) */}
                 {isTylerHill && (
-                    <StyledCard style={[styles.widgetCard, isTimberLakeWest && styles.glassCard]}>
+                    <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                         <View style={styles.cardHeader}>
                             <Ionicons name="document-text-outline" size={20} color={theme.colors.text} />
                             <Text style={styles.cardTitle}>Notes</Text>
@@ -607,7 +608,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                 {isTimberLakeWest && (
                     <View style={styles.wolfStrip}>
                         <View style={styles.wolfRow}>
-                            <View style={[styles.wolfMiniCard, isTimberLakeWest && styles.glassCard]}>
+                            <View style={[styles.wolfMiniCard, hasDashboardHeroBg && styles.glassCard]}>
                                 <View style={styles.wolfMiniHeader}>
                                     <Ionicons name="person-outline" size={18} color={theme.colors.secondary} />
                                     <Text style={styles.wolfMiniTitle}>Super OD</Text>
@@ -616,7 +617,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                                     {dailyWolfRow?.officer_of_day?.trim() || 'Not set'}
                                 </Text>
                             </View>
-                            <View style={[styles.wolfMiniCard, isTimberLakeWest && styles.glassCard]}>
+                            <View style={[styles.wolfMiniCard, hasDashboardHeroBg && styles.glassCard]}>
                                 <View style={styles.wolfMiniHeader}>
                                     <Ionicons name="chatbox-ellipses-outline" size={18} color="#d97706" />
                                     <Text style={styles.wolfMiniTitle}>Starfish Quote</Text>
@@ -629,7 +630,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                             </View>
                         </View>
                         <View style={styles.wolfRow}>
-                            <View style={[styles.wolfMiniCard, isTimberLakeWest && styles.glassCard]}>
+                            <View style={[styles.wolfMiniCard, hasDashboardHeroBg && styles.glassCard]}>
                                 <View style={styles.wolfMiniHeader}>
                                     <Ionicons name="shirt-outline" size={18} color="#2563eb" />
                                     <Text style={styles.wolfMiniTitle}>Laundry</Text>
@@ -638,7 +639,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                                     {dailyWolfRow?.laundry_info?.trim() || 'No laundry info'}
                                 </Text>
                             </View>
-                            <View style={[styles.wolfMiniCard, isTimberLakeWest && styles.glassCard]}>
+                            <View style={[styles.wolfMiniCard, hasDashboardHeroBg && styles.glassCard]}>
                                 <View style={styles.wolfMiniHeader}>
                                     <Ionicons name="call-outline" size={18} color="#15803d" />
                                     <Text style={styles.wolfMiniTitle}>Phone Calls</Text>
@@ -649,7 +650,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                             </View>
                         </View>
                         {!!dailyWolfRow?.notes?.trim() && (
-                            <View style={[styles.wolfNotesCard, isTimberLakeWest && styles.glassCard]}>
+                            <View style={[styles.wolfNotesCard, hasDashboardHeroBg && styles.glassCard]}>
                                 <View style={styles.wolfMiniHeader}>
                                     <Ionicons name="document-text-outline" size={18} color="#7c3aed" />
                                     <Text style={styles.wolfMiniTitle}>Daily Notes</Text>
@@ -664,9 +665,13 @@ export const DashboardScreen = ({ navigation }: any) => {
         </>
     );
 
-    return isTimberLakeWest ? (
+    return hasDashboardHeroBg ? (
         <ImageBackground
-            source={require('../../assets/timber-lake-west-bg.jpeg')}
+            source={
+                isTylerHill
+                    ? require('../../assets/image001.jpg')
+                    : require('../../assets/timber-lake-west-bg.jpeg')
+            }
             style={styles.heroBg}
             resizeMode="cover"
         >
@@ -685,7 +690,7 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: theme.colors.background,
     },
-    /** Same aerial photo as web `tyler-hill/src/assets/timber-lake-west-bg.jpeg` (copied to mobile assets). */
+    /** Aerial dashboard photos aligned with web: TLW uses timber-lake-west-bg; Tyler Hill uses image001.jpg. */
     heroBg: {
         flex: 1,
         width: '100%',
