@@ -51,7 +51,19 @@ const SERVICES = [
 ];
 
 // Fetch campers from Supabase instead of hardcoding
-const SCHEDULE_PERIODS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+const SCHEDULE_PERIODS = [
+    '1st',
+    '2nd',
+    '3rd',
+    '4th',
+    '5th',
+    '6th',
+    '7th',
+    '8th',
+    'Rest Hour',
+    'Shower Hour',
+    'Free Play',
+];
 
 function mmddyyyyToIso(s: string): string | null {
     if (!s?.trim()) return null;
