@@ -59,49 +59,70 @@ export const AppointmentsScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const appointmentSubmitLock = useRef(false);
 
-    // Fetch appointments from Supabase
+    // Fetch appointments from Supabase (match web: season may differ between web header & app default; some rows have null season)
     const { data: appointments = [], isLoading: isLoadingAppointments } = useQuery({
         queryKey: ['appointments', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
-            const { data, error } = await supabase
-                .from('appointments')
-                .select(
-                    `
+
+            const selectSql = `
                     *,
                     child:child_id(id, name),
                     staff:staff_id(id, name, department)
-                `,
-                )
+                `;
+
+            const mapRows = (rows: any[]) =>
+                (rows || []).map((apt: any) => {
+                    const fromJoin =
+                        (apt.child?.name && String(apt.child.name).trim()) ||
+                        (apt.staff?.name && String(apt.staff.name).trim()) ||
+                        '';
+                    const personLabel =
+                        (apt.person_name && String(apt.person_name).trim()) || fromJoin || '';
+                    return {
+                        id: apt.id,
+                        date: apt.appointment_date,
+                        time: apt.appointment_time,
+                        person: personLabel,
+                        personId: apt.child_id || apt.staff_id || '',
+                        personType: apt.child_id ? 'Camper' : 'Staff',
+                        type: apt.appointment_type,
+                        provider: apt.provider_name,
+                        location: apt.location,
+                        status: apt.status || 'Scheduled',
+                        notes: apt.notes,
+                        followUpRequired: apt.follow_up_required || false,
+                        child_id: apt.child_id,
+                        staff_id: apt.staff_id,
+                    };
+                });
+
+            let q = supabase
+                .from('appointments')
+                .select(selectSql)
                 .eq('company_id', companyId)
-                .eq('season', season)
                 .order('appointment_date', { ascending: true });
+
+            if (season) {
+                q = q.eq('season', season);
+            }
+
+            const { data, error } = await q;
             if (error) throw error;
-            // Map Supabase columns to UI fields — web often omits person_name; resolve from child/staff join (parity with web Appointments.tsx)
-            return (data || []).map((apt: any) => {
-                const fromJoin =
-                    (apt.child?.name && String(apt.child.name).trim()) ||
-                    (apt.staff?.name && String(apt.staff.name).trim()) ||
-                    '';
-                const personLabel =
-                    (apt.person_name && String(apt.person_name).trim()) || fromJoin || '';
-                return {
-                    id: apt.id,
-                    date: apt.appointment_date,
-                    time: apt.appointment_time,
-                    person: personLabel,
-                    personId: apt.child_id || apt.staff_id || '',
-                    personType: apt.child_id ? 'Camper' : 'Staff',
-                    type: apt.appointment_type,
-                    provider: apt.provider_name,
-                    location: apt.location,
-                    status: apt.status || 'Scheduled',
-                    notes: apt.notes,
-                    followUpRequired: apt.follow_up_required || false,
-                    child_id: apt.child_id,
-                    staff_id: apt.staff_id,
-                };
-            });
+
+            let raw = data || [];
+            if (season && raw.length === 0) {
+                const { data: fallback, error: fbError } = await supabase
+                    .from('appointments')
+                    .select(selectSql)
+                    .eq('company_id', companyId)
+                    .order('appointment_date', { ascending: true });
+                if (!fbError && fallback?.length) {
+                    raw = fallback;
+                }
+            }
+
+            return mapRows(raw);
         },
         enabled: !!companyId,
     });
