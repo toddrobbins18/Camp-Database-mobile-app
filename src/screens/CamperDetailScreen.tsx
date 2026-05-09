@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Pressable, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,7 +20,7 @@ type BirthdaySubTabType = 'info' | 'party';
 
 export const CamperDetailScreen = ({ route, navigation }: any) => {
     const { camper: camperParam } = route.params || {};
-    const { companyId, season } = useCompany();
+    const { companyId, season, isTimberLakeWest } = useCompany();
     const { data: divisionsData = [] } = useDivisions(companyId);
     const { data: staffLeaders = [] } = useStaff(companyId, season);
     const leaders = staffLeaders.map((s: any) => ({
@@ -204,16 +204,28 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
         }
     }, [showEditProfileModal, camper, staffLeaders]);
 
-    const tabs: { key: TabType; label: string }[] = [
-        { key: 'overview', label: 'Overview' },
-        { key: 'birthday', label: 'Birthday' },
-        { key: 'allergies', label: 'Allergies' },
-        { key: 'achievements', label: 'Achievements' },
-        { key: 'activities', label: 'Activities' },
-        { key: 'sports-academy', label: 'Sports Academy' },
-        { key: 'incidents', label: 'Incident Reports' },
-        { key: 'appointments', label: 'Appointments' },
-    ];
+    const tabs = useMemo((): { key: TabType; label: string }[] => {
+        const all: { key: TabType; label: string }[] = [
+            { key: 'overview', label: 'Overview' },
+            { key: 'birthday', label: 'Birthday' },
+            { key: 'allergies', label: 'Allergies' },
+            { key: 'achievements', label: 'Achievements' },
+            { key: 'activities', label: 'Activities' },
+            { key: 'sports-academy', label: 'Sports Academy' },
+            { key: 'incidents', label: 'Incident Reports' },
+            { key: 'appointments', label: 'Appointments' },
+        ];
+        if (isTimberLakeWest) {
+            return all.filter((t) => t.key !== 'sports-academy');
+        }
+        return all;
+    }, [isTimberLakeWest]);
+
+    useEffect(() => {
+        if (isTimberLakeWest && activeTab === 'sports-academy') {
+            setActiveTab('overview');
+        }
+    }, [isTimberLakeWest, activeTab]);
 
     if (!camperParam) {
         return (

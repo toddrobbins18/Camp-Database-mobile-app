@@ -67,7 +67,7 @@ const Stack = createNativeStackNavigator();
 const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const { data: roleData } = useRole();
-    const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp } = useCompany();
+    const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp, isTimberLakeWest } = useCompany();
     const { data: rolePermissions = [] } = useRolePermissions(companyId);
     const [showCampPicker, setShowCampPicker] = useState(false);
     const [showYearPicker, setShowYearPicker] = useState(false);
@@ -171,7 +171,7 @@ const CustomDrawerContent = (props: any) => {
             { key: 'special-events', label: 'Special Events & Evening Activities', icon: 'calendar-outline', onPress: () => props.navigation.navigate('SpecialEvents') }
         );
     }
-    if (hasMenuAccess('sports-academy')) {
+    if (!isTimberLakeWest && hasMenuAccess('sports-academy')) {
         mainMenuItems.push(
             { key: 'sports-academy', label: 'Sports Academy', icon: 'trophy-outline', onPress: () => props.navigation.navigate('Sports') }
         );
@@ -228,17 +228,15 @@ const CustomDrawerContent = (props: any) => {
         if (hasMenuAccess('incidents')) mainMenuItems.push({ key: 'incident-reports', label: 'Incident Reports', icon: 'warning-outline', onPress: () => props.navigation.navigate('IncidentReports') });
         if (hasMenuAccess('rainy-day')) mainMenuItems.push({ key: 'rainy-day-schedule', label: 'Rainy Day Schedule', icon: 'rainy-outline', onPress: () => props.navigation.navigate('RainyDaySchedule') });
         if (hasMenuAccess('reports')) mainMenuItems.push({ key: 'reports', label: 'Reports', icon: 'bar-chart-outline', onPress: () => props.navigation.navigate('Reports') });
-        if (hasMenuAccess('tutoring-therapy')) mainMenuItems.push({ key: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', onPress: () => props.navigation.navigate('TutoringTherapy') });
+        if (!isTimberLakeWest && hasMenuAccess('tutoring-therapy')) mainMenuItems.push({ key: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', onPress: () => props.navigation.navigate('TutoringTherapy') });
 
-        if (companySlug === 'tyler-hill-camp') {
-            if (hasMenuAccess('roster-templates')) {
-                mainMenuItems.push({
-                    key: 'roster-templates',
-                    label: 'Roster Templates',
-                    icon: 'list-outline',
-                    onPress: () => props.navigation.navigate('RosterTemplates'),
-                });
-            }
+        if (companySlug === 'tyler-hill-camp' && !isTimberLakeWest && hasMenuAccess('roster-templates')) {
+            mainMenuItems.push({
+                key: 'roster-templates',
+                label: 'Roster Templates',
+                icon: 'list-outline',
+                onPress: () => props.navigation.navigate('RosterTemplates'),
+            });
         }
         if (companySlug !== 'timber-lake-camp' && hasMenuAccess('notes')) {
             mainMenuItems.push({
