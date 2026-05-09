@@ -100,12 +100,14 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const { data: enrollmentsData = [] } = useSportsEnrollments(companyId, season);
     const { data: divisionsData = [] } = useDivisions(companyId);
 
-    /** Same idea as web: All Sports + unique sport_name values from enrollments. */
+    /** All Sports + catalog (same as add form) + any sports only present in enrollments — matches Division/Gender always-full pickers. */
     const sportFilterOptions = useMemo(() => {
-        const unique = [
-            ...new Set(enrollmentsData.map((e) => e.sport_name).filter(Boolean) as string[]),
-        ].sort((a, b) => a.localeCompare(b));
-        return ['All Sports', ...unique];
+        const fromEnrollments = new Set(
+            enrollmentsData.map((e) => e.sport_name).filter(Boolean) as string[],
+        );
+        const merged = new Set<string>([...ENROLLMENT_SPORTS, ...fromEnrollments]);
+        const sorted = [...merged].sort((a, b) => a.localeCompare(b));
+        return ['All Sports', ...sorted];
     }, [enrollmentsData]);
 
     const filteredEnrollments = useMemo(() => {
@@ -1232,17 +1234,15 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         style={[StyleSheet.absoluteFillObject, { zIndex: 10000, elevation: 10000 }]}
                         pointerEvents="box-none"
                     >
-                        <TouchableOpacity
-                            style={styles.modalOverlay}
-                            activeOpacity={1}
-                            onPress={() => setShowCamperDropdown(false)}
-                        >
-                            <View
-                                style={styles.sportNameModalContainer}
-                                onStartShouldSetResponder={() => true}
-                            >
-                                <View style={styles.sportNameModalHeader}>
-                                    <Text style={styles.sportNameModalTitle}>Select Camper</Text>
+                        <View style={styles.filterModalRoot}>
+                            <Pressable
+                                style={styles.filterModalBackdrop}
+                                onPress={() => setShowCamperDropdown(false)}
+                                accessibilityLabel="Dismiss"
+                            />
+                            <View style={styles.filterDropdownMenuModal}>
+                                <View style={styles.filterDropdownHeader}>
+                                    <Text style={styles.filterDropdownTitle}>Select Camper</Text>
                                     <TouchableOpacity
                                         onPress={() => setShowCamperDropdown(false)}
                                         style={styles.closeButton}
@@ -1252,12 +1252,12 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </View>
                                 <FlatList
                                     data={campersData}
-                                    keyExtractor={(item) => item.id || Math.random().toString()}
+                                    keyExtractor={(item) => item.id || `camper-${item.name}`}
                                     renderItem={({ item }) => (
                                         <TouchableOpacity
                                             style={[
-                                                styles.sportNameModalItem,
-                                                selectedChildId === item.id && styles.sportNameModalItemSelected,
+                                                styles.filterDropdownItem,
+                                                selectedChildId === item.id && styles.filterDropdownItemSelected,
                                             ]}
                                             onPress={() => {
                                                 if (item.id) setSelectedChildId(item.id);
@@ -1266,20 +1266,27 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                         >
                                             <Text
                                                 style={[
-                                                    styles.sportNameModalItemText,
-                                                    selectedChildId === item.id && styles.sportNameModalItemTextSelected,
+                                                    styles.filterDropdownItemText,
+                                                    selectedChildId === item.id &&
+                                                        styles.filterDropdownItemTextSelected,
                                                 ]}
                                             >
                                                 {item.name}
                                             </Text>
                                             {selectedChildId === item.id && (
-                                                <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                                <Ionicons
+                                                    name="checkmark"
+                                                    size={20}
+                                                    color={theme.colors.secondary}
+                                                    style={styles.checkIcon}
+                                                />
                                             )}
                                         </TouchableOpacity>
                                     )}
+                                    nestedScrollEnabled
                                 />
                             </View>
-                        </TouchableOpacity>
+                        </View>
                     </View>
                 ) : null}
                 {showSportNameDropdown ? (
@@ -1287,17 +1294,15 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         style={[StyleSheet.absoluteFillObject, { zIndex: 10000, elevation: 10000 }]}
                         pointerEvents="box-none"
                     >
-                        <TouchableOpacity
-                            style={styles.modalOverlay}
-                            activeOpacity={1}
-                            onPress={() => setShowSportNameDropdown(false)}
-                        >
-                            <View
-                                style={styles.sportNameModalContainer}
-                                onStartShouldSetResponder={() => true}
-                            >
-                                <View style={styles.sportNameModalHeader}>
-                                    <Text style={styles.sportNameModalTitle}>Select Sport</Text>
+                        <View style={styles.filterModalRoot}>
+                            <Pressable
+                                style={styles.filterModalBackdrop}
+                                onPress={() => setShowSportNameDropdown(false)}
+                                accessibilityLabel="Dismiss"
+                            />
+                            <View style={styles.filterDropdownMenuModal}>
+                                <View style={styles.filterDropdownHeader}>
+                                    <Text style={styles.filterDropdownTitle}>Select Sport</Text>
                                     <TouchableOpacity
                                         onPress={() => setShowSportNameDropdown(false)}
                                         style={styles.closeButton}
@@ -1311,8 +1316,8 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                     renderItem={({ item }) => (
                                         <TouchableOpacity
                                             style={[
-                                                styles.sportNameModalItem,
-                                                sportName === item && styles.sportNameModalItemSelected,
+                                                styles.filterDropdownItem,
+                                                sportName === item && styles.filterDropdownItemSelected,
                                             ]}
                                             onPress={() => {
                                                 setSportName(item);
@@ -1321,8 +1326,8 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                         >
                                             <Text
                                                 style={[
-                                                    styles.sportNameModalItemText,
-                                                    sportName === item && styles.sportNameModalItemTextSelected,
+                                                    styles.filterDropdownItemText,
+                                                    sportName === item && styles.filterDropdownItemTextSelected,
                                                 ]}
                                             >
                                                 {item}
@@ -1332,13 +1337,15 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                                     name="checkmark"
                                                     size={20}
                                                     color={theme.colors.secondary}
+                                                    style={styles.checkIcon}
                                                 />
                                             )}
                                         </TouchableOpacity>
                                     )}
+                                    nestedScrollEnabled
                                 />
                             </View>
-                        </TouchableOpacity>
+                        </View>
                     </View>
                 ) : null}
                 </View>
@@ -2298,45 +2305,6 @@ const styles = StyleSheet.create({
     sportNameDropdownText: {
         ...theme.typography.body,
         flex: 1,
-    },
-    sportNameModalContainer: {
-        backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: theme.borderRadius.xl,
-        borderTopRightRadius: theme.borderRadius.xl,
-        width: '100%',
-        maxWidth: 600,
-        maxHeight: '60%',
-        ...theme.shadows.card,
-    },
-    sportNameModalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: theme.spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    sportNameModalTitle: {
-        ...theme.typography.h3,
-    },
-    sportNameModalItem: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    sportNameModalItemSelected: {
-        backgroundColor: '#fff7ed',
-    },
-    sportNameModalItemText: {
-        ...theme.typography.body,
-    },
-    sportNameModalItemTextSelected: {
-        color: theme.colors.secondary,
-        fontWeight: '600',
     },
     schedulePeriodsContainer: {
         gap: theme.spacing.md,

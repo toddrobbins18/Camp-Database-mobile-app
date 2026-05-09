@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View,
     Text,
@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
@@ -31,6 +32,13 @@ import { supabase } from '../lib/supabase';
 
 const DEFAULT_WEATHER_ZIP = '18469';
 
+function formatLocalDateYmd(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 function weatherIconName(condition: string | undefined): keyof typeof Ionicons.glyphMap {
     const c = (condition ?? '').toLowerCase();
     if (c.includes('clear') || c.includes('sunny')) return 'sunny-outline';
@@ -41,10 +49,19 @@ function weatherIconName(condition: string | undefined): keyof typeof Ionicons.g
 }
 
 export const DashboardScreen = ({ navigation }: any) => {
+    const queryClient = useQueryClient();
+    const isDashboardFocused = useIsFocused();
     const { companyId, season, isTylerHill, isTimberLakeCamp, isTimberLakeWest } = useCompany();
     const hasDashboardHeroBg = isTimberLakeWest || isTylerHill;
+
+    useFocusEffect(
+        useCallback(() => {
+            void queryClient.invalidateQueries({ queryKey: ['dashboard_events'] });
+            void queryClient.invalidateQueries({ queryKey: ['daily_news_schedule'] });
+        }, [queryClient]),
+    );
     const currentDate = new Date();
-    const todayString = currentDate.toISOString().split('T')[0];
+    const todayString = formatLocalDateYmd(currentDate);
     const todayMonth = currentDate.getMonth() + 1;
     const todayDay = currentDate.getDate();
 
@@ -73,7 +90,12 @@ export const DashboardScreen = ({ navigation }: any) => {
     });
 
     const { data: birthdays = [] } = useTodayBirthdays(companyId, todayMonth, todayDay);
-    const { data: todayEvents = [] } = useTodayEvents(companyId, todayString, season ?? null);
+    const { data: todayEvents = [] } = useTodayEvents(
+        companyId,
+        todayString,
+        season ?? null,
+        isDashboardFocused,
+    );
     const { data: meals = null } = useTodayMeals(companyId, todayString);
 
     const { data: upcomingTrips = [] } = useUpcomingTripsForDashboard(
@@ -601,11 +623,13 @@ export const DashboardScreen = ({ navigation }: any) => {
                     </StyledCard>
                 )}
 
-                {/* Special Events & Activities */}
+                {/* Special Events (Timber Lake West: match web — no "& Activities") */}
                 <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                     <View style={styles.cardHeader}>
                         <Ionicons name="calendar-outline" size={20} color={theme.colors.secondary} />
-                        <Text style={styles.cardTitle}>Special Events & Activities</Text>
+                        <Text style={styles.cardTitle}>
+                            {isTimberLakeWest ? 'Special Events' : 'Special Events & Activities'}
+                        </Text>
                     </View>
                     <Text style={styles.cardSubtitle}>Today's schedule</Text>
                     {specialEvents.length === 0 ? (

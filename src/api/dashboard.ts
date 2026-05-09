@@ -114,7 +114,13 @@ export const useTodayBirthdays = (companyId: string | null, todayMonth: number, 
 };
 
 // Fetch today's activities / field trips (activities_field_trips — uses event_date + season, not legacy `date`)
-export const useTodayEvents = (companyId: string | null, todayString: string, season: string | null) => {
+export const useTodayEvents = (
+    companyId: string | null,
+    todayString: string,
+    season: string | null,
+    /** When true (e.g. dashboard focused), poll so rows added on web show without app reload. */
+    pollWhileFocused = false,
+) => {
     const seasonKey = season ?? '';
     return useQuery({
         queryKey: ['dashboard_events', companyId, todayString, seasonKey],
@@ -135,6 +141,10 @@ export const useTodayEvents = (companyId: string | null, todayString: string, se
             return data || [];
         },
         enabled: !!companyId,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
+        refetchInterval: pollWhileFocused ? 45_000 : false,
+        refetchIntervalInBackground: false,
     });
 };
 

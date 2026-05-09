@@ -37,6 +37,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const { companyId, season } = useCompany();
 
+    const invalidateActivityCaches = useCallback(() => {
+        void queryClient.invalidateQueries({ queryKey: ['activities'] });
+        void queryClient.invalidateQueries({ queryKey: ['dashboard_events'] });
+        void queryClient.invalidateQueries({ queryKey: ['daily_news_schedule'] });
+    }, [queryClient]);
+
     const toNullableString = (v: any) => {
         if (v == null) return null;
         const s = String(v).trim();
@@ -153,7 +159,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             return activity;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['activities'] });
+            invalidateActivityCaches();
             Alert.alert('Success', 'Activity added successfully');
             closeActivityTransientUi();
             setIsAddActivityModalOpen(false);
@@ -220,7 +226,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             }
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['activities'] });
+            invalidateActivityCaches();
             Alert.alert('Success', 'Activity updated successfully');
             closeActivityTransientUi();
             setIsEditModalOpen(false);
@@ -348,8 +354,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     // Refetch when the screen is opened so rows added on web show up without restarting the app.
     useFocusEffect(
         useCallback(() => {
-            void queryClient.invalidateQueries({ queryKey: ['activities'] });
-        }, [queryClient])
+            invalidateActivityCaches();
+        }, [invalidateActivityCaches])
     );
 
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
@@ -448,7 +454,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                 Alert.alert('Delete failed', error.message || 'Unknown error');
             } else {
                 console.log('[DELETE] Success — invalidating queries');
-                queryClient.invalidateQueries({ queryKey: ['activities'] });
+                invalidateActivityCaches();
                 Alert.alert('Success', 'Activity deleted successfully');
             }
         } catch (err: any) {
@@ -581,7 +587,7 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     errors.push(`Row ${i + 2}: ${e?.message || String(e)}`);
                 }
             }
-            queryClient.invalidateQueries({ queryKey: ['activities'] });
+            invalidateActivityCaches();
             setIsUploadCSVModalOpen(false);
             setCsvUploading(false);
             if (inserted > 0) {
