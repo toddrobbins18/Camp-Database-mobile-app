@@ -114,7 +114,7 @@ interface SportsEvent {
 }
 
 export const SportsCalendarScreen = ({ navigation }: any) => {
-    const { companyId, season } = useCompany();
+    const { companyId, season, isTimberLakeCamp } = useCompany();
     const queryClient = useQueryClient();
     const { data: camperData = [] } = useCampers(companyId, season);
     const { data: staffData = [] } = useStaff(companyId, season);
@@ -258,7 +258,11 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
     // Options from Tyler-Hill Web Code
     const sportTypeOptions = ['Baseball', 'Basketball', 'Dance', 'Football', 'Golf', 'Gymnastics', 'Hockey', 'Lacrosse', 'Soccer', 'Softball', 'Tennis', 'Volleyball', 'Waterfront', 'Other'];
-    const eventTypeOptions = ['WC One Day Tournament', 'WC Knock Out Tournament', 'Exhibition/Friendly', 'Invitational', 'Other'];
+    const eventTypeOptions = useMemo(() => {
+        const base = ['WC One Day Tournament', 'WC Knock Out Tournament', 'Exhibition/Friendly', 'Invitational', 'Other'];
+        if (!isTimberLakeCamp) return base;
+        return ['Away', 'Home', 'Gordon', 'Jacobs', 'Bocian/Melter Bowl', ...base];
+    }, [isTimberLakeCamp]);
     const mealOptions = ['Breakfast', 'Snack', 'Lunch', 'Dinner', 'Other'];
 
     // Fetch sports events from Supabase
@@ -591,6 +595,12 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
         const dateStr = `${addFormData.event_date.getFullYear()}-${String(addFormData.event_date.getMonth() + 1).padStart(2, '0')}-${String(addFormData.event_date.getDate()).padStart(2, '0')}`;
 
+        let resolvedHomeAway = normalizeHomeAway(addFormData.home_away);
+        if (!resolvedHomeAway && isTimberLakeCamp) {
+            if (addFormData.event_type === 'Home') resolvedHomeAway = 'home';
+            else if (addFormData.event_type === 'Away') resolvedHomeAway = 'away';
+        }
+
         const submitData = {
             event_date: dateStr,
             title: addFormData.title.trim(),
@@ -607,7 +617,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
             location: addFormData.location || null,
             team: addFormData.team || null,
             opponent: addFormData.opponent || null,
-            home_away: normalizeHomeAway(addFormData.home_away) || null,
+            home_away: resolvedHomeAway || null,
             division_id: addFormData.division_ids.length === 1 ? addFormData.division_ids[0] : null,
             division_provides_coach: addFormData.division_provides_coach,
             division_provides_ref: addFormData.division_provides_ref,
@@ -723,6 +733,12 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         const dateStr = editFormData.event_date instanceof Date
             ? `${editFormData.event_date.getFullYear()}-${String(editFormData.event_date.getMonth() + 1).padStart(2, '0')}-${String(editFormData.event_date.getDate()).padStart(2, '0')}`
             : editFormData.event_date;
+        let resolvedEditHomeAway = normalizeHomeAway(editFormData.home_away);
+        if (!resolvedEditHomeAway && isTimberLakeCamp) {
+            if (editFormData.event_type === 'Home') resolvedEditHomeAway = 'home';
+            else if (editFormData.event_type === 'Away') resolvedEditHomeAway = 'away';
+        }
+
         const submitData = {
             title: editFormData.title,
             event_date: dateStr,
@@ -733,7 +749,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     : null,
             event_type: editFormData.event_type || null,
             emoji: editFormData.emoji || null,
-            home_away: normalizeHomeAway(editFormData.home_away) || null,
+            home_away: resolvedEditHomeAway || null,
             depart_time: editFormData.depart_time || null,
             start_time_field: editFormData.start_time_field || null,
             location: editFormData.location || null,
@@ -1662,6 +1678,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             </View>
 
+                            {!isTimberLakeCamp && (
                             <View style={styles.formGroup}>
                                 <Text style={styles.label}>Home or Away</Text>
                                 <TouchableOpacity style={styles.selectInput} onPress={() => setActiveFormPicker({ kind: 'home', target: 'add' })}>
@@ -1669,8 +1686,10 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
                             </View>
+                            )}
 
-                            {addFormData.home_away === 'away' && (
+                            {(addFormData.home_away === 'away' ||
+                                (isTimberLakeCamp && addFormData.event_type === 'Away')) && (
                                 <View style={styles.formGroup}>
                                     <Text style={styles.label}>Depart from Camp</Text>
                                     <TextInput
@@ -1681,7 +1700,9 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     />
                                 </View>
                             )}
-                            {(addFormData.home_away === 'home' || addFormData.home_away === 'neutral') && (
+                            {(addFormData.home_away === 'home' ||
+                                addFormData.home_away === 'neutral' ||
+                                (isTimberLakeCamp && addFormData.event_type === 'Home')) && (
                                 <View style={styles.formGroup}>
                                     <Text style={styles.label}>
                                         {addFormData.home_away === 'neutral' ? 'Start Time' : 'Start Time (on field)'}
@@ -2528,6 +2549,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             </View>
 
                             {/* Home or Away */}
+                            {!isTimberLakeCamp && (
                             <View style={styles.formGroup}>
                                 <Text style={styles.label}>Home or Away</Text>
                                 <TouchableOpacity style={styles.selectInput} onPress={() => setActiveFormPicker({ kind: 'home', target: 'edit' })}>
@@ -2535,8 +2557,10 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                                 </TouchableOpacity>
                             </View>
+                            )}
 
-                            {editFormData.home_away === 'away' && (
+                            {(editFormData.home_away === 'away' ||
+                                (isTimberLakeCamp && editFormData.event_type === 'Away')) && (
                                 <View style={styles.formGroup}>
                                     <Text style={styles.label}>Depart from Camp</Text>
                                     <TextInput
@@ -2547,7 +2571,9 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     />
                                 </View>
                             )}
-                            {(editFormData.home_away === 'home' || editFormData.home_away === 'neutral') && (
+                            {(editFormData.home_away === 'home' ||
+                                editFormData.home_away === 'neutral' ||
+                                (isTimberLakeCamp && editFormData.event_type === 'Home')) && (
                                 <View style={styles.formGroup}>
                                     <Text style={styles.label}>
                                         {editFormData.home_away === 'neutral' ? 'Start Time' : 'Start Time (on field)'}

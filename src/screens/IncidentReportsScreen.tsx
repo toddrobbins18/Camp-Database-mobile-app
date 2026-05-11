@@ -96,6 +96,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
             const result = await uploadCsvFromText('incident_reports', picked.text, { companyId, season });
             if (result.ok) {
                 await queryClient.invalidateQueries({ queryKey: ['incident_reports', companyId, season] });
+                await queryClient.invalidateQueries({ queryKey: ['camper_incidents'] });
                 Alert.alert('Success', result.message);
             } else {
                 Alert.alert('Upload failed', result.error);
@@ -215,6 +216,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
             if (error) throw error;
             if (companyId) {
                 await queryClient.invalidateQueries({ queryKey: ['incident_reports', companyId, season] });
+                await queryClient.invalidateQueries({ queryKey: ['camper_incidents'] });
             }
             Alert.alert('Success', 'Incident report deleted.');
         } catch (error: any) {

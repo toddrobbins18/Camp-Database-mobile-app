@@ -16,6 +16,7 @@ import {
     STANDARD_MEAL_SCHEDULE_HHMM,
     STANDARD_MEAL_LABEL_ORDER,
     resolveBedtimeOptionFromDivisionName,
+    formatMedicationMealTimeForDisplay,
 } from '../constants/medicationBedtimeOptions';
 
 const getChildDisplayName = (child: any) =>
@@ -124,11 +125,9 @@ const CSV_GUIDE_FORMATS: Record<
 };
 
 function medicationScheduleLabel(med: any): string {
-    const mt = med.meal_time;
-    const first = Array.isArray(mt) ? mt[0] : mt;
-    if (typeof first === 'string' && first.trim().length > 0) {
-        return first;
-    }
+    const divisionName = med.children?.division?.name ?? med.children?.group_name ?? null;
+    const fromMeal = formatMedicationMealTimeForDisplay(med.meal_time, divisionName);
+    if (fromMeal) return fromMeal;
     const st = med.scheduled_time;
     if (st === '08:00') return 'Before Breakfast';
     if (st === '09:00') return 'After Breakfast';
@@ -376,7 +375,7 @@ export const HealthScreen = ({ navigation }: any) => {
         const bedtimeOpt = hasBedtime ? resolveBedtimeOptionFromDivisionName(divisionName) : undefined;
         const bedtimeSlots =
             hasBedtime && bedtimeOpt
-                ? [{ scheduled_time: bedtimeOpt.scheduledTimeHHmm, meal_time: [bedtimeOpt.mealTimeLabel] }]
+                ? [{ scheduled_time: bedtimeOpt.scheduledTimeHHmm, meal_time: ['Bedtime'] as string[] }]
                 : [];
 
         if (standardSlots.length === 0 && bedtimeSlots.length === 0) {

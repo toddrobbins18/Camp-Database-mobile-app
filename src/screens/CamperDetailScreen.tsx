@@ -9,11 +9,22 @@ import { useDivisions, useEditCamper } from '../api/campers';
 import { useCompany } from '../contexts/CompanyContext';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { getAwardCategoryChips } from '../lib/awardCategory';
+import { formatMedicationMealTimeForDisplay } from '../constants/medicationBedtimeOptions';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
 
-type TabType = 'overview' | 'birthday' | 'allergies' | 'achievements' | 'activities' | 'sports-academy' | 'incidents' | 'appointments';
+type TabType =
+    | 'overview'
+    | 'birthday'
+    | 'allergies'
+    | 'health-center'
+    | 'achievements'
+    | 'activities'
+    | 'sports-academy'
+    | 'incidents'
+    | 'appointments';
 type BirthdaySubTabType = 'info' | 'party';
 
 
@@ -61,24 +72,163 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
     });
     const camper = fullChild ?? camperParam;
 
-    // Fetch achievements/awards from Supabase for this camper
+    // Align with web ChildProfile: same child_id set via person_id + real columns title/category/description
     const { data: achievements = [], isLoading: achievementsLoading } = useQuery({
-        queryKey: ['camper_awards', camper?.id, companyId],
+        queryKey: ['camper_awards', camper?.id, (camper as any)?.person_id, companyId],
         queryFn: async () => {
             if (!camper?.id || !companyId) return [];
+
+            let childIds: string[] = [camper.id];
+            const personId = (camper as any)?.person_id;
+            if (personId) {
+                const { data: siblingRows } = await supabase
+                    .from('children')
+                    .select('id')
+                    .eq('person_id', personId)
+                    .eq('company_id', companyId);
+                if (siblingRows?.length) {
+                    childIds = [...new Set(siblingRows.map((c: { id: string }) => c.id))];
+                }
+            }
+
             const { data, error } = await supabase
                 .from('awards')
                 .select('*')
                 .eq('company_id', companyId)
-                .eq('child_id', camper.id)
+                .in('child_id', childIds)
                 .order('date', { ascending: false });
             if (error) throw error;
-            return (data || []).map((a: any) => ({
-                title: a.award_type ? `${a.award_type} Award${a.starfish_value ? ' - ' + a.starfish_value : ''}` : 'Award',
-                type: a.starfish_value || a.award_type || '',
-                tag: a.award_type?.toLowerCase() || '',
-                date: a.date ? new Date(a.date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '',
+
+            const seen = new Set<string>();
+            const rows = (data || []).filter((a: any) => {
+                if (seen.has(a.id)) return false;
+                seen.add(a.id);
+                return true;
+            });
+
+            return rows.map((a: any) => ({
+                id: a.id,
+                title: a.title || 'Award',
+                description: (a.description || '').trim(),
+                category: a.category ?? null,
+                date: a.date
+                    ? new Date(String(a.date).includes('T') ? a.date : `${a.date}T12:00:00`).toLocaleDateString('en-US', {
+                          month: '2-digit',
+                          day: '2-digit',
+                          year: 'numeric',
+                      })
+                    : '',
             }));
+        },
+        enabled: !!camper?.id && !!companyId,
+    });
+
+    /** Align with web ChildProfile: sports_academy by child + company (no season filter on profile). */
+    const { data: sportsAcademyEnrollments = [], isLoading: sportsAcademyLoading } = useQuery({
+        queryKey: ['camper_sports_academy', camper?.id, companyId],
+        queryFn: async () => {
+            if (!camper?.id || !companyId) return [];
+            const { data, error } = await supabase
+                .from('sports_academy')
+                .select('*')
+                .eq('child_id', camper.id)
+                .eq('company_id', companyId)
+                .order('sport_name', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!camper?.id && !!companyId,
+    });
+
+    /**
+     * Incidents linked via incident_children (same as web ChildProfile).
+     * incident_reports.child_id may be null when only the junction table links campers.
+     */
+    const { data: camperIncidents = [], isLoading: incidentsLoading } = useQuery({
+        queryKey: ['camper_incidents', camper?.id, companyId],
+        queryFn: async () => {
+            if (!camper?.id || !companyId) return [];
+            const { data: incidentLinks, error } = await supabase
+                .from('incident_children')
+                .select(`
+                    incident_reports (
+                        id,
+                        date,
+                        type,
+                        severity,
+                        description,
+                        status,
+                        reported_by,
+                        tags,
+                        season,
+                        created_at,
+                        company_id
+                    )
+                `)
+                .eq('child_id', camper.id);
+            if (error) throw error;
+            const flat = (incidentLinks || [])
+                .map((link: any) => link.incident_reports)
+                .filter(Boolean)
+                .filter((r: any) => r.company_id === companyId);
+            const byId = new Map<string, any>();
+            for (const r of flat) {
+                if (r?.id && !byId.has(r.id)) byId.set(r.id, r);
+            }
+            return Array.from(byId.values()).sort(
+                (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+            );
+        },
+        enabled: !!camper?.id && !!companyId,
+    });
+
+    /** Align with web ChildProfile: appointments by child + company. */
+    const { data: camperAppointments = [], isLoading: appointmentsLoading } = useQuery({
+        queryKey: ['camper_appointments', camper?.id, companyId],
+        queryFn: async () => {
+            if (!camper?.id || !companyId) return [];
+            const { data, error } = await supabase
+                .from('appointments')
+                .select('*')
+                .eq('child_id', camper.id)
+                .eq('company_id', companyId)
+                .order('appointment_date', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!camper?.id && !!companyId,
+    });
+
+    /** Web HealthCenterTab parity: admissions + recent medications for this child. */
+    const { data: healthAdmissions = [], isLoading: healthAdmissionsLoading } = useQuery({
+        queryKey: ['camper_health_admissions', camper?.id, companyId],
+        queryFn: async () => {
+            if (!camper?.id || !companyId) return [];
+            const { data, error } = await supabase
+                .from('health_center_admissions')
+                .select('*')
+                .eq('company_id', companyId)
+                .eq('child_id', camper.id)
+                .order('admitted_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!camper?.id && !!companyId,
+    });
+
+    const { data: healthMedications = [], isLoading: healthMedicationsLoading } = useQuery({
+        queryKey: ['camper_health_medications', camper?.id, companyId],
+        queryFn: async () => {
+            if (!camper?.id || !companyId) return [];
+            const { data, error } = await supabase
+                .from('medication_logs')
+                .select('*')
+                .eq('child_id', camper.id)
+                .eq('company_id', companyId)
+                .order('date', { ascending: false })
+                .limit(50);
+            if (error) throw error;
+            return data || [];
         },
         enabled: !!camper?.id && !!companyId,
     });
@@ -209,6 +359,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             { key: 'overview', label: 'Overview' },
             { key: 'birthday', label: 'Birthday' },
             { key: 'allergies', label: 'Allergies' },
+            { key: 'health-center', label: 'Health Center' },
             { key: 'achievements', label: 'Achievements' },
             { key: 'activities', label: 'Activities' },
             { key: 'sports-academy', label: 'Sports Academy' },
@@ -581,6 +732,190 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                     </View>
                 )}
 
+                {activeTab === 'health-center' && (
+                    <View style={styles.tabContent}>
+                        {(healthAdmissionsLoading || healthMedicationsLoading) && (
+                            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                                <ActivityIndicator size="small" color={theme.colors.secondary} />
+                            </View>
+                        )}
+                        {!healthAdmissionsLoading && !healthMedicationsLoading && (
+                            <>
+                                {(() => {
+                                    const currentAdmission = healthAdmissions.find((a: any) => !a.checked_out_at);
+                                    const pastAdmissions = healthAdmissions.filter((a: any) => !!a.checked_out_at);
+                                    const camperDivName =
+                                        ((camper as any)?.division?.name as string | undefined) ??
+                                        ((camper as any)?.group_name as string | undefined) ??
+                                        null;
+
+                                    const getAdmissionDuration = (admittedAt: string, checkedOutAt?: string | null) => {
+                                        const start = new Date(admittedAt);
+                                        const end = checkedOutAt ? new Date(checkedOutAt) : new Date();
+                                        const diffMs = end.getTime() - start.getTime();
+                                        const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                                        const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                                        return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+                                    };
+
+                                    return (
+                                        <>
+                                            {currentAdmission ? (
+                                                <StyledCard style={styles.healthCenterActiveCard}>
+                                                    <View style={styles.cardHeader}>
+                                                        <View style={styles.healthCenterTitleRow}>
+                                                            <Ionicons name="medical" size={22} color="#d97706" />
+                                                            <Text style={styles.healthCenterActiveTitle}>Currently in Health Center</Text>
+                                                        </View>
+                                                        <Text style={styles.healthCenterSubMuted}>
+                                                            Admitted{' '}
+                                                            {new Date(currentAdmission.admitted_at).toLocaleString('en-US', {
+                                                                dateStyle: 'medium',
+                                                                timeStyle: 'short',
+                                                            })}
+                                                        </Text>
+                                                    </View>
+                                                    <View style={styles.healthCenterGrid}>
+                                                        <View style={styles.healthCenterField}>
+                                                            <Text style={styles.healthCenterFieldLabel}>Reason</Text>
+                                                            <Text style={styles.healthCenterFieldValue}>
+                                                                {currentAdmission.reason || 'Not specified'}
+                                                            </Text>
+                                                        </View>
+                                                        <View style={styles.healthCenterField}>
+                                                            <Text style={styles.healthCenterFieldLabel}>Duration</Text>
+                                                            <Text style={styles.healthCenterFieldValue}>
+                                                                {getAdmissionDuration(currentAdmission.admitted_at)}
+                                                            </Text>
+                                                        </View>
+                                                        {currentAdmission.notes ? (
+                                                            <View style={[styles.healthCenterField, styles.healthCenterFieldWide]}>
+                                                                <Text style={styles.healthCenterFieldLabel}>Notes</Text>
+                                                                <Text style={styles.healthCenterFieldValue}>{currentAdmission.notes}</Text>
+                                                            </View>
+                                                        ) : null}
+                                                    </View>
+                                                </StyledCard>
+                                            ) : (
+                                                <StyledCard style={styles.healthCenterSafeCard}>
+                                                    <View style={styles.healthCenterNotAdmittedRow}>
+                                                        <View style={styles.healthCenterGreenIconWrap}>
+                                                            <Ionicons name="checkmark-circle" size={24} color="#059669" />
+                                                        </View>
+                                                        <View>
+                                                            <Text style={styles.healthCenterSafeTitle}>Not currently admitted</Text>
+                                                            <Text style={styles.healthCenterSubMuted}>No active Health Center stay</Text>
+                                                        </View>
+                                                    </View>
+                                                </StyledCard>
+                                            )}
+
+                                            <StyledCard style={styles.infoCard}>
+                                                <View style={styles.cardHeader}>
+                                                    <Text style={styles.cardTitle}>Admission history</Text>
+                                                    <Text style={styles.cardDescription}>
+                                                        {pastAdmissions.length} past visit{pastAdmissions.length === 1 ? '' : 's'}
+                                                    </Text>
+                                                </View>
+                                                <View style={styles.cardContent}>
+                                                    {pastAdmissions.length === 0 ? (
+                                                        <Text style={styles.emptyPartyText}>No previous Health Center visits</Text>
+                                                    ) : (
+                                                        <View style={{ gap: 12 }}>
+                                                            {pastAdmissions.map((admission: any) => (
+                                                                <View key={admission.id} style={styles.healthHistoryRow}>
+                                                                    <View style={styles.healthHistoryHeader}>
+                                                                        <Text style={styles.healthHistoryDate}>
+                                                                            {new Date(admission.admitted_at).toLocaleDateString(
+                                                                                'en-US',
+                                                                                { month: 'short', day: 'numeric', year: 'numeric' },
+                                                                            )}
+                                                                        </Text>
+                                                                        <View style={styles.healthDurationBadge}>
+                                                                            <Text style={styles.healthDurationBadgeText}>
+                                                                                {getAdmissionDuration(
+                                                                                    admission.admitted_at,
+                                                                                    admission.checked_out_at,
+                                                                                )}
+                                                                            </Text>
+                                                                        </View>
+                                                                    </View>
+                                                                    {admission.reason ? (
+                                                                        <Text style={styles.healthHistoryReason}>{admission.reason}</Text>
+                                                                    ) : null}
+                                                                    {admission.notes ? (
+                                                                        <Text style={styles.healthHistoryNotes}>{admission.notes}</Text>
+                                                                    ) : null}
+                                                                </View>
+                                                            ))}
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            </StyledCard>
+
+                                            <StyledCard style={styles.infoCard}>
+                                                <View style={styles.cardHeader}>
+                                                    <Text style={styles.cardTitle}>Medication history</Text>
+                                                    <Text style={styles.cardDescription}>Recent medication records</Text>
+                                                </View>
+                                                <View style={styles.cardContent}>
+                                                    {healthMedications.length === 0 ? (
+                                                        <Text style={styles.emptyPartyText}>No medication records</Text>
+                                                    ) : (
+                                                        <View style={{ gap: 12 }}>
+                                                            {healthMedications.map((med: any) => {
+                                                                const mtLabel = formatMedicationMealTimeForDisplay(
+                                                                    med.meal_time,
+                                                                    camperDivName,
+                                                                );
+                                                                const administered = !!med.administered;
+                                                                return (
+                                                                    <View key={med.id} style={styles.healthHistoryRow}>
+                                                                        <View style={styles.healthHistoryHeader}>
+                                                                            <Text style={styles.healthMedName}>{med.medication_name}</Text>
+                                                                            <View
+                                                                                style={[
+                                                                                    styles.apptStatusBadge,
+                                                                                    administered
+                                                                                        ? styles.healthMedBadgeGiven
+                                                                                        : styles.apptBadgeOutline,
+                                                                                ]}
+                                                                            >
+                                                                                <Text style={styles.apptStatusText}>
+                                                                                    {administered ? 'Administered' : 'Pending'}
+                                                                                </Text>
+                                                                            </View>
+                                                                        </View>
+                                                                        <View style={styles.achievementDateContainer}>
+                                                                            <Ionicons name="calendar-outline" size={12} color="#6b7280" />
+                                                                            <Text style={styles.healthHistoryReason}>
+                                                                                {med.date
+                                                                                    ? new Date(`${med.date}T12:00:00`).toLocaleDateString(
+                                                                                          'en-US',
+                                                                                      )
+                                                                                    : ''}
+                                                                                {med.dosage ? ` · ${med.dosage}` : ''}
+                                                                                {mtLabel ? ` · ${mtLabel}` : ''}
+                                                                            </Text>
+                                                                        </View>
+                                                                        {med.notes ? (
+                                                                            <Text style={styles.healthHistoryNotes}>{med.notes}</Text>
+                                                                        ) : null}
+                                                                    </View>
+                                                                );
+                                                            })}
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            </StyledCard>
+                                        </>
+                                    );
+                                })()}
+                            </>
+                        )}
+                    </View>
+                )}
+
                 {activeTab === 'achievements' && (
                     <View style={styles.tabContent}>
                         {/* Achievements Count */}
@@ -601,32 +936,56 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                             </StyledCard>
                         ) : (
                             <View style={styles.achievementsList}>
-                                {achievements.map((achievement, index) => (
-                                    <StyledCard key={index} style={styles.achievementCard}>
-                                        <View style={styles.achievementContent}>
-                                            <View style={styles.achievementIconContainer}>
-                                                <Ionicons name="trophy" size={24} color="#2563eb" />
-                                            </View>
-                                            <View style={styles.achievementDetails}>
-                                                <Text style={styles.achievementTitle}>{achievement.title}</Text>
-                                                {achievement.type && (
-                                                    <Text style={styles.achievementType}>{achievement.type}</Text>
-                                                )}
-                                                <View style={styles.achievementFooter}>
-                                                    {achievement.tag && (
-                                                        <View style={styles.achievementTag}>
-                                                            <Text style={styles.achievementTagText}>{achievement.tag}</Text>
+                                {achievements.map((achievement) => {
+                                    const categoryChips = getAwardCategoryChips(achievement.category);
+                                    return (
+                                        <StyledCard key={achievement.id} style={styles.achievementCard}>
+                                            <View style={styles.achievementContent}>
+                                                <View style={styles.achievementIconContainer}>
+                                                    <Ionicons name="trophy" size={24} color="#2563eb" />
+                                                </View>
+                                                <View style={styles.achievementDetails}>
+                                                    <Text style={styles.achievementTitle}>{achievement.title}</Text>
+                                                    {achievement.description ? (
+                                                        <Text style={styles.achievementDescription}>
+                                                            {achievement.description}
+                                                        </Text>
+                                                    ) : null}
+                                                    {categoryChips.length > 0 ? (
+                                                        <View style={styles.achievementChipRow}>
+                                                            {categoryChips.map((chip, idx) => (
+                                                                <View
+                                                                    key={`${chip.key}-${idx}`}
+                                                                    style={
+                                                                        chip.variant === 'filled'
+                                                                            ? styles.achievementTag
+                                                                            : styles.achievementTagOutline
+                                                                    }
+                                                                >
+                                                                    <Text
+                                                                        style={
+                                                                            chip.variant === 'filled'
+                                                                                ? styles.achievementTagText
+                                                                                : styles.achievementTagOutlineText
+                                                                        }
+                                                                    >
+                                                                        {chip.text}
+                                                                    </Text>
+                                                                </View>
+                                                            ))}
                                                         </View>
-                                                    )}
-                                                    <View style={styles.achievementDateContainer}>
-                                                        <Ionicons name="calendar-outline" size={12} color="#6b7280" />
-                                                        <Text style={styles.achievementDate}>{achievement.date}</Text>
+                                                    ) : null}
+                                                    <View style={styles.achievementFooter}>
+                                                        <View style={styles.achievementDateContainer}>
+                                                            <Ionicons name="calendar-outline" size={12} color="#6b7280" />
+                                                            <Text style={styles.achievementDate}>{achievement.date}</Text>
+                                                        </View>
                                                     </View>
                                                 </View>
                                             </View>
-                                        </View>
-                                    </StyledCard>
-                                ))}
+                                        </StyledCard>
+                                    );
+                                })}
                             </View>
                         )}
                     </View>
@@ -660,41 +1019,319 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
 
                 {activeTab === 'sports-academy' && (
                     <View style={styles.tabContent}>
-                        {/* Sports Academy Enrollments Count */}
                         <View style={styles.achievementsHeader}>
                             <Text style={styles.achievementsCountText}>
-                                0 total enrollments
+                                {sportsAcademyLoading
+                                    ? 'Loading...'
+                                    : `${sportsAcademyEnrollments.length} total enrollments`}
                             </Text>
                         </View>
 
-                        {/* Empty State */}
-                        <StyledCard style={styles.emptyCard}>
-                            <Text style={styles.emptyText}>No sports academy enrollments recorded</Text>
-                        </StyledCard>
+                        {sportsAcademyLoading ? (
+                            <View style={{ padding: 20, alignItems: 'center' }}>
+                                <ActivityIndicator size="small" color={theme.colors.secondary} />
+                            </View>
+                        ) : sportsAcademyEnrollments.length === 0 ? (
+                            <StyledCard style={styles.emptyCard}>
+                                <Text style={styles.emptyText}>No sports academy enrollments recorded</Text>
+                            </StyledCard>
+                        ) : (
+                            <View style={styles.achievementsList}>
+                                {sportsAcademyEnrollments.map((enrollment: any) => {
+                                    const periods: string[] = Array.isArray(enrollment.schedule_periods)
+                                        ? enrollment.schedule_periods
+                                        : [];
+                                    const start = enrollment.start_date;
+                                    const end = enrollment.end_date;
+                                    const dateLine = (() => {
+                                        const fmt = (d: string) =>
+                                            new Date(`${d}T00:00:00`).toLocaleDateString('en-US');
+                                        if (start && end) return `${fmt(start)} - ${fmt(end)}`;
+                                        if (start) return fmt(start);
+                                        if (end) return fmt(end);
+                                        return '';
+                                    })();
+
+                                    return (
+                                        <StyledCard key={enrollment.id} style={styles.achievementCard}>
+                                            <View style={styles.achievementContent}>
+                                                <View style={styles.achievementIconContainer}>
+                                                    <Ionicons name="trophy" size={24} color="#2563eb" />
+                                                </View>
+                                                <View style={styles.achievementDetails}>
+                                                    <Text style={styles.achievementTitle}>{enrollment.sport_name}</Text>
+                                                    {enrollment.instructor ? (
+                                                        <Text style={styles.achievementType}>
+                                                            Instructor: {enrollment.instructor}
+                                                        </Text>
+                                                    ) : null}
+                                                    {periods.length > 0 ? (
+                                                        <View
+                                                            style={[styles.achievementFooter, { marginTop: 8 }]}
+                                                        >
+                                                            {periods.map((period: string, idx: number) => (
+                                                                <View key={`${enrollment.id}-p-${idx}`} style={styles.achievementTag}>
+                                                                    <Text style={styles.achievementTagText}>{period}</Text>
+                                                                </View>
+                                                            ))}
+                                                        </View>
+                                                    ) : null}
+                                                    {dateLine ? (
+                                                        <View style={[styles.achievementDateContainer, { marginTop: 8 }]}>
+                                                            <Ionicons name="calendar-outline" size={12} color="#6b7280" />
+                                                            <Text style={styles.achievementDate}>{dateLine}</Text>
+                                                        </View>
+                                                    ) : null}
+                                                    {enrollment.notes ? (
+                                                        <Text style={[styles.achievementType, { marginTop: 8 }]}>
+                                                            {enrollment.notes}
+                                                        </Text>
+                                                    ) : null}
+                                                </View>
+                                            </View>
+                                        </StyledCard>
+                                    );
+                                })}
+                            </View>
+                        )}
                     </View>
                 )}
 
                 {activeTab === 'incidents' && (
                     <View style={styles.tabContent}>
-                        {/* Incident Reports Count */}
                         <View style={styles.achievementsHeader}>
                             <Text style={styles.achievementsCountText}>
-                                0 total incident reports
+                                {incidentsLoading
+                                    ? 'Loading...'
+                                    : `${camperIncidents.length} total incident reports`}
                             </Text>
                         </View>
 
-                        {/* Empty State */}
-                        <StyledCard style={styles.emptyCard}>
-                            <Text style={styles.emptyText}>No incident reports recorded</Text>
-                        </StyledCard>
+                        {incidentsLoading ? (
+                            <View style={{ padding: 20, alignItems: 'center' }}>
+                                <ActivityIndicator size="small" color={theme.colors.secondary} />
+                            </View>
+                        ) : camperIncidents.length === 0 ? (
+                            <StyledCard style={styles.emptyCard}>
+                                <Text style={styles.emptyText}>No incident reports recorded</Text>
+                            </StyledCard>
+                        ) : (
+                            <View style={styles.achievementsList}>
+                                {camperIncidents.map((report: any) => {
+                                    const sev = String(report.severity || '').toLowerCase();
+                                    const iconWrap =
+                                        sev === 'high'
+                                            ? styles.incidentIconHigh
+                                            : sev === 'medium'
+                                              ? styles.incidentIconMedium
+                                              : styles.incidentIconLow;
+                                    const iconColor =
+                                        sev === 'high'
+                                            ? '#dc2626'
+                                            : sev === 'medium'
+                                              ? '#d97706'
+                                              : '#6b7280';
+
+                                    return (
+                                        <StyledCard key={report.id} style={styles.achievementCard}>
+                                            <View style={styles.achievementContent}>
+                                                <View style={[styles.achievementIconContainer, iconWrap]}>
+                                                    <Ionicons name="warning-outline" size={24} color={iconColor} />
+                                                </View>
+                                                <View style={styles.achievementDetails}>
+                                                    <View style={styles.apptTitleRow}>
+                                                        <Text style={[styles.achievementTitle, { flex: 1 }]}>
+                                                            {report.type || 'Incident'}
+                                                        </Text>
+                                                        <View style={styles.incidentBadgeRow}>
+                                                            {report.severity ? (
+                                                                <View
+                                                                    style={[
+                                                                        styles.incidentSeverityBadge,
+                                                                        sev === 'high'
+                                                                            ? styles.incidentSevHigh
+                                                                            : sev === 'medium'
+                                                                              ? styles.incidentSevMedium
+                                                                              : styles.incidentSevLow,
+                                                                    ]}
+                                                                >
+                                                                    <Text style={styles.incidentSeverityText}>
+                                                                        {report.severity}
+                                                                    </Text>
+                                                                </View>
+                                                            ) : null}
+                                                            {report.status ? (
+                                                                <View
+                                                                    style={[
+                                                                        styles.apptStatusBadge,
+                                                                        String(report.status).toLowerCase() === 'open'
+                                                                            ? styles.apptBadgeDestructive
+                                                                            : String(report.status).toLowerCase() ===
+                                                                                'resolved'
+                                                                              ? styles.apptBadgeDefault
+                                                                              : styles.apptBadgeSecondary,
+                                                                    ]}
+                                                                >
+                                                                    <Text style={styles.apptStatusText}>
+                                                                        {report.status}
+                                                                    </Text>
+                                                                </View>
+                                                            ) : null}
+                                                        </View>
+                                                    </View>
+                                                    {report.reported_by ? (
+                                                        <Text style={styles.achievementType}>
+                                                            Reported by {report.reported_by}
+                                                        </Text>
+                                                    ) : null}
+                                                    {report.description ? (
+                                                        <Text style={[styles.achievementType, { marginTop: 8 }]}>
+                                                            {report.description}
+                                                        </Text>
+                                                    ) : null}
+                                                    {Array.isArray(report.tags) && report.tags.length > 0 ? (
+                                                        <View style={[styles.achievementFooter, { marginTop: 8 }]}>
+                                                            {report.tags.map((tag: string, idx: number) => (
+                                                                <View
+                                                                    key={`${report.id}-tag-${idx}`}
+                                                                    style={styles.incidentTagOutline}
+                                                                >
+                                                                    <Text style={styles.incidentTagOutlineText}>
+                                                                        {tag}
+                                                                    </Text>
+                                                                </View>
+                                                            ))}
+                                                        </View>
+                                                    ) : null}
+                                                    {report.date ? (
+                                                        <View style={[styles.achievementDateContainer, { marginTop: 8 }]}>
+                                                            <Ionicons name="calendar-outline" size={12} color="#6b7280" />
+                                                            <Text style={styles.achievementDate}>
+                                                                {new Date(`${report.date}T00:00:00`).toLocaleDateString(
+                                                                    'en-US',
+                                                                )}
+                                                            </Text>
+                                                        </View>
+                                                    ) : null}
+                                                </View>
+                                            </View>
+                                        </StyledCard>
+                                    );
+                                })}
+                            </View>
+                        )}
                     </View>
                 )}
 
                 {activeTab === 'appointments' && (
                     <View style={styles.tabContent}>
-                        <StyledCard style={styles.emptyCard}>
-                            <Text style={styles.emptyText}>Appointments coming soon</Text>
-                        </StyledCard>
+                        <View style={styles.achievementsHeader}>
+                            <Text style={styles.achievementsCountText}>
+                                {appointmentsLoading
+                                    ? 'Loading...'
+                                    : `${camperAppointments.length} total appointments`}
+                            </Text>
+                        </View>
+
+                        {appointmentsLoading ? (
+                            <View style={{ padding: 20, alignItems: 'center' }}>
+                                <ActivityIndicator size="small" color={theme.colors.secondary} />
+                            </View>
+                        ) : camperAppointments.length === 0 ? (
+                            <StyledCard style={styles.emptyCard}>
+                                <Text style={styles.emptyText}>No appointments recorded</Text>
+                            </StyledCard>
+                        ) : (
+                            <View style={styles.achievementsList}>
+                                {camperAppointments.map((apt: any) => {
+                                    const status = String(apt.status || '').toLowerCase();
+                                    const statusStyle =
+                                        status === 'completed'
+                                            ? styles.apptBadgeSecondary
+                                            : status === 'cancelled'
+                                              ? styles.apptBadgeDestructive
+                                              : status === 'no_show'
+                                                ? styles.apptBadgeOutline
+                                                : styles.apptBadgeDefault;
+                                    const dateStr = apt.appointment_date
+                                        ? new Date(`${apt.appointment_date}T00:00:00`).toLocaleDateString(
+                                              'en-US',
+                                          )
+                                        : '';
+
+                                    return (
+                                        <StyledCard key={apt.id} style={styles.achievementCard}>
+                                            <View style={styles.achievementContent}>
+                                                <View style={styles.achievementIconContainer}>
+                                                    <Ionicons name="medical-outline" size={24} color="#2563eb" />
+                                                </View>
+                                                <View style={styles.achievementDetails}>
+                                                    <View style={styles.apptTitleRow}>
+                                                        <Text style={[styles.achievementTitle, { flex: 1 }]}>
+                                                            {apt.appointment_type || 'Appointment'}
+                                                        </Text>
+                                                        {apt.status ? (
+                                                            <View style={[styles.apptStatusBadge, statusStyle]}>
+                                                                <Text style={styles.apptStatusText}>{apt.status}</Text>
+                                                            </View>
+                                                        ) : null}
+                                                    </View>
+                                                    {apt.provider_name ? (
+                                                        <Text style={styles.achievementType}>{apt.provider_name}</Text>
+                                                    ) : null}
+                                                    <View style={[styles.achievementDateContainer, { marginTop: 8 }]}>
+                                                        <Ionicons name="calendar-outline" size={14} color="#6b7280" />
+                                                        <Text style={styles.achievementDate}>{dateStr}</Text>
+                                                        {apt.appointment_time ? (
+                                                            <>
+                                                                <Text style={styles.achievementDate}> · </Text>
+                                                                <Ionicons
+                                                                    name="time-outline"
+                                                                    size={14}
+                                                                    color="#6b7280"
+                                                                />
+                                                                <Text style={styles.achievementDate}>
+                                                                    {apt.appointment_time}
+                                                                </Text>
+                                                            </>
+                                                        ) : null}
+                                                    </View>
+                                                    {apt.location ? (
+                                                        <View style={[styles.achievementDateContainer, { marginTop: 4 }]}>
+                                                            <Ionicons name="location-outline" size={14} color="#6b7280" />
+                                                            <Text style={[styles.achievementDate, { flex: 1 }]}>
+                                                                {apt.location}
+                                                            </Text>
+                                                        </View>
+                                                    ) : null}
+                                                    {apt.notes ? (
+                                                        <Text style={[styles.achievementType, { marginTop: 8 }]}>
+                                                            {apt.notes}
+                                                        </Text>
+                                                    ) : null}
+                                                    {apt.outcome ? (
+                                                        <View style={styles.apptOutcomeBox}>
+                                                            <Text style={styles.apptOutcomeLabel}>Outcome: </Text>
+                                                            <Text style={styles.apptOutcomeText}>{apt.outcome}</Text>
+                                                        </View>
+                                                    ) : null}
+                                                    {apt.follow_up_required && apt.follow_up_date ? (
+                                                        <View style={[styles.achievementTag, { marginTop: 8, alignSelf: 'flex-start' }]}>
+                                                            <Text style={styles.achievementTagText}>
+                                                                Follow-up:{' '}
+                                                                {new Date(`${apt.follow_up_date}T00:00:00`).toLocaleDateString(
+                                                                    'en-US',
+                                                                )}
+                                                            </Text>
+                                                        </View>
+                                                    ) : null}
+                                                </View>
+                                            </View>
+                                        </StyledCard>
+                                    );
+                                })}
+                            </View>
+                        )}
                     </View>
                 )}
             </ScrollView>
@@ -2457,9 +3094,21 @@ const styles = StyleSheet.create({
         color: '#374151',
         marginBottom: 4,
     },
+    achievementDescription: {
+        fontSize: 14,
+        color: '#6b7280',
+        marginBottom: 8,
+        lineHeight: 20,
+    },
     achievementType: {
         fontSize: 14,
         color: '#6b7280',
+        marginBottom: 8,
+    },
+    achievementChipRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
         marginBottom: 8,
     },
     achievementFooter: {
@@ -2474,6 +3123,19 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         borderRadius: 12,
     },
+    achievementTagOutline: {
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    achievementTagOutlineText: {
+        fontSize: 12,
+        color: '#4b5563',
+        fontWeight: '500',
+    },
     achievementTagText: {
         fontSize: 12,
         color: '#2563eb',
@@ -2487,6 +3149,229 @@ const styles = StyleSheet.create({
     achievementDate: {
         fontSize: 12,
         color: '#6b7280',
+    },
+    apptTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: 8,
+        marginBottom: 4,
+    },
+    apptStatusBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        flexShrink: 0,
+    },
+    apptBadgeDefault: {
+        backgroundColor: '#dbeafe',
+    },
+    apptBadgeSecondary: {
+        backgroundColor: '#f3f4f6',
+    },
+    apptBadgeDestructive: {
+        backgroundColor: '#fee2e2',
+    },
+    apptBadgeOutline: {
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+    },
+    apptStatusText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#374151',
+        textTransform: 'capitalize',
+    },
+    apptOutcomeBox: {
+        marginTop: 8,
+        padding: 8,
+        borderRadius: 8,
+        backgroundColor: '#f3f4f6',
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+    },
+    apptOutcomeLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    apptOutcomeText: {
+        fontSize: 13,
+        color: '#4b5563',
+        flex: 1,
+    },
+    healthCenterActiveCard: {
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#fcd34d',
+        backgroundColor: '#fffbeb',
+    },
+    healthCenterSafeCard: {
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#a7f3d0',
+        backgroundColor: '#ecfdf5',
+    },
+    healthCenterTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 4,
+    },
+    healthCenterActiveTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#92400e',
+    },
+    healthCenterSubMuted: {
+        fontSize: 13,
+        color: '#6b7280',
+    },
+    healthCenterNotAdmittedRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 4,
+    },
+    healthCenterGreenIconWrap: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#d1fae5',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    healthCenterSafeTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#065f46',
+    },
+    healthCenterGrid: {
+        gap: 10,
+        marginTop: 4,
+    },
+    healthCenterField: {
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+        borderRadius: 8,
+        backgroundColor: '#ffffff',
+    },
+    healthCenterFieldWide: {
+        width: '100%',
+    },
+    healthCenterFieldLabel: {
+        fontSize: 12,
+        color: '#6b7280',
+        marginBottom: 2,
+    },
+    healthCenterFieldValue: {
+        fontSize: 15,
+        fontWeight: '500',
+        color: '#374151',
+    },
+    healthHistoryRow: {
+        padding: 12,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        backgroundColor: '#fafafa',
+    },
+    healthHistoryHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        flexWrap: 'wrap',
+        marginBottom: 4,
+    },
+    healthHistoryDate: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    healthHistoryReason: {
+        fontSize: 13,
+        color: '#6b7280',
+    },
+    healthHistoryNotes: {
+        fontSize: 12,
+        color: '#6b7280',
+        marginTop: 6,
+        fontStyle: 'italic',
+    },
+    healthDurationBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+        backgroundColor: '#ffffff',
+    },
+    healthDurationBadgeText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    healthMedName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#374151',
+        flexShrink: 1,
+    },
+    healthMedBadgeGiven: {
+        backgroundColor: '#dcfce7',
+        borderWidth: 0,
+    },
+    incidentIconHigh: {
+        backgroundColor: '#fee2e2',
+    },
+    incidentIconMedium: {
+        backgroundColor: '#ffedd5',
+    },
+    incidentIconLow: {
+        backgroundColor: '#f3f4f6',
+    },
+    incidentBadgeRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 6,
+        justifyContent: 'flex-end',
+        flexShrink: 0,
+        maxWidth: '52%',
+    },
+    incidentSeverityBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+    },
+    incidentSevHigh: {
+        backgroundColor: '#fee2e2',
+    },
+    incidentSevMedium: {
+        backgroundColor: '#ffedd5',
+    },
+    incidentSevLow: {
+        backgroundColor: '#f3f4f6',
+    },
+    incidentSeverityText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#374151',
+        textTransform: 'capitalize',
+    },
+    incidentTagOutline: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+        backgroundColor: '#ffffff',
+    },
+    incidentTagOutlineText: {
+        fontSize: 11,
+        color: '#374151',
     },
     activitiesSection: {
         marginBottom: 24,

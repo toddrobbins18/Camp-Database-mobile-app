@@ -505,6 +505,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                 Alert.alert('Delete failed', error.message);
             } else {
                 queryClient.invalidateQueries({ queryKey: ['sports_enrollments'] });
+                queryClient.invalidateQueries({ queryKey: ['camper_sports_academy'] });
                 Alert.alert('Success', 'Item deleted');
             }
         } finally {
@@ -672,6 +673,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 const result = await uploadCsvFromText('sports_academy', picked.text, { companyId, season });
                                 if (result.ok) {
                                     await queryClient.invalidateQueries({ queryKey: ['sports_enrollments'] });
+                                    await queryClient.invalidateQueries({ queryKey: ['camper_sports_academy'] });
                                     Alert.alert('Success', result.message);
                                 } else {
                                     Alert.alert('Upload failed', result.error);

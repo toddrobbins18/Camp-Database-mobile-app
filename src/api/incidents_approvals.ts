@@ -88,6 +88,7 @@ export const useAddIncidentReport = () => {
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ['incident_reports', variables.company_id] });
+            queryClient.invalidateQueries({ queryKey: ['camper_incidents'] });
         },
     });
 };
@@ -122,6 +123,7 @@ export const useUpdateIncidentReport = () => {
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ['incident_reports', variables.company_id] });
+            queryClient.invalidateQueries({ queryKey: ['camper_incidents'] });
         },
     });
 };
@@ -138,6 +140,7 @@ export const useDeleteIncidentReport = () => {
         },
         onSuccess: (params) => {
             queryClient.invalidateQueries({ queryKey: ['incident_reports', params.company_id] });
+            queryClient.invalidateQueries({ queryKey: ['camper_incidents'] });
         },
     });
 };

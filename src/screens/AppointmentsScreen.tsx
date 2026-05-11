@@ -236,6 +236,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['appointments'] });
+            queryClient.invalidateQueries({ queryKey: ['camper_appointments'] });
             Alert.alert('Success', 'Appointment created successfully');
             setIsAddModalOpen(false);
         },
@@ -267,6 +268,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['appointments'] });
+            queryClient.invalidateQueries({ queryKey: ['camper_appointments'] });
             Alert.alert('Success', 'Appointment updated successfully');
             setIsEditModalOpen(false);
             setEditingAppointment(null);
@@ -299,6 +301,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
             } else {
                 console.log('[DELETE] Success — invalidating queries');
                 queryClient.invalidateQueries({ queryKey: ['appointments'] });
+                queryClient.invalidateQueries({ queryKey: ['camper_appointments'] });
                 Alert.alert('Success', 'Appointment deleted successfully');
             }
         } catch (err: any) {

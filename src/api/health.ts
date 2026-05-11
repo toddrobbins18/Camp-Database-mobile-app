@@ -26,6 +26,7 @@ export interface MedicationLog {
         id: string;
         name: string;
         group_name?: string;
+        division?: { name: string } | null;
     };
 }
 
@@ -63,7 +64,8 @@ export const useMedicationLogs = (companyId: string | null, dateString: string) 
                     children (
                         id,
                         name,
-                        group_name
+                        group_name,
+                        division:divisions(name)
                     )
                 `)
                 .eq('company_id', companyId)

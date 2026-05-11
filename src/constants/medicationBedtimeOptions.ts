@@ -110,3 +110,25 @@ export function findBedtimeOptionFromStoredMealLabel(label: string | null | unde
 
     return undefined;
 }
+
+/** DB stores bedtime as `Bedtime`; UI shows division-specific time label. */
+export function formatMedicationMealTimeForDisplay(
+    mealTime: string[] | string | null | undefined,
+    divisionName?: string | null,
+): string {
+    if (!mealTime) return '';
+    const arr = Array.isArray(mealTime) ? mealTime : [mealTime];
+    const first = arr[0];
+    if (!first) return '';
+
+    if (first === 'Bedtime') {
+        const resolved = resolveBedtimeOptionFromDivisionName(divisionName);
+        return resolved?.mealTimeLabel ?? 'Bedtime';
+    }
+
+    const bedtimeMatch = findBedtimeOptionFromStoredMealLabel(first);
+    if (bedtimeMatch) return bedtimeMatch.mealTimeLabel;
+
+    if (arr.length === 1) return first;
+    return arr.filter(Boolean).join(', ');
+}

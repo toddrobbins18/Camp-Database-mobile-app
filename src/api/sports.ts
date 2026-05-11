@@ -59,6 +59,7 @@ export const useAddSportsEnrollment = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['sports_enrollments'] });
+            queryClient.invalidateQueries({ queryKey: ['camper_sports_academy'] });
         },
     });
 };
@@ -80,6 +81,7 @@ export const useDeleteSportsEnrollment = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['sports_enrollments'] });
+            queryClient.invalidateQueries({ queryKey: ['camper_sports_academy'] });
         },
     });
 };
@@ -102,6 +104,7 @@ export const useUpdateSportsEnrollment = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['sports_enrollments'] });
+            queryClient.invalidateQueries({ queryKey: ['camper_sports_academy'] });
         },
     });
 };
