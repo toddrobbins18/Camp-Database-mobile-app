@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Pressable, Switch, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,9 +10,8 @@ import { useCompany } from '../contexts/CompanyContext';
 
 
 
-// Appointment types (for filter)
-const APPOINTMENT_TYPES = [
-    'All Types',
+// Appointment types — base list; Timber Lake West adds tennis + tutoring (match web).
+const BASE_APPOINTMENT_TYPE_OPTIONS = [
     'Orthodontist',
     'Physical Therapy',
     'Dentist',
@@ -21,19 +20,14 @@ const APPOINTMENT_TYPES = [
     'Specialist',
     'Mental Health',
     'Other',
-];
+] as const;
 
-// Appointment types (for form dropdown)
-const APPOINTMENT_TYPE_OPTIONS = [
-    'Orthodontist',
-    'Physical Therapy',
-    'Dentist',
-    'Optometrist',
-    'General Physician',
-    'Specialist',
-    'Mental Health',
-    'Other',
-];
+function appointmentTypeOptionsForSlug(companySlug: string | null | undefined): string[] {
+    if (companySlug === 'timber-lake-west') {
+        return [...BASE_APPOINTMENT_TYPE_OPTIONS, 'Tennis lesson', 'Tutoring'];
+    }
+    return [...BASE_APPOINTMENT_TYPE_OPTIONS];
+}
 
 // Appointment statuses (for filter)
 const APPOINTMENT_STATUSES = [
@@ -55,7 +49,16 @@ const APPOINTMENT_STATUS_OPTIONS = [
 type AppointmentTab = 'Upcoming' | 'Past' | 'All';
 
 export const AppointmentsScreen = ({ navigation }: any) => {
-    const { companyId, season } = useCompany();
+    const { companyId, season, companySlug } = useCompany();
+
+    const appointmentTypeFormOptions = useMemo(
+        () => appointmentTypeOptionsForSlug(companySlug),
+        [companySlug],
+    );
+    const appointmentTypesFilter = useMemo(
+        () => ['All Types', ...appointmentTypeFormOptions],
+        [appointmentTypeFormOptions],
+    );
     const queryClient = useQueryClient();
     const appointmentSubmitLock = useRef(false);
 
@@ -609,7 +612,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                                     style={styles.typeBottomSheetScroll}
                                     showsVerticalScrollIndicator={false}
                                 >
-                                    {APPOINTMENT_TYPES.map((type) => (
+                                    {appointmentTypesFilter.map((type) => (
                                         <TouchableOpacity
                                             key={type}
                                             style={styles.bottomSheetOption}
@@ -1097,7 +1100,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                         </View>
                         <View style={styles.bottomSheetContent}>
                             <ScrollView style={styles.typeBottomSheetScroll} showsVerticalScrollIndicator={false}>
-                                {APPOINTMENT_TYPE_OPTIONS.map((type) => (
+                                {appointmentTypeFormOptions.map((type) => (
                                     <TouchableOpacity
                                         key={type}
                                         style={[

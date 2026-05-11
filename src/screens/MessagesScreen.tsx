@@ -693,7 +693,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                                 <TouchableOpacity style={styles.clearBtn} onPress={handleClear}>
                                     <Text style={styles.clearBtnText}>Clear</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={styles.sendBtn} onPress={() => {
+                                <TouchableOpacity style={styles.sendBtn} onPress={async () => {
                                     if (!currentUserId) {
                                         Alert.alert('Error', 'You must be signed in to send notifications.');
                                         return;
@@ -713,12 +713,23 @@ export const MessagesScreen = ({ navigation }: any) => {
                                         Alert.alert('Missing message', 'Please enter a message.');
                                         return;
                                     }
-                                    selectedUsers.forEach(recipientId => {
+                                    let senderLabel: string | undefined = users.find((u) => u.id === currentUserId)?.name;
+                                    if (!senderLabel) {
+                                        const { data: prof } = await supabase
+                                            .from('profiles')
+                                            .select('full_name, email')
+                                            .eq('id', currentUserId)
+                                            .maybeSingle();
+                                        senderLabel =
+                                            prof?.full_name?.trim() || prof?.email?.split('@')[0] || undefined;
+                                    }
+                                    selectedUsers.forEach((recipientId) => {
                                         sendMutation.mutate({
                                             sender_id: currentUserId,
                                             recipient_id: recipientId,
                                             subject: subject.trim(),
                                             content: message.trim(),
+                                            sender_display_name: senderLabel,
                                         });
                                     });
                                     Alert.alert('Success', 'Message sent!');

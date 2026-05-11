@@ -19,17 +19,24 @@ async function attachParticipantProfiles(
     if (senderId) ids.add(senderId);
     if (recipientId) ids.add(recipientId);
   });
-  if (ids.size === 0) return base;
 
-  const labels = await fetchMessageProfileLabels([...ids], companyId ?? undefined);
+  const labels =
+    ids.size === 0
+      ? new Map<string, string>()
+      : await fetchMessageProfileLabels([...ids], companyId ?? undefined);
   return base.map((r) => {
     const row = r as Record<string, unknown>;
     const { senderId, recipientId } = rowParticipantIds(row);
+    const snapshot =
+      String(row.sender_display_name ?? (row as { senderDisplayName?: unknown }).senderDisplayName ?? '').trim();
+    const fromRpc = senderId ? labels.get(senderId) : undefined;
+    const rpcOk = !!(fromRpc && fromRpc.trim() && fromRpc !== 'Unknown');
+    const senderLabel = (rpcOk ? fromRpc.trim() : '') || snapshot || undefined;
     return {
       ...r,
       sender_id: senderId ?? r.sender_id,
       recipient_id: recipientId ?? r.recipient_id,
-      sender: senderId ? { full_name: labels.get(senderId) ?? undefined } : undefined,
+      sender: senderLabel ? { full_name: senderLabel } : undefined,
       recipient: recipientId ? { full_name: labels.get(recipientId) ?? undefined } : undefined,
     };
   });
@@ -67,6 +74,7 @@ async function enrichInboxWithThreadPreview(
     sorted: Record<string, unknown>[];
     latest?: Record<string, unknown>;
     peerSenderId: string | null;
+    peerSenderSnapshot: string | null;
   };
   const augByRootId = new Map<string, Aug>();
 
@@ -83,12 +91,17 @@ async function enrichInboxWithThreadPreview(
     const recipientId = canonicalProfileUuid(m.recipient_id);
 
     let peerSenderId: string | null = null;
+    let peerSenderSnapshot: string | null = null;
     if (!rootSenderId && recipientId) {
       const peerRow = list.find((row) => {
         const sid = rowParticipantIds(row).senderId;
         return sid != null && sid !== recipientId;
       });
-      peerSenderId = peerRow ? rowParticipantIds(peerRow).senderId : null;
+      if (peerRow) {
+        peerSenderId = rowParticipantIds(peerRow).senderId;
+        peerSenderSnapshot =
+          String(peerRow.sender_display_name ?? '').trim() || null;
+      }
     }
 
     if (latest) {
@@ -97,26 +110,32 @@ async function enrichInboxWithThreadPreview(
     }
     if (peerSenderId) labelIds.add(peerSenderId);
 
-    augByRootId.set(m.id, { sorted: list, latest, peerSenderId });
+    augByRootId.set(m.id, { sorted: list, latest, peerSenderId, peerSenderSnapshot });
   }
 
   const labels = await fetchMessageProfileLabels([...labelIds], companyId ?? undefined);
 
   return rows.map((m) => {
     const aug = augByRootId.get(m.id)!;
-    const { latest, peerSenderId } = aug;
+    const { latest, peerSenderId, peerSenderSnapshot } = aug;
     const rootSenderId = rowParticipantIds(m as unknown as Record<string, unknown>).senderId;
 
     let latestSenderName: string | undefined;
     if (latest) {
       const lsid = rowParticipantIds(latest).senderId;
       if (lsid) latestSenderName = labels.get(lsid);
+      if (!latestSenderName || latestSenderName === 'Unknown') {
+        const snap = String((latest as { sender_display_name?: unknown }).sender_display_name ?? '').trim();
+        if (snap) latestSenderName = snap;
+      }
     }
 
     const peerName = peerSenderId ? labels.get(peerSenderId) : undefined;
+    const peerOk = !!(peerName && peerName.trim() && peerName !== 'Unknown');
+    const peerLabel = (peerOk ? peerName!.trim() : '') || peerSenderSnapshot || undefined;
     const senderOverlay =
-      !rootSenderId && peerName
-        ? { sender: { full_name: peerName } as { full_name?: string; email?: string } }
+      !rootSenderId && peerLabel
+        ? { sender: { full_name: peerLabel } as { full_name?: string; email?: string } }
         : {};
 
     return {
@@ -158,6 +177,7 @@ export interface Message {
     content: string;
     read: boolean;
     created_at: string;
+    sender_display_name?: string | null;
     sender?: { full_name?: string; email?: string };
     recipient?: { full_name?: string; email?: string };
     /** Inbox only — latest reply in thread (parity with Nest web Messages). */
@@ -322,6 +342,13 @@ export const useMessages = (userId: string | null, companyId: string | null | un
         queryKey: ['messages', userId, companyId ?? ''],
         queryFn: async () => {
             if (!userId) return [];
+            const { error: fixErr } = await supabase.rpc('apply_message_senders_from_email_logs_for_inbox');
+            const missingRpc =
+                fixErr?.code === 'PGRST202' ||
+                (typeof fixErr?.message === 'string' && fixErr.message.includes('could not find the function'));
+            if (fixErr && !missingRpc) {
+                console.warn('[messages] apply_message_senders_from_email_logs_for_inbox:', fixErr.message);
+            }
             const { data, error } = await supabase
                 .from('messages')
                 .select('*')
@@ -388,10 +415,24 @@ export const useMessageGroups = (userId: string | null) => {
 export const useSendMessage = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (msg: { sender_id: string; recipient_id: string; subject: string; content: string }) => {
+        mutationFn: async (msg: {
+            sender_id: string;
+            recipient_id: string;
+            subject: string;
+            content: string;
+            sender_display_name?: string | null;
+        }) => {
             const { data, error } = await supabase
                 .from('messages')
-                .insert([msg])
+                .insert([
+                    {
+                        sender_id: msg.sender_id,
+                        recipient_id: msg.recipient_id,
+                        subject: msg.subject,
+                        content: msg.content,
+                        sender_display_name: msg.sender_display_name?.trim() || null,
+                    },
+                ])
                 .select()
                 .single();
             if (error) throw error;

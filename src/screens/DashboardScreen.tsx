@@ -52,7 +52,7 @@ export const DashboardScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const isDashboardFocused = useIsFocused();
     const { companyId, season, isTylerHill, isTimberLakeCamp, isTimberLakeWest } = useCompany();
-    const hasDashboardHeroBg = isTimberLakeWest || isTylerHill;
+    const hasDashboardHeroBg = isTimberLakeWest || isTylerHill || isTimberLakeCamp;
 
     useFocusEffect(
         useCallback(() => {
@@ -795,7 +795,9 @@ export const DashboardScreen = ({ navigation }: any) => {
             source={
                 isTylerHill
                     ? require('../../assets/image001.jpg')
-                    : require('../../assets/timber-lake-west-bg.jpeg')
+                    : isTimberLakeCamp
+                      ? require('../../assets/tember-camp.jpeg')
+                      : require('../../assets/timber-lake-west-bg.jpeg')
             }
             style={styles.heroBg}
             resizeMode="cover"
@@ -815,7 +817,7 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: theme.colors.background,
     },
-    /** Aerial dashboard photos aligned with web: TLW uses timber-lake-west-bg; Tyler Hill uses image001.jpg. */
+    /** Aerial dashboard photos aligned with web: TLC tember-camp; TLW timber-lake-west-bg; Tyler Hill image001.jpg. */
     heroBg: {
         flex: 1,
         width: '100%',

@@ -107,11 +107,18 @@ export async function fetchMessageProfileLabels(
 export function inboxSenderDisplayName(msg: {
   sender?: { full_name?: string; email?: string | null };
   sender_id?: string | null;
+  sender_display_name?: string | null;
   content?: string;
   group_id?: string | null;
 }): string {
   const resolved = msg.sender?.full_name?.trim() || msg.sender?.email?.split('@')[0];
   if (resolved && resolved !== 'Unknown') return resolved;
+  const rawRow = msg as Record<string, unknown>;
+  const snap =
+    (typeof msg.sender_display_name === 'string' ? msg.sender_display_name : '') ||
+    (typeof rawRow.senderDisplayName === 'string' ? rawRow.senderDisplayName : '');
+  const trimmedSnap = snap.trim();
+  if (trimmedSnap) return trimmedSnap;
   const sid = messageRowSenderId(msg as unknown as Record<string, unknown>);
   if (sid) return 'Unknown sender';
   if (msg.group_id && typeof msg.content === 'string') {

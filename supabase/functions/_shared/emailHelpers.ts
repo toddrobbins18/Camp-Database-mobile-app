@@ -168,6 +168,7 @@ export async function sendEmailNotifications(
       subject: subject,
       content: content,
       read: false,
+      sender_display_name: 'Camp notification',
     };
     
     // Add company_id if provided
