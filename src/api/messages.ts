@@ -30,12 +30,16 @@ async function attachParticipantProfiles(
     const snapshot =
       String(row.sender_display_name ?? (row as { senderDisplayName?: unknown }).senderDisplayName ?? '').trim();
     const fromRpc = senderId ? labels.get(senderId) : undefined;
-    const rpcOk = !!(fromRpc && fromRpc.trim() && fromRpc !== 'Unknown');
+    const rpcOk =
+      !!(fromRpc && fromRpc.trim()) &&
+      fromRpc !== 'Unknown' &&
+      fromRpc !== 'Unknown sender';
     const senderLabel = (rpcOk ? fromRpc.trim() : '') || snapshot || undefined;
     return {
       ...r,
       sender_id: senderId ?? r.sender_id,
       recipient_id: recipientId ?? r.recipient_id,
+      sender_name: senderLabel,
       sender: senderLabel ? { full_name: senderLabel } : undefined,
       recipient: recipientId ? { full_name: labels.get(recipientId) ?? undefined } : undefined,
     };
@@ -119,23 +123,54 @@ async function enrichInboxWithThreadPreview(
     const aug = augByRootId.get(m.id)!;
     const { latest, peerSenderId, peerSenderSnapshot } = aug;
     const rootSenderId = rowParticipantIds(m as unknown as Record<string, unknown>).senderId;
+    const recipientId = canonicalProfileUuid(m.recipient_id);
 
     let latestSenderName: string | undefined;
     if (latest) {
       const lsid = rowParticipantIds(latest).senderId;
       if (lsid) latestSenderName = labels.get(lsid);
-      if (!latestSenderName || latestSenderName === 'Unknown') {
+      if (!latestSenderName || latestSenderName === 'Unknown' || latestSenderName === 'Unknown sender') {
         const snap = String((latest as { sender_display_name?: unknown }).sender_display_name ?? '').trim();
         if (snap) latestSenderName = snap;
       }
     }
 
     const peerName = peerSenderId ? labels.get(peerSenderId) : undefined;
-    const peerOk = !!(peerName && peerName.trim() && peerName !== 'Unknown');
-    const peerLabel = (peerOk ? peerName!.trim() : '') || peerSenderSnapshot || undefined;
+    const peerRpcOk =
+      !!(peerName && peerName.trim()) &&
+      peerName !== 'Unknown' &&
+      peerName !== 'Unknown sender';
+    const peerLabel =
+      (peerRpcOk ? peerName!.trim() : '') ||
+      peerSenderSnapshot ||
+      '';
+
+    /** Root row often has NULL sender_id (bulk/edge); if last activity is from the counterparty, use that label. */
+    let fromLatestOtherParty: string | undefined;
+    if (!rootSenderId && recipientId && latest) {
+      const lsid = rowParticipantIds(latest).senderId;
+      if (lsid && lsid !== recipientId) {
+        let nm = labels.get(lsid);
+        const lsnap = String((latest as { sender_display_name?: unknown }).sender_display_name ?? '').trim();
+        if (!nm || nm === 'Unknown' || nm === 'Unknown sender') {
+          nm = lsnap || undefined;
+        }
+        if (nm && nm !== 'Unknown' && nm !== 'Unknown sender') {
+          fromLatestOtherParty = nm.trim();
+        }
+      }
+    }
+
+    const inferredFrom =
+      (peerLabel && peerLabel.trim()) ||
+      fromLatestOtherParty ||
+      undefined;
     const senderOverlay =
-      !rootSenderId && peerLabel
-        ? { sender: { full_name: peerLabel } as { full_name?: string; email?: string } }
+      !rootSenderId && inferredFrom
+        ? {
+            sender_name: inferredFrom,
+            sender: { full_name: inferredFrom } as { full_name?: string; email?: string },
+          }
         : {};
 
     return {
@@ -179,6 +214,8 @@ export interface Message {
     created_at: string;
     sender_display_name?: string | null;
     sender?: { full_name?: string; email?: string };
+    /** Same as web inbox — cached label or snapshot for From: line */
+    sender_name?: string;
     recipient?: { full_name?: string; email?: string };
     /** Inbox only — latest reply in thread (parity with Nest web Messages). */
     reply_count?: number;

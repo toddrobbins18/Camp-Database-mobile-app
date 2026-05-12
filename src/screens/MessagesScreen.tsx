@@ -73,7 +73,12 @@ export const MessagesScreen = ({ navigation }: any) => {
     const [groupSearchUsers, setGroupSearchUsers] = useState('');
     const [selectedGroupMembers, setSelectedGroupMembers] = useState<string[]>([]);
 
-    const { companyId } = useCompany();
+    const { companyId, profile } = useCompany();
+    /**
+     * Web passes `currentCompany?.id` into `fetchMessageProfileLabels` so `resolve_message_profile_labels` runs.
+     * Use profile.company_id when context has not finished hydrating so inbox rows get real sender names, not "Unknown sender".
+     */
+    const messageLabelsCompanyId = companyId ?? profile?.company_id ?? undefined;
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null));
@@ -83,8 +88,8 @@ export const MessagesScreen = ({ navigation }: any) => {
         data: messages = [],
         isLoading: messagesLoading,
         dataUpdatedAt: inboxDataUpdatedAt,
-    } = useMessages(currentUserId, companyId ?? undefined);
-    const { data: sentMessages = [], isLoading: sentMessagesLoading } = useSentMessages(currentUserId, companyId ?? undefined);
+    } = useMessages(currentUserId, messageLabelsCompanyId);
+    const { data: sentMessages = [], isLoading: sentMessagesLoading } = useSentMessages(currentUserId, messageLabelsCompanyId);
     const { data: messageGroups = [], isLoading: groupsLoading } = useMessageGroups(currentUserId);
     const sendMutation = useSendMessage();
     const createGroupMutation = useCreateMessageGroup();
@@ -207,13 +212,13 @@ export const MessagesScreen = ({ navigation }: any) => {
             return;
         }
         let cancelled = false;
-        fetchMessageThread(openThreadId, companyId ?? undefined).then((rows) => {
+        fetchMessageThread(openThreadId, messageLabelsCompanyId).then((rows) => {
             if (!cancelled) setThreadReplies(rows);
         });
         return () => {
             cancelled = true;
         };
-    }, [openThreadId, companyId, inboxDataUpdatedAt]);
+    }, [openThreadId, messageLabelsCompanyId, inboxDataUpdatedAt]);
 
     useEffect(() => {
         if (!openThreadId) return;
@@ -384,7 +389,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                                             {threadReplies.map((r: any) => (
                                                 <View key={r.id} style={styles.replyBubble}>
                                                     <Text style={styles.replyMeta}>
-                                                        {`${r.sender_id === currentUserId ? 'You' : r.sender?.full_name || 'Unknown'} · ${new Date(r.created_at).toLocaleString()}`}
+                                                        {`${r.sender_id === currentUserId ? 'You' : inboxSenderDisplayName(r)} · ${new Date(r.created_at).toLocaleString()}`}
                                                     </Text>
                                                     <Text style={styles.replyBody}>{r.content}</Text>
                                                 </View>

@@ -44,7 +44,7 @@ type CsvGuideTab = (typeof CSV_GUIDE_TAB_ORDER)[number];
 
 const CSV_GUIDE_FORMATS: Record<
     CsvGuideTab,
-    { title: string; columns: string; example: string; notes: string; shortLabel: string }
+    { title: string; columns: string; optionalColumns?: string; example: string; notes: string; shortLabel: string }
 > = {
     children: {
         title: 'Children Roster',
@@ -66,10 +66,11 @@ const CSV_GUIDE_FORMATS: Record<
     medication_logs: {
         title: 'Medication Logs',
         shortLabel: 'Meds',
-        columns: 'child_id, medication_name, dosage',
-        example: '<child_id>, Tylenol, 5ml',
+        columns: 'person_id, medication_name, dosage',
+        optionalColumns: 'scheduled_time, date, notes, is_recurring, frequency, days_of_week, end_date',
+        example: 'P12345, Tylenol, 5ml, 08:00, 2024-01-15, Take with food, false, daily, ,',
         notes:
-            'Required in header row: child_id (campers UUID — on mobile uploads you may use person_id instead and it maps to child_id), medication_name, dosage. Optional when you need scheduling details: meal_time or scheduled_time, date (YYYY-MM-DD), notes, is_recurring, frequency, days_of_week, end_date.',
+            'REQUIRED for every row: person_id, medication_name, dosage. OPTIONAL: scheduling and recurrence columns above. Header row lists required columns first, then optional ones you need. Uploads accept person_id or child_id UUID (mapper resolves person_id → child_id). Use meal_time or scheduled_time only when scheduling is needed.',
     },
     trips: {
         title: 'Transportation/Trips',
@@ -1612,10 +1613,27 @@ export const HealthScreen = ({ navigation }: any) => {
                             <Text style={styles.csvGuideSectionTitle}>{CSV_GUIDE_FORMATS[csvGuideTab].title}</Text>
                             <Text style={styles.csvGuideHint}>First row must be column headers</Text>
 
-                            <Text style={styles.csvGuideLabel}>Required columns</Text>
+                            <Text style={styles.csvGuideLabel}>
+                                {CSV_GUIDE_FORMATS[csvGuideTab].optionalColumns
+                                    ? 'Required column headers'
+                                    : 'Required columns'}
+                            </Text>
                             <Text selectable style={styles.csvGuideMono}>
                                 {CSV_GUIDE_FORMATS[csvGuideTab].columns}
                             </Text>
+
+                            {CSV_GUIDE_FORMATS[csvGuideTab].optionalColumns ? (
+                                <>
+                                    <Text style={styles.csvGuideLabel}>Optional column headers</Text>
+                                    <Text selectable style={styles.csvGuideMono}>
+                                        {CSV_GUIDE_FORMATS[csvGuideTab].optionalColumns}
+                                    </Text>
+                                    <Text style={[styles.csvGuideHint, { marginTop: 6 }]}>
+                                        Use one header row: required columns first (left to right), then optional
+                                        columns.
+                                    </Text>
+                                </>
+                            ) : null}
 
                             <Text style={styles.csvGuideLabel}>Example row</Text>
                             <Text selectable style={styles.csvGuideMono}>

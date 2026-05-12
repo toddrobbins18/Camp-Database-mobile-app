@@ -41,12 +41,23 @@ export async function fetchMessageProfileLabels(
   const ids = [...new Set(profileIds.map((id) => canonicalProfileUuid(id)).filter(Boolean) as string[])];
   if (ids.length === 0) return map;
 
+  /** Match web (`tyler-hill/messageProfiles.ts`): RPC needs a camp id; if the UI context is not ready yet, use the signed-in profile's company (same as CompanyProvider). Without this, we skip `resolve_message_profile_labels` and RLS often yields no rows for *other* users in the `profiles` fallback → every sender is "Unknown sender". */
+  let effectiveCompanyId = targetCompanyId;
+  if (!effectiveCompanyId) {
+    const { data: auth } = await supabase.auth.getUser();
+    const uid = auth.user?.id;
+    if (uid) {
+      const { data: me } = await supabase.from('profiles').select('company_id').eq('id', uid).maybeSingle();
+      effectiveCompanyId = me?.company_id ?? undefined;
+    }
+  }
+
   let rows: ProfileRow[] | null = null;
 
-  if (targetCompanyId) {
+  if (effectiveCompanyId) {
     const { data, error } = await supabase.rpc('resolve_message_profile_labels', {
       profile_ids: ids,
-      target_company_id: targetCompanyId,
+      target_company_id: effectiveCompanyId,
     });
     if (!error && data) {
       rows = data as ProfileRow[];
@@ -76,10 +87,12 @@ export async function fetchMessageProfileLabels(
   for (const p of rows) {
     const pid = canonicalProfileUuid(p.id);
     if (!pid) continue;
-    map.set(pid, p.full_name?.trim() || p.email?.split('@')[0] || 'Unknown');
+    map.set(pid, p.full_name?.trim() || p.email?.split('@')[0] || 'Unknown sender');
   }
 
-  const stillMissing = ids.filter((id) => !map.has(id) || map.get(id) === 'Unknown');
+  const stillMissing = ids.filter(
+    (id) => !map.has(id) || map.get(id) === 'Unknown' || map.get(id) === 'Unknown sender'
+  );
   if (stillMissing.length > 0) {
     const { data: partnerRows, error: pErr } = await supabase.rpc('resolve_profile_names_for_message_partners', {
       profile_ids: stillMissing,
@@ -88,7 +101,7 @@ export async function fetchMessageProfileLabels(
       for (const p of partnerRows as ProfileRow[]) {
         const pid = canonicalProfileUuid(p.id);
         if (!pid) continue;
-        const label = p.full_name?.trim() || p.email?.split('@')[0] || 'Unknown';
+        const label = p.full_name?.trim() || p.email?.split('@')[0] || 'Unknown sender';
         map.set(pid, label);
       }
     } else if (
@@ -103,22 +116,31 @@ export async function fetchMessageProfileLabels(
   return map;
 }
 
-/** Fallback label when enriched profile is missing (null sender vs group inline name). */
+/**
+ * Label for "From:" on inbox rows. Prefer enriched `sender`, then `sender_display_name`.
+ * Never use `subject` here — it is the thread title (e.g. "Testing") and must not appear as the sender.
+ * Rows missing sender metadata show "Unknown sender" until backfilled or resolved via RPC.
+ */
 export function inboxSenderDisplayName(msg: {
+  sender_name?: string;
   sender?: { full_name?: string; email?: string | null };
   sender_id?: string | null;
   sender_display_name?: string | null;
+  subject?: string | null;
   content?: string;
   group_id?: string | null;
+  notification_type?: string | null;
 }): string {
-  const resolved = msg.sender?.full_name?.trim() || msg.sender?.email?.split('@')[0];
-  if (resolved && resolved !== 'Unknown') return resolved;
+  const named = msg.sender_name?.trim() || '';
+  const resolved = named || msg.sender?.full_name?.trim() || msg.sender?.email?.split('@')[0];
+  if (resolved && resolved !== 'Unknown' && resolved !== 'Unknown sender') return resolved;
   const rawRow = msg as Record<string, unknown>;
   const snap =
     (typeof msg.sender_display_name === 'string' ? msg.sender_display_name : '') ||
     (typeof rawRow.senderDisplayName === 'string' ? rawRow.senderDisplayName : '');
   const trimmedSnap = snap.trim();
   if (trimmedSnap) return trimmedSnap;
+
   const sid = messageRowSenderId(msg as unknown as Record<string, unknown>);
   if (sid) return 'Unknown sender';
   if (msg.group_id && typeof msg.content === 'string') {
@@ -128,7 +150,11 @@ export function inboxSenderDisplayName(msg: {
       if (prefix.length > 0 && prefix.length < 120) return prefix;
     }
   }
-  return 'Automated notification';
+  const nType = (msg.notification_type || '').toLowerCase();
+  if (nType === 'system' || nType === 'automated') {
+    return 'Automated notification';
+  }
+  return 'Unknown sender';
 }
 
 export function sentRecipientDisplayName(msg: {
