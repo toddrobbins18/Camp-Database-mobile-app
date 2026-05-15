@@ -6,6 +6,8 @@ import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 
 const DISMISS_STORE_VERSION_KEY = 'nest_dismissed_store_update_version';
+const DISMISS_STORE_VERSION_AT_KEY = 'nest_dismissed_store_update_version_at';
+const STORE_REMIND_AFTER_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /** Compare semver-like strings ("1.0.10" vs "1.0.9"); returns true if b is newer than a */
 function isVersionNewer(a: string, b: string): boolean {
@@ -105,8 +107,15 @@ async function checkAppStoreIosIfNeeded(): Promise<void> {
 
         if (!isVersionNewer(installed, storeVer)) return;
 
-        const dismissed = await AsyncStorage.getItem(DISMISS_STORE_VERSION_KEY);
-        if (dismissed === storeVer) return;
+        const [dismissed, dismissedAtRaw] = await Promise.all([
+            AsyncStorage.getItem(DISMISS_STORE_VERSION_KEY),
+            AsyncStorage.getItem(DISMISS_STORE_VERSION_AT_KEY),
+        ]);
+        if (dismissed === storeVer) {
+            const dismissedAt = parseInt(dismissedAtRaw || '0', 10) || 0;
+            const elapsed = Date.now() - dismissedAt;
+            if (dismissedAt > 0 && elapsed < STORE_REMIND_AFTER_MS) return;
+        }
 
         const url = item.trackViewUrl;
         Alert.alert(
@@ -116,7 +125,12 @@ async function checkAppStoreIosIfNeeded(): Promise<void> {
                 {
                     text: 'Later',
                     style: 'cancel',
-                    onPress: () => AsyncStorage.setItem(DISMISS_STORE_VERSION_KEY, storeVer),
+                    onPress: async () => {
+                        await Promise.all([
+                            AsyncStorage.setItem(DISMISS_STORE_VERSION_KEY, storeVer),
+                            AsyncStorage.setItem(DISMISS_STORE_VERSION_AT_KEY, String(Date.now())),
+                        ]);
+                    },
                 },
                 ...(url
                     ? [
