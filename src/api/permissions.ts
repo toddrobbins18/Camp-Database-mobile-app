@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 
 // ===================== ROLE PERMISSIONS =====================
 
@@ -18,13 +19,20 @@ export const useRolePermissions = (companyId: string | null) => {
         enabled: !!companyId,
         queryFn: async () => {
             if (!companyId) return [] as RolePermission[];
-            const { data, error } = await supabase
-                .from('role_permissions')
-                .select('*')
-                .eq('company_id', companyId)
-                .order('role', { ascending: true });
-            if (error) throw error;
-            return (data || []) as RolePermission[];
+            const cacheKey = `role_permissions:${companyId}`;
+            try {
+                const { data, error } = await supabase
+                    .from('role_permissions')
+                    .select('*')
+                    .eq('company_id', companyId)
+                    .order('role', { ascending: true });
+                if (error) throw error;
+                const rows = (data || []) as RolePermission[];
+                await setCachedJson(cacheKey, rows);
+                return rows;
+            } catch {
+                return (await getCachedJson<RolePermission[]>(cacheKey)) || [];
+            }
         },
     });
 };
@@ -43,16 +51,20 @@ export const useUpdateRolePermission = () => {
             menu_item: string;
             can_access: boolean;
         }) => {
-            const { data, error } = await supabase
-                .from('role_permissions')
-                .upsert(
-                    { company_id: companyId, role, menu_item, can_access },
-                    { onConflict: 'company_id,role,menu_item' }
-                )
-                .select()
-                .single();
-            if (error) throw error;
-            return data;
+            if (await isOnlineNow()) {
+                const { data, error } = await supabase
+                    .from('role_permissions')
+                    .upsert(
+                        { company_id: companyId, role, menu_item, can_access },
+                        { onConflict: 'company_id,role,menu_item' }
+                    )
+                    .select()
+                    .single();
+                if (error) throw error;
+                return data;
+            }
+            await enqueueSync('role_permissions.upsert', { companyId, role, menu_item, can_access });
+            return { company_id: companyId, role, menu_item, can_access } as any;
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['role_permissions', variables.companyId] });
@@ -77,12 +89,19 @@ export const useDivisionPermissions = (companyId: string | null) => {
         enabled: !!companyId,
         queryFn: async () => {
             if (!companyId) return [] as DivisionPermission[];
-            const { data, error } = await supabase
-                .from('division_permissions')
-                .select('*, division:divisions(name, gender)')
-                .order('created_at', { ascending: true });
-            if (error) throw error;
-            return (data || []) as any[];
+            const cacheKey = `division_permissions:${companyId}`;
+            try {
+                const { data, error } = await supabase
+                    .from('division_permissions')
+                    .select('*, division:divisions(name, gender)')
+                    .order('created_at', { ascending: true });
+                if (error) throw error;
+                const rows = (data || []) as any[];
+                await setCachedJson(cacheKey, rows);
+                return rows;
+            } catch {
+                return (await getCachedJson<any[]>(cacheKey)) || [];
+            }
         },
     });
 };
@@ -92,14 +111,21 @@ export const useDivisionsLookup = (companyId: string | null) => {
         queryKey: ['divisions_lookup', companyId],
         queryFn: async () => {
             if (!companyId) return [];
-            const { data, error } = await supabase
-                .from('divisions')
-                .select('*')
-                .eq('company_id', companyId)
-                .eq('is_active', true)
-                .order('sort_order', { ascending: true });
-            if (error) throw error;
-            return data || [];
+            const cacheKey = `divisions_lookup:${companyId}`;
+            try {
+                const { data, error } = await supabase
+                    .from('divisions')
+                    .select('*')
+                    .eq('company_id', companyId)
+                    .eq('is_active', true)
+                    .order('sort_order', { ascending: true });
+                if (error) throw error;
+                const rows = data || [];
+                await setCachedJson(cacheKey, rows);
+                return rows;
+            } catch {
+                return (await getCachedJson<any[]>(cacheKey)) || [];
+            }
         },
         enabled: !!companyId,
     });
@@ -111,13 +137,17 @@ export const useUpdateDivisionPermission = () => {
         mutationFn: async ({ user_id, division_id, company_id, can_access }: { user_id: string; division_id: string; company_id?: string; can_access: boolean }) => {
             const row: Record<string, unknown> = { user_id, division_id, can_access };
             if (company_id) row.company_id = company_id;
-            const { data, error } = await supabase
-                .from('division_permissions')
-                .upsert(row, { onConflict: 'user_id,division_id' })
-                .select()
-                .single();
-            if (error) throw error;
-            return data;
+            if (await isOnlineNow()) {
+                const { data, error } = await supabase
+                    .from('division_permissions')
+                    .upsert(row, { onConflict: 'user_id,division_id' })
+                    .select()
+                    .single();
+                if (error) throw error;
+                return data;
+            }
+            await enqueueSync('division_permissions.upsert', { row });
+            return row as any;
         },
         onSuccess: (_data, variables) => {
             // Keep invalidation aligned with useDivisionPermissions(companyId)
@@ -133,13 +163,20 @@ export const useUsersForPermissions = (companyId: string | null) => {
         queryKey: ['users_permissions', companyId],
         queryFn: async () => {
             if (!companyId) return [];
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('id, full_name, email')
-                .eq('company_id', companyId)
-                .order('full_name', { ascending: true });
-            if (error) throw error;
-            return data || [];
+            const cacheKey = `users_permissions:${companyId}`;
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, email')
+                    .eq('company_id', companyId)
+                    .order('full_name', { ascending: true });
+                if (error) throw error;
+                const rows = data || [];
+                await setCachedJson(cacheKey, rows);
+                return rows;
+            } catch {
+                return (await getCachedJson<any[]>(cacheKey)) || [];
+            }
         },
         enabled: !!companyId,
     });

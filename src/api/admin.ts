@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
+import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 
 // --------- User Management --------- //
 export interface AdminUser {
@@ -15,6 +16,18 @@ export interface AdminUser {
 export interface UserTagRow {
     user_id: string;
     tag: string;
+}
+
+async function readThroughCache<T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> {
+    try {
+        const value = await fetcher();
+        await setCachedJson(cacheKey, value);
+        return value;
+    } catch {
+        const cached = await getCachedJson<T>(cacheKey);
+        if (cached != null) return cached;
+        throw new Error('No cached data available');
+    }
 }
 
 function roleLabelFromAppRole(appRole: string): string {
@@ -58,86 +71,86 @@ export const useAdminUsers = (companyId: string | null) => {
         queryKey: ['adminUsers', companyId],
         enabled: true,
         queryFn: async () => {
-            const { data: authData } = await supabase.auth.getUser();
-            const currentUserId = authData?.user?.id;
-            if (!currentUserId) return [] as AdminUser[];
+            return readThroughCache<AdminUser[]>(`admin_users:${companyId ?? ''}`, async () => {
+                const { data: authData } = await supabase.auth.getUser();
+                const currentUserId = authData?.user?.id;
+                if (!currentUserId) return [] as AdminUser[];
 
-            // Determine whether current user is super admin (so they can see all companies).
-            const { data: currentRolesData, error: currentRolesErr } = await supabase
-                .from('user_roles')
-                .select('role')
-                .eq('user_id', currentUserId);
+                // Determine whether current user is super admin (so they can see all companies).
+                const { data: currentRolesData, error: currentRolesErr } = await supabase
+                    .from('user_roles')
+                    .select('role')
+                    .eq('user_id', currentUserId);
 
-            if (currentRolesErr) throw currentRolesErr;
-            const currentRoles = (currentRolesData || []).map((r: any) => String(r?.role ?? '').toLowerCase());
-            const isSuperAdminUser = currentRoles.includes('super_admin');
+                if (currentRolesErr) throw currentRolesErr;
+                const currentRoles = (currentRolesData || []).map((r: any) => String(r?.role ?? '').toLowerCase());
+                const isSuperAdminUser = currentRoles.includes('super_admin');
 
-            // If we don't have companyId from the app context yet, fall back to the user's profile company_id.
-            let effectiveCompanyId = companyId;
-            if (!effectiveCompanyId && !isSuperAdminUser) {
-                const { data: myProfile } = await supabase
+                // If we don't have companyId from the app context yet, fall back to the user's profile company_id.
+                let effectiveCompanyId = companyId;
+                if (!effectiveCompanyId && !isSuperAdminUser) {
+                    const { data: myProfile } = await supabase
+                        .from('profiles')
+                        .select('company_id')
+                        .eq('id', currentUserId)
+                        .maybeSingle();
+                    effectiveCompanyId = myProfile?.company_id ?? null;
+                }
+
+                // Web UserRoleManagement always scopes to currentCompany — super admins still switch camp, not "all users".
+                if (!effectiveCompanyId) return [] as AdminUser[];
+
+                // Mirror web: list profiles for the selected company only.
+                let profilesQuery = supabase
                     .from('profiles')
-                    .select('company_id')
-                    .eq('id', currentUserId)
-                    .maybeSingle();
-                effectiveCompanyId = myProfile?.company_id ?? null;
-            }
+                    // `profiles` does not have a `tags` column. Tags are handled separately in the web app.
+                    .select('id, email, full_name, company_id')
+                    .eq('company_id', effectiveCompanyId);
 
-            // Web UserRoleManagement always scopes to currentCompany — super admins still switch camp, not "all users".
-            if (!effectiveCompanyId) return [] as AdminUser[];
+                const { data: profiles, error: profilesErr } = await profilesQuery;
+                if (profilesErr) throw profilesErr;
 
-            // Mirror web: list profiles for the selected company only.
-            let profilesQuery = supabase
-                .from('profiles')
-                // `profiles` does not have a `tags` column. Tags are handled separately in the web app.
-                .select('id, email, full_name, company_id')
-                .eq('company_id', effectiveCompanyId);
+                const profileList = profiles || [];
+                const profileIds = profileList.map((p: any) => p.id);
+                if (profileIds.length === 0) return [] as AdminUser[];
 
-            const { data: profiles, error: profilesErr } = await profilesQuery;
-            if (profilesErr) throw profilesErr;
+                // Fetch all roles for these users in one call, like the web workflow.
+                const { data: rolesRows, error: rolesErr } = await supabase
+                    .from('user_roles')
+                    .select('user_id, role')
+                    .in('user_id', profileIds);
 
-            const profileList = profiles || [];
-            const profileIds = profileList.map((p: any) => p.id);
-            if (profileIds.length === 0) return [] as AdminUser[];
+                if (rolesErr) throw rolesErr;
 
-            // Fetch all roles for these users in one call, like the web workflow.
-            const { data: rolesRows, error: rolesErr } = await supabase
-                .from('user_roles')
-                .select('user_id, role')
-                .in('user_id', profileIds);
+                const rolesByUserId = new Map<string, string[]>();
+                for (const row of (rolesRows || []) as any[]) {
+                    const uid = String(row.user_id);
+                    const role = String(row.role ?? '').toLowerCase();
+                    if (!rolesByUserId.has(uid)) rolesByUserId.set(uid, []);
+                    rolesByUserId.get(uid)!.push(role);
+                }
 
-            if (rolesErr) throw rolesErr;
+                // Same priority as web app: super_admin > admin > division_leader > staff > specialist > health_center
+                return profileList.map((p: any) => {
+                    const roles = rolesByUserId.get(String(p.id)) || [];
+                    let appRole = 'viewer';
+                    if (roles.includes('super_admin')) appRole = 'super_admin';
+                    else if (roles.includes('admin')) appRole = 'admin';
+                    else if (roles.includes('division_leader')) appRole = 'division_leader';
+                    else if (roles.includes('staff')) appRole = 'staff';
+                    else if (roles.includes('specialist')) appRole = 'specialist';
+                    else if (roles.includes('health_center')) appRole = 'health_center';
 
-            const rolesByUserId = new Map<string, string[]>();
-            for (const row of (rolesRows || []) as any[]) {
-                const uid = String(row.user_id);
-                const role = String(row.role ?? '').toLowerCase();
-                if (!rolesByUserId.has(uid)) rolesByUserId.set(uid, []);
-                rolesByUserId.get(uid)!.push(role);
-            }
-
-            // Same priority as web app: super_admin > admin > division_leader > staff > specialist > health_center
-            const usersWithRoles: AdminUser[] = profileList.map((p: any) => {
-                const roles = rolesByUserId.get(String(p.id)) || [];
-                let appRole = 'viewer';
-                if (roles.includes('super_admin')) appRole = 'super_admin';
-                else if (roles.includes('admin')) appRole = 'admin';
-                else if (roles.includes('division_leader')) appRole = 'division_leader';
-                else if (roles.includes('staff')) appRole = 'staff';
-                else if (roles.includes('specialist')) appRole = 'specialist';
-                else if (roles.includes('health_center')) appRole = 'health_center';
-
-                return {
-                    id: p.id,
-                    name: p.full_name || p.email?.split('@')[0] || 'Unknown',
-                    email: p.email || '',
-                    role: roleLabelFromAppRole(appRole),
-                    roleColor: '#2563eb',
-                    tags: [],
-                };
+                    return {
+                        id: p.id,
+                        name: p.full_name || p.email?.split('@')[0] || 'Unknown',
+                        email: p.email || '',
+                        role: roleLabelFromAppRole(appRole),
+                        roleColor: '#2563eb',
+                        tags: [],
+                    };
+                }) as AdminUser[];
             });
-
-            return usersWithRoles;
         }
     });
 };
@@ -149,22 +162,25 @@ export const useUpdateUserRole = () => {
             if (!companyId) throw new Error('Missing companyId.');
 
             const appRole = appRoleFromRoleLabel(role);
+            if (await isOnlineNow()) {
+                // Mirror the web workflow: delete existing roles for this user, then insert the selected role.
+                const { error: delErr } = await supabase
+                    .from('user_roles')
+                    .delete()
+                    .eq('user_id', userId);
+                if (delErr) throw delErr;
 
-            // Mirror the web workflow: delete existing roles for this user, then insert the selected role.
-            const { error: delErr } = await supabase
-                .from('user_roles')
-                .delete()
-                .eq('user_id', userId);
-            if (delErr) throw delErr;
-
-            const { error: insErr } = await supabase
-                .from('user_roles')
-                .insert({
-                    user_id: userId,
-                    role: appRole,
-                    company_id: companyId,
-                });
-            if (insErr) throw insErr;
+                const { error: insErr } = await supabase
+                    .from('user_roles')
+                    .insert({
+                        user_id: userId,
+                        role: appRole,
+                        company_id: companyId,
+                    });
+                if (insErr) throw insErr;
+            } else {
+                await enqueueSync('user_roles.replace', { userId, role: appRole, companyId });
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
@@ -176,6 +192,7 @@ export const useUpdateUserRole = () => {
 export const useSendPasswordReset = () => {
     return useMutation({
         mutationFn: async (email: string) => {
+            if (!(await isOnlineNow())) throw new Error('Internet connection is required to send password reset email.');
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
                 redirectTo: undefined, // Uses Supabase project default URL
             });
@@ -188,6 +205,7 @@ export const useSendPasswordReset = () => {
  * Delete a user. Tries RPC (bypasses RLS) then falls back to direct table delete.
  */
 export async function deleteAdminPanelUser(userId: string): Promise<void> {
+    if (!(await isOnlineNow())) throw new Error('Internet connection is required to delete users.');
     // Method 1: RPC (SECURITY DEFINER — works if run_in_sql_editor.sql was executed)
     const { error: rpcError } = await supabase.rpc('admin_delete_user', { target_user_id: userId });
     if (!rpcError) return; // success
@@ -247,6 +265,7 @@ export const useCreateUser = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (params: { email: string; password: string; fullName: string; role: string; companyId: string | null }) => {
+            if (!(await isOnlineNow())) throw new Error('Internet connection is required to create users.');
             try {
                 // create-user verifies the caller via Authorization token.
                 const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession();
@@ -307,22 +326,24 @@ export const usePendingUsers = () => {
     return useQuery({
         queryKey: ['pendingUsers'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .or('approved.eq.false,approved.is.null')
-                .order('approval_requested_at', { ascending: false });
+            return readThroughCache<any[]>('admin_pending_users', async () => {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .or('approved.eq.false,approved.is.null')
+                    .order('approval_requested_at', { ascending: false });
 
-            if (error) throw error;
+                if (error) throw error;
 
-            // Exclude any profile that is explicitly approved (defensive)
-            const pending = (data || []).filter((u: any) => u.approved !== true);
-            return pending.map((u: any) => ({
-                id: u.id,
-                name: u.full_name || u.email?.split('@')[0] || 'No Name',
-                email: u.email || '',
-                requestedAt: u.approval_requested_at || u.created_at || new Date().toISOString()
-            }));
+                // Exclude any profile that is explicitly approved (defensive)
+                const pending = (data || []).filter((u: any) => u.approved !== true);
+                return pending.map((u: any) => ({
+                    id: u.id,
+                    name: u.full_name || u.email?.split('@')[0] || 'No Name',
+                    email: u.email || '',
+                    requestedAt: u.approval_requested_at || u.created_at || new Date().toISOString()
+                }));
+            });
         }
     });
 };
@@ -331,6 +352,7 @@ export const useApproveUser = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({ userId, companyId }: { userId: string, companyId: string }) => {
+            if (!(await isOnlineNow())) throw new Error('Internet connection is required to approve users.');
             // 1. Approve the profile and assign company
             const { data: updated, error: profileError } = await supabase
                 .from('profiles')
@@ -396,20 +418,22 @@ export const useEmailConfigs = (companyId: string | null) => {
         enabled: !!companyId,
         queryFn: async () => {
             if (!companyId) return [] as EmailConfig[];
-            const { data, error } = await supabase
-                .from('automated_email_config')
-                .select('*')
-                .eq('company_id', companyId);
-            if (error) throw error;
-            return data.map((d: any) => ({
-                id: d.id,
-                title: d.email_type || 'Unknown Title',
-                description: d.description || '',
-                enabled: d.enabled,
-                selectedTags: d.recipient_tags || [],
-                selectedTimings: d.send_timing || [],
-                lastUpdated: d.updated_at || new Date().toISOString()
-            })) as EmailConfig[];
+            return readThroughCache<EmailConfig[]>(`email_configs:${companyId}`, async () => {
+                const { data, error } = await supabase
+                    .from('automated_email_config')
+                    .select('*')
+                    .eq('company_id', companyId);
+                if (error) throw error;
+                return data.map((d: any) => ({
+                    id: d.id,
+                    title: d.email_type || 'Unknown Title',
+                    description: d.description || '',
+                    enabled: d.enabled,
+                    selectedTags: d.recipient_tags || [],
+                    selectedTimings: d.send_timing || [],
+                    lastUpdated: d.updated_at || new Date().toISOString()
+                })) as EmailConfig[];
+            });
         }
     });
 };
@@ -421,17 +445,26 @@ export const useUpdateEmailConfig = () => {
             if (!config.companyId) {
                 throw new Error('Missing company context for email config update.');
             }
-            const { data, error } = await supabase.from('automated_email_config').update({
+            const update = {
                 enabled: config.enabled,
                 recipient_tags: config.selectedTags,
                 send_timing: config.selectedTimings
-            })
-                .eq('id', config.id)
-                .eq('company_id', config.companyId)
-                .select('id');
-            if (error) throw error;
-            if (!data || data.length === 0) {
-                throw new Error('Email config update did not match any row for this company.');
+            };
+            if (await isOnlineNow()) {
+                const { data, error } = await supabase.from('automated_email_config').update(update)
+                    .eq('id', config.id)
+                    .eq('company_id', config.companyId)
+                    .select('id');
+                if (error) throw error;
+                if (!data || data.length === 0) {
+                    throw new Error('Email config update did not match any row for this company.');
+                }
+            } else {
+                await enqueueSync('automated_email_config.update', {
+                    id: config.id,
+                    companyId: config.companyId,
+                    update,
+                });
             }
         },
         onSuccess: (_, variables) => {
@@ -447,12 +480,14 @@ export const useUserTags = (companyId: string | null) => {
         enabled: !!companyId,
         queryFn: async () => {
             if (!companyId) return [] as UserTagRow[];
-            const { data, error } = await supabase
-                .from('user_tags')
-                .select('user_id, tag')
-                .eq('company_id', companyId);
-            if (error) throw error;
-            return (data || []) as UserTagRow[];
+            return readThroughCache<UserTagRow[]>(`user_tags:${companyId}`, async () => {
+                const { data, error } = await supabase
+                    .from('user_tags')
+                    .select('user_id, tag')
+                    .eq('company_id', companyId);
+                if (error) throw error;
+                return (data || []) as UserTagRow[];
+            });
         },
     });
 };
@@ -463,10 +498,15 @@ export const useAddUserTag = () => {
         mutationFn: async ({ userId, tag, companyId }: { userId: string; tag: string; companyId: string }) => {
             const { data: authData } = await supabase.auth.getUser();
             const createdBy = authData?.user?.id ?? null;
-            const { error } = await supabase
-                .from('user_tags')
-                .insert({ user_id: userId, tag, company_id: companyId, created_by: createdBy });
-            if (error) throw error;
+            const row = { user_id: userId, tag, company_id: companyId, created_by: createdBy };
+            if (await isOnlineNow()) {
+                const { error } = await supabase
+                    .from('user_tags')
+                    .insert(row);
+                if (error) throw error;
+            } else {
+                await enqueueSync('user_tags.add', { row });
+            }
         },
         onSuccess: (_, vars) => {
             queryClient.invalidateQueries({ queryKey: ['userTags', vars.companyId] });
@@ -478,13 +518,17 @@ export const useRemoveUserTag = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({ userId, tag, companyId }: { userId: string; tag: string; companyId: string }) => {
-            const { error } = await supabase
-                .from('user_tags')
-                .delete()
-                .eq('user_id', userId)
-                .eq('tag', tag)
-                .eq('company_id', companyId);
-            if (error) throw error;
+            if (await isOnlineNow()) {
+                const { error } = await supabase
+                    .from('user_tags')
+                    .delete()
+                    .eq('user_id', userId)
+                    .eq('tag', tag)
+                    .eq('company_id', companyId);
+                if (error) throw error;
+            } else {
+                await enqueueSync('user_tags.remove', { userId, tag, companyId });
+            }
         },
         onSuccess: (_, vars) => {
             queryClient.invalidateQueries({ queryKey: ['userTags', vars.companyId] });
@@ -506,25 +550,27 @@ export const useEditHistory = () => {
     return useQuery({
         queryKey: ['editHistory'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('audit_logs')
-                .select('*')
-                .order('changed_at', { ascending: false })
-                .limit(100);
+            return readThroughCache<EditHistoryEntry[]>('admin_edit_history', async () => {
+                const { data, error } = await supabase
+                    .from('audit_logs')
+                    .select('*')
+                    .order('changed_at', { ascending: false })
+                    .limit(100);
 
-            if (error) {
-                // Return empty if audit_logs table isn't accessible
-                return [];
-            }
+                if (error) {
+                    // Return empty if audit_logs table isn't accessible
+                    return [];
+                }
 
-            return data.map((log: any) => ({
-                id: log.id,
-                dateTime: new Date(log.changed_at).toLocaleString(),
-                user: log.user_id || 'System',
-                table: log.table_name || 'Unknown',
-                action: log.action || 'UPDATE',
-                recordId: log.record_id || ''
-            })) as EditHistoryEntry[];
+                return data.map((log: any) => ({
+                    id: log.id,
+                    dateTime: new Date(log.changed_at).toLocaleString(),
+                    user: log.user_id || 'System',
+                    table: log.table_name || 'Unknown',
+                    action: log.action || 'UPDATE',
+                    recordId: log.record_id || ''
+                })) as EditHistoryEntry[];
+            });
         }
     });
 };

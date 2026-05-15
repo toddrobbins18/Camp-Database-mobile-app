@@ -26,6 +26,7 @@ import { isTimberLakeCamp } from '../constants/camps';
 import { useRosterDivisionFilter } from '../api/campers';
 import { ensureTimberLakeElectives } from '../api/ensureTimberLakeElectives';
 import { confirmAppAlert, showAppAlert } from '../utils/showAppAlert';
+import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 
 /** Matches lovable-web-app ElectiveSignUp.tsx */
 const PERIODS = [
@@ -149,8 +150,27 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
             setElectives(rawElectives.filter((e: { is_active?: boolean | null }) => e.is_active !== false));
             if (signupsRes.data) setSignups(signupsRes.data);
             if (allChildrenRes.data) setAllChildren(allChildrenRes.data);
+            await setCachedJson(`elective_signup_bundle:${companyId}:${season}:${weekStart}:${selectedDay}:${selectedPeriod}`, {
+                divisions: [...rawDivs].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+                electives: rawElectives.filter((e: { is_active?: boolean | null }) => e.is_active !== false),
+                signups: signupsRes.data || [],
+                allChildren: allChildrenRes.data || [],
+            });
         } catch {
-            Alert.alert('Error', 'Failed to load elective data.');
+            const cached = await getCachedJson<{
+                divisions: any[];
+                electives: any[];
+                signups: any[];
+                allChildren: any[];
+            }>(`elective_signup_bundle:${companyId}:${season}:${weekStart}:${selectedDay}:${selectedPeriod}`);
+            if (cached) {
+                setDivisions(cached.divisions || []);
+                setElectives(cached.electives || []);
+                setSignups(cached.signups || []);
+                setAllChildren(cached.allChildren || []);
+            } else {
+                Alert.alert('Error', 'Failed to load elective data.');
+            }
         } finally {
             setLoading(false);
         }
@@ -202,14 +222,20 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
 
     const fetchChildrenForDivision = async (divisionId: string) => {
         if (!companyId || !season) return;
-        const { data } = await supabase
-            .from('children')
-            .select('id, name, division_id')
-            .eq('company_id', companyId)
-            .eq('division_id', divisionId)
-            .eq('season', season)
-            .order('name');
-        setChildren(data || []);
+        const cacheKey = `elective_children:${companyId}:${season}:${divisionId}`;
+        try {
+            const { data } = await supabase
+                .from('children')
+                .select('id, name, division_id')
+                .eq('company_id', companyId)
+                .eq('division_id', divisionId)
+                .eq('season', season)
+                .order('name');
+            setChildren(data || []);
+            await setCachedJson(cacheKey, data || []);
+        } catch {
+            setChildren((await getCachedJson<any[]>(cacheKey)) || []);
+        }
     };
 
     const signupByChild = useMemo(() => {
@@ -279,39 +305,51 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
     const handleAssign = async (childId: string, electiveId: string | null) => {
         if (!companyId || !season) return;
         try {
-            await supabase
-                .from('elective_signups')
-                .delete()
-                .eq('company_id', companyId)
-                .eq('child_id', childId)
-                .eq('week_start_date', weekStart)
-                .eq('day_of_week', selectedDay)
-                .eq('period', selectedPeriod);
+            if (await isOnlineNow()) {
+                await supabase
+                    .from('elective_signups')
+                    .delete()
+                    .eq('company_id', companyId)
+                    .eq('child_id', childId)
+                    .eq('week_start_date', weekStart)
+                    .eq('day_of_week', selectedDay)
+                    .eq('period', selectedPeriod);
 
-            if (electiveId) {
-                const rawCap = electives.find((e) => e.id === electiveId)?.capacity;
-                const capNum =
-                    rawCap != null && rawCap !== ''
-                        ? typeof rawCap === 'number'
-                            ? rawCap
-                            : parseInt(String(rawCap), 10)
-                        : NaN;
-                const count = signupCountByElective[electiveId] || 0;
-                const already = signupByChild[childId]?.elective_id === electiveId;
-                if (!Number.isNaN(capNum) && count >= capNum && !already) {
-                    Alert.alert('Full', 'This elective is at capacity.');
-                    return;
+                if (electiveId) {
+                    const rawCap = electives.find((e) => e.id === electiveId)?.capacity;
+                    const capNum =
+                        rawCap != null && rawCap !== ''
+                            ? typeof rawCap === 'number'
+                                ? rawCap
+                                : parseInt(String(rawCap), 10)
+                            : NaN;
+                    const count = signupCountByElective[electiveId] || 0;
+                    const already = signupByChild[childId]?.elective_id === electiveId;
+                    if (!Number.isNaN(capNum) && count >= capNum && !already) {
+                        Alert.alert('Full', 'This elective is at capacity.');
+                        return;
+                    }
+                    const { error } = await supabase.from('elective_signups').insert({
+                        company_id: companyId,
+                        child_id: childId,
+                        elective_id: electiveId,
+                        week_start_date: weekStart,
+                        day_of_week: selectedDay,
+                        period: selectedPeriod,
+                        season,
+                    });
+                    if (error) throw error;
                 }
-                const { error } = await supabase.from('elective_signups').insert({
-                    company_id: companyId,
-                    child_id: childId,
-                    elective_id: electiveId,
-                    week_start_date: weekStart,
-                    day_of_week: selectedDay,
+            } else {
+                await enqueueSync('elective_signups.replace', {
+                    companyId: companyId,
+                    childId: childId,
+                    electiveId: electiveId,
+                    weekStart: weekStart,
+                    dayOfWeek: selectedDay,
                     period: selectedPeriod,
                     season,
                 });
-                if (error) throw error;
             }
             setAssignChildId(null);
             await fetchData();
@@ -323,14 +361,19 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
     const handleAddElective = async () => {
         if (!companyId || !newElectiveName.trim()) return;
         const cap = newElectiveCapacity.trim() === '' ? null : parseInt(newElectiveCapacity, 10);
-        const { error } = await supabase.from('electives').insert({
+        const row = {
             company_id: companyId,
             name: newElectiveName.trim(),
             capacity: cap != null && !Number.isNaN(cap) ? cap : null,
-        } as any);
-        if (error) {
-            Alert.alert('Error', error.message?.includes('duplicate') ? 'Elective already exists' : error.message);
-            return;
+        } as any;
+        if (await isOnlineNow()) {
+            const { error } = await supabase.from('electives').insert(row);
+            if (error) {
+                Alert.alert('Error', error.message?.includes('duplicate') ? 'Elective already exists' : error.message);
+                return;
+            }
+        } else {
+            await enqueueSync('electives.insert', [row]);
         }
         setNewElectiveName('');
         setNewElectiveCapacity('10');
@@ -340,13 +383,18 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
 
     const handleSaveCapacity = async (electiveId: string) => {
         const cap = editingCapacities[electiveId];
-        const { error } = await supabase
-            .from('electives')
-            .update({ capacity: cap === '' ? null : cap } as any)
-            .eq('id', electiveId);
-        if (error) {
-            Alert.alert('Error', 'Could not save capacity');
-            return;
+        const update = { capacity: cap === '' ? null : cap } as any;
+        if (await isOnlineNow()) {
+            const { error } = await supabase
+                .from('electives')
+                .update(update)
+                .eq('id', electiveId);
+            if (error) {
+                Alert.alert('Error', 'Could not save capacity');
+                return;
+            }
+        } else {
+            await enqueueSync('electives.update', { id: electiveId, update });
         }
         fetchData();
     };
@@ -359,9 +407,14 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
         );
         if (!ok) return;
         try {
-            const { error } = await supabase.from('electives').update({ is_active: false }).eq('id', id);
-            if (error) showAppAlert('Error', error.message);
-            else fetchData();
+            if (await isOnlineNow()) {
+                const { error } = await supabase.from('electives').update({ is_active: false }).eq('id', id);
+                if (error) showAppAlert('Error', error.message);
+                else fetchData();
+            } else {
+                await enqueueSync('electives.update', { id, update: { is_active: false } });
+                fetchData();
+            }
         } catch (e: any) {
             showAppAlert('Error', e?.message ?? 'Could not remove elective');
         }
@@ -371,13 +424,19 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
         if (!companyId) return;
         setHistoryLoading(true);
         setHistoryChildId(childId);
-        const { data } = await supabase
-            .from('elective_signups')
-            .select('*, electives(name)')
-            .eq('company_id', companyId)
-            .eq('child_id', childId)
-            .order('week_start_date', { ascending: false });
-        setHistoryResults(data || []);
+        const cacheKey = `elective_history:${companyId}:${childId}`;
+        try {
+            const { data } = await supabase
+                .from('elective_signups')
+                .select('*, electives(name)')
+                .eq('company_id', companyId)
+                .eq('child_id', childId)
+                .order('week_start_date', { ascending: false });
+            setHistoryResults(data || []);
+            await setCachedJson(cacheKey, data || []);
+        } catch {
+            setHistoryResults((await getCachedJson<any[]>(cacheKey)) || []);
+        }
         setHistoryLoading(false);
     };
 

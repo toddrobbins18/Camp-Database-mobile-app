@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { showNewInboxMessageNotification } from '../lib/inboxLocalNotification';
 import { canonicalProfileUuid, fetchMessageProfileLabels, rowParticipantIds } from '../lib/messageProfiles';
+import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 
 async function attachParticipantProfiles(
   rows: Record<string, unknown>[],
@@ -239,18 +240,71 @@ export function inboxUnreadCountQueryKey(userId: string) {
     return ['inboxUnreadCount', userId] as const;
 }
 
+const messagesCacheKey = (kind: 'inbox' | 'sent', userId: string, companyId?: string | null) =>
+    `messages:${kind}:${userId}:${companyId ?? ''}`;
+const groupsCacheKey = (userId: string) => `message_groups:${userId}`;
+const unreadCacheKey = (userId: string) => `messages_unread:${userId}`;
+
+async function applyQueuedMessageOps(rows: Message[], userId: string, kind: 'inbox' | 'sent'): Promise<Message[]> {
+    const out = [...rows];
+    const queued = await listQueued('messages.');
+    for (const q of queued) {
+        if (q.action === 'messages.insert') {
+            const ins = Array.isArray(q.payload) ? (q.payload as any[]) : [q.payload as any];
+            for (const row of ins) {
+                if (!row) continue;
+                if (kind === 'inbox' && row.recipient_id === userId) {
+                    out.unshift({ ...(row as Message), id: (row.id as string) || `offline-${q.id}` });
+                } else if (kind === 'sent' && row.sender_id === userId) {
+                    out.unshift({ ...(row as Message), id: (row.id as string) || `offline-${q.id}` });
+                }
+            }
+        } else if (q.action === 'messages.mark_read' && kind === 'inbox') {
+            const id = (q.payload as any)?.id as string | undefined;
+            if (!id) continue;
+            const idx = out.findIndex((m) => m.id === id);
+            if (idx >= 0) out[idx] = { ...out[idx], read: true };
+        }
+    }
+    return out;
+}
+
+async function queuedUnreadAdjustment(userId: string): Promise<number> {
+    const queued = await listQueued('messages.');
+    let delta = 0;
+    for (const q of queued) {
+        if (q.action === 'messages.insert') {
+            const ins = Array.isArray(q.payload) ? (q.payload as any[]) : [q.payload as any];
+            for (const row of ins) {
+                if (row?.recipient_id === userId && !row?.read) delta += 1;
+            }
+        } else if (q.action === 'messages.mark_read') {
+            delta -= 1;
+        }
+    }
+    return delta;
+}
+
 export function useInboxUnreadCount(userId: string | null) {
     return useQuery({
         queryKey: userId ? inboxUnreadCountQueryKey(userId) : ['inboxUnreadCount', 'disabled'],
         queryFn: async (): Promise<number> => {
             if (!userId) return 0;
-            const { count, error } = await supabase
-                .from('messages')
-                .select('*', { count: 'exact', head: true })
-                .eq('recipient_id', userId)
-                .eq('read', false);
-            if (error) throw error;
-            return count ?? 0;
+            try {
+                const { count, error } = await supabase
+                    .from('messages')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('recipient_id', userId)
+                    .eq('read', false);
+                if (error) throw error;
+                const base = count ?? 0;
+                const total = Math.max(0, base + (await queuedUnreadAdjustment(userId)));
+                await setCachedJson(unreadCacheKey(userId), total);
+                return total;
+            } catch {
+                const cached = (await getCachedJson<number>(unreadCacheKey(userId))) ?? 0;
+                return Math.max(0, cached + (await queuedUnreadAdjustment(userId)));
+            }
         },
         enabled: !!userId,
         staleTime: 5000,
@@ -379,22 +433,29 @@ export const useMessages = (userId: string | null, companyId: string | null | un
         queryKey: ['messages', userId, companyId ?? ''],
         queryFn: async () => {
             if (!userId) return [];
-            const { error: fixErr } = await supabase.rpc('apply_message_senders_from_email_logs_for_inbox');
-            const missingRpc =
-                fixErr?.code === 'PGRST202' ||
-                (typeof fixErr?.message === 'string' && fixErr.message.includes('could not find the function'));
-            if (fixErr && !missingRpc) {
-                console.warn('[messages] apply_message_senders_from_email_logs_for_inbox:', fixErr.message);
+            try {
+                const { error: fixErr } = await supabase.rpc('apply_message_senders_from_email_logs_for_inbox');
+                const missingRpc =
+                    fixErr?.code === 'PGRST202' ||
+                    (typeof fixErr?.message === 'string' && fixErr.message.includes('could not find the function'));
+                if (fixErr && !missingRpc) {
+                    console.warn('[messages] apply_message_senders_from_email_logs_for_inbox:', fixErr.message);
+                }
+                const { data, error } = await supabase
+                    .from('messages')
+                    .select('*')
+                    .eq('recipient_id', userId)
+                    .is('parent_message_id', null)
+                    .order('created_at', { ascending: false });
+                if (error) throw error;
+                const withParties = await attachParticipantProfiles((data || []) as Record<string, unknown>[], companyId);
+                const enriched = await enrichInboxWithThreadPreview(withParties, companyId);
+                await setCachedJson(messagesCacheKey('inbox', userId, companyId), enriched);
+                return await applyQueuedMessageOps(enriched, userId, 'inbox');
+            } catch {
+                const cached = (await getCachedJson<Message[]>(messagesCacheKey('inbox', userId, companyId))) || [];
+                return await applyQueuedMessageOps(cached, userId, 'inbox');
             }
-            const { data, error } = await supabase
-                .from('messages')
-                .select('*')
-                .eq('recipient_id', userId)
-                .is('parent_message_id', null)
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            const withParties = await attachParticipantProfiles((data || []) as Record<string, unknown>[], companyId);
-            return enrichInboxWithThreadPreview(withParties, companyId);
         },
         enabled: !!userId,
         staleTime: 8000,
@@ -409,14 +470,21 @@ export const useSentMessages = (userId: string | null, companyId: string | null 
         queryKey: ['messages_sent', userId, companyId ?? ''],
         queryFn: async () => {
             if (!userId) return [];
-            const { data, error } = await supabase
-                .from('messages')
-                .select('*')
-                .eq('sender_id', userId)
-                .is('parent_message_id', null)
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            return attachParticipantProfiles((data || []) as Record<string, unknown>[], companyId);
+            try {
+                const { data, error } = await supabase
+                    .from('messages')
+                    .select('*')
+                    .eq('sender_id', userId)
+                    .is('parent_message_id', null)
+                    .order('created_at', { ascending: false });
+                if (error) throw error;
+                const rows = await attachParticipantProfiles((data || []) as Record<string, unknown>[], companyId);
+                await setCachedJson(messagesCacheKey('sent', userId, companyId), rows);
+                return await applyQueuedMessageOps(rows, userId, 'sent');
+            } catch {
+                const cached = (await getCachedJson<Message[]>(messagesCacheKey('sent', userId, companyId))) || [];
+                return await applyQueuedMessageOps(cached, userId, 'sent');
+            }
         },
         enabled: !!userId,
         staleTime: 8000,
@@ -430,20 +498,26 @@ export const useMessageGroups = (userId: string | null) => {
         queryKey: ['message_groups', userId],
         queryFn: async () => {
             if (!userId) return [];
-            const { data: memberships, error: membershipsError } = await supabase
-                .from('message_group_members')
-                .select('group_id')
-                .eq('user_id', userId);
-            if (membershipsError) throw membershipsError;
-            const ids = (memberships || []).map((m: any) => m.group_id).filter(Boolean);
-            if (ids.length === 0) return [];
-            const { data, error } = await supabase
-                .from('message_groups')
-                .select('*')
-                .in('id', ids)
-                .order('updated_at', { ascending: false });
-            if (error) throw error;
-            return (data || []) as MessageGroup[];
+            try {
+                const { data: memberships, error: membershipsError } = await supabase
+                    .from('message_group_members')
+                    .select('group_id')
+                    .eq('user_id', userId);
+                if (membershipsError) throw membershipsError;
+                const ids = (memberships || []).map((m: any) => m.group_id).filter(Boolean);
+                if (ids.length === 0) return [];
+                const { data, error } = await supabase
+                    .from('message_groups')
+                    .select('*')
+                    .in('id', ids)
+                    .order('updated_at', { ascending: false });
+                if (error) throw error;
+                const rows = (data || []) as MessageGroup[];
+                await setCachedJson(groupsCacheKey(userId), rows);
+                return rows;
+            } catch {
+                return (await getCachedJson<MessageGroup[]>(groupsCacheKey(userId))) || [];
+            }
         },
         enabled: !!userId,
     });
@@ -459,21 +533,26 @@ export const useSendMessage = () => {
             content: string;
             sender_display_name?: string | null;
         }) => {
-            const { data, error } = await supabase
-                .from('messages')
-                .insert([
-                    {
-                        sender_id: msg.sender_id,
-                        recipient_id: msg.recipient_id,
-                        subject: msg.subject,
-                        content: msg.content,
-                        sender_display_name: msg.sender_display_name?.trim() || null,
-                    },
-                ])
-                .select()
-                .single();
-            if (error) throw error;
-            return data;
+            const row = {
+                sender_id: msg.sender_id,
+                recipient_id: msg.recipient_id,
+                subject: msg.subject,
+                content: msg.content,
+                sender_display_name: msg.sender_display_name?.trim() || null,
+            };
+            if (await isOnlineNow()) {
+                const { data, error } = await supabase.from('messages').insert([row]).select().single();
+                if (error) throw error;
+                return data;
+            }
+            const offlineRow = {
+                ...row,
+                id: `offline-${Date.now()}`,
+                read: false,
+                created_at: new Date().toISOString(),
+            };
+            await enqueueSync('messages.insert', [row]);
+            return offlineRow;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] });
@@ -493,25 +572,33 @@ export const useCreateMessageGroup = () => {
             created_by: string;
             member_ids: string[];
         }) => {
-            const { data: group, error: groupError } = await supabase
-                .from('message_groups')
-                .insert({
-                    name: params.name.trim(),
-                    description: params.description?.trim() || null,
-                    company_id: params.company_id,
-                    created_by: params.created_by,
-                })
-                .select()
-                .single();
-            if (groupError) throw groupError;
-
+            const groupRow = {
+                name: params.name.trim(),
+                description: params.description?.trim() || null,
+                company_id: params.company_id,
+                created_by: params.created_by,
+            };
             const uniqueMemberIds = Array.from(new Set([...params.member_ids, params.created_by]));
-            if (uniqueMemberIds.length > 0) {
-                const rows = uniqueMemberIds.map((userId) => ({ group_id: group.id, user_id: userId }));
-                const { error: membersError } = await supabase.from('message_group_members').insert(rows);
-                if (membersError) throw membersError;
+            if (await isOnlineNow()) {
+                const { data: group, error: groupError } = await supabase
+                    .from('message_groups')
+                    .insert(groupRow)
+                    .select()
+                    .single();
+                if (groupError) throw groupError;
+                if (uniqueMemberIds.length > 0) {
+                    const rows = uniqueMemberIds.map((userId) => ({ group_id: group.id, user_id: userId }));
+                    const { error: membersError } = await supabase.from('message_group_members').insert(rows);
+                    if (membersError) throw membersError;
+                }
+                return group;
             }
-            return group;
+            await enqueueSync('message_groups.create', { groupRow, memberIds: uniqueMemberIds });
+            return {
+                ...groupRow,
+                id: `offline-${Date.now()}`,
+                created_at: new Date().toISOString(),
+            } as MessageGroup;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['message_groups'] });
@@ -523,11 +610,15 @@ export const useMarkMessageRead = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (messageId: string) => {
-            const { error } = await supabase
-                .from('messages')
-                .update({ read: true })
-                .eq('id', messageId);
-            if (error) throw error;
+            if (await isOnlineNow()) {
+                const { error } = await supabase
+                    .from('messages')
+                    .update({ read: true })
+                    .eq('id', messageId);
+                if (error) throw error;
+            } else {
+                await enqueueSync('messages.mark_read', { id: messageId });
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] });

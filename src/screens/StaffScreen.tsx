@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
 import { useQueryClient } from '@tanstack/react-query';
-import { useStaff, useAddStaff, useEditStaff, type StaffMember } from '../api/staff';
+import { useStaff, useAddStaff, useEditStaff, useDeleteStaff, type StaffMember } from '../api/staff';
 import { supabase } from '../lib/supabase';
 import { buildStaffInsertRow, formatIsoDateToUs, formatStaffTypeFromDb, mapUiStaffTypeToDb, toIsoDateOrNull } from '../api/staffPayload';
 import { fetchBunksForCompanySeason, syncStaffBunkStaff, fetchPrimaryBunkIdForStaff, type BunkListItem } from '../lib/staffBunkSync';
@@ -37,6 +37,7 @@ export const StaffScreen = ({ navigation }: any) => {
 
     const addStaffMutation = useAddStaff();
     const editStaffMutation = useEditStaff();
+    const deleteStaffMutation = useDeleteStaff();
 
     const [isScannerActive, setIsScannerActive] = useState(false);
     const [scanInput, setScanInput] = useState('');
@@ -255,9 +256,12 @@ export const StaffScreen = ({ navigation }: any) => {
         setIsDeleting(true);
         console.log('[DELETE] Starting delete for:', itemToDelete.id);
         try {
-            const { error, status, statusText } = await supabase.from('staff').delete().eq('id', itemToDelete.id);
-            console.log('[DELETE] Response:', { error, status, statusText });
-            if (error) throw error;
+            await deleteStaffMutation.mutateAsync({
+                id: itemToDelete.id,
+                company_id: companyId || '',
+                season: season || '',
+            });
+            console.log('[DELETE] Response:', { ok: true });
             queryClient.invalidateQueries({ queryKey: ['staff'] });
             Alert.alert('Success', 'Staff member deleted');
         } catch (err: any) {

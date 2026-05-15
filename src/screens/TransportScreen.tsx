@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCompany } from '../contexts/CompanyContext';
-import { useTrips, useAddTrip, useUpdateTrip, useManageTripRoster, useTripAttendees, useTripAttachments } from '../api/transport';
+import { useTrips, useAddTrip, useUpdateTrip, useDeleteTrip, useManageTripRoster, useTripAttendees, useTripAttachments } from '../api/transport';
 import { useCampers, useDivisions } from '../api/campers';
 import { useStaff } from '../api/staff';
 import { useQueryClient } from '@tanstack/react-query';
@@ -32,6 +32,7 @@ import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
+import { isOnlineNow } from '../offline/engine';
 
 // Trip Interfaces
 interface Trip {
@@ -352,6 +353,7 @@ export const TransportScreen = ({ navigation }: any) => {
     const [tripCsvUploading, setTripCsvUploading] = useState(false);
     const addTripMutation = useAddTrip();
     const updateTripMutation = useUpdateTrip();
+    const deleteTripMutation = useDeleteTrip();
     const manageRosterMutation = useManageTripRoster();
 
     /** Must be declared before any hook that reads it (was below → ReferenceError → blank screen). */
@@ -367,6 +369,10 @@ export const TransportScreen = ({ navigation }: any) => {
 
     const handleAddTripAttachment = async () => {
         if (!tripAttachmentTripId || !companyId) return;
+        if (!(await isOnlineNow())) {
+            Alert.alert('Offline', 'Trip document upload requires internet. Please reconnect and try again.');
+            return;
+        }
         try {
             const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
             if (!result.assets?.[0]) return;
@@ -550,9 +556,8 @@ export const TransportScreen = ({ navigation }: any) => {
         setIsDeleting(true);
         console.log('[DELETE] Starting delete for:', itemToDelete.id);
         try {
-            const { error, status, statusText } = await supabase.from('trips').delete().eq('id', itemToDelete.id);
-            console.log('[DELETE] Response:', { error, status, statusText });
-            if (error) throw error;
+            await deleteTripMutation.mutateAsync(itemToDelete.id);
+            console.log('[DELETE] Response:', { ok: true });
             queryClient.invalidateQueries({ queryKey: ['trips'] });
             Alert.alert('Success', 'Trip deleted');
         } catch (err: any) {

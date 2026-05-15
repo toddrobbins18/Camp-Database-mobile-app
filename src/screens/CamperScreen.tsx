@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
-import { useCampers, useAddCamper, useEditCamper, useDivisions } from '../api/campers';
+import { useCampers, useAddCamper, useEditCamper, useDeleteCamper, useDivisions } from '../api/campers';
 import { useRole } from '../hooks/useRole';
 import { useStaff } from '../api/staff';
 import { supabase } from '../lib/supabase';
@@ -57,6 +57,7 @@ export const CamperScreen = ({ navigation }: any) => {
 
     const addCamperMutation = useAddCamper();
     const editCamperMutation = useEditCamper();
+    const deleteCamperMutation = useDeleteCamper();
 
     // Fetch staff for the "Assigned Leader" dropdown (replaces old MOCK_LEADERS)
     const { data: staffList = [] } = useStaff(companyId, season);
@@ -144,9 +145,12 @@ export const CamperScreen = ({ navigation }: any) => {
         setIsDeleting(true);
         console.log('[DELETE] Starting delete for:', itemToDelete.id);
         try {
-            const { error, status, statusText } = await supabase.from('children').delete().eq('id', itemToDelete.id);
-            console.log('[DELETE] Response:', { error, status, statusText });
-            if (error) throw error;
+            await deleteCamperMutation.mutateAsync({
+                id: itemToDelete.id,
+                company_id: companyId || '',
+                season: season || '',
+            });
+            console.log('[DELETE] Response:', { ok: true });
             queryClient.invalidateQueries({ queryKey: ['campers'] });
             showAppAlert('Success', 'Camper deleted');
         } catch (err: any) {

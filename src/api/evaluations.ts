@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 
 // ===================== EVALUATION QUESTIONS =====================
 
@@ -18,19 +19,56 @@ export interface EvaluationQuestion {
     created_at: string;
 }
 
+async function readThroughCache<T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> {
+    try {
+        const data = await fetcher();
+        await setCachedJson(cacheKey, data);
+        return data;
+    } catch {
+        const cached = await getCachedJson<T>(cacheKey);
+        if (cached != null) return cached;
+        throw new Error('No cached data available');
+    }
+}
+
 export const useEvaluationQuestions = (companyId: string | null) => {
     return useQuery({
         queryKey: ['evaluation_questions', companyId],
         queryFn: async () => {
             if (!companyId) return [];
-            const { data, error } = await supabase
-                .from('evaluation_questions')
-                .select('*')
-                .eq('is_active', true)
-                .eq('company_id', companyId)
-                .order('staff_type, category, display_order, created_at');
-            if (error) throw error;
-            return (data || []) as EvaluationQuestion[];
+            const base = await readThroughCache<EvaluationQuestion[]>(
+                `evaluation_questions:${companyId}`,
+                async () => {
+                    const { data, error } = await supabase
+                        .from('evaluation_questions')
+                        .select('*')
+                        .eq('is_active', true)
+                        .eq('company_id', companyId)
+                        .order('staff_type, category, display_order, created_at');
+                    if (error) throw error;
+                    return (data || []) as EvaluationQuestion[];
+                },
+            );
+            const queued = await listQueued('evaluation_questions.');
+            let out = [...base];
+            for (const q of queued) {
+                if (q.action === 'evaluation_questions.insert') {
+                    const rows = Array.isArray(q.payload) ? (q.payload as any[]) : [q.payload as any];
+                    for (const row of rows) {
+                        if (!row || row.company_id !== companyId || row.is_active === false) continue;
+                        out.push({ ...(row as EvaluationQuestion), id: (row.id as string) || `offline-${q.id}` });
+                    }
+                } else if (q.action === 'evaluation_questions.update') {
+                    const payload = q.payload as any;
+                    const idx = out.findIndex((r) => r.id === payload?.id);
+                    if (idx >= 0) out[idx] = { ...out[idx], ...(payload?.update || {}) };
+                } else if (q.action === 'evaluation_questions.deactivate') {
+                    const id = (q.payload as any)?.id as string | undefined;
+                    if (!id) continue;
+                    out = out.filter((r) => r.id !== id);
+                }
+            }
+            return out;
         },
         enabled: !!companyId,
     });
@@ -50,13 +88,23 @@ export const useAddEvaluationQuestion = () => {
             guidance_text?: string | null;
             display_order: number;
         }) => {
-            const { data, error } = await supabase
-                .from('evaluation_questions')
-                .insert([{ ...q, is_active: true }])
-                .select()
-                .single();
-            if (error) throw error;
-            return data;
+            const row = { ...q, is_active: true };
+            if (await isOnlineNow()) {
+                const { data, error } = await supabase
+                    .from('evaluation_questions')
+                    .insert([row])
+                    .select()
+                    .single();
+                if (error) throw error;
+                return data;
+            }
+            const offlineRow = {
+                ...row,
+                id: `offline-${Date.now()}`,
+                created_at: new Date().toISOString(),
+            };
+            await enqueueSync('evaluation_questions.insert', [row]);
+            return offlineRow as any;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['evaluation_questions'] });
@@ -68,11 +116,15 @@ export const useUpdateEvaluationQuestion = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({ id, ...updates }: Partial<EvaluationQuestion> & { id: string }) => {
-            const { error } = await supabase
-                .from('evaluation_questions')
-                .update(updates)
-                .eq('id', id);
-            if (error) throw error;
+            if (await isOnlineNow()) {
+                const { error } = await supabase
+                    .from('evaluation_questions')
+                    .update(updates)
+                    .eq('id', id);
+                if (error) throw error;
+            } else {
+                await enqueueSync('evaluation_questions.update', { id, update: updates });
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['evaluation_questions'] });
@@ -84,11 +136,15 @@ export const useDeleteEvaluationQuestion = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (id: string) => {
-            const { error } = await supabase
-                .from('evaluation_questions')
-                .update({ is_active: false })
-                .eq('id', id);
-            if (error) throw error;
+            if (await isOnlineNow()) {
+                const { error } = await supabase
+                    .from('evaluation_questions')
+                    .update({ is_active: false })
+                    .eq('id', id);
+                if (error) throw error;
+            } else {
+                await enqueueSync('evaluation_questions.deactivate', { id });
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['evaluation_questions'] });
@@ -114,18 +170,21 @@ export const useCamperEvalQuestions = (companyId: string | null, reportType?: st
         queryKey: ['camper_eval_questions', companyId, reportType],
         queryFn: async () => {
             if (!companyId) return [];
-            let query = supabase
-                .from('camper_evaluation_questions')
-                .select('*')
-                .eq('company_id', companyId)
-                .eq('is_active', true)
-                .order('sort_order', { ascending: true });
-            if (reportType) {
-                query = query.eq('report_type', reportType);
-            }
-            const { data, error } = await query;
-            if (error) throw error;
-            return (data || []) as CamperEvalQuestion[];
+            const key = `camper_eval_questions:${companyId}:${reportType || ''}`;
+            return readThroughCache<CamperEvalQuestion[]>(key, async () => {
+                let query = supabase
+                    .from('camper_evaluation_questions')
+                    .select('*')
+                    .eq('company_id', companyId)
+                    .eq('is_active', true)
+                    .order('sort_order', { ascending: true });
+                if (reportType) {
+                    query = query.eq('report_type', reportType);
+                }
+                const { data, error } = await query;
+                if (error) throw error;
+                return (data || []) as CamperEvalQuestion[];
+            });
         },
         enabled: !!companyId,
     });
@@ -149,14 +208,16 @@ export const useCamperReports = (companyId: string | null, season: string) => {
         queryKey: ['camper_reports', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
-            const { data, error } = await supabase
-                .from('camper_reports')
-                .select('*')
-                .eq('company_id', companyId)
-                .eq('season', season)
-                .order('report_date', { ascending: false });
-            if (error) throw error;
-            return (data || []) as CamperReport[];
+            return readThroughCache<CamperReport[]>(`camper_reports:${companyId}:${season}`, async () => {
+                const { data, error } = await supabase
+                    .from('camper_reports')
+                    .select('*')
+                    .eq('company_id', companyId)
+                    .eq('season', season)
+                    .order('report_date', { ascending: false });
+                if (error) throw error;
+                return (data || []) as CamperReport[];
+            });
         },
         enabled: !!companyId,
     });

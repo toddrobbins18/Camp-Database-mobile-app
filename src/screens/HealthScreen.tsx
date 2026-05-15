@@ -8,7 +8,7 @@ import { StyledCard } from '../components/StyledCard';
 import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useDivisions, getCamperDivisionName } from '../api/campers';
-import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
+import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useDeleteMedicationLog, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
 import { supabase } from '../lib/supabase';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
@@ -194,6 +194,7 @@ export const HealthScreen = ({ navigation }: any) => {
     const { data: medicationsData } = useMedicationLogs(companyId, medicationQueryDate);
     const addMedicationMutation = useAddMedicationLog();
     const administerMutation = useAdministerMedication();
+    const deleteMedicationMutation = useDeleteMedicationLog();
     const safeMedications = Array.isArray(medicationsData) ? medicationsData : [];
 
     const calendarWidgetEvents: CalendarWidgetEvent[] = useMemo(() => {
@@ -295,15 +296,8 @@ export const HealthScreen = ({ navigation }: any) => {
             };
             console.log('[ADMIT] Insert payload:', insertPayload);
 
-            const { data: insertedRow, error: insertErr, status, statusText } = await supabase
-                .from('health_center_admissions')
-                .insert([insertPayload])
-                .select()
-                .single();
-
-            console.log('[ADMIT] Insert response:', { insertedRow, insertErr, status, statusText });
-
-            if (insertErr) throw insertErr;
+            const insertedRow = await addAdmissionMutation.mutateAsync(insertPayload as any);
+            console.log('[ADMIT] Insert response:', { insertedRow });
 
             await queryClient.invalidateQueries({ queryKey: ['health_center_admissions'] });
             await admissionsQuery.refetch();
@@ -335,17 +329,8 @@ export const HealthScreen = ({ navigation }: any) => {
             const { data: { user } } = await supabase.auth.getUser();
             console.log('[CHECKOUT] User:', user?.id);
 
-            const { error, status, statusText } = await supabase
-                .from('health_center_admissions')
-                .update({
-                    checked_out_at: new Date().toISOString(),
-                    checked_out_by: user?.id || null,
-                })
-                .eq('id', admissionId);
-
-            console.log('[CHECKOUT] Response:', { error, status, statusText });
-
-            if (error) throw error;
+            await checkoutMutation.mutateAsync({ id: admissionId, checkedOutBy: user?.id });
+            console.log('[CHECKOUT] Response:', { ok: true });
 
             await queryClient.invalidateQueries({ queryKey: ['health_center_admissions'] });
             await admissionsQuery.refetch();
@@ -455,9 +440,8 @@ export const HealthScreen = ({ navigation }: any) => {
         setIsDeleting(true);
         console.log('[DELETE] medication_logs', itemToDelete.id);
         try {
-            const { error } = await supabase.from('medication_logs').delete().eq('id', itemToDelete.id);
-            console.log('[DELETE] medication_logs response', error);
-            if (error) throw error;
+            await deleteMedicationMutation.mutateAsync(itemToDelete.id);
+            console.log('[DELETE] medication_logs response', { ok: true });
             await queryClient.invalidateQueries({ queryKey: ['medication_logs'] });
             Alert.alert('Success', 'Medication log deleted.');
         } catch (error: any) {

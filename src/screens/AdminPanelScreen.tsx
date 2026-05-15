@@ -21,6 +21,7 @@ import {
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
 import { getSignedUrl } from '../api/storage';
+import { isOnlineNow } from '../offline/engine';
 
 export const AdminPanelScreen = ({ navigation }: any) => {
 
@@ -95,6 +96,12 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         Alert.alert('Update failed', message);
     };
 
+    const requireOnline = async (actionLabel: string): Promise<boolean> => {
+        if (await isOnlineNow()) return true;
+        Alert.alert('Offline', `${actionLabel} requires internet. Please reconnect and try again.`);
+        return false;
+    };
+
     const handleToggleEmailConfig = (id: string) => {
         const config = emailConfigs.find(c => c.id === id);
         if (config) {
@@ -166,7 +173,8 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         'Super Admin'
     ];
 
-    const runCreateUser = (fullName: string, email: string, password: string) => {
+    const runCreateUser = async (fullName: string, email: string, password: string) => {
+        if (!(await requireOnline('Creating users'))) return;
         const roleMap: Record<string, string> = {
             'Viewer': 'viewer',
             'Staff': 'staff',
@@ -251,6 +259,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
     const handleDeleteUser = async () => {
         if (!userToDelete?.id) return;
+        if (!(await requireOnline('Deleting users'))) return;
         console.log('[DELETE] admin panel user (profiles)', userToDelete.id, userToDelete.name);
         setIsDeleting(true);
         try {
@@ -266,7 +275,8 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         }
     };
 
-    const handleSendPasswordReset = (email: string, name: string) => {
+    const handleSendPasswordReset = async (email: string, name: string) => {
+        if (!(await requireOnline('Sending password reset links'))) return;
         sendPasswordResetMutation.mutate(email, {
             onSuccess: () => {
                 Alert.alert('Reset link sent', `Password reset instructions were sent to ${email}.`);
@@ -775,6 +785,9 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     };
 
     const callEdgeFunction = async <T,>(functionName: string, body: Record<string, any>): Promise<T> => {
+        if (!(await isOnlineNow())) {
+            throw new Error('Internet connection is required for this action.');
+        }
         const accessToken = await getFreshAccessToken();
         if (!accessToken) {
             throw new Error('Session expired. Please sign out and sign in again.');
@@ -854,6 +867,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
         const handleSave = async () => {
             if (!companyId) return;
+            if (!(await requireOnline('Saving email configuration'))) return;
             if (!form.m365_tenant_id || !form.m365_client_id || !form.m365_sender_email) {
                 Alert.alert('Validation error', 'Tenant ID, Client ID, and Sender Email are required.');
                 return;
@@ -1086,6 +1100,11 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                 .replace(/(^-|-$)/g, '');
 
         const fetchCompanies = async () => {
+            if (!(await isOnlineNow())) {
+                setLoading(false);
+                Alert.alert('Offline', 'Company admin data requires internet.');
+                return;
+            }
             setLoading(true);
             try {
                 const { data, error } = await supabase
@@ -1174,6 +1193,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         };
 
         const handleSaveCompany = async () => {
+            if (!(await requireOnline('Saving company settings'))) return;
             try {
                 const name = form.name.trim();
                 if (!name) {
@@ -1442,6 +1462,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
 
         const confirmDataManagementDelete = async () => {
             if (!itemToDelete || !companyId) return;
+            if (!(await requireOnline('Deleting data'))) return;
             const isAll = itemToDelete === ALL_TEST_DATA_KEY;
             console.log('[DELETE] data management', isAll ? 'bulk test tables' : itemToDelete, 'company_id', companyId);
             setIsDeleting(true);

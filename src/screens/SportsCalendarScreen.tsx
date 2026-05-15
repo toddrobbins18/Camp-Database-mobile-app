@@ -26,6 +26,7 @@ import { useStaff } from '../api/staff';
 import { useCompany } from '../contexts/CompanyContext';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
+import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 
 /** DB + web use lowercase; labels are for UI only (see migrations sports_calendar_home_away_check). */
 const HOME_AWAY_OPTIONS: { value: string; label: string }[] = [
@@ -44,6 +45,14 @@ function normalizeHomeAway(raw: string | undefined | null): string {
     const l = String(raw).trim().toLowerCase();
     if (l === 'home' || l === 'away' || l === 'neutral') return l;
     return '';
+}
+
+function makeClientUuid(): string {
+    if (typeof globalThis.crypto !== 'undefined' && 'randomUUID' in globalThis.crypto) {
+        return globalThis.crypto.randomUUID();
+    }
+    const rnd = Math.random().toString(16).slice(2).padEnd(12, '0').slice(0, 12);
+    return `00000000-0000-4000-8000-${rnd}`;
 }
 
 /** Align with web SportsCalendar: division.gender is often male/female; filter uses Boys/Girls. */
@@ -270,58 +279,65 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         queryKey: ['sports_calendar', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
-            const [eventsRes, divisionLinksRes, rosterRes] = await Promise.all([
-                supabase
-                    .from('sports_calendar')
-                    .select(`
-                        *,
-                        division:divisions(id, name, gender),
-                        sports_calendar_divisions(division_id, division:divisions(id, name, gender))
-                    `)
-                    .eq('company_id', companyId)
-                    .eq('season', season)
-                    .order('event_date', { ascending: true }),
-                supabase
-                    .from('sports_calendar_divisions')
-                    .select('sports_event_id, division_id, division:divisions(id, name, gender)')
-                    .eq('company_id', companyId),
-                supabase
-                    .from('sports_event_roster')
-                    .select('event_id')
-                    .eq('company_id', companyId),
-            ]);
-            if (eventsRes.error) throw eventsRes.error;
-            if (divisionLinksRes.error) throw divisionLinksRes.error;
-            if (rosterRes.error) throw rosterRes.error;
+            const cacheKey = `sports_calendar_screen:${companyId}:${season}`;
+            try {
+                const [eventsRes, divisionLinksRes, rosterRes] = await Promise.all([
+                    supabase
+                        .from('sports_calendar')
+                        .select(`
+                            *,
+                            division:divisions(id, name, gender),
+                            sports_calendar_divisions(division_id, division:divisions(id, name, gender))
+                        `)
+                        .eq('company_id', companyId)
+                        .eq('season', season)
+                        .order('event_date', { ascending: true }),
+                    supabase
+                        .from('sports_calendar_divisions')
+                        .select('sports_event_id, division_id, division:divisions(id, name, gender)')
+                        .eq('company_id', companyId),
+                    supabase
+                        .from('sports_event_roster')
+                        .select('event_id')
+                        .eq('company_id', companyId),
+                ]);
+                if (eventsRes.error) throw eventsRes.error;
+                if (divisionLinksRes.error) throw divisionLinksRes.error;
+                if (rosterRes.error) throw rosterRes.error;
 
-            const divisionMap = new Map<string, Array<{ id: string; name: string; gender?: string }>>();
-            (divisionLinksRes.data || []).forEach((row: any) => {
-                if (!divisionMap.has(row.sports_event_id)) divisionMap.set(row.sports_event_id, []);
-                if (row.division) {
-                    divisionMap.get(row.sports_event_id)!.push({
-                        id: row.division.id,
-                        name: row.division.name,
-                        gender: row.division.gender,
-                    });
-                }
-            });
+                const divisionMap = new Map<string, Array<{ id: string; name: string; gender?: string }>>();
+                (divisionLinksRes.data || []).forEach((row: any) => {
+                    if (!divisionMap.has(row.sports_event_id)) divisionMap.set(row.sports_event_id, []);
+                    if (row.division) {
+                        divisionMap.get(row.sports_event_id)!.push({
+                            id: row.division.id,
+                            name: row.division.name,
+                            gender: row.division.gender,
+                        });
+                    }
+                });
 
-            const rosterCounts = new Map<string, number>();
-            (rosterRes.data || []).forEach((row: any) => {
-                rosterCounts.set(row.event_id, (rosterCounts.get(row.event_id) || 0) + 1);
-            });
+                const rosterCounts = new Map<string, number>();
+                (rosterRes.data || []).forEach((row: any) => {
+                    rosterCounts.set(row.event_id, (rosterCounts.get(row.event_id) || 0) + 1);
+                });
 
-            return (eventsRes.data || []).map((event: any) => {
-                const joinedDivisions = divisionMap.get(event.id) || [];
-                const fallbackDivision = event.division
-                    ? [{ id: event.division.id, name: event.division.name, gender: event.division.gender }]
-                    : [];
-                return {
-                    ...event,
-                    _divisions: joinedDivisions.length > 0 ? joinedDivisions : fallbackDivision,
-                    _rosterCount: rosterCounts.get(event.id) || 0,
-                };
-            });
+                const rows = (eventsRes.data || []).map((event: any) => {
+                    const joinedDivisions = divisionMap.get(event.id) || [];
+                    const fallbackDivision = event.division
+                        ? [{ id: event.division.id, name: event.division.name, gender: event.division.gender }]
+                        : [];
+                    return {
+                        ...event,
+                        _divisions: joinedDivisions.length > 0 ? joinedDivisions : fallbackDivision,
+                        _rosterCount: rosterCounts.get(event.id) || 0,
+                    };
+                });
+                await setCachedJson(cacheKey, rows);
+                return rows;
+            } catch {
+                return (await getCachedJson<any[]>(cacheKey)) || [];
+            }
         },
         enabled: !!companyId,
     });
@@ -331,14 +347,21 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         queryKey: ['divisions_picker', companyId],
         queryFn: async () => {
             if (!companyId) return [];
-            const { data, error } = await supabase
-                .from('divisions')
-                .select('id, name, gender, sort_order')
-                .eq('company_id', companyId)
-                .eq('is_active', true);
-            if (error) throw error;
-            const rows = data || [];
-            return [...rows].sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+            const cacheKey = `sports_calendar_divisions_picker:${companyId}`;
+            try {
+                const { data, error } = await supabase
+                    .from('divisions')
+                    .select('id, name, gender, sort_order')
+                    .eq('company_id', companyId)
+                    .eq('is_active', true);
+                if (error) throw error;
+                const rows = data || [];
+                const sorted = [...rows].sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+                await setCachedJson(cacheKey, sorted);
+                return sorted;
+            } catch {
+                return (await getCachedJson<any[]>(cacheKey)) || [];
+            }
         },
         enabled: !!companyId,
     });
@@ -628,12 +651,19 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         };
 
         try {
-            const { data: newEvent, error } = await supabase.from('sports_calendar').insert(submitData).select().single();
-
-            if (error || !newEvent) {
-                console.error('Error adding event:', error);
-                Alert.alert('Error adding event', error?.message || 'Unknown error');
-                return;
+            let newEvent: any = null;
+            if (await isOnlineNow()) {
+                const { data, error } = await supabase.from('sports_calendar').insert(submitData).select().single();
+                if (error || !data) {
+                    console.error('Error adding event:', error);
+                    Alert.alert('Error adding event', error?.message || 'Unknown error');
+                    return;
+                }
+                newEvent = data;
+            } else {
+                const localId = makeClientUuid();
+                newEvent = { id: localId };
+                await enqueueSync('sports_calendar.insert', [{ ...submitData, id: localId }]);
             }
 
             if (addFormData.division_ids.length > 0) {
@@ -642,8 +672,16 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     division_id: divId,
                     company_id: companyId,
                 }));
-                const { error: junctionErr } = await supabase.from('sports_calendar_divisions').insert(junctionData);
-                if (junctionErr) console.warn('Sports divisions insert:', junctionErr);
+                if (await isOnlineNow()) {
+                    const { error: junctionErr } = await supabase.from('sports_calendar_divisions').insert(junctionData);
+                    if (junctionErr) console.warn('Sports divisions insert:', junctionErr);
+                } else {
+                    await enqueueSync('sports_calendar_divisions.replace', {
+                        eventId: newEvent.id,
+                        companyId: companyId,
+                        divisionIds: addFormData.division_ids,
+                    });
+                }
             }
 
             const tripData = {
@@ -659,8 +697,12 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 season,
                 company_id: companyId,
             };
-            const { error: tripErr } = await supabase.from('trips').insert(tripData);
-            if (tripErr) console.warn('Trip insert (optional):', tripErr);
+            if (await isOnlineNow()) {
+                const { error: tripErr } = await supabase.from('trips').insert(tripData);
+                if (tripErr) console.warn('Trip insert (optional):', tripErr);
+            } else {
+                await enqueueSync('trips.insert', [tripData]);
+            }
 
             queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
             queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
@@ -682,11 +724,15 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         setIsDeleting(true);
         console.log('[DELETE] sports_calendar start', eventToDelete);
         try {
-            const { error } = await supabase.from('sports_calendar').delete().eq('id', eventToDelete);
-            console.log('[DELETE] sports_calendar response', { error: error?.message ?? null });
-            if (error) {
-                Alert.alert('Delete failed', error.message);
-                return;
+            if (await isOnlineNow()) {
+                const { error } = await supabase.from('sports_calendar').delete().eq('id', eventToDelete);
+                console.log('[DELETE] sports_calendar response', { error: error?.message ?? null });
+                if (error) {
+                    Alert.alert('Delete failed', error.message);
+                    return;
+                }
+            } else {
+                await enqueueSync('sports_calendar.delete', { id: eventToDelete });
             }
             await queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });
             await queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
@@ -762,21 +808,30 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
             division_provides_ref: editFormData.division_provides_ref,
             division_id: editFormData.division_ids.length === 1 ? editFormData.division_ids[0] : null,
         };
-        const { error } = await supabase.from('sports_calendar').update(submitData).eq('id', editFormData.id);
-        if (error) {
-            Alert.alert('Error updating event', error.message);
-            return;
-        }
+        if (await isOnlineNow()) {
+            const { error } = await supabase.from('sports_calendar').update(submitData).eq('id', editFormData.id);
+            if (error) {
+                Alert.alert('Error updating event', error.message);
+                return;
+            }
 
-        await supabase.from('sports_calendar_divisions').delete().eq('sports_event_id', editFormData.id);
-        if (editFormData.division_ids.length > 0) {
-            const junctionData = editFormData.division_ids.map((divId) => ({
-                sports_event_id: editFormData.id,
-                division_id: divId,
-                company_id: companyId,
-            }));
-            const { error: jErr } = await supabase.from('sports_calendar_divisions').insert(junctionData);
-            if (jErr) console.warn('Junction update:', jErr);
+            await supabase.from('sports_calendar_divisions').delete().eq('sports_event_id', editFormData.id);
+            if (editFormData.division_ids.length > 0) {
+                const junctionData = editFormData.division_ids.map((divId) => ({
+                    sports_event_id: editFormData.id,
+                    division_id: divId,
+                    company_id: companyId,
+                }));
+                const { error: jErr } = await supabase.from('sports_calendar_divisions').insert(junctionData);
+                if (jErr) console.warn('Junction update:', jErr);
+            }
+        } else {
+            await enqueueSync('sports_calendar.update', { id: editFormData.id, update: submitData });
+            await enqueueSync('sports_calendar_divisions.replace', {
+                eventId: editFormData.id,
+                companyId: companyId,
+                divisionIds: editFormData.division_ids,
+            });
         }
 
         queryClient.invalidateQueries({ queryKey: ['sports_calendar', companyId, season] });

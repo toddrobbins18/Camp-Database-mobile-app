@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 
 export type OwlPayCamper = {
     id: string;
@@ -42,27 +43,41 @@ export type OwlPayEmailConfig = {
     staff_report_recipient_email: string | null;
 };
 
+async function readThroughCache<T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> {
+    try {
+        const result = await fetcher();
+        await setCachedJson(cacheKey, result);
+        return result;
+    } catch {
+        const cached = await getCachedJson<T>(cacheKey);
+        if (cached != null) return cached;
+        throw new Error('No cached data available');
+    }
+}
+
 export const useOwlPayCampers = (companyId: string | null, season: string, search = '') => {
     return useQuery({
         queryKey: ['owlpay_campers', companyId, season, search],
         queryFn: async () => {
             if (!companyId) return [] as OwlPayCamper[];
-            let query = supabase
-                .from('children')
-                .select('id, name, person_id, rfid, photo_url, owl_pay_balance')
-                .eq('company_id', companyId)
-                .eq('season', season)
-                .neq('status', 'inactive')
-                .order('name', { ascending: true });
-
             const q = search.trim();
-            if (q) {
-                query = query.or(`name.ilike.%${q}%,person_id.ilike.%${q}%,rfid.ilike.%${q}%`);
-            }
+            return readThroughCache<OwlPayCamper[]>(`owlpay_campers:${companyId}:${season}:${q}`, async () => {
+                let query = supabase
+                    .from('children')
+                    .select('id, name, person_id, rfid, photo_url, owl_pay_balance')
+                    .eq('company_id', companyId)
+                    .eq('season', season)
+                    .neq('status', 'inactive')
+                    .order('name', { ascending: true });
 
-            const { data, error } = await query;
-            if (error) throw error;
-            return (data || []) as OwlPayCamper[];
+                if (q) {
+                    query = query.or(`name.ilike.%${q}%,person_id.ilike.%${q}%,rfid.ilike.%${q}%`);
+                }
+
+                const { data, error } = await query;
+                if (error) throw error;
+                return (data || []) as OwlPayCamper[];
+            });
         },
         enabled: !!companyId && !!season,
     });
@@ -73,19 +88,40 @@ export const useOwlPayItems = (companyId: string | null, includeInactive = false
         queryKey: ['owlpay_items', companyId, includeInactive],
         queryFn: async () => {
             if (!companyId) return [] as OwlPayItem[];
-            let query = supabase
-                .from('owl_pay_items')
-                .select('*')
-                .eq('company_id', companyId)
-                .order('name', { ascending: true });
+            const base = await readThroughCache<OwlPayItem[]>(
+                `owlpay_items:${companyId}:${String(includeInactive)}`,
+                async () => {
+                    let query = supabase
+                        .from('owl_pay_items')
+                        .select('*')
+                        .eq('company_id', companyId)
+                        .order('name', { ascending: true });
 
-            if (!includeInactive) {
-                query = query.eq('active', true);
+                    if (!includeInactive) {
+                        query = query.eq('active', true);
+                    }
+
+                    const { data, error } = await query;
+                    if (error) throw error;
+                    return (data || []) as OwlPayItem[];
+                },
+            );
+            const queued = await listQueued('owl_pay_items.');
+            let out = [...base];
+            for (const q of queued) {
+                if (q.action === 'owl_pay_items.upsert') {
+                    const row = (q.payload as any)?.payloadRow;
+                    if (!row || row.company_id !== companyId) continue;
+                    const idx = out.findIndex((r) => r.id === row.id);
+                    if (idx >= 0) out[idx] = { ...out[idx], ...row };
+                    else out.push({ ...(row as OwlPayItem), id: (row.id as string) || `offline-${q.id}` });
+                } else if (q.action === 'owl_pay_items.delete') {
+                    const id = (q.payload as any)?.id as string | undefined;
+                    if (!id) continue;
+                    out = out.filter((r) => r.id !== id);
+                }
             }
-
-            const { data, error } = await query;
-            if (error) throw error;
-            return (data || []) as OwlPayItem[];
+            return out;
         },
         enabled: !!companyId,
     });
@@ -96,22 +132,24 @@ export const useOwlPayStaff = (companyId: string | null, season: string, search 
         queryKey: ['owlpay_staff', companyId, season, search],
         queryFn: async () => {
             if (!companyId) return [] as OwlPayStaff[];
-            let query = supabase
-                .from('staff')
-                .select('id, name, person_id, rfid, photo_url')
-                .eq('company_id', companyId)
-                .eq('season', season)
-                .neq('status', 'inactive')
-                .order('name', { ascending: true });
-
             const q = search.trim();
-            if (q) {
-                query = query.or(`name.ilike.%${q}%,rfid.ilike.%${q}%,person_id.ilike.%${q}%`);
-            }
+            return readThroughCache<OwlPayStaff[]>(`owlpay_staff:${companyId}:${season}:${q}`, async () => {
+                let query = supabase
+                    .from('staff')
+                    .select('id, name, person_id, rfid, photo_url')
+                    .eq('company_id', companyId)
+                    .eq('season', season)
+                    .neq('status', 'inactive')
+                    .order('name', { ascending: true });
 
-            const { data, error } = await query;
-            if (error) throw error;
-            return (data || []) as OwlPayStaff[];
+                if (q) {
+                    query = query.or(`name.ilike.%${q}%,rfid.ilike.%${q}%,person_id.ilike.%${q}%`);
+                }
+
+                const { data, error } = await query;
+                if (error) throw error;
+                return (data || []) as OwlPayStaff[];
+            });
         },
         enabled: !!companyId && !!season,
     });
@@ -128,25 +166,30 @@ export const useSaveOwlPayItem = () => {
             category: string;
             active?: boolean;
         }) => {
-            if (payload.id) {
-                const { id, ...rest } = payload;
+            if (await isOnlineNow()) {
+                if (payload.id) {
+                    const { id, ...rest } = payload;
+                    const { data, error } = await supabase
+                        .from('owl_pay_items')
+                        .update(rest)
+                        .eq('id', id)
+                        .select()
+                        .single();
+                    if (error) throw error;
+                    return data;
+                }
+
                 const { data, error } = await supabase
                     .from('owl_pay_items')
-                    .update(rest)
-                    .eq('id', id)
+                    .insert(payload)
                     .select()
                     .single();
                 if (error) throw error;
                 return data;
             }
-
-            const { data, error } = await supabase
-                .from('owl_pay_items')
-                .insert(payload)
-                .select()
-                .single();
-            if (error) throw error;
-            return data;
+            const offlineRow = { ...payload, id: payload.id || `offline-${Date.now()}` };
+            await enqueueSync('owl_pay_items.upsert', { payloadRow: offlineRow });
+            return offlineRow as any;
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['owlpay_items', variables.company_id] });
@@ -158,8 +201,12 @@ export const useDeleteOwlPayItem = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (payload: { id: string; company_id: string }) => {
-            const { error } = await supabase.from('owl_pay_items').delete().eq('id', payload.id);
-            if (error) throw error;
+            if (await isOnlineNow()) {
+                const { error } = await supabase.from('owl_pay_items').delete().eq('id', payload.id);
+                if (error) throw error;
+            } else {
+                await enqueueSync('owl_pay_items.delete', { id: payload.id });
+            }
             return payload;
         },
         onSuccess: (payload) => {
@@ -173,13 +220,15 @@ export const useOwlPayEmailConfig = (companyId: string | null) => {
         queryKey: ['owlpay_email_config', companyId],
         queryFn: async () => {
             if (!companyId) return null;
-            const { data, error } = await supabase
-                .from('owl_pay_email_config')
-                .select('*')
-                .eq('company_id', companyId)
-                .maybeSingle();
-            if (error) throw error;
-            return data as OwlPayEmailConfig | null;
+            return readThroughCache<OwlPayEmailConfig | null>(`owlpay_email_config:${companyId}`, async () => {
+                const { data, error } = await supabase
+                    .from('owl_pay_email_config')
+                    .select('*')
+                    .eq('company_id', companyId)
+                    .maybeSingle();
+                if (error) throw error;
+                return data as OwlPayEmailConfig | null;
+            });
         },
         enabled: !!companyId,
     });
@@ -189,30 +238,34 @@ export const useSaveOwlPayEmailConfig = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (payload: OwlPayEmailConfig) => {
-            const { data: existing } = await supabase
-                .from('owl_pay_email_config')
-                .select('id')
-                .eq('company_id', payload.company_id)
-                .maybeSingle();
+            if (await isOnlineNow()) {
+                const { data: existing } = await supabase
+                    .from('owl_pay_email_config')
+                    .select('id')
+                    .eq('company_id', payload.company_id)
+                    .maybeSingle();
 
-            if (existing?.id) {
+                if (existing?.id) {
+                    const { data, error } = await supabase
+                        .from('owl_pay_email_config')
+                        .update({ ...payload, updated_at: new Date().toISOString() })
+                        .eq('id', existing.id)
+                        .select()
+                        .single();
+                    if (error) throw error;
+                    return data;
+                }
+
                 const { data, error } = await supabase
                     .from('owl_pay_email_config')
-                    .update({ ...payload, updated_at: new Date().toISOString() })
-                    .eq('id', existing.id)
+                    .insert(payload)
                     .select()
                     .single();
                 if (error) throw error;
                 return data;
             }
-
-            const { data, error } = await supabase
-                .from('owl_pay_email_config')
-                .insert(payload)
-                .select()
-                .single();
-            if (error) throw error;
-            return data;
+            await enqueueSync('owl_pay_email_config.save', { row: payload });
+            return payload;
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['owlpay_email_config', variables.company_id] });
@@ -266,18 +319,24 @@ export const useOwlPayReports = (
 
             if (!companyId) return empty;
 
-            const { data, error } = await supabase
-                .from('owl_pay_transactions')
-                .select(
-                    'id, amount, is_free, created_at, item_id, child_id, staff_id, owl_pay_items(name, category), children(name), staff(name)'
-                )
-                .eq('company_id', companyId)
-                .eq('transaction_type', 'purchase')
-                .gte('created_at', fromISO)
-                .lte('created_at', toISO)
-                .order('created_at', { ascending: false });
+            const data = await readThroughCache<any[]>(
+                `owlpay_reports_tx:${companyId}:${fromISO}:${toISO}:${audience}:${search.trim()}`,
+                async () => {
+                    const { data, error } = await supabase
+                        .from('owl_pay_transactions')
+                        .select(
+                            'id, amount, is_free, created_at, item_id, child_id, staff_id, owl_pay_items(name, category), children(name), staff(name)'
+                        )
+                        .eq('company_id', companyId)
+                        .eq('transaction_type', 'purchase')
+                        .gte('created_at', fromISO)
+                        .lte('created_at', toISO)
+                        .order('created_at', { ascending: false });
 
-            if (error) throw error;
+                    if (error) throw error;
+                    return data || [];
+                },
+            );
 
             const itemMap = new Map<string, { id: string; name: string; category: string; quantity: number; revenue: number }>();
             const dateMap = new Map<string, { revenue: number; count: number }>();
@@ -360,41 +419,43 @@ export const useOwlPayStaffSpendRows = (companyId: string | null, season: string
         queryKey: ['owlpay_staff_spend', companyId, season],
         queryFn: async (): Promise<OwlPayStaffSpendRow[]> => {
             if (!companyId || !season) return [];
+            const cacheKey = `owlpay_staff_spend:${companyId}:${season}`;
+            return readThroughCache<OwlPayStaffSpendRow[]>(cacheKey, async () => {
+                const [{ data: staffList, error: staffErr }, { data: txs, error: txErr }] = await Promise.all([
+                    supabase
+                        .from('staff')
+                        .select('id, name, person_id, rfid, photo_url')
+                        .eq('company_id', companyId)
+                        .eq('season', season)
+                        .neq('status', 'inactive')
+                        .order('name', { ascending: true }),
+                    supabase
+                        .from('owl_pay_transactions')
+                        .select('staff_id, amount')
+                        .eq('company_id', companyId)
+                        .eq('transaction_type', 'purchase')
+                        .not('staff_id', 'is', null),
+                ]);
 
-            const [{ data: staffList, error: staffErr }, { data: txs, error: txErr }] = await Promise.all([
-                supabase
-                    .from('staff')
-                    .select('id, name, person_id, rfid, photo_url')
-                    .eq('company_id', companyId)
-                    .eq('season', season)
-                    .neq('status', 'inactive')
-                    .order('name', { ascending: true }),
-                supabase
-                    .from('owl_pay_transactions')
-                    .select('staff_id, amount')
-                    .eq('company_id', companyId)
-                    .eq('transaction_type', 'purchase')
-                    .not('staff_id', 'is', null),
-            ]);
+                if (staffErr) throw staffErr;
+                if (txErr) throw txErr;
 
-            if (staffErr) throw staffErr;
-            if (txErr) throw txErr;
+                const spentByStaff = new Map<string, number>();
+                for (const tx of txs || []) {
+                    const sid = (tx as any).staff_id as string;
+                    if (!sid) continue;
+                    spentByStaff.set(sid, (spentByStaff.get(sid) || 0) + Number((tx as any).amount || 0));
+                }
 
-            const spentByStaff = new Map<string, number>();
-            for (const tx of txs || []) {
-                const sid = (tx as any).staff_id as string;
-                if (!sid) continue;
-                spentByStaff.set(sid, (spentByStaff.get(sid) || 0) + Number((tx as any).amount || 0));
-            }
-
-            return (staffList || []).map((s: any) => ({
-                id: s.id,
-                name: s.name,
-                person_id: s.person_id ?? null,
-                rfid: s.rfid ?? null,
-                photo_url: s.photo_url ?? null,
-                total_spent: spentByStaff.get(s.id) || 0,
-            }));
+                return (staffList || []).map((s: any) => ({
+                    id: s.id,
+                    name: s.name,
+                    person_id: s.person_id ?? null,
+                    rfid: s.rfid ?? null,
+                    photo_url: s.photo_url ?? null,
+                    total_spent: spentByStaff.get(s.id) || 0,
+                }));
+            });
         },
         enabled: !!companyId && !!season,
     });

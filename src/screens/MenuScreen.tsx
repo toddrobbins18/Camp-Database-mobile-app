@@ -24,7 +24,7 @@ import { MobileUserMenu } from '../components/MobileUserMenu';
 import { useCompany } from '../contexts/CompanyContext';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
-import { useMenuItems, useAddMenuItem, MenuItem } from '../api/menu';
+import { useMenuItems, useAddMenuItem, useDeleteMenuItem, MenuItem } from '../api/menu';
 import { supabase } from '../lib/supabase';
 import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
@@ -41,6 +41,7 @@ export const MenuScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
     const { data: menuItemsList = [] } = useMenuItems(companyId);
     const addMenuItemMutation = useAddMenuItem();
+    const deleteMenuItemMutation = useDeleteMenuItem();
     const [itemToDelete, setItemToDelete] = useState<any>(null);
     const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -137,9 +138,8 @@ export const MenuScreen = ({ navigation }: any) => {
         setIsDeleting(true);
         console.log('[DELETE] menu_items', itemToDelete.id);
         try {
-            const { error } = await supabase.from('menu_items').delete().eq('id', itemToDelete.id);
-            console.log('[DELETE] menu_items response', error);
-            if (error) throw error;
+            await deleteMenuItemMutation.mutateAsync({ id: itemToDelete.id, company_id: companyId });
+            console.log('[DELETE] menu_items response', { ok: true });
             await queryClient.invalidateQueries({ queryKey: ['menu_items', companyId] });
             await queryClient.invalidateQueries({ queryKey: ['dashboard_meals'] });
             Alert.alert('Success', 'Menu item deleted.');

@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
 import { useStaff } from '../api/staff';
 import { isTylerHillCamp } from '../constants/camps';
+import { enqueueSync, isOnlineNow } from '../offline/engine';
 
 interface StaffMember {
     id: string;
@@ -273,10 +274,15 @@ export const ODManagementScreen = ({ navigation }: any) => {
 
     const assignStaffToBunkMutation = useMutation({
         mutationFn: async ({ bunkId, staffId }: { bunkId: string; staffId: string }) => {
-            const { error } = await supabase
-                .from('bunk_staff')
-                .insert([{ company_id: companyId, season, bunk_id: bunkId, staff_id: staffId, is_primary: false }]);
-            if (error) throw error;
+            const row = { company_id: companyId, season, bunk_id: bunkId, staff_id: staffId, is_primary: false };
+            if (await isOnlineNow()) {
+                const { error } = await supabase
+                    .from('bunk_staff')
+                    .insert([row]);
+                if (error) throw error;
+            } else {
+                await enqueueSync('bunk_staff.insert', [row]);
+            }
         },
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ['bunk_staff'] });
@@ -292,8 +298,12 @@ export const ODManagementScreen = ({ navigation }: any) => {
 
     const removeStaffFromBunkMutation = useMutation({
         mutationFn: async (bunkStaffId: string) => {
-            const { error } = await supabase.from('bunk_staff').delete().eq('id', bunkStaffId);
-            if (error) throw error;
+            if (await isOnlineNow()) {
+                const { error } = await supabase.from('bunk_staff').delete().eq('id', bunkStaffId);
+                if (error) throw error;
+            } else {
+                await enqueueSync('bunk_staff.delete', { id: bunkStaffId });
+            }
         },
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ['bunk_staff'] });
@@ -562,10 +572,20 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 return;
             }
             if (!row.checked_out) {
-                await supabase.from('staff_days_off').update({ checked_out: true, checked_out_at: new Date().toISOString() }).eq('id', row.id);
+                const update = { checked_out: true, checked_out_at: new Date().toISOString() };
+                if (await isOnlineNow()) {
+                    await supabase.from('staff_days_off').update(update).eq('id', row.id);
+                } else {
+                    await enqueueSync('staff_days_off.update', { id: row.id, update });
+                }
                 Alert.alert('Checked out', `${staffMember.name} signed out.`);
             } else if (!row.checked_in) {
-                await supabase.from('staff_days_off').update({ checked_in: true, checked_in_at: new Date().toISOString() }).eq('id', row.id);
+                const update = { checked_in: true, checked_in_at: new Date().toISOString() };
+                if (await isOnlineNow()) {
+                    await supabase.from('staff_days_off').update(update).eq('id', row.id);
+                } else {
+                    await enqueueSync('staff_days_off.update', { id: row.id, update });
+                }
                 Alert.alert('Checked in', `${staffMember.name} signed in.`);
             } else {
                 Alert.alert('Done', `${staffMember.name} has already checked out and back in today.`);
@@ -589,8 +609,12 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 const newValue = !cur;
                 const updates: Record<string, boolean> = { [field]: newValue };
                 if (field === 'is_day_off') updates.is_night_off = newValue;
-                const { error } = await supabase.from('staff_days_off').update(updates).eq('id', existing.id);
-                if (error) throw error;
+                if (await isOnlineNow()) {
+                    const { error } = await supabase.from('staff_days_off').update(updates).eq('id', existing.id);
+                    if (error) throw error;
+                } else {
+                    await enqueueSync('staff_days_off.update', { id: existing.id, update: updates });
+                }
             } else {
                 const newRecord = {
                     company_id: companyId,
@@ -601,8 +625,12 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     is_night_off: field === 'is_day_off' || field === 'is_night_off',
                     is_sleeping_out: field === 'is_sleeping_out',
                 };
-                const { error } = await supabase.from('staff_days_off').insert(newRecord);
-                if (error) throw error;
+                if (await isOnlineNow()) {
+                    const { error } = await supabase.from('staff_days_off').insert(newRecord);
+                    if (error) throw error;
+                } else {
+                    await enqueueSync('staff_days_off.insert', [newRecord]);
+                }
             }
             await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
         } catch (e: any) {
@@ -617,26 +645,31 @@ export const ODManagementScreen = ({ navigation }: any) => {
             return;
         }
         const { data: { user } } = await supabase.auth.getUser();
-        const { error } = await supabase
-            .from('staff_days_off')
-            .upsert({
-                company_id: companyId,
-                staff_id: lateOverrideStaffId,
-                date: dateString,
-                season,
-                is_day_off: true,
-                is_night_off: true,
-                checked_out: true,
-                checked_out_at: new Date().toISOString(),
-                checked_out_by: user?.id ?? null,
-                late_override: true,
-                late_override_reason: lateOverrideReason.trim(),
-                late_override_approved_by: user?.id ?? null,
-                late_override_approved_at: new Date().toISOString(),
-            }, { onConflict: 'company_id,staff_id,date,season' });
-        if (error) {
-            Alert.alert('Error', error.message || 'Failed to approve override');
-            return;
+        const row = {
+            company_id: companyId,
+            staff_id: lateOverrideStaffId,
+            date: dateString,
+            season,
+            is_day_off: true,
+            is_night_off: true,
+            checked_out: true,
+            checked_out_at: new Date().toISOString(),
+            checked_out_by: user?.id ?? null,
+            late_override: true,
+            late_override_reason: lateOverrideReason.trim(),
+            late_override_approved_by: user?.id ?? null,
+            late_override_approved_at: new Date().toISOString(),
+        };
+        if (await isOnlineNow()) {
+            const { error } = await supabase
+                .from('staff_days_off')
+                .upsert(row, { onConflict: 'company_id,staff_id,date,season' });
+            if (error) {
+                Alert.alert('Error', error.message || 'Failed to approve override');
+                return;
+            }
+        } else {
+            await enqueueSync('staff_days_off.upsert', { row });
         }
         setShowLateOverrideModal(false);
         setLateOverrideReason('');

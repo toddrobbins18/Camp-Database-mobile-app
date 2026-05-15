@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 
 // ===================== CALENDAR / MASTER EVENTS =====================
 
@@ -28,6 +29,75 @@ export interface Division {
     sort_order?: number;
 }
 
+async function readThroughCache<T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> {
+    try {
+        const data = await fetcher();
+        await setCachedJson(cacheKey, data);
+        return data;
+    } catch {
+        const cached = await getCachedJson<T>(cacheKey);
+        if (cached != null) return cached;
+        throw new Error('No cached data available');
+    }
+}
+
+function mapSpecialToCalendarEvent(event: any): CalendarEvent {
+    const divisions = event.divisions || [];
+    const div = divisions[0];
+    return {
+        id: `special_${event.id}`,
+        title: event.title || '',
+        date: event.event_date,
+        location: event.location,
+        description: event.description,
+        type: event.event_type || 'Special Event',
+        time: event.time_slot || event.start_time,
+        source: 'special_events_activities',
+        divisionId: div?.id,
+        divisionName: div?.name,
+        tags: ['Special Event', event.event_type, ...divisions.map((d: any) => d.name)].filter(Boolean),
+        originalData: { ...event, divisions },
+    };
+}
+
+async function applyQueuedSpecialEventsToCalendar(events: CalendarEvent[]): Promise<CalendarEvent[]> {
+    let out = [...events];
+    const queued = await listQueued('special_events.');
+    for (const q of queued) {
+        if (q.action === 'special_events.insert') {
+            const payload = q.payload as any;
+            const row = payload?.eventRow;
+            if (!row) continue;
+            out.push(
+                mapSpecialToCalendarEvent({
+                    ...row,
+                    id: row.id || `offline-${q.id}`,
+                    divisions: (payload?.divisionIds || []).map((id: string) => ({ id, name: 'Division' })),
+                }),
+            );
+        } else if (q.action === 'special_events.update') {
+            const payload = q.payload as any;
+            const id = payload?.id as string | undefined;
+            if (!id) continue;
+            out = out.map((evt) => {
+                if (evt.source !== 'special_events_activities') return evt;
+                if (evt.id !== `special_${id}`) return evt;
+                return mapSpecialToCalendarEvent({
+                    ...(evt.originalData || {}),
+                    ...(payload?.eventUpdate || {}),
+                    id,
+                    divisions: (payload?.divisionIds || []).map((d: string) => ({ id: d, name: 'Division' })),
+                });
+            });
+        } else if (q.action === 'special_events.delete') {
+            const id = (q.payload as any)?.id as string | undefined;
+            if (!id) continue;
+            out = out.filter((evt) => !(evt.source === 'special_events_activities' && evt.id === `special_${id}`));
+        }
+    }
+    return out;
+}
+
 /**
  * Fetches divisions for the company (for Master Calendar filter).
  */
@@ -36,14 +106,16 @@ export const useDivisions = (companyId: string | null) => {
         queryKey: ['divisions', companyId],
         queryFn: async (): Promise<Division[]> => {
             if (!companyId) return [];
-            const { data, error } = await supabase
-                .from('divisions')
-                .select('id, name, gender, sort_order')
-                .eq('company_id', companyId)
-                .eq('is_active', true)
-                .order('sort_order', { ascending: true });
-            if (error) throw error;
-            return data || [];
+            return readThroughCache<Division[]>(`calendar_divisions:${companyId}`, async () => {
+                const { data, error } = await supabase
+                    .from('divisions')
+                    .select('id, name, gender, sort_order')
+                    .eq('company_id', companyId)
+                    .eq('is_active', true)
+                    .order('sort_order', { ascending: true });
+                if (error) throw error;
+                return data || [];
+            });
         },
         enabled: !!companyId,
     });
@@ -59,107 +131,107 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
         queryKey: ['calendar_events', companyId, season],
         queryFn: async (): Promise<CalendarEvent[]> => {
             if (!companyId) return [];
-
             const seasonFilter = season || '2026';
+            const cacheKey = `calendar_events:${companyId}:${seasonFilter}`;
+            const base = await readThroughCache<CalendarEvent[]>(cacheKey, async () => {
+                // Mirror web behavior: pull in two pages per table to avoid 1000-row truncation.
+                const [
+                    sportsBatch1,
+                    sportsBatch2,
+                    activitiesBatch1,
+                    activitiesBatch2,
+                    specialBatch1,
+                    specialBatch2,
+                    specialDivisionsRes,
+                    tigerTimesRes,
+                ] = await Promise.all([
+                    supabase
+                        .from('sports_calendar')
+                        .select('*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))')
+                        .eq('company_id', companyId)
+                        .order('event_date', { ascending: true })
+                        .range(0, 999),
+                    supabase
+                        .from('sports_calendar')
+                        .select('*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))')
+                        .eq('company_id', companyId)
+                        .order('event_date', { ascending: true })
+                        .range(1000, 1999),
+                    supabase
+                        .from('activities_field_trips')
+                        .select('*, division:divisions(id, name, gender)')
+                        .eq('company_id', companyId)
+                        .order('event_date', { ascending: true })
+                        .range(0, 999),
+                    supabase
+                        .from('activities_field_trips')
+                        .select('*, division:divisions(id, name, gender)')
+                        .eq('company_id', companyId)
+                        .order('event_date', { ascending: true })
+                        .range(1000, 1999),
+                    supabase
+                        .from('special_events_activities')
+                        .select('*, division:divisions(id, name, gender)')
+                        .eq('company_id', companyId)
+                        .order('event_date', { ascending: true })
+                        .range(0, 999),
+                    supabase
+                        .from('special_events_activities')
+                        .select('*, division:divisions(id, name, gender)')
+                        .eq('company_id', companyId)
+                        .order('event_date', { ascending: true })
+                        .range(1000, 1999),
+                    supabase
+                        .from('special_events_divisions')
+                        .select('event_id, division_id, divisions(id, name, gender)')
+                        .eq('company_id', companyId),
+                    supabase
+                        .from('daily_wolf_content')
+                        .select('*')
+                        .eq('company_id', companyId)
+                        .eq('season', seasonFilter)
+                        .order('date', { ascending: true }),
+                ]);
 
-            // Mirror web behavior: pull in two pages per table to avoid 1000-row truncation.
-            const [
-                sportsBatch1,
-                sportsBatch2,
-                activitiesBatch1,
-                activitiesBatch2,
-                specialBatch1,
-                specialBatch2,
-                specialDivisionsRes,
-                tigerTimesRes,
-            ] = await Promise.all([
-                supabase
-                    .from('sports_calendar')
-                    .select('*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))')
-                    .eq('company_id', companyId)
-                    .order('event_date', { ascending: true })
-                    .range(0, 999),
-                supabase
-                    .from('sports_calendar')
-                    .select('*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))')
-                    .eq('company_id', companyId)
-                    .order('event_date', { ascending: true })
-                    .range(1000, 1999),
-                supabase
-                    .from('activities_field_trips')
-                    .select('*, division:divisions(id, name, gender)')
-                    .eq('company_id', companyId)
-                    .order('event_date', { ascending: true })
-                    .range(0, 999),
-                supabase
-                    .from('activities_field_trips')
-                    .select('*, division:divisions(id, name, gender)')
-                    .eq('company_id', companyId)
-                    .order('event_date', { ascending: true })
-                    .range(1000, 1999),
-                supabase
-                    .from('special_events_activities')
-                    .select('*, division:divisions(id, name, gender)')
-                    .eq('company_id', companyId)
-                    .order('event_date', { ascending: true })
-                    .range(0, 999),
-                supabase
-                    .from('special_events_activities')
-                    .select('*, division:divisions(id, name, gender)')
-                    .eq('company_id', companyId)
-                    .order('event_date', { ascending: true })
-                    .range(1000, 1999),
-                supabase
-                    .from('special_events_divisions')
-                    .select('event_id, division_id, divisions(id, name, gender)')
-                    .eq('company_id', companyId),
-                supabase
-                    .from('daily_wolf_content')
-                    .select('*')
-                    .eq('company_id', companyId)
-                    .eq('season', seasonFilter)
-                    .order('date', { ascending: true }),
-            ]);
+                const sportsData = [...(sportsBatch1.data || []), ...(sportsBatch2.data || [])]
+                    .filter((e: any) => e.season === seasonFilter || e.season == null);
+                const activitiesData = [...(activitiesBatch1.data || []), ...(activitiesBatch2.data || [])]
+                    .filter((e: any) => e.season === seasonFilter || e.season == null);
 
-            const sportsData = [...(sportsBatch1.data || []), ...(sportsBatch2.data || [])]
-                .filter((e: any) => e.season === seasonFilter || e.season == null);
-            const activitiesData = [...(activitiesBatch1.data || []), ...(activitiesBatch2.data || [])]
-                .filter((e: any) => e.season === seasonFilter || e.season == null);
-
-            const specialMerged = [...(specialBatch1.data || []), ...(specialBatch2.data || [])];
-            let specialData = specialMerged.filter(
-                (e: any) => e.season === seasonFilter || e.season == null,
-            );
-            // Web may save under a different season than the app's default — show rows anyway (parity with appointments).
-            if (seasonFilter && specialData.length === 0 && specialMerged.length > 0) {
-                specialData = specialMerged;
-            }
-
-            const specialDivisionMap = new Map<string, Array<{ id: string; name: string; gender?: string }>>();
-            (specialDivisionsRes.data || []).forEach((row: any) => {
-                if (!row?.event_id || !row?.divisions?.id) return;
-                if (!specialDivisionMap.has(row.event_id)) {
-                    specialDivisionMap.set(row.event_id, []);
+                const specialMerged = [...(specialBatch1.data || []), ...(specialBatch2.data || [])];
+                let specialData = specialMerged.filter(
+                    (e: any) => e.season === seasonFilter || e.season == null,
+                );
+                // Web may save under a different season than the app's default — show rows anyway (parity with appointments).
+                if (seasonFilter && specialData.length === 0 && specialMerged.length > 0) {
+                    specialData = specialMerged;
                 }
-                specialDivisionMap.get(row.event_id)!.push({
-                    id: row.divisions.id,
-                    name: row.divisions.name,
-                    gender: row.divisions.gender,
+
+                const specialDivisionMap = new Map<string, Array<{ id: string; name: string; gender?: string }>>();
+                (specialDivisionsRes.data || []).forEach((row: any) => {
+                    if (!row?.event_id || !row?.divisions?.id) return;
+                    if (!specialDivisionMap.has(row.event_id)) {
+                        specialDivisionMap.set(row.event_id, []);
+                    }
+                    specialDivisionMap.get(row.event_id)!.push({
+                        id: row.divisions.id,
+                        name: row.divisions.name,
+                        gender: row.divisions.gender,
+                    });
                 });
-            });
 
-            const events: CalendarEvent[] = [];
+                const events: CalendarEvent[] = [];
 
-            const firstSportsTimeField = (...vals: unknown[]): string => {
-                for (const v of vals) {
-                    if (v == null) continue;
-                    const s = String(v).trim();
-                    if (s) return s;
-                }
-                return '';
-            };
+                const firstSportsTimeField = (...vals: unknown[]): string => {
+                    for (const v of vals) {
+                        if (v == null) continue;
+                        const s = String(v).trim();
+                        if (s) return s;
+                    }
+                    return '';
+                };
 
-            sportsData.forEach((event: any) => {
+                sportsData.forEach((event: any) => {
                 const divisions =
                     event.sports_calendar_divisions?.map((d: any) => d.division).filter(Boolean)
                     || (event.division ? [event.division] : []);
@@ -193,9 +265,9 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                     tags: ['Sports', event.sport_type || event.custom_sport_type, div?.name].filter(Boolean),
                     originalData: { ...event, divisions },
                 });
-            });
+                });
 
-            activitiesData.forEach((event: any) => {
+                activitiesData.forEach((event: any) => {
                 const div = event.division;
                 events.push({
                     id: `fieldtrip_${event.id}`,
@@ -211,9 +283,9 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                     tags: ['Field Trip', event.activity_type, div?.name].filter(Boolean),
                     originalData: event,
                 });
-            });
+                });
 
-            specialData.forEach((event: any) => {
+                specialData.forEach((event: any) => {
                 const mappedDivisions = specialDivisionMap.get(event.id) || [];
                 const fallbackSingleDivision = event.division ? [event.division] : [];
                 const divisions = mappedDivisions.length > 0 ? mappedDivisions : fallbackSingleDivision;
@@ -232,37 +304,40 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                     tags: ['Special Event', event.event_type, ...divisions.map((d: any) => d.name)].filter(Boolean),
                     originalData: { ...event, divisions },
                 });
-            });
+                });
 
             // Tiger Times (Daily Wolf content): each populated field becomes a calendar event.
-            const tigerFields: { field: string; label: string; colorKey: string }[] = [
+                const tigerFields: { field: string; label: string; colorKey: string }[] = [
                 { field: 'laundry_info', label: 'Laundry', colorKey: 'TT: Laundry' },
                 { field: 'phone_calls_info', label: 'Phone Calls', colorKey: 'TT: Phone Calls' },
                 { field: 'outside_event', label: 'Outside Events', colorKey: 'TT: Outside Events' },
                 { field: 'staff_days_off', label: 'Staff Days Off', colorKey: 'TT: Staff Days Off' },
                 { field: 'od_notes', label: 'OD Notes', colorKey: 'TT: OD Notes' },
-            ];
+                ];
 
-            (tigerTimesRes.data || []).forEach((entry: any) => {
-                tigerFields.forEach(({ field, label, colorKey }) => {
-                    const value = entry?.[field];
-                    if (typeof value === 'string' && value.trim()) {
-                        events.push({
-                            id: `tt_${entry.id}_${field}`,
-                            title: `Tiger Times: ${label}`,
-                            date: entry.date,
-                            location: '',
-                            description: value,
-                            type: colorKey,
-                            source: 'tiger_times',
-                            tags: ['Tiger Times', label],
-                            originalData: { ...entry, tiger_times_category: colorKey },
-                        });
-                    }
+                (tigerTimesRes.data || []).forEach((entry: any) => {
+                    tigerFields.forEach(({ field, label, colorKey }) => {
+                        const value = entry?.[field];
+                        if (typeof value === 'string' && value.trim()) {
+                            events.push({
+                                id: `tt_${entry.id}_${field}`,
+                                title: `Tiger Times: ${label}`,
+                                date: entry.date,
+                                location: '',
+                                description: value,
+                                type: colorKey,
+                                source: 'tiger_times',
+                                tags: ['Tiger Times', label],
+                                originalData: { ...entry, tiger_times_category: colorKey },
+                            });
+                        }
+                    });
                 });
+
+                return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
             });
 
-            return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            return applyQueuedSpecialEventsToCalendar(base);
         },
         enabled: !!companyId,
         staleTime: 0,
@@ -296,47 +371,82 @@ export const useSpecialEvents = (companyId: string | null, season: string) => {
         queryKey: ['special_events', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
-
-            const [eventsRes, linksRes] = await Promise.all([
-                supabase
-                    .from('special_events_activities')
-                    .select('*')
-                    .eq('company_id', companyId)
-                    .order('event_date', { ascending: true })
-                    .order('time_slot', { ascending: true }),
-                supabase
-                    .from('special_events_divisions')
-                    .select('event_id, division_id, divisions(id, name)')
-                    .eq('company_id', companyId),
-            ]);
-
-            if (eventsRes.error) throw eventsRes.error;
-            if (linksRes.error) throw linksRes.error;
-
             const seasonFilter = season || '2026';
-            const rawEvents = eventsRes.data || [];
-            let events = rawEvents.filter(
-                (e: any) => e.season === seasonFilter || e.season == null,
-            );
-            if (seasonFilter && events.length === 0 && rawEvents.length > 0) {
-                events = rawEvents;
-            }
+            const cacheKey = `special_events:${companyId}:${seasonFilter}`;
+            const base = await readThroughCache<SpecialEvent[]>(cacheKey, async () => {
+                const [eventsRes, linksRes] = await Promise.all([
+                    supabase
+                        .from('special_events_activities')
+                        .select('*')
+                        .eq('company_id', companyId)
+                        .order('event_date', { ascending: true })
+                        .order('time_slot', { ascending: true }),
+                    supabase
+                        .from('special_events_divisions')
+                        .select('event_id, division_id, divisions(id, name)')
+                        .eq('company_id', companyId),
+                ]);
 
-            const divisionMap = new Map<string, Array<{ id: string; name: string }>>();
-            (linksRes.data || []).forEach((link: any) => {
-                if (!divisionMap.has(link.event_id)) divisionMap.set(link.event_id, []);
-                if (link.divisions) {
-                    divisionMap.get(link.event_id)!.push({
-                        id: link.divisions.id,
-                        name: link.divisions.name,
-                    });
+                if (eventsRes.error) throw eventsRes.error;
+                if (linksRes.error) throw linksRes.error;
+
+                const rawEvents = eventsRes.data || [];
+                let events = rawEvents.filter(
+                    (e: any) => e.season === seasonFilter || e.season == null,
+                );
+                if (seasonFilter && events.length === 0 && rawEvents.length > 0) {
+                    events = rawEvents;
                 }
+
+                const divisionMap = new Map<string, Array<{ id: string; name: string }>>();
+                (linksRes.data || []).forEach((link: any) => {
+                    if (!divisionMap.has(link.event_id)) divisionMap.set(link.event_id, []);
+                    if (link.divisions) {
+                        divisionMap.get(link.event_id)!.push({
+                            id: link.divisions.id,
+                            name: link.divisions.name,
+                        });
+                    }
+                    });
+
+                return events.map((event: any) => ({
+                    ...event,
+                    divisions: divisionMap.get(event.id) || [],
+                })) as SpecialEvent[];
             });
 
-            return events.map((event: any) => ({
-                ...event,
-                divisions: divisionMap.get(event.id) || [],
-            })) as SpecialEvent[];
+            let merged = [...base];
+            const queued = await listQueued('special_events.');
+            for (const q of queued) {
+                if (q.action === 'special_events.insert') {
+                    const payload = q.payload as any;
+                    const row = payload?.eventRow;
+                    if (!row) continue;
+                    merged.push({
+                        ...(row as SpecialEvent),
+                        id: (row.id as string) || `offline-${q.id}`,
+                        divisions: (payload?.divisionIds || []).map((id: string) => ({ id, name: 'Division' })),
+                    });
+                } else if (q.action === 'special_events.update') {
+                    const payload = q.payload as any;
+                    const id = payload?.id as string | undefined;
+                    if (!id) continue;
+                    merged = merged.map((evt) =>
+                        evt.id === id
+                            ? {
+                                  ...evt,
+                                  ...(payload?.eventUpdate || {}),
+                                  divisions: (payload?.divisionIds || []).map((d: string) => ({ id: d, name: 'Division' })),
+                              }
+                            : evt,
+                    );
+                } else if (q.action === 'special_events.delete') {
+                    const id = (q.payload as any)?.id as string | undefined;
+                    if (!id) continue;
+                    merged = merged.filter((evt) => evt.id !== id);
+                }
+            }
+            return merged;
         },
         enabled: !!companyId,
         staleTime: 0,
@@ -351,42 +461,52 @@ export const useAddSpecialEvent = () => {
         mutationFn: async (
             eventData: Omit<SpecialEvent, 'id' | 'divisions'> & { division_ids?: string[] }
         ) => {
-            const { data, error } = await supabase
-                .from('special_events_activities')
-                .insert([{
-                    title: eventData.title,
-                    event_date: eventData.event_date,
-                    event_type: eventData.event_type || 'special-event',
-                    time_slot: eventData.time_slot || 'TBD',
-                    start_time: eventData.start_time || null,
-                    end_time: eventData.end_time || null,
-                    location: eventData.location || null,
-                    description: eventData.description || null,
-                    chaperone: eventData.chaperone || null,
-                    emoji: eventData.emoji || null,
-                    file_url: eventData.file_url || null,
-                    file_name: eventData.file_name || null,
-                    company_id: eventData.company_id,
-                    season: eventData.season,
-                }])
-                .select()
-                .single();
+            const eventRow = {
+                title: eventData.title,
+                event_date: eventData.event_date,
+                event_type: eventData.event_type || 'special-event',
+                time_slot: eventData.time_slot || 'TBD',
+                start_time: eventData.start_time || null,
+                end_time: eventData.end_time || null,
+                location: eventData.location || null,
+                description: eventData.description || null,
+                chaperone: eventData.chaperone || null,
+                emoji: eventData.emoji || null,
+                file_url: eventData.file_url || null,
+                file_name: eventData.file_name || null,
+                company_id: eventData.company_id,
+                season: eventData.season,
+            };
 
-            if (error) throw error;
+            if (await isOnlineNow()) {
+                const { data, error } = await supabase
+                    .from('special_events_activities')
+                    .insert([eventRow])
+                    .select()
+                    .single();
 
-            if (eventData.division_ids && eventData.division_ids.length > 0) {
-                const rows = eventData.division_ids.map((divisionId) => ({
-                    event_id: data.id,
-                    division_id: divisionId,
-                    company_id: eventData.company_id,
-                }));
-                const { error: divError } = await supabase
-                    .from('special_events_divisions')
-                    .insert(rows);
-                if (divError) throw divError;
+                if (error) throw error;
+
+                if (eventData.division_ids && eventData.division_ids.length > 0) {
+                    const rows = eventData.division_ids.map((divisionId) => ({
+                        event_id: data.id,
+                        division_id: divisionId,
+                        company_id: eventData.company_id,
+                    }));
+                    const { error: divError } = await supabase
+                        .from('special_events_divisions')
+                        .insert(rows);
+                    if (divError) throw divError;
+                }
+
+                return data;
             }
 
-            return data;
+            await enqueueSync('special_events.insert', {
+                eventRow,
+                divisionIds: eventData.division_ids || [],
+            });
+            return { ...eventRow, id: `offline-${Date.now()}` } as any;
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ['special_events', variables.company_id, variables.season] });
@@ -407,48 +527,56 @@ export const useUpdateSpecialEvent = () => {
             } & Omit<SpecialEvent, 'id' | 'divisions'> & { division_ids?: string[] }
         ) => {
             const { id, division_ids, ...eventData } = payload;
+            const eventUpdate = {
+                title: eventData.title,
+                event_date: eventData.event_date,
+                event_type: eventData.event_type || 'special-event',
+                time_slot: eventData.time_slot || 'TBD',
+                start_time: eventData.start_time || null,
+                end_time: eventData.end_time || null,
+                location: eventData.location || null,
+                description: eventData.description || null,
+                chaperone: eventData.chaperone || null,
+                emoji: eventData.emoji || null,
+                file_url: eventData.file_url || null,
+                file_name: eventData.file_name || null,
+                season: eventData.season,
+            };
+            if (await isOnlineNow()) {
+                const { error } = await supabase
+                    .from('special_events_activities')
+                    .update(eventUpdate)
+                    .eq('id', id)
+                    .eq('company_id', eventData.company_id);
 
-            const { error } = await supabase
-                .from('special_events_activities')
-                .update({
-                    title: eventData.title,
-                    event_date: eventData.event_date,
-                    event_type: eventData.event_type || 'special-event',
-                    time_slot: eventData.time_slot || 'TBD',
-                    start_time: eventData.start_time || null,
-                    end_time: eventData.end_time || null,
-                    location: eventData.location || null,
-                    description: eventData.description || null,
-                    chaperone: eventData.chaperone || null,
-                    emoji: eventData.emoji || null,
-                    file_url: eventData.file_url || null,
-                    file_name: eventData.file_name || null,
-                    season: eventData.season,
-                })
-                .eq('id', id)
-                .eq('company_id', eventData.company_id);
+                if (error) throw error;
 
-            if (error) throw error;
-
-            const { error: deleteLinksError } = await supabase
-                .from('special_events_divisions')
-                .delete()
-                .eq('event_id', id)
-                .eq('company_id', eventData.company_id);
-            if (deleteLinksError) throw deleteLinksError;
-
-            if (division_ids && division_ids.length > 0) {
-                const rows = division_ids.map((divisionId) => ({
-                    event_id: id,
-                    division_id: divisionId,
-                    company_id: eventData.company_id,
-                }));
-                const { error: insertLinksError } = await supabase
+                const { error: deleteLinksError } = await supabase
                     .from('special_events_divisions')
-                    .insert(rows);
-                if (insertLinksError) throw insertLinksError;
-            }
+                    .delete()
+                    .eq('event_id', id)
+                    .eq('company_id', eventData.company_id);
+                if (deleteLinksError) throw deleteLinksError;
 
+                if (division_ids && division_ids.length > 0) {
+                    const rows = division_ids.map((divisionId) => ({
+                        event_id: id,
+                        division_id: divisionId,
+                        company_id: eventData.company_id,
+                    }));
+                    const { error: insertLinksError } = await supabase
+                        .from('special_events_divisions')
+                        .insert(rows);
+                    if (insertLinksError) throw insertLinksError;
+                }
+            } else {
+                await enqueueSync('special_events.update', {
+                    id,
+                    company_id: eventData.company_id,
+                    eventUpdate,
+                    divisionIds: division_ids || [],
+                });
+            }
             return { id };
         },
         onSuccess: (_, variables) => {
@@ -463,12 +591,19 @@ export const useDeleteSpecialEvent = () => {
 
     return useMutation({
         mutationFn: async (payload: { id: string; company_id: string; season?: string }) => {
-            const { error } = await supabase
-                .from('special_events_activities')
-                .delete()
-                .eq('id', payload.id)
-                .eq('company_id', payload.company_id);
-            if (error) throw error;
+            if (await isOnlineNow()) {
+                const { error } = await supabase
+                    .from('special_events_activities')
+                    .delete()
+                    .eq('id', payload.id)
+                    .eq('company_id', payload.company_id);
+                if (error) throw error;
+            } else {
+                await enqueueSync('special_events.delete', {
+                    id: payload.id,
+                    company_id: payload.company_id,
+                });
+            }
             return payload;
         },
         onSuccess: (_, variables) => {

@@ -24,6 +24,7 @@ import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { MobileUserMenu } from '../components/MobileUserMenu';
+import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -299,15 +300,23 @@ export const TigerTimesScreen = ({ navigation }: { navigation: any }) => {
             }
             setLoading(true);
             try {
-                const { data, error } = await supabase
-                    .from('daily_wolf_content')
-                    .select('*')
-                    .eq('company_id', companyId)
-                    .eq('date', dateStr)
-                    .eq('season', season)
-                    .maybeSingle();
+                const cacheKey = `tiger_times_row:${companyId}:${season}:${dateStr}`;
+                let data: any = null;
+                try {
+                    const res = await supabase
+                        .from('daily_wolf_content')
+                        .select('*')
+                        .eq('company_id', companyId)
+                        .eq('date', dateStr)
+                        .eq('season', season)
+                        .maybeSingle();
+                    if (res.error) throw res.error;
+                    data = res.data;
+                    await setCachedJson(cacheKey, data);
+                } catch {
+                    data = await getCachedJson<any>(cacheKey);
+                }
                 if (cancelled) return;
-                if (error) throw error;
                 if (data) {
                     setRowId(data.id);
                     setOfficerOfDay(data.officer_of_day || '');
@@ -358,8 +367,24 @@ export const TigerTimesScreen = ({ navigation }: { navigation: any }) => {
                 staff_days_off: staffDaysOff,
                 od_notes: odNotes,
             };
-            const { error } = await supabase.from('daily_wolf_content').update(payload).eq('id', rowId);
-            if (error) throw error;
+            if (rowId.startsWith('offline-')) {
+                await enqueueSync('daily_wolf_content.insert', [
+                    {
+                        company_id: companyId,
+                        date: dateStr,
+                        season,
+                        ...payload,
+                    },
+                ]);
+                Alert.alert('Saved', 'Tiger Times changes queued for sync.');
+                return;
+            }
+            if (await isOnlineNow()) {
+                const { error } = await supabase.from('daily_wolf_content').update(payload).eq('id', rowId);
+                if (error) throw error;
+            } else {
+                await enqueueSync('daily_wolf_content.update', { id: rowId, update: payload });
+            }
             Alert.alert('Saved', 'Tiger Times content updated.');
         } catch (e: any) {
             Alert.alert('Error', e?.message ?? 'Save failed');
@@ -372,28 +397,35 @@ export const TigerTimesScreen = ({ navigation }: { navigation: any }) => {
         if (!companyId || !season || !isTimberLakeCamp) return;
         setSaving(true);
         try {
-            const { data, error } = await supabase
-                .from('daily_wolf_content')
-                .insert({
-                    company_id: companyId,
-                    date: dateStr,
-                    season,
-                    officer_of_day: '',
-                    laundry_info: '',
-                    phone_calls_info: '',
-                    quote_of_the_day: '',
-                    notes: '',
-                    picture_day: '',
-                    outside_event: '',
-                    staff_days_off: '',
-                    od_notes: '',
-                })
-                .select('id')
-                .single();
-            if (error) throw error;
-            if (data?.id) {
+            const row = {
+                company_id: companyId,
+                date: dateStr,
+                season,
+                officer_of_day: '',
+                laundry_info: '',
+                phone_calls_info: '',
+                quote_of_the_day: '',
+                notes: '',
+                picture_day: '',
+                outside_event: '',
+                staff_days_off: '',
+                od_notes: '',
+            };
+            if (await isOnlineNow()) {
+                const { data, error } = await supabase
+                    .from('daily_wolf_content')
+                    .insert(row)
+                    .select('id')
+                    .single();
+                if (error) throw error;
+                if (data?.id) {
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                    setRowId(data.id);
+                }
+            } else {
+                await enqueueSync('daily_wolf_content.insert', [row]);
                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                setRowId(data.id);
+                setRowId(`offline-${Date.now()}`);
             }
             Alert.alert('Created', 'New entry created successfully.');
         } catch (e: any) {

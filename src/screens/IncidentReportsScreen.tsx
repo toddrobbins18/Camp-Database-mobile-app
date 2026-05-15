@@ -7,7 +7,7 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers } from '../api/campers';
-import { useIncidentReports, useAddIncidentReport, useUpdateIncidentReport } from '../api/incidents_approvals';
+import { useIncidentReports, useAddIncidentReport, useUpdateIncidentReport, useDeleteIncidentReport } from '../api/incidents_approvals';
 import { supabase } from '../lib/supabase';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
@@ -39,6 +39,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     const { data: campersList = [] } = useCampers(companyId, season);
     const addIncidentMutation = useAddIncidentReport();
     const updateIncidentMutation = useUpdateIncidentReport();
+    const deleteIncidentMutation = useDeleteIncidentReport();
     const childrenNames = campersList.map((c: any) => ({ id: c.id, name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim() }));
     const [incidentCsvUploading, setIncidentCsvUploading] = useState(false);
     const [showAddIncidentModal, setShowAddIncidentModal] = useState(false);
@@ -211,9 +212,11 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
         setIsDeleting(true);
         console.log('[DELETE] incident_reports', itemToDelete.id);
         try {
-            const { error } = await supabase.from('incident_reports').delete().eq('id', itemToDelete.id);
-            console.log('[DELETE] incident_reports response', error);
-            if (error) throw error;
+            await deleteIncidentMutation.mutateAsync({
+                id: itemToDelete.id,
+                company_id: companyId || '',
+            });
+            console.log('[DELETE] incident_reports response', { ok: true });
             if (companyId) {
                 await queryClient.invalidateQueries({ queryKey: ['incident_reports', companyId, season] });
                 await queryClient.invalidateQueries({ queryKey: ['camper_incidents'] });

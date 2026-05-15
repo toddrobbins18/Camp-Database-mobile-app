@@ -16,6 +16,7 @@ import {
 } from '../api/dashboard';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadDailyWolfDocument, pathFromFileUrl, getSignedUrl } from '../api/storage';
+import { isOnlineNow } from '../offline/engine';
 import { Linking } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -125,6 +126,10 @@ export const DailyNewsScreen = ({ navigation }: any) => {
     const uploadDailyWolf = async () => {
         if (!companyId || !dailyWolfFileUri || !dailyWolfFileName) {
             Alert.alert('Missing info', 'Please select a PDF and date.');
+            return;
+        }
+        if (!(await isOnlineNow())) {
+            Alert.alert('Offline', 'PDF upload requires internet. Please reconnect and try again.');
             return;
         }
         setDailyWolfUploading(true);

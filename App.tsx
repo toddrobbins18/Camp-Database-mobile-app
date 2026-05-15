@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { CompanyProvider } from './src/contexts/CompanyContext';
 import { useAppUpdatePrompt } from './src/hooks/useAppUpdatePrompt';
+import { startOfflineSyncEngine, stopOfflineSyncEngine, syncNow } from './src/offline/engine';
 
 const AppUpdateGate = () => {
   useAppUpdatePrompt();
@@ -34,6 +35,9 @@ const QueryFocusSync = () => {
   useEffect(() => {
     const onAppStateChange = (status: AppStateStatus) => {
       focusManager.setFocused(status === 'active');
+      if (status === 'active') {
+        void syncNow();
+      }
     };
 
     const sub = AppState.addEventListener('change', onAppStateChange);
@@ -45,11 +49,23 @@ const QueryFocusSync = () => {
   return null;
 };
 
+const OfflineSyncBoot = () => {
+  useEffect(() => {
+    void startOfflineSyncEngine();
+    return () => {
+      stopOfflineSyncEngine();
+    };
+  }, []);
+
+  return null;
+};
+
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <QueryFocusSync />
+        <OfflineSyncBoot />
         <AppUpdateGate />
         <CompanyProvider>
           <SafeAreaProvider>

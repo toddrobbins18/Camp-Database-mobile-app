@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 
 // ===================== INCIDENT REPORTS =====================
 
@@ -21,36 +22,73 @@ export interface IncidentReport {
     children?: Array<{ id: string; name?: string }>;
 }
 
+const incidentsCacheKey = (companyId: string, season: string) => `incident_reports:${companyId}:${season}`;
+
+async function applyQueuedIncidentOps(base: IncidentReport[]): Promise<IncidentReport[]> {
+    const out = [...base];
+    const queued = await listQueued('incident_reports.');
+    for (const q of queued) {
+        if (q.action === 'incident_reports.insert') {
+            const payload = q.payload as any;
+            const reportData = payload?.reportData;
+            if (!reportData) continue;
+            out.push({
+                ...(reportData as IncidentReport),
+                id: (reportData.id as string) || `offline-${q.id}`,
+            });
+        } else if (q.action === 'incident_reports.update') {
+            const payload = q.payload as any;
+            const id = payload?.id as string | undefined;
+            const update = payload?.update as Partial<IncidentReport> | undefined;
+            if (!id || !update) continue;
+            const idx = out.findIndex((r) => r.id === id);
+            if (idx >= 0) out[idx] = { ...out[idx], ...update };
+        } else if (q.action === 'incident_reports.delete') {
+            const id = (q.payload as any)?.id as string | undefined;
+            if (!id) continue;
+            const idx = out.findIndex((r) => r.id === id);
+            if (idx >= 0) out.splice(idx, 1);
+        }
+    }
+    return out;
+}
+
 export const useIncidentReports = (companyId: string | null, season: string) => {
     return useQuery({
         queryKey: ['incident_reports', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
+            try {
+                let query = supabase
+                    .from('incident_reports')
+                    .select(`
+                        *,
+                        incident_children (
+                            child_id,
+                            children ( id, name )
+                        )
+                    `)
+                    .eq('company_id', companyId)
+                    .order('date', { ascending: false });
+                if (season) {
+                    query = query.or(`season.eq.${season},season.is.null`);
+                }
+                const { data, error } = await query;
 
-            let query = supabase
-                .from('incident_reports')
-                .select(`
-                    *,
-                    incident_children (
-                        child_id,
-                        children ( id, name )
-                    )
-                `)
-                .eq('company_id', companyId)
-                .order('date', { ascending: false });
-            if (season) {
-                query = query.or(`season.eq.${season},season.is.null`);
+                if (error) throw error;
+
+                const rows = (data || []).map((report: any) => ({
+                    ...report,
+                    children: (report.incident_children || [])
+                        .map((ic: any) => ic.children)
+                        .filter(Boolean),
+                })) as IncidentReport[];
+                await setCachedJson(incidentsCacheKey(companyId, season), rows);
+                return await applyQueuedIncidentOps(rows);
+            } catch {
+                const cached = (await getCachedJson<IncidentReport[]>(incidentsCacheKey(companyId, season))) || [];
+                return await applyQueuedIncidentOps(cached);
             }
-            const { data, error } = await query;
-
-            if (error) throw error;
-
-            return (data || []).map((report: any) => ({
-                ...report,
-                children: (report.incident_children || [])
-                    .map((ic: any) => ic.children)
-                    .filter(Boolean),
-            }));
         },
         enabled: !!companyId,
     });
@@ -61,30 +99,39 @@ export const useAddIncidentReport = () => {
 
     return useMutation({
         mutationFn: async ({ childIds, ...reportData }: Omit<IncidentReport, 'id' | 'created_at' | 'children'> & { childIds?: string[] }) => {
-            // Insert incident report
-            const { data: report, error: reportError } = await supabase
-                .from('incident_reports')
-                .insert([reportData])
-                .select()
-                .single();
+            if (await isOnlineNow()) {
+                // Insert incident report
+                const { data: report, error: reportError } = await supabase
+                    .from('incident_reports')
+                    .insert([reportData])
+                    .select()
+                    .single();
 
-            if (reportError) throw reportError;
+                if (reportError) throw reportError;
 
-            // Insert child associations if any
-            if (childIds && childIds.length > 0 && report) {
-                const childRows = childIds.map(childId => ({
-                    incident_id: report.id,
-                    child_id: childId,
-                }));
+                // Insert child associations if any
+                if (childIds && childIds.length > 0 && report) {
+                    const childRows = childIds.map(childId => ({
+                        incident_id: report.id,
+                        child_id: childId,
+                    }));
 
-                const { error: childError } = await supabase
-                    .from('incident_children')
-                    .insert(childRows);
+                    const { error: childError } = await supabase
+                        .from('incident_children')
+                        .insert(childRows);
 
-                if (childError) console.error('Error linking children:', childError);
+                    if (childError) console.error('Error linking children:', childError);
+                }
+
+                return report;
             }
-
-            return report;
+            const offlineReport = {
+                ...reportData,
+                id: `offline-${Date.now()}`,
+                created_at: new Date().toISOString(),
+            };
+            await enqueueSync('incident_reports.insert', { reportData, childIds: childIds || [] });
+            return offlineReport as any;
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ['incident_reports', variables.company_id] });
@@ -112,14 +159,18 @@ export const useUpdateIncidentReport = () => {
             status?: string;
             tags?: string[];
         }) => {
-            const { data, error } = await supabase
-                .from('incident_reports')
-                .update(updates)
-                .eq('id', id)
-                .select()
-                .single();
-            if (error) throw error;
-            return data;
+            if (await isOnlineNow()) {
+                const { data, error } = await supabase
+                    .from('incident_reports')
+                    .update(updates)
+                    .eq('id', id)
+                    .select()
+                    .single();
+                if (error) throw error;
+                return data;
+            }
+            await enqueueSync('incident_reports.update', { id, update: updates });
+            return { id, ...updates } as any;
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ['incident_reports', variables.company_id] });
@@ -133,9 +184,12 @@ export const useDeleteIncidentReport = () => {
 
     return useMutation({
         mutationFn: async (params: { id: string; company_id: string }) => {
-            const { error } = await supabase.from('incident_reports').delete().eq('id', params.id);
-
-            if (error) throw error;
+            if (await isOnlineNow()) {
+                const { error } = await supabase.from('incident_reports').delete().eq('id', params.id);
+                if (error) throw error;
+            } else {
+                await enqueueSync('incident_reports.delete', { id: params.id });
+            }
             return params;
         },
         onSuccess: (params) => {

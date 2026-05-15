@@ -22,6 +22,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
+import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 
 type WolfForm = {
     officer_of_day: string;
@@ -126,15 +127,21 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
         queryKey: ['daily_wolf_management_row', companyId, season, selectedYmd],
         queryFn: async () => {
             if (!companyId || !season) return null;
-            const { data, error } = await supabase
-                .from('daily_wolf_content')
-                .select('*')
-                .eq('company_id', companyId)
-                .eq('season', season)
-                .eq('date', selectedYmd)
-                .maybeSingle();
-            if (error) throw error;
-            return data as DailyWolfRow | null;
+            const cacheKey = `daily_wolf_management_row:${companyId}:${season}:${selectedYmd}`;
+            try {
+                const { data, error } = await supabase
+                    .from('daily_wolf_content')
+                    .select('*')
+                    .eq('company_id', companyId)
+                    .eq('season', season)
+                    .eq('date', selectedYmd)
+                    .maybeSingle();
+                if (error) throw error;
+                await setCachedJson(cacheKey, data as DailyWolfRow | null);
+                return data as DailyWolfRow | null;
+            } catch {
+                return await getCachedJson<DailyWolfRow | null>(cacheKey);
+            }
         },
         enabled: !!companyId && !!season,
     });
@@ -159,11 +166,15 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
             if (!rowId) return;
             setSaving(true);
             try {
-                const { error } = await supabase
-                    .from('daily_wolf_content')
-                    .update({ [field]: value })
-                    .eq('id', rowId);
-                if (error) throw error;
+                if (await isOnlineNow()) {
+                    const { error } = await supabase
+                        .from('daily_wolf_content')
+                        .update({ [field]: value })
+                        .eq('id', rowId);
+                    if (error) throw error;
+                } else {
+                    await enqueueSync('daily_wolf_content.update', { id: rowId, update: { [field]: value } });
+                }
                 await queryClient.invalidateQueries({ queryKey: ['daily_wolf_management_row'] });
                 await queryClient.invalidateQueries({ queryKey: ['daily_wolf_content_dashboard'] });
             } catch (e: unknown) {
@@ -214,7 +225,7 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
         }
         setCreating(true);
         try {
-            const { error } = await supabase.from('daily_wolf_content').insert({
+            const row = {
                 company_id: companyId,
                 date: selectedYmd,
                 season,
@@ -223,8 +234,13 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
                 laundry_info: '',
                 phone_calls_info: '',
                 notes: '',
-            });
-            if (error) throw error;
+            };
+            if (await isOnlineNow()) {
+                const { error } = await supabase.from('daily_wolf_content').insert(row);
+                if (error) throw error;
+            } else {
+                await enqueueSync('daily_wolf_content.insert', [row]);
+            }
             await queryClient.invalidateQueries({ queryKey: ['daily_wolf_management_row'] });
             await queryClient.invalidateQueries({ queryKey: ['daily_wolf_content_dashboard'] });
         } catch (e: unknown) {

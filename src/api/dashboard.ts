@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { ageOnLocalDate, parseBirthdayCalendarParts } from '../lib/birthdayDate';
+import { getCachedJson, setCachedJson } from '../offline/engine';
 
 /** Same as lovable-web-app usePermissions fullDivisionAccessRoles. */
 const FULL_DIVISION_ACCESS_ROLES = new Set([
@@ -10,6 +11,18 @@ const FULL_DIVISION_ACCESS_ROLES = new Set([
     'staff',
     'health_center',
 ]);
+
+async function readThroughCache<T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> {
+    try {
+        const value = await fetcher();
+        await setCachedJson(cacheKey, value);
+        return value;
+    } catch {
+        const cached = await getCachedJson<T>(cacheKey);
+        if (cached != null) return cached;
+        throw new Error('No cached data available');
+    }
+}
 
 /**
  * Mirrors Dashboard.tsx getDivisionFilter + birthday branch:
@@ -54,75 +67,77 @@ export const useTodayBirthdays = (
     queryKey: ['dashboard_birthdays', companyId, season ?? '', todayMonth, todayDay],
         queryFn: async () => {
             if (!companyId) return [];
+            const cacheKey = `dashboard_birthdays:${companyId}:${season ?? ''}:${todayMonth}:${todayDay}`;
+            return readThroughCache<any[]>(cacheKey, async () => {
+                const divisionFilter = await resolveDashboardDivisionFilter(companyId);
+                const hasFullAccess = divisionFilter === null;
 
-            const divisionFilter = await resolveDashboardDivisionFilter(companyId);
-            const hasFullAccess = divisionFilter === null;
+                let childrenQuery = supabase
+                    .from('children')
+                    .select('id, name, date_of_birth, division_id')
+                    .eq('status', 'active')
+                    .eq('company_id', companyId)
+                    .not('date_of_birth', 'is', null);
 
-            let childrenQuery = supabase
-                .from('children')
-                .select('id, name, date_of_birth, division_id')
-                .eq('status', 'active')
-                .eq('company_id', companyId)
-                .not('date_of_birth', 'is', null);
+                if (season != null && String(season).trim() !== '') {
+                    childrenQuery = childrenQuery.eq('season', season);
+                }
 
-            if (season != null && String(season).trim() !== '') {
-                childrenQuery = childrenQuery.eq('season', season);
-            }
+                if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
+                    childrenQuery = childrenQuery.in('division_id', divisionFilter);
+                }
 
-            if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
-                childrenQuery = childrenQuery.in('division_id', divisionFilter);
-            }
+                const { data: childrenData, error: childrenError } = await childrenQuery;
+                if (childrenError) {
+                    console.warn('Birthday children query failed:', childrenError.message);
+                }
 
-            const { data: childrenData, error: childrenError } = await childrenQuery;
-            if (childrenError) {
-                console.warn('Birthday children query failed:', childrenError.message);
-            }
+                let staffQuery = supabase
+                    .from('staff')
+                    .select('id, name, date_of_birth')
+                    .eq('status', 'active')
+                    .eq('company_id', companyId)
+                    .not('date_of_birth', 'is', null);
 
-            let staffQuery = supabase
-                .from('staff')
-                .select('id, name, date_of_birth')
-                .eq('status', 'active')
-                .eq('company_id', companyId)
-                .not('date_of_birth', 'is', null);
+                if (season != null && String(season).trim() !== '') {
+                    staffQuery = staffQuery.eq('season', season);
+                }
 
-            if (season != null && String(season).trim() !== '') {
-                staffQuery = staffQuery.eq('season', season);
-            }
+                const { data: staffData, error: staffError } = await staffQuery;
 
-            const { data: staffData, error: staffError } = await staffQuery;
+                if (staffError) {
+                    console.warn('Birthday staff query failed:', staffError.message);
+                }
 
-            if (staffError) {
-                console.warn('Birthday staff query failed:', staffError.message);
-            }
+                const now = new Date();
+                const birthdays: any[] = [];
 
-            const now = new Date();
-            const birthdays: any[] = [];
-
-            (childrenData ?? []).forEach((person: any) => {
-                const parts = parseBirthdayCalendarParts(person.date_of_birth);
-                if (!parts) return;
-                if (parts.month !== todayMonth || parts.day !== todayDay) return;
-                birthdays.push({
-                    id: person.id,
-                    name: person.name || 'Unknown',
-                    type: 'child',
-                    age: ageOnLocalDate(parts, now),
+                (childrenData ?? []).forEach((person: any) => {
+                    const parts = parseBirthdayCalendarParts(person.date_of_birth);
+                    if (!parts) return;
+                    if (parts.month !== todayMonth || parts.day !== todayDay) return;
+                    birthdays.push({
+                        id: person.id,
+                        name: person.name || 'Unknown',
+                        type: 'child',
+                        age: ageOnLocalDate(parts, now),
+                    });
                 });
-            });
 
-            (staffData ?? []).forEach((person: any) => {
-                const parts = parseBirthdayCalendarParts(person.date_of_birth);
-                if (!parts) return;
-                if (parts.month !== todayMonth || parts.day !== todayDay) return;
-                birthdays.push({
-                    id: person.id,
-                    name: person.name || 'Unknown',
-                    type: 'staff',
-                    age: ageOnLocalDate(parts, now),
+                (staffData ?? []).forEach((person: any) => {
+                    const parts = parseBirthdayCalendarParts(person.date_of_birth);
+                    if (!parts) return;
+                    if (parts.month !== todayMonth || parts.day !== todayDay) return;
+                    birthdays.push({
+                        id: person.id,
+                        name: person.name || 'Unknown',
+                        type: 'staff',
+                        age: ageOnLocalDate(parts, now),
+                    });
                 });
-            });
 
-            return birthdays;
+                return birthdays;
+            });
         },
         enabled: !!companyId,
     });
@@ -141,19 +156,21 @@ export const useTodayEvents = (
         queryKey: ['dashboard_events', companyId, todayString, seasonKey],
         queryFn: async () => {
             if (!companyId) return [];
-            let q = supabase
-                .from('activities_field_trips')
-                .select('id, title, description, event_date, time, location')
-                .eq('company_id', companyId)
-                .eq('event_date', todayString)
-                .order('time', { ascending: true });
-            if (seasonKey) {
-                q = q.eq('season', seasonKey);
-            }
-            const { data, error } = await q;
-
-            if (error) throw error;
-            return data || [];
+            const cacheKey = `dashboard_events:${companyId}:${todayString}:${seasonKey}`;
+            return readThroughCache<any[]>(cacheKey, async () => {
+                let q = supabase
+                    .from('activities_field_trips')
+                    .select('id, title, description, event_date, time, location')
+                    .eq('company_id', companyId)
+                    .eq('event_date', todayString)
+                    .order('time', { ascending: true });
+                if (seasonKey) {
+                    q = q.eq('season', seasonKey);
+                }
+                const { data, error } = await q;
+                if (error) throw error;
+                return data || [];
+            });
         },
         enabled: !!companyId,
         staleTime: 0,
@@ -175,19 +192,22 @@ export const useUpcomingTripsForDashboard = (
         queryKey: ['dashboard_upcoming_trips', companyId, todayString, seasonKey],
         queryFn: async () => {
             if (!companyId) return [];
-            let q = supabase
-                .from('trips')
-                .select('id, name, date, type, departure_time, destination')
-                .eq('company_id', companyId)
-                .gte('date', todayString)
-                .order('date', { ascending: true })
-                .limit(8);
-            if (seasonKey) {
-                q = q.eq('season', seasonKey);
-            }
-            const { data, error } = await q;
-            if (error) throw error;
-            return data || [];
+            const cacheKey = `dashboard_upcoming_trips:${companyId}:${todayString}:${seasonKey}`;
+            return readThroughCache<any[]>(cacheKey, async () => {
+                let q = supabase
+                    .from('trips')
+                    .select('id, name, date, type, departure_time, destination')
+                    .eq('company_id', companyId)
+                    .gte('date', todayString)
+                    .order('date', { ascending: true })
+                    .limit(8);
+                if (seasonKey) {
+                    q = q.eq('season', seasonKey);
+                }
+                const { data, error } = await q;
+                if (error) throw error;
+                return data || [];
+            });
         },
         enabled: !!companyId && enabled,
     });
@@ -208,60 +228,63 @@ export const useDailyNewsSchedule = (companyId: string | null, todayString: stri
         queryKey: ['daily_news_schedule', companyId, todayString, season],
         queryFn: async (): Promise<DailyNewsScheduleEvent[]> => {
             if (!companyId) return [];
-            const events: DailyNewsScheduleEvent[] = [];
-            const seasonFilter = season || '2026';
+            const cacheKey = `daily_news_schedule:${companyId}:${todayString}:${season ?? ''}`;
+            return readThroughCache<DailyNewsScheduleEvent[]>(cacheKey, async () => {
+                const events: DailyNewsScheduleEvent[] = [];
+                const seasonFilter = season || '2026';
 
-            const [sportsRes, activitiesRes, specialRes] = await Promise.all([
-                supabase
-                    .from('sports_calendar')
-                    .select('id, title, time, location, description')
-                    .eq('company_id', companyId)
-                    .eq('event_date', todayString)
-                    .eq('season', seasonFilter)
-                    .order('time'),
-                supabase
-                    .from('activities_field_trips')
-                    .select('id, title, time, location, description')
-                    .eq('company_id', companyId)
-                    .eq('event_date', todayString)
-                    .eq('season', seasonFilter)
-                    .order('time'),
-                supabase
-                    .from('special_events_activities')
-                    .select('id, title, time_slot, location, description')
-                    .eq('company_id', companyId)
-                    .eq('event_date', todayString)
-                    .eq('season', seasonFilter)
-                    .order('time_slot'),
-            ]);
+                const [sportsRes, activitiesRes, specialRes] = await Promise.all([
+                    supabase
+                        .from('sports_calendar')
+                        .select('id, title, time, location, description')
+                        .eq('company_id', companyId)
+                        .eq('event_date', todayString)
+                        .eq('season', seasonFilter)
+                        .order('time'),
+                    supabase
+                        .from('activities_field_trips')
+                        .select('id, title, time, location, description')
+                        .eq('company_id', companyId)
+                        .eq('event_date', todayString)
+                        .eq('season', seasonFilter)
+                        .order('time'),
+                    supabase
+                        .from('special_events_activities')
+                        .select('id, title, time_slot, location, description')
+                        .eq('company_id', companyId)
+                        .eq('event_date', todayString)
+                        .eq('season', seasonFilter)
+                        .order('time_slot'),
+                ]);
 
-            if (sportsRes.data) {
-                events.push(...sportsRes.data.map((e) => ({ ...e, type: 'Sports' })));
-            }
-            if (activitiesRes.data) {
-                events.push(...activitiesRes.data.map((e) => ({ ...e, type: 'Activity' })));
-            }
-            if (specialRes.data) {
-                events.push(
-                    ...specialRes.data.map((e) => ({
-                        id: e.id,
-                        title: e.title,
-                        time: e.time_slot,
-                        location: e.location,
-                        description: e.description,
-                        type: 'Special Event',
-                    }))
-                );
-            }
+                if (sportsRes.data) {
+                    events.push(...sportsRes.data.map((e) => ({ ...e, type: 'Sports' })));
+                }
+                if (activitiesRes.data) {
+                    events.push(...activitiesRes.data.map((e) => ({ ...e, type: 'Activity' })));
+                }
+                if (specialRes.data) {
+                    events.push(
+                        ...specialRes.data.map((e) => ({
+                            id: e.id,
+                            title: e.title,
+                            time: e.time_slot,
+                            location: e.location,
+                            description: e.description,
+                            type: 'Special Event',
+                        }))
+                    );
+                }
 
-            events.sort((a, b) => {
-                const tA = a.time || '';
-                const tB = b.time || '';
-                if (!tA) return 1;
-                if (!tB) return -1;
-                return tA.localeCompare(tB);
+                events.sort((a, b) => {
+                    const tA = a.time || '';
+                    const tB = b.time || '';
+                    if (!tA) return 1;
+                    if (!tB) return -1;
+                    return tA.localeCompare(tB);
+                });
+                return events;
             });
-            return events;
         },
         enabled: !!companyId,
     });
@@ -273,27 +296,29 @@ export const useTodayMeals = (companyId: string | null, todayString: string) => 
         queryKey: ['dashboard_meals', companyId, todayString],
         queryFn: async () => {
             if (!companyId) return null;
-            try {
-                const { data, error } = await supabase
-                    .from('menu_items')
-                    .select('*')
-                    .eq('company_id', companyId)
-                    .eq('date', todayString);
+            const cacheKey = `dashboard_meals:${companyId}:${todayString}`;
+            return readThroughCache<{ breakfast: string; lunch: string; snack: string; dinner: string } | null>(
+                cacheKey,
+                async () => {
+                    const { data, error } = await supabase
+                        .from('menu_items')
+                        .select('*')
+                        .eq('company_id', companyId)
+                        .eq('date', todayString);
 
-                if (error) throw error;
+                    if (error) throw error;
 
-                const meals = { breakfast: '', lunch: '', snack: '', dinner: '' };
-                (data || []).forEach((item) => {
-                    const type = item.meal_type?.toLowerCase() || '';
-                    if (type === 'breakfast') meals.breakfast = item.items;
-                    if (type === 'lunch') meals.lunch = item.items;
-                    if (type === 'dinner') meals.dinner = item.items;
-                    if (type === 'snack') meals.snack = item.items;
-                });
-                return meals;
-            } catch {
-                return null;
-            }
+                    const meals = { breakfast: '', lunch: '', snack: '', dinner: '' };
+                    (data || []).forEach((item) => {
+                        const type = item.meal_type?.toLowerCase() || '';
+                        if (type === 'breakfast') meals.breakfast = item.items;
+                        if (type === 'lunch') meals.lunch = item.items;
+                        if (type === 'dinner') meals.dinner = item.items;
+                        if (type === 'snack') meals.snack = item.items;
+                    });
+                    return meals;
+                }
+            );
         },
         enabled: !!companyId,
     });
@@ -310,15 +335,18 @@ export const useTodaySportsCalendar = (
         queryKey: ['dashboard_sports_calendar', companyId, todayString, season],
         queryFn: async () => {
             if (!companyId || !season) return [];
-            const { data, error } = await supabase
-                .from('sports_calendar')
-                .select('id, title, time, location, sport_type, event_date')
-                .eq('company_id', companyId)
-                .eq('event_date', todayString)
-                .eq('season', season)
-                .order('time');
-            if (error) throw error;
-            return data || [];
+            const cacheKey = `dashboard_sports_calendar:${companyId}:${todayString}:${season}`;
+            return readThroughCache<any[]>(cacheKey, async () => {
+                const { data, error } = await supabase
+                    .from('sports_calendar')
+                    .select('id, title, time, location, sport_type, event_date')
+                    .eq('company_id', companyId)
+                    .eq('event_date', todayString)
+                    .eq('season', season)
+                    .order('time');
+                if (error) throw error;
+                return data || [];
+            });
         },
         enabled: !!companyId && !!season && enabled,
     });
@@ -335,19 +363,22 @@ export const useTodaySpecialEventsActivities = (
         queryKey: ['dashboard_special_events_activities', companyId, todayString, season],
         queryFn: async () => {
             if (!companyId || !season) return [];
-            const { data, error } = await supabase
-                .from('special_events_activities')
-                .select('id, title, time_slot, location, description, event_type, season')
-                .eq('company_id', companyId)
-                .eq('event_date', todayString)
-                .order('time_slot');
-            if (error) throw error;
-            const rows = data || [];
-            const matched = rows.filter(
-                (e: { season?: string | null }) => e.season === season || e.season == null,
-            );
-            if (matched.length > 0) return matched;
-            return rows;
+            const cacheKey = `dashboard_special_events_activities:${companyId}:${todayString}:${season}`;
+            return readThroughCache<any[]>(cacheKey, async () => {
+                const { data, error } = await supabase
+                    .from('special_events_activities')
+                    .select('id, title, time_slot, location, description, event_type, season')
+                    .eq('company_id', companyId)
+                    .eq('event_date', todayString)
+                    .order('time_slot');
+                if (error) throw error;
+                const rows = data || [];
+                const matched = rows.filter(
+                    (e: { season?: string | null }) => e.season === season || e.season == null,
+                );
+                if (matched.length > 0) return matched;
+                return rows;
+            });
         },
         enabled: !!companyId && !!season && enabled,
         staleTime: 0,
@@ -366,17 +397,20 @@ export const useDailyWolfContentRow = (
         queryKey: ['daily_wolf_content_dashboard', companyId, todayString, season],
         queryFn: async () => {
             if (!companyId || !season) return null;
-            const { data, error } = await supabase
-                .from('daily_wolf_content')
-                .select(
-                    'officer_of_day, laundry_info, phone_calls_info, quote_of_the_day, notes',
-                )
-                .eq('company_id', companyId)
-                .eq('date', todayString)
-                .eq('season', season)
-                .maybeSingle();
-            if (error) throw error;
-            return data;
+            const cacheKey = `daily_wolf_content_dashboard:${companyId}:${todayString}:${season}`;
+            return readThroughCache<any | null>(cacheKey, async () => {
+                const { data, error } = await supabase
+                    .from('daily_wolf_content')
+                    .select(
+                        'officer_of_day, laundry_info, phone_calls_info, quote_of_the_day, notes',
+                    )
+                    .eq('company_id', companyId)
+                    .eq('date', todayString)
+                    .eq('season', season)
+                    .maybeSingle();
+                if (error) throw error;
+                return data;
+            });
         },
         enabled: !!companyId && !!season && enabled,
     });

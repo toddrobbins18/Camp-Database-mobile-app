@@ -30,10 +30,12 @@ import {
     useOwlPayReports,
     useOwlPayStaff,
     useOwlPayStaffSpendRows,
+    useDeleteOwlPayItem,
     useSaveOwlPayEmailConfig,
     useSaveOwlPayItem,
 } from '../api/owlpay';
 import { supabase } from '../lib/supabase';
+import { enqueueSync, isOnlineNow } from '../offline/engine';
 
 type OwlPayTab = 'pos' | 'items' | 'balances' | 'reports' | 'settings';
 type ItemCategory = 'Food' | 'Snacks' | 'Drinks' | 'Other';
@@ -121,6 +123,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const { data: allItems = [], isLoading: itemsLoading } = useOwlPayItems(companyId, true);
     const { data: settings, isLoading: settingsLoading } = useOwlPayEmailConfig(companyId);
     const saveItemMutation = useSaveOwlPayItem();
+    const deleteItemMutation = useDeleteOwlPayItem();
     const saveSettingsMutation = useSaveOwlPayEmailConfig();
 
     useEffect(() => {
@@ -306,8 +309,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
         console.log('[DELETE] owl_pay_items', itemToDelete.id, itemToDelete.name);
         setIsDeleting(true);
         try {
-            const { error } = await supabase.from('owl_pay_items').delete().eq('id', itemToDelete.id);
-            if (error) throw error;
+            await deleteItemMutation.mutateAsync({ id: itemToDelete.id, company_id: itemToDelete.company_id });
             if (companyId) {
                 await queryClient.invalidateQueries({ queryKey: ['owlpay_items', companyId] });
             }
@@ -446,15 +448,14 @@ export const OwlPayScreen = ({ navigation }: any) => {
         try {
             const { data: authData } = await supabase.auth.getUser();
             const createdBy = authData.user?.id;
+            const online = await isOnlineNow();
 
             if (!selectedIsStaff && isFirstScanToday) {
-                const { error: scanError } = await supabase.from('owl_pay_daily_scans').insert({
+                const scanRow = {
                     child_id: selectedCamperId,
                     company_id: companyId,
-                });
-                if (scanError) throw scanError;
-
-                const { error: firstScanTxError } = await supabase.from('owl_pay_transactions').insert({
+                };
+                const firstScanTxRow = {
                     child_id: selectedCamperId,
                     staff_id: null,
                     company_id: companyId,
@@ -463,8 +464,17 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     transaction_type: 'first_scan',
                     notes: 'First scan of the day - free entry',
                     created_by: createdBy,
-                });
-                if (firstScanTxError) throw firstScanTxError;
+                };
+                if (online) {
+                    const { error: scanError } = await supabase.from('owl_pay_daily_scans').insert(scanRow);
+                    if (scanError) throw scanError;
+
+                    const { error: firstScanTxError } = await supabase.from('owl_pay_transactions').insert(firstScanTxRow);
+                    if (firstScanTxError) throw firstScanTxError;
+                } else {
+                    await enqueueSync('owl_pay_daily_scans.insert', [scanRow]);
+                    await enqueueSync('owl_pay_transactions.insert_many', [firstScanTxRow]);
+                }
             }
 
             if (cart.length > 0) {
@@ -482,19 +492,30 @@ export const OwlPayScreen = ({ navigation }: any) => {
                             created_by: createdBy,
                         }))
                 );
-                const { error: txError } = await supabase.from('owl_pay_transactions').insert(txRows);
-                if (txError) throw txError;
+                if (online) {
+                    const { error: txError } = await supabase.from('owl_pay_transactions').insert(txRows);
+                    if (txError) throw txError;
+                } else {
+                    await enqueueSync('owl_pay_transactions.insert_many', txRows);
+                }
             }
 
             if (!selectedIsStaff && selectedCamper && total !== 0) {
-                const { error: balError } = await supabase.rpc('increment_camper_balance', {
-                    _child_id: selectedCamper.id,
-                    _amount: -total,
-                });
-                if (balError) throw balError;
+                if (online) {
+                    const { error: balError } = await supabase.rpc('increment_camper_balance', {
+                        _child_id: selectedCamper.id,
+                        _amount: -total,
+                    });
+                    if (balError) throw balError;
+                } else {
+                    await enqueueSync('children.balance.increment', {
+                        childId: selectedCamper.id,
+                        amount: -total,
+                    });
+                }
             }
 
-            if (cart.length > 0 && !isFirstScanToday) {
+            if (online && cart.length > 0 && !isFirstScanToday) {
                 try {
                     await supabase.functions.invoke('send-owlpay-notifications', {
                         body: {

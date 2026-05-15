@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 
 /** Matches web Roster / usePermissions: these roles see all divisions for roster queries. */
 const ROSTER_FULL_DIVISION_ACCESS_ROLES = [
@@ -107,6 +108,39 @@ export function getCamperDivisionName(child: {
 
 const CAMPERS_PAGE_SIZE = 1000;
 
+const campersCacheKey = (companyId: string, season: string, divisionFilter: string[] | null | undefined) =>
+    `campers:${companyId}:${season}:${JSON.stringify(divisionFilter ?? null)}`;
+
+async function applyQueuedCamperOps(base: Camper[], companyId: string, season: string): Promise<Camper[]> {
+    const out = [...base];
+    const queued = await listQueued('children.');
+    for (const q of queued) {
+        if (q.action === 'children.insert') {
+            const rows = Array.isArray(q.payload) ? (q.payload as any[]) : [q.payload as any];
+            for (const row of rows) {
+                if (!row || row.company_id !== companyId || row.season !== season) continue;
+                out.push({
+                    ...(row as Camper),
+                    id: (row.id as string) || `offline-${q.id}`,
+                });
+            }
+        } else if (q.action === 'children.update') {
+            const payload = q.payload as any;
+            const id = payload?.id as string | undefined;
+            const update = payload?.update as Partial<Camper> | undefined;
+            if (!id || !update) continue;
+            const idx = out.findIndex((c) => c.id === id);
+            if (idx >= 0) out[idx] = { ...out[idx], ...update };
+        } else if (q.action === 'children.delete') {
+            const id = (q.payload as any)?.id as string | undefined;
+            if (!id) continue;
+            const idx = out.findIndex((c) => c.id === id);
+            if (idx >= 0) out.splice(idx, 1);
+        }
+    }
+    return out;
+}
+
 function useCampersPaged(
     companyId: string | null,
     season: string,
@@ -119,34 +153,40 @@ function useCampersPaged(
         queryKey: ['campers', companyId, season, divisionFilter ?? null],
         queryFn: async () => {
             if (!companyId) return [];
+            try {
+                const rows: Camper[] = [];
+                let from = 0;
 
-            const rows: Camper[] = [];
-            let from = 0;
+                for (;;) {
+                    const to = from + CAMPERS_PAGE_SIZE - 1;
+                    let q = supabase
+                        .from('children')
+                        .select('*, division:divisions(id, name, gender, sort_order)')
+                        .eq('company_id', companyId)
+                        .eq('season', season)
+                        .neq('status', 'inactive')
+                        .order('name', { ascending: true })
+                        .range(from, to);
 
-            for (;;) {
-                const to = from + CAMPERS_PAGE_SIZE - 1;
-                let q = supabase
-                    .from('children')
-                    .select('*, division:divisions(id, name, gender, sort_order)')
-                    .eq('company_id', companyId)
-                    .eq('season', season)
-                    .neq('status', 'inactive')
-                    .order('name', { ascending: true })
-                    .range(from, to);
+                    if (divisionFilter != null && divisionFilter.length > 0) {
+                        q = q.in('division_id', divisionFilter);
+                    }
 
-                if (divisionFilter != null && divisionFilter.length > 0) {
-                    q = q.in('division_id', divisionFilter);
+                    const { data, error } = await q;
+                    if (error) throw error;
+                    const batch = (data ?? []) as Camper[];
+                    rows.push(...batch);
+                    if (batch.length < CAMPERS_PAGE_SIZE) break;
+                    from += CAMPERS_PAGE_SIZE;
                 }
 
-                const { data, error } = await q;
-                if (error) throw error;
-                const batch = (data ?? []) as Camper[];
-                rows.push(...batch);
-                if (batch.length < CAMPERS_PAGE_SIZE) break;
-                from += CAMPERS_PAGE_SIZE;
+                await setCachedJson(campersCacheKey(companyId, season, divisionFilter), rows);
+                return await applyQueuedCamperOps(rows, companyId, season);
+            } catch {
+                const cached =
+                    (await getCachedJson<Camper[]>(campersCacheKey(companyId, season, divisionFilter))) || [];
+                return await applyQueuedCamperOps(cached, companyId, season);
             }
-
-            return rows;
         },
         enabled: !!companyId && !!season && enabled,
     });
@@ -177,14 +217,22 @@ export const useAddCamper = () => {
 
     return useMutation({
         mutationFn: async (newCamper: Omit<Camper, 'id' | 'created_at'>) => {
-            const { data, error } = await supabase
-                .from('children')
-                .insert([newCamper])
-                .select()
-                .single();
-
-            if (error) throw error;
-            return data;
+            if (await isOnlineNow()) {
+                const { data, error } = await supabase
+                    .from('children')
+                    .insert([newCamper])
+                    .select()
+                    .single();
+                if (error) throw error;
+                return data;
+            }
+            const offlineRow = {
+                ...newCamper,
+                id: `offline-${Date.now()}`,
+                created_at: new Date().toISOString(),
+            };
+            await enqueueSync('children.insert', [offlineRow]);
+            return offlineRow as any;
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ['campers', variables.company_id, variables.season] });
@@ -199,22 +247,25 @@ export const useEditCamper = () => {
     return useMutation({
         mutationFn: async (camperData: Partial<Camper> & { id: string }) => {
             const { id, ...updateData } = camperData;
+            if (await isOnlineNow()) {
+                // Avoid .single() after update — 406 if RETURNING is empty (RLS / 0 rows). Array response is always valid.
+                const { data: rows, error } = await supabase
+                    .from('children')
+                    .update(updateData)
+                    .eq('id', id)
+                    .select();
 
-            // Avoid .single() after update — 406 if RETURNING is empty (RLS / 0 rows). Array response is always valid.
-            const { data: rows, error } = await supabase
-                .from('children')
-                .update(updateData)
-                .eq('id', id)
-                .select();
-
-            if (error) throw error;
-            const data = rows?.[0];
-            if (!data) {
-                throw new Error(
-                    'Update did not return a row. Check children UPDATE permissions (RLS) or that the camper exists.'
-                );
+                if (error) throw error;
+                const data = rows?.[0];
+                if (!data) {
+                    throw new Error(
+                        'Update did not return a row. Check children UPDATE permissions (RLS) or that the camper exists.'
+                    );
+                }
+                return data;
             }
-            return data;
+            await enqueueSync('children.update', { id, update: updateData });
+            return { id, ...updateData } as any;
         },
         onSuccess: (data, variables) => {
             if (data?.company_id && data?.season) {
@@ -236,9 +287,12 @@ export const useDeleteCamper = () => {
 
     return useMutation({
         mutationFn: async (params: { id: string, company_id: string, season: string }) => {
-            const { error } = await supabase.from('children').delete().eq('id', params.id);
-
-            if (error) throw error;
+            if (await isOnlineNow()) {
+                const { error } = await supabase.from('children').delete().eq('id', params.id);
+                if (error) throw error;
+            } else {
+                await enqueueSync('children.delete', { id: params.id });
+            }
             return params;
         },
         onSuccess: (params) => {

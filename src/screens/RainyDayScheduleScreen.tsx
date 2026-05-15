@@ -21,6 +21,7 @@ import { supabase } from '../lib/supabase';
 import { useQueryClient } from '@tanstack/react-query';
 import { uploadRainyDayDocument, pathFromFileUrl, getSignedUrl } from '../api/storage';
 import { Linking } from 'react-native';
+import { isOnlineNow } from '../offline/engine';
 
 interface RainyDayScheduleScreenProps {
     navigation: any;
@@ -72,6 +73,10 @@ export const RainyDayScheduleScreen = ({ navigation }: RainyDayScheduleScreenPro
     const handleUploadSchedule = async () => {
         if (!selectedFileUri || !fileName || !companyId || !season) {
             Alert.alert('Missing info', 'Please choose a PDF file first.');
+            return;
+        }
+        if (!(await isOnlineNow())) {
+            Alert.alert('Offline', 'Schedule upload requires internet. Please reconnect and try again.');
             return;
         }
         const dateParts = date.split('/');

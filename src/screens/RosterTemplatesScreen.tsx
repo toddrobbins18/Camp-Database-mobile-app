@@ -21,6 +21,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { isTylerHillCamp } from '../constants/camps';
 import { showAppAlert } from '../utils/showAppAlert';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
+import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 
 interface RosterTemplatesScreenProps {
     navigation: any;
@@ -65,20 +66,27 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
         queryKey: ['children_with_division', companyId, season],
         queryFn: async () => {
             if (!companyId || !season) return [];
-            const { data, error } = await supabase
-                .from('children')
-                .select('id, name, division_id, division:divisions(name)')
-                .eq('company_id', companyId)
-                .eq('season', season)
-                .eq('status', 'active')
-                .order('name', { ascending: true });
-            if (error) throw error;
-            return (data || []).map((c: any) => ({
-                id: c.id,
-                name: (c.name || '').trim() || 'Unnamed',
-                divisionId: c.division_id || null,
-                divisionName: c.division?.name || 'Unassigned',
-            }));
+            const cacheKey = `roster_templates_children:${companyId}:${season}`;
+            try {
+                const { data, error } = await supabase
+                    .from('children')
+                    .select('id, name, division_id, division:divisions(name)')
+                    .eq('company_id', companyId)
+                    .eq('season', season)
+                    .eq('status', 'active')
+                    .order('name', { ascending: true });
+                if (error) throw error;
+                const rows = (data || []).map((c: any) => ({
+                    id: c.id,
+                    name: (c.name || '').trim() || 'Unnamed',
+                    divisionId: c.division_id || null,
+                    divisionName: c.division?.name || 'Unassigned',
+                }));
+                await setCachedJson(cacheKey, rows);
+                return rows;
+            } catch {
+                return (await getCachedJson<any[]>(cacheKey)) || [];
+            }
         },
         enabled: !!companyId && !!season && isTylerHill,
     });
@@ -105,13 +113,19 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
         queryKey: ['roster_templates', companyId],
         queryFn: async () => {
             if (!companyId) return [];
-            const { data, error } = await supabase
-                .from('roster_templates')
-                .select('*, roster_template_children(child_id)')
-                .eq('company_id', companyId)
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            return data || [];
+            const cacheKey = `roster_templates:${companyId}`;
+            try {
+                const { data, error } = await supabase
+                    .from('roster_templates')
+                    .select('*, roster_template_children(child_id)')
+                    .eq('company_id', companyId)
+                    .order('created_at', { ascending: false });
+                if (error) throw error;
+                await setCachedJson(cacheKey, data || []);
+                return data || [];
+            } catch {
+                return (await getCachedJson<any[]>(cacheKey)) || [];
+            }
         },
         enabled: !!companyId && isTylerHill,
     });
@@ -119,32 +133,39 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
     // Create template mutation
     const createTemplateMutation = useMutation({
         mutationFn: async (templateData: any) => {
-            // 1. Create the template
-            const { data: template, error: templateError } = await supabase
-                .from('roster_templates')
-                .insert([{
-                    company_id: companyId,
-                    name: templateData.name,
-                    description: templateData.description || null,
-                }])
-                .select()
-                .single();
-            if (templateError) throw templateError;
+            const templateRow = {
+                company_id: companyId,
+                name: templateData.name,
+                description: templateData.description || null,
+            };
+            if (await isOnlineNow()) {
+                // 1. Create the template
+                const { data: template, error: templateError } = await supabase
+                    .from('roster_templates')
+                    .insert([templateRow])
+                    .select()
+                    .single();
+                if (templateError) throw templateError;
 
-            // 2. Add children to the template
-            if (templateData.camperIds.length > 0) {
-                const childrenRecords = templateData.camperIds.map((childId: string) => ({
-                    template_id: template.id,
-                    company_id: companyId,
-                    child_id: childId,
-                }));
-                const { error: childrenError } = await supabase
-                    .from('roster_template_children')
-                    .insert(childrenRecords);
-                if (childrenError) throw childrenError;
+                // 2. Add children to the template
+                if (templateData.camperIds.length > 0) {
+                    const childrenRecords = templateData.camperIds.map((childId: string) => ({
+                        template_id: template.id,
+                        company_id: companyId,
+                        child_id: childId,
+                    }));
+                    const { error: childrenError } = await supabase
+                        .from('roster_template_children')
+                        .insert(childrenRecords);
+                    if (childrenError) throw childrenError;
+                }
+                return template;
             }
-
-            return template;
+            await enqueueSync('roster_templates.create_with_children', {
+                templateRow,
+                childIds: templateData.camperIds,
+            });
+            return { ...templateRow, id: `offline-${Date.now()}` };
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['roster_templates'] });
@@ -160,29 +181,38 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
 
     const updateTemplateMutation = useMutation({
         mutationFn: async (payload: { templateId: string; name: string; description: string; camperIds: string[] }) => {
-            const { error: updErr } = await supabase
-                .from('roster_templates')
-                .update({
-                    name: payload.name,
-                    description: payload.description || null,
-                })
-                .eq('id', payload.templateId);
-            if (updErr) throw updErr;
+            if (await isOnlineNow()) {
+                const { error: updErr } = await supabase
+                    .from('roster_templates')
+                    .update({
+                        name: payload.name,
+                        description: payload.description || null,
+                    })
+                    .eq('id', payload.templateId);
+                if (updErr) throw updErr;
 
-            const { error: delErr } = await supabase
-                .from('roster_template_children')
-                .delete()
-                .eq('template_id', payload.templateId);
-            if (delErr) throw delErr;
+                const { error: delErr } = await supabase
+                    .from('roster_template_children')
+                    .delete()
+                    .eq('template_id', payload.templateId);
+                if (delErr) throw delErr;
 
-            if (payload.camperIds.length > 0) {
-                const rows = payload.camperIds.map((childId) => ({
-                    template_id: payload.templateId,
-                    company_id: companyId,
-                    child_id: childId,
-                }));
-                const { error: insErr } = await supabase.from('roster_template_children').insert(rows);
-                if (insErr) throw insErr;
+                if (payload.camperIds.length > 0) {
+                    const rows = payload.camperIds.map((childId) => ({
+                        template_id: payload.templateId,
+                        company_id: companyId,
+                        child_id: childId,
+                    }));
+                    const { error: insErr } = await supabase.from('roster_template_children').insert(rows);
+                    if (insErr) throw insErr;
+                }
+            } else {
+                await enqueueSync('roster_templates.update_with_children', {
+                    templateId: payload.templateId,
+                    update: { name: payload.name, description: payload.description || null },
+                    companyId: companyId,
+                    childIds: payload.camperIds,
+                });
             }
         },
         onSuccess: () => {
@@ -199,27 +229,34 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
 
     const duplicateTemplateMutation = useMutation({
         mutationFn: async (template: any) => {
-            const children = Array.isArray(template.roster_template_children)
-                ? template.roster_template_children
-                : [];
-            const { data: newTemplate, error } = await supabase
-                .from('roster_templates')
-                .insert({
-                    company_id: companyId,
-                    name: `${template.name} (Copy)`,
-                    description: template.description ?? null,
-                })
-                .select()
-                .single();
-            if (error) throw error;
-            if (children.length > 0 && newTemplate) {
-                const rows = children.map((c: any) => ({
-                    template_id: newTemplate.id,
-                    company_id: companyId,
-                    child_id: c.child_id,
-                }));
-                const { error: chErr } = await supabase.from('roster_template_children').insert(rows);
-                if (chErr) throw chErr;
+            if (await isOnlineNow()) {
+                const children = Array.isArray(template.roster_template_children)
+                    ? template.roster_template_children
+                    : [];
+                const { data: newTemplate, error } = await supabase
+                    .from('roster_templates')
+                    .insert({
+                        company_id: companyId,
+                        name: `${template.name} (Copy)`,
+                        description: template.description ?? null,
+                    })
+                    .select()
+                    .single();
+                if (error) throw error;
+                if (children.length > 0 && newTemplate) {
+                    const rows = children.map((c: any) => ({
+                        template_id: newTemplate.id,
+                        company_id: companyId,
+                        child_id: c.child_id,
+                    }));
+                    const { error: chErr } = await supabase.from('roster_template_children').insert(rows);
+                    if (chErr) throw chErr;
+                }
+            } else {
+                await enqueueSync('roster_templates.duplicate_with_children', {
+                    sourceTemplate: template,
+                    companyId: companyId,
+                });
             }
         },
         onSuccess: () => {
@@ -233,8 +270,12 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
 
     const deleteTemplateMutation = useMutation({
         mutationFn: async (templateId: string) => {
-            const { error } = await supabase.from('roster_templates').delete().eq('id', templateId);
-            if (error) throw error;
+            if (await isOnlineNow()) {
+                const { error } = await supabase.from('roster_templates').delete().eq('id', templateId);
+                if (error) throw error;
+            } else {
+                await enqueueSync('roster_templates.delete', { templateId });
+            }
         },
         onSuccess: () => {
             setTemplatePendingDelete(null);

@@ -7,6 +7,7 @@ import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { MobileUserMenu } from '../components/MobileUserMenu';
+import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 
 interface NotificationPreference {
     id?: string;
@@ -50,36 +51,41 @@ export const NotificationPreferencesScreen = ({ navigation }: any) => {
         }
         const fetchPrefs = async () => {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('user_notification_preferences')
-                .select('*')
-                .eq('user_id', userId)
-                .eq('company_id', companyId);
-            if (error) {
-                setLoading(false);
-                return;
-            }
-            const existing = data || [];
-            const all = NOTIFICATION_TYPES.map(t => {
-                const ex = existing.find((p: any) => p.notification_type === t.value);
-                if (ex) {
+            const cacheKey = `user_notification_preferences:${companyId}:${userId}`;
+            try {
+                const { data, error } = await supabase
+                    .from('user_notification_preferences')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .eq('company_id', companyId);
+                if (error) throw error;
+                const existing = data || [];
+                const all = NOTIFICATION_TYPES.map(t => {
+                    const ex = existing.find((p: any) => p.notification_type === t.value);
+                    if (ex) {
+                        return {
+                            id: ex.id,
+                            notification_type: ex.notification_type,
+                            enabled: !!ex.enabled,
+                            timing_options: Array.isArray(ex.timing_options) ? ex.timing_options : [],
+                            delivery_methods: Array.isArray(ex.delivery_methods) ? ex.delivery_methods : ['email'],
+                        };
+                    }
                     return {
-                        id: ex.id,
-                        notification_type: ex.notification_type,
-                        enabled: !!ex.enabled,
-                        timing_options: Array.isArray(ex.timing_options) ? ex.timing_options : [],
-                        delivery_methods: Array.isArray(ex.delivery_methods) ? ex.delivery_methods : ['email'],
+                        notification_type: t.value,
+                        enabled: false,
+                        timing_options: [],
+                        delivery_methods: ['email'],
                     };
-                }
-                return {
-                    notification_type: t.value,
-                    enabled: false,
-                    timing_options: [],
-                    delivery_methods: ['email'],
-                };
-            });
-            setPreferences(all);
-            setLoading(false);
+                });
+                setPreferences(all);
+                await setCachedJson(cacheKey, all);
+            } catch {
+                const cached = await getCachedJson<NotificationPreference[]>(cacheKey);
+                if (cached) setPreferences(cached);
+            } finally {
+                setLoading(false);
+            }
         };
         fetchPrefs();
     }, [companyId, userId]);
@@ -105,19 +111,24 @@ export const NotificationPreferencesScreen = ({ navigation }: any) => {
         if (!companyId || !userId) return;
         setSaving(true);
         try {
-            for (const pref of preferences) {
-                await supabase.from('user_notification_preferences').upsert(
-                    {
-                        user_id: userId,
-                        company_id: companyId,
-                        notification_type: pref.notification_type,
-                        enabled: pref.enabled,
-                        timing_options: pref.timing_options,
-                        delivery_methods: pref.delivery_methods,
-                    },
-                    { onConflict: 'user_id,company_id,notification_type' }
-                );
+            const rows = preferences.map((pref) => ({
+                user_id: userId,
+                company_id: companyId,
+                notification_type: pref.notification_type,
+                enabled: pref.enabled,
+                timing_options: pref.timing_options,
+                delivery_methods: pref.delivery_methods,
+            }));
+            if (await isOnlineNow()) {
+                for (const row of rows) {
+                    await supabase
+                        .from('user_notification_preferences')
+                        .upsert(row, { onConflict: 'user_id,company_id,notification_type' });
+                }
+            } else {
+                await enqueueSync('user_notification_preferences.upsert_many', { rows });
             }
+            await setCachedJson(`user_notification_preferences:${companyId}:${userId}`, preferences);
             Alert.alert('Saved', 'Notification preferences updated.');
         } catch (e: any) {
             Alert.alert('Error', e?.message || 'Failed to save');
