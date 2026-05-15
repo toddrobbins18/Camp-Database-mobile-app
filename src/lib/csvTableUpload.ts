@@ -48,20 +48,134 @@ export type CsvTableName =
 
 const CHILD_PERSON_ID_TABLES: CsvTableName[] = ['awards', 'daily_notes', 'incident_reports', 'medication_logs'];
 
+const CSV_MEAL_SLOT_TO_LABEL: Record<string, string> = {
+    'BEFORE BREAKFAST': 'Before Breakfast',
+    'AFTER BREAKFAST': 'After Breakfast',
+    'BEFORE LUNCH': 'Before Lunch',
+    'AFTER LUNCH': 'After Lunch',
+    'BEFORE DINNER': 'Before Dinner',
+    'AFTER DINNER': 'After Dinner',
+    BEDTIME: 'Bedtime',
+    BED: 'Bedtime',
+};
+
+const STANDARD_MEAL_SCHEDULE_HHMM: Record<string, string> = {
+    'Before Breakfast': '08:00',
+    'After Breakfast': '09:00',
+    'Before Lunch': '12:00',
+    'After Lunch': '13:00',
+    'Before Dinner': '18:00',
+    'After Dinner': '19:00',
+};
+
+const WEEKDAY_ALIASES: Record<string, string> = {
+    SUNDAY: 'Sunday',
+    MONDAY: 'Monday',
+    TUESDAY: 'Tuesday',
+    WEDNESDAY: 'Wednesday',
+    THURSDAY: 'Thursday',
+    FRIDAY: 'Friday',
+    SATURDAY: 'Saturday',
+};
+
 function formatZodIssues(err: z.ZodError): string {
     return err.issues.map((e) => `${e.path.join('.') || 'field'}: ${e.message}`).join(', ');
 }
 
+function localDateYmd(d: Date = new Date()): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function parseCsvDocument(text: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = '';
+    let i = 0;
+    let inQuotes = false;
+
+    while (i < text.length) {
+        const c = text[i];
+
+        if (inQuotes) {
+            if (c === '"') {
+                if (text[i + 1] === '"') {
+                    field += '"';
+                    i += 2;
+                    continue;
+                }
+                inQuotes = false;
+                i++;
+                continue;
+            }
+            field += c;
+            i++;
+            continue;
+        }
+
+        if (c === '"') {
+            inQuotes = true;
+            i++;
+            continue;
+        }
+
+        if (c === ',') {
+            row.push(field);
+            field = '';
+            i++;
+            continue;
+        }
+
+        if (c === '\r') {
+            if (text[i + 1] === '\n') i++;
+            row.push(field);
+            field = '';
+            rows.push(row);
+            row = [];
+            i++;
+            continue;
+        }
+
+        if (c === '\n') {
+            row.push(field);
+            field = '';
+            rows.push(row);
+            row = [];
+            i++;
+            continue;
+        }
+
+        field += c;
+        i++;
+    }
+
+    row.push(field);
+    rows.push(row);
+
+    while (rows.length > 1) {
+        const last = rows[rows.length - 1];
+        if (last.every((cell) => cell === '')) {
+            rows.pop();
+        } else {
+            break;
+        }
+    }
+
+    return rows;
+}
+
 function parseCsvToRawRows(text: string): { rawRows: Record<string, unknown>[] } | { error: string } {
-    const lines = text.split(/\r?\n/).filter((line) => line.trim());
-    if (lines.length === 0) return { error: 'CSV file is empty' };
-    if (lines.length > 1001) return { error: 'CSV file too large. Maximum 1000 rows allowed.' };
-    const headers = lines[0].split(',').map((h) => h.trim().replace(/"/g, ''));
-    const rawRows = lines.slice(1).map((line) => {
-        const values = line.split(',').map((v) => v.trim().replace(/"/g, ''));
+    const records = parseCsvDocument(text);
+    if (records.length === 0) return { error: 'CSV file is empty' };
+    if (records.length > 1001) return { error: 'CSV file too large. Maximum 1000 rows allowed.' };
+    const headers = records[0].map((h) => h.trim().replace(/^"|"$/g, ''));
+    const rawRows = records.slice(1).map((values) => {
         const obj: Record<string, unknown> = {};
         headers.forEach((header, index) => {
-            obj[header] = values[index] ?? null;
+            const v = values[index];
+            obj[header] = v != null && String(v).length > 0 ? String(v).trim() : null;
         });
         return obj;
     });
@@ -82,9 +196,82 @@ export function normalizeFlexibleDate(raw: string | undefined | null): string {
     return t;
 }
 
+function normalizeDateStringOrNull(value: unknown): string | null {
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (us) {
+        const mm = us[1].padStart(2, '0');
+        const dd = us[2].padStart(2, '0');
+        return `${us[3]}-${mm}-${dd}`;
+    }
+    return null;
+}
+
+function normalizeMedicationFrequencyValue(raw: unknown): string | null {
+    const v = String(raw ?? '').trim().toUpperCase().replace(/\s+/g, ' ');
+    if (!v) return null;
+    if (['DAILY', 'EVERY DAY', 'EVERYDAY', 'QD'].includes(v)) return 'daily';
+    if (['WEEKLY', 'EVERY WEEK'].includes(v)) return 'weekly';
+    if (['CUSTOM', 'MONTHLY', 'EVERY MONTH'].includes(v)) return 'custom';
+    if (['AS NEEDED', 'PRN'].includes(v)) return null;
+    if (WEEKDAY_ALIASES[v]) return 'weekly';
+    return null;
+}
+
+function normalizeMedicationDaysOfWeek(raw: unknown): string[] {
+    if (!Array.isArray(raw)) return [];
+    const out = raw
+        .map((d) => WEEKDAY_ALIASES[String(d ?? '').trim().toUpperCase()] ?? null)
+        .filter((d): d is string => Boolean(d));
+    return Array.from(new Set(out));
+}
+
+function sanitizeMedicationLogRowForInsert(row: Record<string, unknown>): void {
+    const normalizedDate = normalizeDateStringOrNull(row.date);
+    row.date = normalizedDate || localDateYmd();
+
+    row.end_date = normalizeDateStringOrNull(row.end_date);
+
+    const normalizedFrequency = normalizeMedicationFrequencyValue(row.frequency);
+    row.frequency = normalizedFrequency;
+    row.days_of_week = normalizeMedicationDaysOfWeek(row.days_of_week);
+    if (!row.is_recurring && !normalizedFrequency) {
+        row.days_of_week = [];
+    }
+
+    const rawSlot = String(row.scheduled_time ?? '')
+        .trim()
+        .replace(/\s+/g, ' ');
+    const upper = rawSlot.toUpperCase();
+    const isAsNeeded = !upper || upper.includes('AS NEEDED') || upper === 'PRN';
+
+    if (isAsNeeded) {
+        row.scheduled_time = null;
+        row.meal_time = null;
+        return;
+    }
+
+    const label = CSV_MEAL_SLOT_TO_LABEL[upper];
+    if (!label) {
+        row.scheduled_time = null;
+        row.meal_time = null;
+        return;
+    }
+
+    row.meal_time = [label];
+    if (label === 'Bedtime') {
+        row.scheduled_time = '21:00';
+    } else {
+        row.scheduled_time = STANDARD_MEAL_SCHEDULE_HHMM[label] ?? '12:00';
+    }
+}
+
 async function resolveChildPersonIds(
     client: SupabaseClient,
     companyId: string,
+    season: string,
     personIds: string[]
 ): Promise<Map<string, string>> {
     if (!companyId || personIds.length === 0) return new Map();
@@ -92,6 +279,8 @@ async function resolveChildPersonIds(
         .from('children')
         .select('id, person_id')
         .eq('company_id', companyId)
+        .eq('season', season)
+        .neq('status', 'inactive')
         .in('person_id', personIds);
     const mapping = new Map<string, string>();
     (data || []).forEach((child: { id: string; person_id: string | null }) => {
@@ -184,6 +373,12 @@ export async function uploadCsvFromText(
         try {
             const raw = parsed.rawRows[i] as Record<string, any>;
             const pre = parser(raw);
+            if (tableName === 'medication_logs') {
+                const pid = String(pre.person_id ?? '').trim();
+                const med = String(pre.medication_name ?? '').trim();
+                const dose = String(pre.dosage ?? '').trim();
+                if (!pid && !med && !dose) continue;
+            }
             const validated = schema.parse(pre);
             validatedRows.push(validated);
         } catch (error) {
@@ -279,7 +474,7 @@ export async function uploadCsvFromText(
             if (row.person_id) personIds.add(row.person_id);
             if (row.person_ids) (row.person_ids as string[]).forEach((id: string) => personIds.add(id));
         });
-        childPersonIdMap = await resolveChildPersonIds(client, companyId, Array.from(personIds));
+        childPersonIdMap = await resolveChildPersonIds(client, companyId, season, Array.from(personIds));
 
         const missingIds: string[] = [];
         validatedRows.forEach((row, i) => {
@@ -374,7 +569,7 @@ export async function uploadCsvFromText(
     // --- SPORTS ACADEMY ---
     if (tableName === 'sports_academy') {
         const academyPersonIds = validatedRows.map((r) => r.person_id as string).filter(Boolean);
-        const academyChildMap = await resolveChildPersonIds(client, companyId, academyPersonIds);
+        const academyChildMap = await resolveChildPersonIds(client, companyId, season, academyPersonIds);
         const rowsOut: Record<string, unknown>[] = [];
         for (const row of validatedRows) {
             const pid = row.person_id as string;
@@ -440,10 +635,7 @@ export async function uploadCsvFromText(
         }
 
         if (tableName === 'medication_logs') {
-            baseRow.date = normalizeFlexibleDate(row.date as string) || row.date;
-            if (row.end_date) {
-                baseRow.end_date = normalizeFlexibleDate(row.end_date as string) || row.end_date;
-            }
+            sanitizeMedicationLogRowForInsert(baseRow);
         }
 
         if (tableName === 'daily_notes') {
