@@ -58,6 +58,7 @@ export const DashboardScreen = ({ navigation }: any) => {
         useCallback(() => {
             void queryClient.invalidateQueries({ queryKey: ['dashboard_events'] });
             void queryClient.invalidateQueries({ queryKey: ['daily_news_schedule'] });
+            void queryClient.invalidateQueries({ queryKey: ['dashboard_birthdays'] });
         }, [queryClient]),
     );
     const currentDate = new Date();
@@ -89,7 +90,7 @@ export const DashboardScreen = ({ navigation }: any) => {
         enabled: !!companyId,
     });
 
-    const { data: birthdays = [] } = useTodayBirthdays(companyId, todayMonth, todayDay);
+    const { data: birthdays = [] } = useTodayBirthdays(companyId, season ?? null, todayMonth, todayDay);
     const { data: todayEvents = [] } = useTodayEvents(
         companyId,
         todayString,

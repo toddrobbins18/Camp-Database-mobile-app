@@ -43,7 +43,12 @@ export const DailyWolfPrintableScreen = ({ navigation }: any) => {
     const todayDay = today.getDate();
     const longDate = formatLongDate(today);
 
-    const { data: birthdays = [], isLoading: loadingBirthdays } = useTodayBirthdays(companyId, todayMonth, todayDay);
+    const { data: birthdays = [], isLoading: loadingBirthdays } = useTodayBirthdays(
+        companyId,
+        season ?? null,
+        todayMonth,
+        todayDay,
+    );
     const { data: dailyWolfRow, isLoading: loadingWolf } = useDailyWolfContentRow(
         companyId,
         todayString,

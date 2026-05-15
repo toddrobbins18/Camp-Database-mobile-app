@@ -44,7 +44,7 @@ export const DailyNewsScreen = ({ navigation }: any) => {
     const todayDay = currentDate.getDate();
 
     // Birthdays: same as Dashboard (children + staff, name + type/age) – aligned with main app Daily Notes
-    const { data: birthdays = [] } = useTodayBirthdays(companyId, todayMonth, todayDay);
+    const { data: birthdays = [] } = useTodayBirthdays(companyId, season ?? null, todayMonth, todayDay);
 
     // Today's schedule: same as main app Daily Notes – sports_calendar + activities_field_trips + special_events_activities by event_date & season
     const { data: scheduleEvents = [] } = useDailyNewsSchedule(companyId, todayString, season ?? null);

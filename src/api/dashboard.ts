@@ -43,10 +43,15 @@ async function resolveDashboardDivisionFilter(companyId: string): Promise<string
     return ids;
 }
 
-// Fetch today's birthdays from children and staff (aligned with lovable-web-app Dashboard.tsx)
-export const useTodayBirthdays = (companyId: string | null, todayMonth: number, todayDay: number) => {
-    return useQuery({
-        queryKey: ['dashboard_birthdays', companyId, todayMonth, todayDay],
+// Fetch today's birthdays from children and staff — same roster pool as Dashboard + Daily News web (season + calendar DOB parsing).
+export const useTodayBirthdays = (
+  companyId: string | null,
+  season: string | null,
+  todayMonth: number,
+  todayDay: number,
+) => {
+  return useQuery({
+    queryKey: ['dashboard_birthdays', companyId, season ?? '', todayMonth, todayDay],
         queryFn: async () => {
             if (!companyId) return [];
 
@@ -60,6 +65,10 @@ export const useTodayBirthdays = (companyId: string | null, todayMonth: number, 
                 .eq('company_id', companyId)
                 .not('date_of_birth', 'is', null);
 
+            if (season != null && String(season).trim() !== '') {
+                childrenQuery = childrenQuery.eq('season', season);
+            }
+
             if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
                 childrenQuery = childrenQuery.in('division_id', divisionFilter);
             }
@@ -69,12 +78,18 @@ export const useTodayBirthdays = (companyId: string | null, todayMonth: number, 
                 console.warn('Birthday children query failed:', childrenError.message);
             }
 
-            const { data: staffData, error: staffError } = await supabase
+            let staffQuery = supabase
                 .from('staff')
                 .select('id, name, date_of_birth')
                 .eq('status', 'active')
                 .eq('company_id', companyId)
                 .not('date_of_birth', 'is', null);
+
+            if (season != null && String(season).trim() !== '') {
+                staffQuery = staffQuery.eq('season', season);
+            }
+
+            const { data: staffData, error: staffError } = await staffQuery;
 
             if (staffError) {
                 console.warn('Birthday staff query failed:', staffError.message);
