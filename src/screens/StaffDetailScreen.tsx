@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useCompany } from '../contexts/CompanyContext';
 import {
     View,
     Text,
@@ -11,6 +13,7 @@ import {
     Platform,
     Pressable,
     Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +32,37 @@ const TABS = [
 ];
 
 export const StaffDetailScreen = ({ route, navigation }: any) => {
+    const { companyId, season } = useCompany();
+    const staffId = route?.params?.staff?.id as string | undefined;
+
+    const { data: loadedStaff, isLoading: staffLoading } = useQuery({
+        queryKey: ['staff_detail', staffId, companyId, season],
+        queryFn: async () => {
+            if (!staffId) return null;
+
+            const { data: staffData, error: staffError } = await supabase
+                .from('staff')
+                .select('*, division:division_id(id, name), supervisor:leader_id(id, name, role)')
+                .eq('id', staffId)
+                .single();
+
+            if (staffError) throw staffError;
+
+            const { data: leaderAssignmentData } = await supabase
+                .from('staff_leader_assignments')
+                .select('id, leader:leader_id(id, name, role)')
+                .eq('staff_id', staffId)
+                .eq('company_id', companyId || '')
+                .eq('season', season || '');
+
+            return {
+                ...staffData,
+                assignedLeaders: leaderAssignmentData || [],
+            };
+        },
+        enabled: !!staffId,
+    });
+
     const [staff, setStaff] = useState<any>(route?.params?.staff ?? {});
     const [cannotEvalVisible, setCannotEvalVisible] = useState(false);
     const [editVisible, setEditVisible] = useState(false);
@@ -42,19 +76,22 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
         staff_type: route?.params?.staff?.staff_type || '',
     });
 
-    const initials = (staff?.name || 'NA')
+    const displayStaff = loadedStaff ?? staff;
+    const assignedLeaders = (displayStaff as any)?.assignedLeaders || [];
+
+    const initials = (displayStaff?.name || 'NA')
         .split(' ')
         .map((part: string) => part[0] || '')
         .join('')
         .slice(0, 2)
         .toUpperCase();
 
-    const rating = Number(staff?.averageRating || 0).toFixed(1);
-    const status = (staff?.status || 'active').toLowerCase();
+    const rating = Number(displayStaff?.averageRating || 0).toFixed(1);
+    const status = (displayStaff?.status || 'active').toLowerCase();
     const normalizedStaffType = useMemo(() => {
-        const raw = String(staff?.staff_type || '').trim().toLowerCase();
+        const raw = String(displayStaff?.staff_type || '').trim().toLowerCase();
         return raw;
-    }, [staff?.staff_type]);
+    }, [displayStaff?.staff_type]);
 
     const handleEvaluatePress = () => {
         if (!normalizedStaffType || normalizedStaffType === 'not_specified') {
@@ -115,6 +152,16 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
         }
     };
 
+    if (staffLoading && staffId) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -139,8 +186,8 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                         <Text style={styles.avatarLargeText}>{initials}</Text>
                     </View>
                     <View style={styles.nameBlock}>
-                        <Text style={styles.name}>{staff?.name || 'Staff Member'}</Text>
-                        <Text style={styles.role}>{staff?.role || 'No role set'}</Text>
+                        <Text style={styles.name}>{displayStaff?.name || 'Staff Member'}</Text>
+                        <Text style={styles.role}>{displayStaff?.role || 'No role set'}</Text>
                     </View>
                     <View style={styles.ratingBlock}>
                         <View style={styles.ratingNumberRow}>
@@ -176,8 +223,43 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                         </View>
                         <View style={styles.fieldGroup}>
                             <Text style={styles.fieldLabel}>Department</Text>
-                            <Text style={styles.fieldValue}>{staff?.department || 'Not provided'}</Text>
+                            <Text style={styles.fieldValue}>{displayStaff?.department || 'Not provided'}</Text>
                         </View>
+                        {displayStaff?.division?.name ? (
+                            <View style={styles.fieldGroup}>
+                                <Text style={styles.fieldLabel}>Division</Text>
+                                <Text style={styles.fieldValue}>{displayStaff.division.name}</Text>
+                            </View>
+                        ) : null}
+                        {displayStaff?.supervisor ? (
+                            <View style={styles.fieldGroup}>
+                                <Text style={styles.fieldLabel}>Reports To</Text>
+                                <Text style={styles.fieldValue}>
+                                    {displayStaff.supervisor.name}
+                                    {displayStaff.supervisor.role ? ` (${displayStaff.supervisor.role})` : ''}
+                                </Text>
+                            </View>
+                        ) : null}
+                        {assignedLeaders.length > 0 ? (
+                            <View style={styles.fieldGroup}>
+                                <Text style={styles.fieldLabel}>Assigned Leaders</Text>
+                                <Text style={styles.fieldValue}>
+                                    {assignedLeaders
+                                        .map((a: any) => {
+                                            const name = a.leader?.name || 'Unknown';
+                                            const role = a.leader?.role ? ` (${a.leader.role})` : '';
+                                            return `${name}${role}`;
+                                        })
+                                        .join(', ')}
+                                </Text>
+                            </View>
+                        ) : null}
+                        {Array.isArray(displayStaff?.specialty_sports) && displayStaff.specialty_sports.length > 0 ? (
+                            <View style={styles.fieldGroup}>
+                                <Text style={styles.fieldLabel}>Sport Assignments</Text>
+                                <Text style={styles.fieldValue}>{displayStaff.specialty_sports.join(', ')}</Text>
+                            </View>
+                        ) : null}
                     </View>
 
                     <View style={styles.infoCard}>

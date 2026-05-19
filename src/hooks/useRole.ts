@@ -8,20 +8,26 @@ import { supabase } from '../lib/supabase';
  */
 export const useRole = () => {
     const [userId, setUserId] = useState<string | null>(null);
+    const [userEmail, setUserEmail] = useState<string | null>(null);
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        const applySession = (session: { user?: { id?: string; email?: string | null } } | null) => {
             setUserId(session?.user?.id ?? null);
+            setUserEmail(session?.user?.email ?? null);
+        };
+
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            applySession(session);
         });
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setUserId(session?.user?.id ?? null);
+            applySession(session);
         });
 
         return () => subscription.unsubscribe();
     }, []);
 
-    return useQuery({
+    const query = useQuery({
         queryKey: ['user_roles', userId],
         queryFn: async () => {
             if (!userId) return null;
@@ -48,13 +54,20 @@ export const useRole = () => {
             }
 
             const roles = data.map(r => r.role);
+            const isSpecialist = roles.includes('specialist');
+            const isDivisionLeader = roles.includes('division_leader');
             return {
                 roles,
                 isSuperAdmin: roles.includes('super_admin'),
                 isAdmin: roles.includes('admin') || roles.includes('super_admin'),
                 isStaff: roles.includes('staff'),
+                isSpecialist,
+                isDivisionLeader,
+                isLeaderRole: isDivisionLeader || isSpecialist,
             };
         },
         enabled: !!userId,
     });
+
+    return { userId, userEmail, ...query };
 };

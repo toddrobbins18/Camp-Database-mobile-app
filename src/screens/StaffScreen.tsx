@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, Alert, Pressable, Keyboard, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,9 +31,61 @@ export const StaffScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
     const { data: staffData = [], isLoading, isError } = useStaff(companyId, season);
-    const { data: roleData } = useRole();
+    const { data: roleData, userId, userEmail } = useRole();
     const isSuperAdmin = roleData?.isSuperAdmin || false;
     const isAdmin = roleData?.isAdmin || false;
+    const isSpecialistRole = roleData?.isSpecialist || false;
+    const isLeaderRole = roleData?.isLeaderRole || false;
+
+    const [myStaffId, setMyStaffId] = useState<string | null>(null);
+    const [myAssignedStaffIds, setMyAssignedStaffIds] = useState<Set<string>>(new Set());
+    const [myAssignedSports, setMyAssignedSports] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        const findMyStaffRecord = async () => {
+            if (!userEmail || !companyId || !isLeaderRole) {
+                setMyStaffId(null);
+                setMyAssignedStaffIds(new Set());
+                setMyAssignedSports(new Set());
+                return;
+            }
+
+            if (isSpecialistRole && userId) {
+                const { data: sportAssignmentData } = await supabase
+                    .from('specialist_sport_assignments')
+                    .select('sport')
+                    .eq('user_id', userId)
+                    .eq('company_id', companyId);
+                setMyAssignedSports(new Set((sportAssignmentData || []).map((a: { sport: string }) => a.sport)));
+            } else {
+                setMyAssignedSports(new Set());
+            }
+
+            const { data } = await supabase
+                .from('staff')
+                .select('id')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .ilike('email', userEmail)
+                .maybeSingle();
+
+            const staffId = data?.id || null;
+            setMyStaffId(staffId);
+
+            if (staffId) {
+                const { data: assignmentData } = await supabase
+                    .from('staff_leader_assignments')
+                    .select('staff_id')
+                    .eq('leader_id', staffId)
+                    .eq('company_id', companyId)
+                    .eq('season', season);
+                setMyAssignedStaffIds(new Set((assignmentData || []).map((a: { staff_id: string }) => a.staff_id)));
+            } else {
+                setMyAssignedStaffIds(new Set());
+            }
+        };
+        findMyStaffRecord();
+    }, [userEmail, userId, companyId, season, isLeaderRole, isSpecialistRole]);
 
     const addStaffMutation = useAddStaff();
     const editStaffMutation = useEditStaff();
@@ -42,6 +94,38 @@ export const StaffScreen = ({ navigation }: any) => {
     const [isScannerActive, setIsScannerActive] = useState(false);
     const [scanInput, setScanInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+
+    const filteredStaff = useMemo(() => {
+        const q = searchQuery.toLowerCase();
+        return staffData.filter((member) => {
+            if (isLeaderRole && (myStaffId || isSpecialistRole)) {
+                const isSelf = myStaffId === member.id;
+                const isManuallyAssigned = myStaffId ? myAssignedStaffIds.has(member.id!) : false;
+                const memberSports = Array.isArray((member as any).specialty_sports)
+                    ? (member as any).specialty_sports
+                    : [];
+                const isSportAssigned =
+                    isSpecialistRole && memberSports.some((sport: string) => myAssignedSports.has(sport));
+                if (!isSelf && !isManuallyAssigned && !isSportAssigned) {
+                    return false;
+                }
+            }
+
+            return (
+                member.name?.toLowerCase().includes(q) ||
+                (member.role?.toLowerCase() || '').includes(q) ||
+                (member.department?.toLowerCase() || '').includes(q)
+            );
+        });
+    }, [
+        staffData,
+        searchQuery,
+        isLeaderRole,
+        isSpecialistRole,
+        myStaffId,
+        myAssignedStaffIds,
+        myAssignedSports,
+    ]);
 
     const [modalVisible, setModalVisible] = useState({
         addStaff: false,
@@ -822,12 +906,12 @@ const pickersModals = (
                 {isLoading ? (
                     <Text style={styles.resultsText}>Loading staff...</Text>
                 ) : (
-                    <Text style={styles.resultsText}>Showing {staffData.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase())).length} of {staffData.length} staff members for {season}</Text>
+                    <Text style={styles.resultsText}>Showing {filteredStaff.length} of {staffData.length} staff members for {season}</Text>
                 )}
 
                 {/* Staff List Grid */}
                 <View style={styles.grid}>
-                    {staffData.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase())).map((staff, index) => (
+                    {filteredStaff.map((staff, index) => (
                         <View key={index} style={styles.staffCardWrapper}>
                             <TouchableOpacity
                                 style={styles.staffCard}

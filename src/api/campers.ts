@@ -161,7 +161,7 @@ function useCampersPaged(
                     const to = from + CAMPERS_PAGE_SIZE - 1;
                     let q = supabase
                         .from('children')
-                        .select('*, division:divisions(id, name, gender, sort_order)')
+                        .select('*, division:divisions(id, name, gender, sort_order), leader:leader_id(id, name, role)')
                         .eq('company_id', companyId)
                         .eq('season', season)
                         .neq('status', 'inactive')

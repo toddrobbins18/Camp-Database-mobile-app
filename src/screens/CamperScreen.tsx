@@ -2849,6 +2849,12 @@ export const CamperScreen = ({ navigation }: any) => {
 
                                 <View style={styles.cardFooter}>
                                     <Text style={styles.divisionText}>Division: {(camper as any).division?.name || "N/A"}</Text>
+                                    {(camper as any).group_name ? (
+                                        <Text style={styles.divisionText}>Team: {(camper as any).group_name}</Text>
+                                    ) : null}
+                                    {(camper as any).leader?.name ? (
+                                        <Text style={styles.divisionText}>Leader: {(camper as any).leader.name}</Text>
+                                    ) : null}
                                     {(() => {
                                         const raw = (camper as any)?.status;
                                         const trimmed = typeof raw === 'string' ? raw.trim() : '';

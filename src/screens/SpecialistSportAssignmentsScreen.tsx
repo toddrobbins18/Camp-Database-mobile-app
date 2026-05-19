@@ -19,47 +19,58 @@ function normalizeStaffEmail(value: string | null | undefined): string | null {
   return t || null;
 }
 
+type SpecialistLeader = { user_id: string; full_name: string; email: string };
+type StaffSpecialist = {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string | null;
+  staff_type: string | null;
+  specialty_sports: string[] | null;
+};
+
 export const SpecialistSportAssignmentsScreen = ({ navigation }: any) => {
   const { companyId, season, availableCompanies } = useCompany();
   const companyName = companyId ? availableCompanies.find(c => c.id === companyId)?.name : null;
   const queryClient = useQueryClient();
 
-  const { data: specialists = [], isLoading } = useQuery({
-    queryKey: ['specialist_sport_assignments', companyId, season],
-    queryFn: async () => {
+  const { data: specialists = [], isLoading: leadersLoading } = useQuery({
+    queryKey: ['specialist_sport_leaders', companyId, season],
+    queryFn: async (): Promise<SpecialistLeader[]> => {
       if (!companyId || !season) return [];
 
-      const { data: rolesData, error: rolesError } = await supabase
+      const { data: specialistRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id')
         .eq('role', 'specialist')
         .eq('company_id', companyId);
-      if (rolesError) throw rolesError;
-      const roleUserIds = (rolesData || []).map((r: any) => r.user_id).filter(Boolean);
 
-      const roleProfilesProm =
-        roleUserIds.length === 0
-          ? Promise.resolve({ data: [] as any[], error: null as Error | null })
-          : supabase.from('profiles').select('id, full_name, email').in('id', roleUserIds);
+      if (rolesError) {
+        console.warn('[SpecialistSportAssignments] roles:', rolesError);
+      }
 
-      const { data: staffSpecialists, error: staffSpecError } = await supabase
+      const roleUserIds = new Set<string>();
+      (specialistRoles || []).forEach((row: { user_id?: string | null }) => {
+        if (row.user_id) roleUserIds.add(row.user_id);
+      });
+
+      const { data: staffSpecialistRows } = await supabase
         .from('staff')
         .select('email')
         .eq('company_id', companyId)
-        .eq('status', 'active')
         .eq('season', season)
         .in('staff_type', ['specialist', 'both']);
 
-      if (staffSpecError) console.warn('[SpecialistSportAssignments] staff:', staffSpecError);
-
       const staffEmails = new Set<string>();
-      (staffSpecialists || []).forEach((row: { email?: string | null }) => {
+      (staffSpecialistRows || []).forEach((row: { email?: string | null }) => {
         const n = normalizeStaffEmail(row.email);
         if (n) staffEmails.add(n);
       });
 
-      let emailToProfile = new Map<string, { id: string; full_name: string | null; email: string | null }>();
-      if (staffEmails.size > 0) {
+      const emailToProfile = new Map<string, { id: string; full_name: string | null; email: string | null }>();
+      const profileById = new Map<string, { id: string; full_name: string | null; email: string | null }>();
+
+      if (staffEmails.size > 0 || roleUserIds.size > 0) {
         const { data: companyProfiles, error: profErr } = await supabase
           .from('profiles')
           .select('id, full_name, email')
@@ -70,32 +81,58 @@ export const SpecialistSportAssignmentsScreen = ({ navigation }: any) => {
           if (key && staffEmails.has(key)) {
             emailToProfile.set(key, p);
           }
+          if (roleUserIds.has(p.id)) {
+            profileById.set(p.id, p);
+          }
         });
       }
 
-      const { data: roleProfiles, error: profError } = await roleProfilesProm;
-      if (profError) throw profError;
-
-      const byUserId = new Map<string, { user_id: string; full_name: string; email: string }>();
-      for (const p of roleProfiles || []) {
-        byUserId.set(p.id, {
-          user_id: p.id,
-          full_name: p.full_name || p.email || 'Unknown',
-          email: p.email || '',
-        });
+      const byUserId = new Map<string, SpecialistLeader>();
+      for (const userId of roleUserIds) {
+        const p = profileById.get(userId);
+        if (p) {
+          byUserId.set(userId, {
+            user_id: userId,
+            full_name: p.full_name || p.email || 'Unknown',
+            email: p.email || '',
+          });
+        }
       }
-      for (const em of staffEmails) {
-        const p = emailToProfile.get(em);
-        if (!p?.id || byUserId.has(p.id)) continue;
-        byUserId.set(p.id, {
-          user_id: p.id,
-          full_name: p.full_name || p.email || 'Unknown',
-          email: p.email || '',
-        });
+      for (const email of staffEmails) {
+        const p = emailToProfile.get(email);
+        if (p?.id && !byUserId.has(p.id)) {
+          byUserId.set(p.id, {
+            user_id: p.id,
+            full_name: p.full_name || p.email || 'Unknown',
+            email: p.email || '',
+          });
+        }
       }
 
       return Array.from(byUserId.values()).sort((a, b) =>
         (a.full_name || a.email).localeCompare(b.full_name || b.email, undefined, { sensitivity: 'base' }),
+      );
+    },
+    enabled: !!companyId && !!season,
+  });
+
+  const { data: staffSpecialists = [], isLoading: staffLoading } = useQuery({
+    queryKey: ['specialist_sport_staff', companyId, season],
+    queryFn: async (): Promise<StaffSpecialist[]> => {
+      if (!companyId || !season) return [];
+
+      const { data, error } = await supabase
+        .from('staff')
+        .select('id, name, email, role, staff_type, specialty_sports')
+        .eq('company_id', companyId)
+        .eq('season', season)
+        .neq('name', 'Unknown')
+        .not('name', 'is', null)
+        .in('staff_type', ['specialist', 'both']);
+
+      if (error) throw error;
+      return (data || []).sort((a: any, b: any) =>
+        (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }),
       );
     },
     enabled: !!companyId && !!season,
@@ -139,11 +176,58 @@ export const SpecialistSportAssignmentsScreen = ({ navigation }: any) => {
         if (error) throw error;
       }
       queryClient.invalidateQueries({ queryKey: ['specialist_sport_assignments_list', companyId] });
-      queryClient.invalidateQueries({ queryKey: ['specialist_sport_assignments', companyId, season] });
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to update assignment');
     }
+  }, [companyId, queryClient]);
+
+  const toggleStaffSportAssignment = useCallback(async (staffMember: StaffSpecialist, sport: string, isAssigned: boolean) => {
+    if (!companyId || !season) return;
+    const currentSports = Array.isArray(staffMember.specialty_sports) ? staffMember.specialty_sports : [];
+    const nextSports = isAssigned
+      ? currentSports.filter((s) => s !== sport)
+      : Array.from(new Set([...currentSports, sport]));
+
+    const { error } = await supabase
+      .from('staff')
+      .update({ specialty_sports: nextSports })
+      .eq('id', staffMember.id)
+      .eq('company_id', companyId)
+      .eq('season', season);
+
+    if (error) {
+      Alert.alert('Error', error.message || 'Failed to update staff sport assignments');
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['specialist_sport_staff', companyId, season] });
+    queryClient.invalidateQueries({ queryKey: ['staff', companyId, season] });
   }, [companyId, season, queryClient]);
+
+  const isLoading = leadersLoading || staffLoading;
+
+  const renderSportGrid = (
+    keyPrefix: string,
+    getAssigned: (sport: string) => boolean,
+    onToggle: (sport: string, isAssigned: boolean) => void,
+  ) => (
+    <View style={styles.sportsGrid}>
+      {AVAILABLE_SPORTS.map((sport) => {
+        const isAssigned = getAssigned(sport);
+        return (
+          <View key={`${keyPrefix}-${sport}`} style={styles.sportRow}>
+            <Text style={styles.sportLabel}>{sport}</Text>
+            <Switch
+              value={isAssigned}
+              onValueChange={() => onToggle(sport, isAssigned)}
+              trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
+              thumbColor="#fff"
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -161,55 +245,90 @@ export const SpecialistSportAssignmentsScreen = ({ navigation }: any) => {
         <View style={styles.titleSection}>
           <Text style={styles.title}>Specialist Sport Assignments</Text>
           <Text style={styles.subtitle}>
-            Assign which sports each specialist is responsible for. Specialists will receive email notifications only for their assigned sports.
+            Assign sports to specialist leaders with logins, then assign staff to sports/departments where they should be evaluated.
+            Staff do not need logins for the staff assignment section.
           </Text>
         </View>
 
-        {companyName && (
+        {companyName ? (
           <View style={styles.infoBanner}>
             <Ionicons name="information-circle-outline" size={20} color={theme.colors.textSecondary} />
             <Text style={styles.infoText}>
-              You are viewing assignments for {companyName}. Switch companies to manage other organizations.
+              Viewing assignments for {companyName}.
             </Text>
           </View>
-        )}
+        ) : null}
 
         {isLoading ? (
           <ActivityIndicator size="large" color={theme.colors.primary} style={styles.loader} />
-        ) : specialists.length === 0 ? (
-          <StyledCard style={styles.emptyCard}>
-            <Text style={styles.emptyText}>
-              No specialists found for this camp and season. Set Staff Type to specialist or both (with login email matching
-              staff), or assign the Specialist role in admin—then assign sports here.
-            </Text>
-          </StyledCard>
         ) : (
-          specialists.map((specialist: any) => (
-            <StyledCard key={specialist.user_id} style={styles.specialistCard}>
-              <View style={styles.specialistHeader}>
-                <View>
-                  <Text style={styles.specialistName}>{specialist.full_name}</Text>
-                  <Text style={styles.specialistEmail}>{specialist.email}</Text>
-                </View>
-              </View>
-              <View style={styles.sportsGrid}>
-                {AVAILABLE_SPORTS.map((sport) => {
-                  const isAssigned = (assignmentsMap[specialist.user_id] || []).includes(sport);
-                  return (
-                    <View key={sport} style={styles.sportRow}>
-                      <Text style={styles.sportLabel}>{sport}</Text>
-                      <Switch
-                        value={isAssigned}
-                        onValueChange={() => toggleSportAssignment(specialist.user_id, sport, isAssigned)}
-                        trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
-                        thumbColor="#fff"
-                      />
+          <>
+            <Text style={styles.sectionTitle}>Specialist Leaders</Text>
+            <Text style={styles.sectionSubtitle}>
+              People with a login or Specialist app role. Their sports control which staff they can evaluate.
+            </Text>
+
+            {specialists.length === 0 ? (
+              <StyledCard style={styles.emptyCard}>
+                <Text style={styles.emptyText}>
+                  No specialist leaders found. Add a Specialist app role or match a Specialist/Both staff email to a login.
+                </Text>
+              </StyledCard>
+            ) : (
+              specialists.map((specialist) => (
+                <StyledCard key={specialist.user_id} style={styles.specialistCard}>
+                  <View style={styles.specialistHeader}>
+                    <View>
+                      <Text style={styles.specialistName}>{specialist.full_name}</Text>
+                      <Text style={styles.specialistEmail}>{specialist.email}</Text>
                     </View>
-                  );
-                })}
-              </View>
-            </StyledCard>
-          ))
+                  </View>
+                  {renderSportGrid(
+                    specialist.user_id,
+                    (sport) => (assignmentsMap[specialist.user_id] || []).includes(sport),
+                    (sport, isAssigned) => toggleSportAssignment(specialist.user_id, sport, isAssigned),
+                  )}
+                </StyledCard>
+              ))
+            )}
+
+            <Text style={[styles.sectionTitle, { marginTop: theme.spacing.lg }]}>Staff Sport / Department Assignments</Text>
+            <Text style={styles.sectionSubtitle}>
+              Specialist or Both staff appear here without a login. Assign Tennis, etc. so the matching leader can evaluate them.
+            </Text>
+
+            {staffSpecialists.length === 0 ? (
+              <StyledCard style={styles.emptyCard}>
+                <Text style={styles.emptyText}>
+                  No Specialist or Both staff found for this camp and season.
+                </Text>
+              </StyledCard>
+            ) : (
+              staffSpecialists.map((staffMember) => {
+                const selectedSports = Array.isArray(staffMember.specialty_sports)
+                  ? staffMember.specialty_sports
+                  : [];
+                return (
+                  <StyledCard key={staffMember.id} style={styles.specialistCard}>
+                    <View style={styles.specialistHeader}>
+                      <View>
+                        <Text style={styles.specialistName}>{staffMember.name}</Text>
+                        <Text style={styles.specialistEmail}>
+                          {staffMember.role || 'No role'}
+                          {staffMember.email ? ` • ${staffMember.email}` : ' • No login required'}
+                        </Text>
+                      </View>
+                    </View>
+                    {renderSportGrid(
+                      staffMember.id,
+                      (sport) => selectedSports.includes(sport),
+                      (sport, isAssigned) => toggleStaffSportAssignment(staffMember, sport, isAssigned),
+                    )}
+                  </StyledCard>
+                );
+              })
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -245,6 +364,18 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     textAlign: 'center',
   },
+  sectionTitle: {
+    ...theme.typography.h2,
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  sectionSubtitle: {
+    ...theme.typography.bodySmall,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.md,
+  },
   infoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -258,7 +389,7 @@ const styles = StyleSheet.create({
   },
   infoText: { flex: 1, ...theme.typography.bodySmall, color: theme.colors.textSecondary },
   loader: { marginVertical: theme.spacing.xl },
-  emptyCard: { padding: theme.spacing.lg },
+  emptyCard: { padding: theme.spacing.lg, marginBottom: theme.spacing.md },
   emptyText: {
     ...theme.typography.body,
     textAlign: 'center',

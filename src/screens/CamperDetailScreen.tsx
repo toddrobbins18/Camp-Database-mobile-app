@@ -62,7 +62,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             if (!camperParam?.id) return null;
             const { data, error } = await supabase
                 .from('children')
-                .select('*, division:divisions(id, name, gender, sort_order)')
+                .select('*, division:divisions(id, name, gender, sort_order), leader:leader_id(id, name, role)')
                 .eq('id', camperParam.id)
                 .single();
             if (error) throw error;
@@ -410,7 +410,14 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                 <View style={styles.headerContent}>
                     <View style={styles.headerTitleContainer}>
                         <Text style={styles.headerTitle}>{camper.name}</Text>
-                        <Text style={styles.headerSubtitle}>{camper.grade || ''}{camper.grade ? '.' : ''}</Text>
+                        <Text style={styles.headerSubtitle}>
+                            {[
+                                camper.grade,
+                                (camper as any).division?.name,
+                                (camper as any).group_name ? `Team ${(camper as any).group_name}` : null,
+                                (camper as any).leader?.name ? `Leader: ${(camper as any).leader.name}` : null,
+                            ].filter(Boolean).join(' • ') || '—'}
+                        </Text>
                     </View>
                     <View style={styles.headerActions}>
                         <TouchableOpacity
@@ -503,6 +510,35 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                 </Text>
                                             </View>
                                         </View>
+                                        {((camper as any).division?.name || (camper as any).category) ? (
+                                            <View style={styles.infoGridItem}>
+                                                <Text style={styles.infoLabel}>Division</Text>
+                                                <View style={styles.infoValueBox}>
+                                                    <Text style={styles.infoValueText}>
+                                                        {(camper as any).division?.name || (camper as any).category}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        ) : null}
+                                        {(camper as any).group_name ? (
+                                            <View style={styles.infoGridItem}>
+                                                <Text style={styles.infoLabel}>Team</Text>
+                                                <View style={styles.infoValueBox}>
+                                                    <Text style={styles.infoValueText}>{(camper as any).group_name}</Text>
+                                                </View>
+                                            </View>
+                                        ) : null}
+                                        {(camper as any).leader ? (
+                                            <View style={styles.infoGridItem}>
+                                                <Text style={styles.infoLabel}>Assigned Leader</Text>
+                                                <View style={styles.infoValueBox}>
+                                                    <Text style={styles.infoValueText}>
+                                                        {(camper as any).leader.name}
+                                                        {(camper as any).leader.role ? ` (${(camper as any).leader.role})` : ''}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        ) : null}
                                     </View>
                                 </View>
                             </StyledCard>
