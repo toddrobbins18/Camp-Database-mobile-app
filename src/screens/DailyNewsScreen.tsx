@@ -74,13 +74,15 @@ export const DailyNewsScreen = ({ navigation }: any) => {
         queryFn: async () => {
             if (!companyId) return null;
             try {
-                const q = supabase
+                let q = supabase
                     .from('menu_items')
                     .select('*')
                     .eq('company_id', companyId)
                     .eq('date', todayString);
-                const withSeason = season ? q.eq('season', season) : q;
-                const { data, error } = await withSeason;
+                if (season) {
+                    q = q.or(`season.eq.${season},season.is.null`);
+                }
+                const { data, error } = await q;
                 if (error) return null;
                 const out: Record<string, string> = { breakfast: '', lunch: '', dinner: '', snack: '' };
                 (data || []).forEach((item: any) => {
@@ -268,19 +270,19 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                         <View style={styles.menuContainer}>
                             <View style={styles.menuItem}>
                                 <Text style={styles.menuLabel}>Breakfast:</Text>
-                                <Text style={styles.menuValue}>{meals?.breakfast || 'TBD'}</Text>
+                                <Text style={styles.menuValue}>{meals?.breakfast?.trim() || '—'}</Text>
                             </View>
                             <View style={styles.menuItem}>
                                 <Text style={styles.menuLabel}>Lunch:</Text>
-                                <Text style={styles.menuValue}>{meals?.lunch || 'TBD'}</Text>
+                                <Text style={styles.menuValue}>{meals?.lunch?.trim() || '—'}</Text>
                             </View>
                             <View style={styles.menuItem}>
                                 <Text style={styles.menuLabel}>Snack:</Text>
-                                <Text style={styles.menuValue}>{meals?.snack || 'TBD'}</Text>
+                                <Text style={styles.menuValue}>{meals?.snack?.trim() || '—'}</Text>
                             </View>
                             <View style={styles.menuItem}>
                                 <Text style={styles.menuLabel}>Dinner:</Text>
-                                <Text style={styles.menuValue}>{meals?.dinner || 'TBD'}</Text>
+                                <Text style={styles.menuValue}>{meals?.dinner?.trim() || '—'}</Text>
                             </View>
                         </View>
                     </View>

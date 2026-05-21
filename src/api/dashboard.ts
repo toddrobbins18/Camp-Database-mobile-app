@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { ageOnLocalDate, parseBirthdayCalendarParts } from '../lib/birthdayDate';
+import { ageOnLocalDate, isActiveRosterStatus, parseBirthdayCalendarParts } from '../lib/birthdayDate';
 import { getCachedJson, setCachedJson } from '../offline/engine';
 
 /** Same as lovable-web-app usePermissions fullDivisionAccessRoles. */
@@ -74,8 +74,7 @@ export const useTodayBirthdays = (
 
                 let childrenQuery = supabase
                     .from('children')
-                    .select('id, name, date_of_birth, division_id')
-                    .eq('status', 'active')
+                    .select('id, name, date_of_birth, division_id, status')
                     .eq('company_id', companyId)
                     .not('date_of_birth', 'is', null);
 
@@ -87,15 +86,17 @@ export const useTodayBirthdays = (
                     childrenQuery = childrenQuery.in('division_id', divisionFilter);
                 }
 
-                const { data: childrenData, error: childrenError } = await childrenQuery;
+                const { data: childrenRaw, error: childrenError } = await childrenQuery;
                 if (childrenError) {
                     console.warn('Birthday children query failed:', childrenError.message);
                 }
+                const childrenData = (childrenRaw ?? []).filter((c: { status?: string | null }) =>
+                    isActiveRosterStatus(c.status),
+                );
 
                 let staffQuery = supabase
                     .from('staff')
-                    .select('id, name, date_of_birth')
-                    .eq('status', 'active')
+                    .select('id, name, date_of_birth, status')
                     .eq('company_id', companyId)
                     .not('date_of_birth', 'is', null);
 
@@ -103,11 +104,14 @@ export const useTodayBirthdays = (
                     staffQuery = staffQuery.eq('season', season);
                 }
 
-                const { data: staffData, error: staffError } = await staffQuery;
+                const { data: staffRaw, error: staffError } = await staffQuery;
 
                 if (staffError) {
                     console.warn('Birthday staff query failed:', staffError.message);
                 }
+                const staffData = (staffRaw ?? []).filter((s: { status?: string | null }) =>
+                    isActiveRosterStatus(s.status),
+                );
 
                 const now = new Date();
                 const birthdays: any[] = [];
@@ -291,30 +295,39 @@ export const useDailyNewsSchedule = (companyId: string | null, todayString: stri
 };
 
 // Fetch today's menu from menu_items table
-export const useTodayMeals = (companyId: string | null, todayString: string) => {
+export const useTodayMeals = (
+    companyId: string | null,
+    todayString: string,
+    season?: string | null,
+) => {
     return useQuery({
-        queryKey: ['dashboard_meals', companyId, todayString],
+        queryKey: ['dashboard_meals', companyId, todayString, season ?? ''],
         queryFn: async () => {
             if (!companyId) return null;
-            const cacheKey = `dashboard_meals:${companyId}:${todayString}`;
+            const cacheKey = `dashboard_meals:${companyId}:${todayString}:${season ?? ''}`;
             return readThroughCache<{ breakfast: string; lunch: string; snack: string; dinner: string } | null>(
                 cacheKey,
                 async () => {
-                    const { data, error } = await supabase
+                    let q = supabase
                         .from('menu_items')
                         .select('*')
                         .eq('company_id', companyId)
                         .eq('date', todayString);
+                    if (season != null && String(season).trim() !== '') {
+                        q = q.or(`season.eq.${season},season.is.null`);
+                    }
+                    const { data, error } = await q;
 
                     if (error) throw error;
 
                     const meals = { breakfast: '', lunch: '', snack: '', dinner: '' };
                     (data || []).forEach((item) => {
                         const type = item.meal_type?.toLowerCase() || '';
-                        if (type === 'breakfast') meals.breakfast = item.items;
-                        if (type === 'lunch') meals.lunch = item.items;
-                        if (type === 'dinner') meals.dinner = item.items;
-                        if (type === 'snack') meals.snack = item.items;
+                        const content = item.items ?? item.description ?? '';
+                        if (type === 'breakfast') meals.breakfast = content;
+                        if (type === 'lunch') meals.lunch = content;
+                        if (type === 'dinner') meals.dinner = content;
+                        if (type === 'snack') meals.snack = content;
                     });
                     return meals;
                 }

@@ -178,6 +178,11 @@ export const OwlPayScreen = ({ navigation }: any) => {
         };
     }, [companyId, queryClient]);
 
+    useEffect(() => {
+        if (activeTab !== 'pos' || !companyId) return;
+        queryClient.invalidateQueries({ queryKey: ['owlpay_items', companyId] });
+    }, [activeTab, companyId, queryClient]);
+
     const reportRange = useMemo(() => {
         const now = new Date();
         const end = new Date(now);
@@ -216,6 +221,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const averageBalance = campers.length ? totalBalance / campers.length : 0;
     const totalStaffSpendAll = staffSpendRows.reduce((sum, r) => sum + r.total_spent, 0);
     const avgStaffSpendDisplay = staffSpendRows.length ? totalStaffSpendAll / staffSpendRows.length : 0;
+    const posActiveItems = useMemo(() => allItems.filter((item) => item.active), [allItems]);
     const subtotal = cart.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
     const total = isFirstScanToday ? 0 : subtotal;
     const currentBalance = Number(selectedCamper?.owl_pay_balance || 0);
@@ -796,7 +802,18 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     </View>
                 </View>
                 <View style={styles.quickItemWrap}>
-                    {allItems.filter((i) => i.active).map((item) => (
+                    {itemsLoading ? (
+                        <View style={styles.emptyStateBox}>
+                            <ActivityIndicator size="small" color={theme.colors.secondary} />
+                        </View>
+                    ) : posActiveItems.length === 0 ? (
+                        <View style={styles.emptyStateBox}>
+                            <Text style={styles.emptyStateText}>
+                                No active canteen items. Add items on the Items tab.
+                            </Text>
+                        </View>
+                    ) : (
+                    posActiveItems.map((item) => (
                         <TouchableOpacity
                             key={item.id}
                             style={styles.quickItemBtn}
@@ -811,7 +828,8 @@ export const OwlPayScreen = ({ navigation }: any) => {
                                 </Text>
                             )}
                         </TouchableOpacity>
-                    ))}
+                    ))
+                    )}
                 </View>
             </StyledCard>
 

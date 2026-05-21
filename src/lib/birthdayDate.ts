@@ -43,3 +43,11 @@ export function ageOnLocalDate(
     }
     return age;
 }
+
+/** Match Staff roster: exclude only explicit inactive (null or empty counts as active). */
+export function isActiveRosterStatus(status: unknown): boolean {
+    if (status == null) return true;
+    const s = String(status).trim().toLowerCase();
+    if (!s) return true;
+    return s !== 'inactive';
+}

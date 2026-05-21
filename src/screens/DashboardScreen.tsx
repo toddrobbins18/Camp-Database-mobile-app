@@ -97,7 +97,7 @@ export const DashboardScreen = ({ navigation }: any) => {
         season ?? null,
         isDashboardFocused,
     );
-    const { data: meals = null } = useTodayMeals(companyId, todayString);
+    const { data: meals = null } = useTodayMeals(companyId, todayString, season ?? null);
 
     const { data: upcomingTrips = [] } = useUpcomingTripsForDashboard(
         companyId,
@@ -423,18 +423,21 @@ export const DashboardScreen = ({ navigation }: any) => {
                     </View>
                     <Text style={styles.cardSubtitle}>Meal schedule for today</Text>
                     <View style={styles.menuGrid}>
-                        <TouchableOpacity style={styles.menuItem}>
-                            <Text style={styles.menuLabel}>BREAKFAST: {meals?.breakfast || 'TBD'}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.menuItem}>
-                            <Text style={styles.menuLabel}>LUNCH: {meals?.lunch || 'TBD'}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.menuItem}>
-                            <Text style={styles.menuLabel}>SNACK: {meals?.snack || 'TBD'}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.menuItem}>
-                            <Text style={styles.menuLabel}>DINNER: {meals?.dinner || 'TBD'}</Text>
-                        </TouchableOpacity>
+                        {(['breakfast', 'lunch', 'snack', 'dinner'] as const).map((mealKey) => {
+                            const value = meals?.[mealKey]?.trim();
+                            return (
+                                <TouchableOpacity key={mealKey} style={styles.menuItem}>
+                                    <Text style={styles.menuMealType}>
+                                        {mealKey.charAt(0).toUpperCase() + mealKey.slice(1)}
+                                    </Text>
+                                    {value ? (
+                                        <Text style={styles.menuMealValue} numberOfLines={4}>
+                                            {value}
+                                        </Text>
+                                    ) : null}
+                                </TouchableOpacity>
+                            );
+                        })}
                     </View>
                     <TouchableOpacity
                         style={[styles.viewMenuBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
@@ -1071,6 +1074,20 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         color: theme.colors.text,
+    },
+    menuMealType: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: theme.colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 4,
+    },
+    menuMealValue: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: theme.colors.text,
+        textAlign: 'center',
     },
     viewMenuBtn: {
         marginTop: theme.spacing.sm,
