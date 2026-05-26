@@ -59,6 +59,7 @@ export const SpecialistSportAssignmentsScreen = ({ navigation }: any) => {
         .select('email')
         .eq('company_id', companyId)
         .eq('season', season)
+        .neq('status', 'inactive')
         .in('staff_type', ['specialist', 'both']);
 
       const staffEmails = new Set<string>();

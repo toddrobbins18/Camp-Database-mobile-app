@@ -12,7 +12,7 @@ import { useRole } from '../hooks/useRole';
 import { useStaff } from '../api/staff';
 import { supabase } from '../lib/supabase';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
-import { uploadCsvFromText } from '../lib/csvTableUpload';
+import { uploadCsvFromText, type CsvImportMode } from '../lib/csvTableUpload';
 import { showAppAlert } from '../utils/showAppAlert';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 
@@ -115,6 +115,19 @@ export const CamperScreen = ({ navigation }: any) => {
     const [isDeleting, setIsDeleting] = useState(false);
     const [rosterCsvUploading, setRosterCsvUploading] = useState(false);
 
+    const promptRosterImportMode = (): Promise<CsvImportMode | null> =>
+        new Promise((resolve) => {
+            Alert.alert(
+                'Import mode',
+                'Add/update keeps existing campers and updates matches. Replace all marks campers not in the file as inactive.',
+                [
+                    { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+                    { text: 'Add / update', onPress: () => resolve('merge') },
+                    { text: 'Replace all', style: 'destructive', onPress: () => resolve('replace') },
+                ],
+            );
+        });
+
     const handleRosterCsvUpload = async () => {
         if (!companyId || !season) {
             showAppAlert('Missing context', 'Company or season is not available yet.');
@@ -126,9 +139,11 @@ export const CamperScreen = ({ navigation }: any) => {
             showAppAlert('CSV', picked.message || 'Could not read file.');
             return;
         }
+        const importMode = await promptRosterImportMode();
+        if (!importMode) return;
         setRosterCsvUploading(true);
         try {
-            const result = await uploadCsvFromText('children', picked.text, { companyId, season });
+            const result = await uploadCsvFromText('children', picked.text, { companyId, season, mode: importMode });
             if (result.ok) {
                 await queryClient.invalidateQueries({ queryKey: ['campers', companyId, season] });
                 showAppAlert('Success', result.message);
@@ -359,6 +374,7 @@ export const CamperScreen = ({ navigation }: any) => {
                 .eq('rfid', valueToScan)
                 .eq('company_id', companyId)
                 .eq('season', season)
+                .neq('status', 'inactive')
                 .limit(1);
 
             const child = rfidRows?.[0];
@@ -413,6 +429,7 @@ export const CamperScreen = ({ navigation }: any) => {
                 .select('id, name, rfid, division_id, company_id')
                 .eq('company_id', companyId)
                 .eq('season', season)
+                .neq('status', 'inactive')
                 .ilike('name', `%${qSafe}%`)
                 .order('name')
                 .limit(25);

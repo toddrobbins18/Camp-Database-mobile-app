@@ -1,10 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
+import { shouldShowTigerTimes, isTimberLakeWestCompany } from '../constants/camps';
+import {
+    DAILY_WOLF_WEST_CALENDAR_FIELDS,
+    TIGER_TIMES_CALENDAR_FIELDS,
+    dailyContentFieldValue,
+} from '../lib/dailyWolfCalendarFields';
 
 // ===================== CALENDAR / MASTER EVENTS =====================
 
-export type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities' | 'tiger_times';
+export type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities' | 'tiger_times' | 'daily_wolf';
 
 export interface CalendarEvent {
     id: string;
@@ -126,13 +132,19 @@ export const useDivisions = (companyId: string | null) => {
  * and tiger_times (daily_wolf_content), aligned with web Master Calendar workflow.
  * and merges into a unified CalendarEvent[] for the Master Calendar (aligned with web).
  */
-export const useCalendarEvents = (companyId: string | null, season: string) => {
+export const useCalendarEvents = (
+    companyId: string | null,
+    season: string,
+    company?: { slug?: string | null; name?: string | null } | null,
+) => {
     return useQuery({
-        queryKey: ['calendar_events', companyId, season],
+        queryKey: ['calendar_events', companyId, season, company?.slug, company?.name],
         queryFn: async (): Promise<CalendarEvent[]> => {
             if (!companyId) return [];
+            const showTigerTimes = shouldShowTigerTimes(company);
+            const showDailyWolf = isTimberLakeWestCompany(company);
             const seasonFilter = season || '2026';
-            const cacheKey = `calendar_events:${companyId}:${seasonFilter}`;
+            const cacheKey = `calendar_events:v2:${companyId}:${seasonFilter}:${company?.slug ?? ''}`;
             const base = await readThroughCache<CalendarEvent[]>(cacheKey, async () => {
                 // Mirror web behavior: pull in two pages per table to avoid 1000-row truncation.
                 const [
@@ -306,31 +318,33 @@ export const useCalendarEvents = (companyId: string | null, season: string) => {
                 });
                 });
 
-            // Tiger Times (Daily Wolf content): each populated field becomes a calendar event.
-                const tigerFields: { field: string; label: string; colorKey: string }[] = [
-                { field: 'laundry_info', label: 'Laundry', colorKey: 'TT: Laundry' },
-                { field: 'phone_calls_info', label: 'Phone Calls', colorKey: 'TT: Phone Calls' },
-                { field: 'outside_event', label: 'Outside Events', colorKey: 'TT: Outside Events' },
-                { field: 'staff_days_off', label: 'Staff Days Off', colorKey: 'TT: Staff Days Off' },
-                { field: 'od_notes', label: 'OD Notes', colorKey: 'TT: OD Notes' },
-                ];
-
+            // Daily Wolf (Timber Lake West) or Tiger Times (Timber Lake Camp) from daily_wolf_content
                 (tigerTimesRes.data || []).forEach((entry: any) => {
-                    tigerFields.forEach(({ field, label, colorKey }) => {
-                        const value = entry?.[field];
-                        if (typeof value === 'string' && value.trim()) {
-                            events.push({
-                                id: `tt_${entry.id}_${field}`,
-                                title: `Tiger Times: ${label}`,
-                                date: entry.date,
-                                location: '',
-                                description: value,
-                                type: colorKey,
-                                source: 'tiger_times',
-                                tags: ['Tiger Times', label],
-                                originalData: { ...entry, tiger_times_category: colorKey },
-                            });
-                        }
+                    const fields = showDailyWolf
+                        ? DAILY_WOLF_WEST_CALENDAR_FIELDS
+                        : showTigerTimes
+                          ? TIGER_TIMES_CALENDAR_FIELDS
+                          : [];
+                    const idPrefix = showDailyWolf ? 'dw' : 'tt';
+                    const source: EventSource = showDailyWolf ? 'daily_wolf' : 'tiger_times';
+                    const tagLabel = showDailyWolf ? 'Daily Wolf' : 'Tiger Times';
+
+                    fields.forEach(({ field, label, colorKey }) => {
+                        const value = dailyContentFieldValue(entry, field);
+                        if (!value) return;
+                        events.push({
+                            id: `${idPrefix}_${entry.id}_${field}`,
+                            title: showDailyWolf ? `${label}: ${value}` : `Tiger Times: ${label}`,
+                            date: entry.date,
+                            location: '',
+                            description: value,
+                            type: colorKey,
+                            source,
+                            tags: [tagLabel, label],
+                            originalData: showDailyWolf
+                                ? { ...entry, daily_wolf_category: colorKey }
+                                : { ...entry, tiger_times_category: colorKey },
+                        });
                     });
                 });
 

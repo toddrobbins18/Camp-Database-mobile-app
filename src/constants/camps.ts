@@ -18,3 +18,19 @@ export function isTimberLakeWest(slug: string | null | undefined): boolean {
 export function isTylerHillCamp(slug: string | null | undefined): boolean {
   return slug === CAMP_SLUG.TYLER_HILL_CAMP;
 }
+
+type CampLike = { slug?: string | null; name?: string | null } | null | undefined;
+
+/** Timber Lake West — slug first, then company name fallback if slug was misconfigured. */
+export function isTimberLakeWestCompany(company: CampLike): boolean {
+  if (!company) return false;
+  if (isTimberLakeWest(company.slug)) return true;
+  return (company.name ?? '').toLowerCase().includes('timber lake west');
+}
+
+/** Tiger Times is Timber Lake Camp only — never Timber Lake West. */
+export function shouldShowTigerTimes(company: CampLike): boolean {
+  if (!company) return false;
+  if (isTimberLakeWestCompany(company)) return false;
+  return isTimberLakeCamp(company.slug);
+}

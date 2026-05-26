@@ -19,7 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { DatePickerModal } from '../components/DatePickerModal';
 import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
@@ -712,37 +712,12 @@ export const TigerTimesScreen = ({ navigation }: { navigation: any }) => {
                 </View>
             </Modal>
 
-            {showDatePicker && Platform.OS === 'android' && (
-                <DateTimePicker
-                    value={selectedDate}
-                    mode="date"
-                    display="default"
-                    onChange={(ev, d) => {
-                        setShowDatePicker(false);
-                        if (ev.type === 'dismissed') return;
-                        if (d) setSelectedDate(d);
-                    }}
-                />
-            )}
-            {showDatePicker && (Platform.OS === 'ios' || Platform.OS === 'web') && (
-                <Modal transparent visible={showDatePicker} animationType="slide">
-                    <View style={styles.iosPickerWrap}>
-                        <Pressable style={{ flex: 1 }} onPress={() => setShowDatePicker(false)} />
-                        <View style={styles.iosPickerInner}>
-                            <DateTimePicker
-                                value={selectedDate}
-                                mode="date"
-                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                themeVariant="light"
-                                onChange={(_, d) => d && setSelectedDate(d)}
-                            />
-                            <TouchableOpacity style={styles.doneBtn} onPress={() => setShowDatePicker(false)}>
-                                <Text style={styles.doneBtnText}>Done</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </Modal>
-            )}
+            <DatePickerModal
+                visible={showDatePicker}
+                value={selectedDate}
+                onClose={() => setShowDatePicker(false)}
+                onChange={setSelectedDate}
+            />
         </SafeAreaView>
     );
 };
@@ -1068,21 +1043,4 @@ const styles = StyleSheet.create({
     btnDisabled: { opacity: 0.65 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
     muted: { color: theme.colors.textSecondary, textAlign: 'center' },
-    iosPickerWrap: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-    iosPickerInner: {
-        backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
-        paddingBottom: 24,
-        paddingTop: 8,
-    },
-    doneBtn: {
-        marginTop: 8,
-        marginHorizontal: theme.spacing.md,
-        backgroundColor: theme.colors.secondary,
-        paddingVertical: 12,
-        borderRadius: theme.borderRadius.md,
-        alignItems: 'center',
-    },
-    doneBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });

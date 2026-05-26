@@ -73,7 +73,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                     .select('id, name, division_id, division:divisions(name)')
                     .eq('company_id', companyId)
                     .eq('season', season)
-                    .eq('status', 'active')
+                    .neq('status', 'inactive')
                     .order('name', { ascending: true });
                 if (error) throw error;
                 const rows = (data || []).map((c: any) => ({

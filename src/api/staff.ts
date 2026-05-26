@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
+import { filterActiveRoster } from '../lib/rosterStatus';
 
 // Define the shape of staff data
 export interface StaffMember {
@@ -64,14 +64,17 @@ export const useStaff = (companyId: string | null, season: string) => {
                     .select('*')
                     .eq('company_id', companyId)
                     .eq('season', season)
+                    .neq('status', 'inactive')
                     .order('name', { ascending: true });
 
                 if (error) throw error;
-                const rows = (data as StaffMember[]) || [];
+                const rows = filterActiveRoster((data as StaffMember[]) || []);
                 await setCachedJson(staffCacheKey(companyId, season), rows);
                 return await applyQueuedStaffOps(rows, companyId, season);
             } catch {
-                const cached = (await getCachedJson<StaffMember[]>(staffCacheKey(companyId, season))) || [];
+                const cached = filterActiveRoster(
+                    (await getCachedJson<StaffMember[]>(staffCacheKey(companyId, season))) || [],
+                );
                 return await applyQueuedStaffOps(cached, companyId, season);
             }
         },

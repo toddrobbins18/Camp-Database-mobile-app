@@ -13,7 +13,7 @@ import { useRole } from '../hooks/useRole';
 import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { StaffLeaderAssignmentModal } from '../components/StaffLeaderAssignmentModal';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
-import { uploadCsvFromText } from '../lib/csvTableUpload';
+import { uploadCsvFromText, type CsvImportMode } from '../lib/csvTableUpload';
 
 const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
     <View style={styles.header}>
@@ -362,6 +362,19 @@ export const StaffScreen = ({ navigation }: any) => {
     const [isEvalErrorVisible, setIsEvalErrorVisible] = useState(false);
     const [staffCsvUploading, setStaffCsvUploading] = useState(false);
 
+    const promptStaffImportMode = (): Promise<CsvImportMode | null> =>
+        new Promise((resolve) => {
+            Alert.alert(
+                'Import mode',
+                'Add/update keeps existing staff and updates matches. Replace all marks staff not in the file as inactive.',
+                [
+                    { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+                    { text: 'Add / update', onPress: () => resolve('merge') },
+                    { text: 'Replace all', style: 'destructive', onPress: () => resolve('replace') },
+                ],
+            );
+        });
+
     const formatDate = (date: Date) => {
         return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
     };
@@ -399,9 +412,11 @@ export const StaffScreen = ({ navigation }: any) => {
             Alert.alert('CSV', picked.message || 'Could not read file.');
             return;
         }
+        const importMode = await promptStaffImportMode();
+        if (!importMode) return;
         setStaffCsvUploading(true);
         try {
-            const result = await uploadCsvFromText('staff', picked.text, { companyId, season });
+            const result = await uploadCsvFromText('staff', picked.text, { companyId, season, mode: importMode });
             if (result.ok) {
                 await queryClient.invalidateQueries({ queryKey: ['staff'] });
                 Alert.alert('Success', result.message);

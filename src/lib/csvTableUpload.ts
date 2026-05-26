@@ -2,6 +2,12 @@ import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import {
+    CSV_REPLACE_CLEAR_TABLES,
+    type CsvImportMode,
+    syncChildrenFromCsv,
+    syncStaffFromCsv,
+} from './csvRosterSync';
+import {
     awardSchema,
     calendarEventSchema,
     childSchema,
@@ -347,16 +353,18 @@ function getSchemaParser(tableName: CsvTableName): SchemaParser | { error: strin
 
 export type CsvUploadResult = { ok: true; message: string } | { ok: false; error: string };
 
+export type { CsvImportMode };
+
 /**
- * Validates and uploads CSV text to Supabase — mirrors `lovable-web-app` `CSVUploader` behavior.
+ * Validates and uploads CSV text to Supabase — mirrors web `CSVUploader` behavior.
  */
 export async function uploadCsvFromText(
     tableName: CsvTableName,
     csvText: string,
-    ctx: { companyId: string; season: string },
+    ctx: { companyId: string; season: string; mode?: CsvImportMode },
     client: SupabaseClient = supabase
 ): Promise<CsvUploadResult> {
-    const { companyId, season } = ctx;
+    const { companyId, season, mode = 'merge' } = ctx;
     if (!companyId) return { ok: false, error: 'Company is not selected.' };
 
     const parsed = parseCsvToRawRows(csvText);
@@ -396,72 +404,17 @@ export async function uploadCsvFromText(
         return { ok: false, error: `Validation failed:\n${head}${more}` };
     }
 
-    // --- CHILDREN (roster sync) ---
+    // --- CHILDREN / STAFF: merge or replace roster ---
     if (tableName === 'children') {
-        const csvPersonIds = new Set(validatedRows.map((r) => r.person_id).filter(Boolean));
+        const result = await syncChildrenFromCsv(client, validatedRows, { companyId, season, mode });
+        if ('error' in result) return { ok: false, error: result.error };
+        return { ok: true, message: result.message };
+    }
 
-        const { data: existingChildren } = await client
-            .from('children')
-            .select('id, name, person_id, status')
-            .eq('company_id', companyId)
-            .eq('season', season)
-            .neq('status', 'inactive');
-
-        const existingMap = new Map<string, { id: string; name: string; person_id: string }>();
-        (existingChildren || []).forEach((child: any) => {
-            if (child.person_id) existingMap.set(child.person_id, child);
-        });
-
-        const toUpdate: { existingId: string; data: Record<string, unknown> }[] = [];
-        const toInsert: Record<string, unknown>[] = [];
-
-        for (const row of validatedRows) {
-            const rowData: Record<string, unknown> = {
-                ...row,
-                company_id: companyId,
-                season,
-                status: 'active',
-            };
-
-            if (row.person_id && existingMap.has(row.person_id)) {
-                toUpdate.push({ existingId: existingMap.get(row.person_id)!.id, data: rowData });
-            } else {
-                toInsert.push(rowData);
-            }
-        }
-
-        if (toInsert.length > 0) {
-            const { error: insertError } = await client.from('children').insert(toInsert as any);
-            if (insertError) return { ok: false, error: insertError.message };
-        }
-
-        let updateErrors = 0;
-        for (const item of toUpdate) {
-            const { existingId, data } = item;
-            const updatePayload = { ...data };
-            delete updatePayload.person_id;
-            const { error: updateError } = await client.from('children').update(updatePayload as any).eq('id', existingId);
-            if (updateError) updateErrors++;
-        }
-
-        const dropped = (existingChildren || []).filter(
-            (child: any) => child.person_id && !csvPersonIds.has(child.person_id) && child.status !== 'inactive'
-        );
-
-        if (dropped.length > 0) {
-            const droppedIds = dropped.map((c: any) => c.id);
-            const { error: dropError } = await client.from('children').update({ status: 'inactive' } as any).in('id', droppedIds);
-            if (dropError) {
-                console.warn('csv children drop:', dropError);
-            }
-        }
-
-        const summary: string[] = [];
-        if (toInsert.length > 0) summary.push(`${toInsert.length} added`);
-        if (toUpdate.length > 0) summary.push(`${toUpdate.length} updated`);
-        if (dropped.length > 0) summary.push(`${dropped.length} dropped`);
-        if (updateErrors > 0) summary.push(`${updateErrors} update errors`);
-        return { ok: true, message: `Camper sync complete: ${summary.join(', ') || 'no changes'}` };
+    if (tableName === 'staff') {
+        const result = await syncStaffFromCsv(client, validatedRows, { companyId, season, mode });
+        if ('error' in result) return { ok: false, error: result.error };
+        return { ok: true, message: result.message };
     }
 
     // Resolve person_ids for child-linked tables
@@ -654,6 +607,15 @@ export async function uploadCsvFromText(
 
         return baseRow;
     });
+
+    if (mode === 'replace' && CSV_REPLACE_CLEAR_TABLES.has(tableName)) {
+        const { error: clearError } = await client
+            .from(tableName as any)
+            .delete()
+            .eq('company_id', companyId)
+            .eq('season', season);
+        if (clearError) return { ok: false, error: clearError.message };
+    }
 
     const { error } = await client.from(tableName as any).insert(rowsWithCompany as any);
     if (error) return { ok: false, error: error.message };

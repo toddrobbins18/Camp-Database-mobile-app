@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { DatePickerModal } from '../components/DatePickerModal';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
@@ -454,32 +454,13 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
                 )}
             </ScrollView>
 
-            <Modal visible={showDatePicker} transparent animationType="fade" onRequestClose={() => setShowDatePicker(false)}>
-                <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
-                    <Pressable style={styles.dateModalContent} onPress={(e) => e.stopPropagation()}>
-                        <DateTimePicker
-                            value={selectedDate}
-                            mode="date"
-                            display={Platform.OS === 'ios' ? 'inline' : 'calendar'}
-                            themeVariant="light"
-                            accentColor={CALENDAR_ORANGE}
-                            onChange={(event, dt) => {
-                                if (Platform.OS === 'android') {
-                                    setShowDatePicker(false);
-                                }
-                                if (event.type === 'dismissed') return;
-                                if (dt) setSelectedDate(dt);
-                            }}
-                        />
-                        <TouchableOpacity
-                            style={[styles.dateDoneBtn, { backgroundColor: CALENDAR_ORANGE }]}
-                            onPress={() => setShowDatePicker(false)}
-                        >
-                            <Text style={styles.dateDoneText}>Done</Text>
-                        </TouchableOpacity>
-                    </Pressable>
-                </Pressable>
-            </Modal>
+            <DatePickerModal
+                visible={showDatePicker}
+                value={selectedDate}
+                onClose={() => setShowDatePicker(false)}
+                onChange={setSelectedDate}
+                accentColor={CALENDAR_ORANGE}
+            />
 
             <Modal visible={showHelpModal} transparent animationType="fade" onRequestClose={() => setShowHelpModal(false)}>
                 <Pressable style={styles.modalOverlay} onPress={() => setShowHelpModal(false)}>
@@ -632,21 +613,6 @@ const styles = StyleSheet.create({
     textArea: { minHeight: 90, textAlignVertical: 'top', paddingTop: 10 },
     notesArea: { minHeight: 120, textAlignVertical: 'top', paddingTop: 10 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-    dateModalContent: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.lg,
-        width: '92%',
-        maxWidth: 420,
-        padding: theme.spacing.md,
-    },
-    dateDoneBtn: {
-        marginTop: theme.spacing.sm,
-        alignSelf: 'flex-end',
-        borderRadius: theme.borderRadius.md,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.xs,
-    },
-    dateDoneText: { color: '#fff', fontWeight: '600' },
     helpModal: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.lg,

@@ -139,6 +139,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                 .from('children')
                 .select('id, name')
                 .eq('company_id', companyId)
+                .neq('status', 'inactive')
                 .order('name', { ascending: true });
 
             if (season) {
@@ -154,6 +155,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                     .from('children')
                     .select('id, name')
                     .eq('company_id', companyId)
+                    .neq('status', 'inactive')
                     .order('name', { ascending: true });
                 if (fallbackError) throw fallbackError;
                 return (fallback || []).map((c: any) => ({
@@ -179,6 +181,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                 .from('staff')
                 .select('id, name')
                 .eq('company_id', companyId)
+                .neq('status', 'inactive')
                 .order('name', { ascending: true });
 
             if (season) {
@@ -193,6 +196,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                     .from('staff')
                     .select('id, name')
                     .eq('company_id', companyId)
+                    .neq('status', 'inactive')
                     .order('name', { ascending: true });
                 if (fallbackError) throw fallbackError;
                 return (fallback || []).map((s: any) => ({

@@ -60,9 +60,17 @@ function formatTime12Hour(timeStr?: string): string {
 }
 
 export const CalendarScreen = ({ navigation }: any) => {
-    const { companyId, season } = useCompany();
+    const { companyId, season, companySlug, availableCompanies, isTimberLakeWest } = useCompany();
+    const activeCompany = React.useMemo(
+        () => availableCompanies.find((c) => c.id === companyId) ?? { slug: companySlug, name: isTimberLakeWest ? 'Timber Lake West' : undefined },
+        [availableCompanies, companyId, companySlug, isTimberLakeWest],
+    );
     const queryClient = useQueryClient();
-    const { data: liveEvents = [], isLoading: isLoadingEvents } = useCalendarEvents(companyId, season || '2026');
+    const { data: liveEvents = [], isLoading: isLoadingEvents } = useCalendarEvents(
+        companyId,
+        season || '2026',
+        activeCompany,
+    );
     const { data: divisionsList = [] } = useDivisions(companyId);
 
     useFocusEffect(
@@ -166,6 +174,7 @@ export const CalendarScreen = ({ navigation }: any) => {
             case 'activities_field_trips': return 'people-outline';
             case 'special_events_activities': return 'star-outline';
             case 'tiger_times': return 'sparkles-outline';
+            case 'daily_wolf': return 'newspaper-outline';
             default: return 'calendar-outline';
         }
     };
@@ -175,6 +184,7 @@ export const CalendarScreen = ({ navigation }: any) => {
             case 'activities_field_trips': return 'Field Trip';
             case 'special_events_activities': return 'Special Event';
             case 'tiger_times': return 'Tiger Times';
+            case 'daily_wolf': return 'Daily Wolf';
             default: return 'Event';
         }
     };
@@ -189,6 +199,8 @@ export const CalendarScreen = ({ navigation }: any) => {
                 return { bg: '#f3e8ff', text: '#7e22ce', marker: '#a855f7' };
             case 'tiger_times':
                 return { bg: '#fef3c7', text: '#92400e', marker: '#f59e0b' };
+            case 'daily_wolf':
+                return { bg: '#e0f2fe', text: '#0369a1', marker: '#0ea5e9' };
             default:
                 return { bg: '#e5e7eb', text: theme.colors.text, marker: theme.colors.secondary };
         }

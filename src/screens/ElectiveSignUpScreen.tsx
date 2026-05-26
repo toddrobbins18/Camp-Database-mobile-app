@@ -138,6 +138,7 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                     .select('id, name, division_id')
                     .eq('company_id', companyId)
                     .eq('season', season)
+                    .neq('status', 'inactive')
                     .order('name'),
             ]);
 
@@ -230,6 +231,7 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                 .eq('company_id', companyId)
                 .eq('division_id', divisionId)
                 .eq('season', season)
+                .neq('status', 'inactive')
                 .order('name');
             setChildren(data || []);
             await setCachedJson(cacheKey, data || []);

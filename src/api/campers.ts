@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
+import { filterActiveRoster } from '../lib/rosterStatus';
 
 /** Matches web Roster / usePermissions: these roles see all divisions for roster queries. */
 const ROSTER_FULL_DIVISION_ACCESS_ROLES = [
@@ -181,10 +181,11 @@ function useCampersPaged(
                 }
 
                 await setCachedJson(campersCacheKey(companyId, season, divisionFilter), rows);
-                return await applyQueuedCamperOps(rows, companyId, season);
+                return await applyQueuedCamperOps(filterActiveRoster(rows), companyId, season);
             } catch {
-                const cached =
-                    (await getCachedJson<Camper[]>(campersCacheKey(companyId, season, divisionFilter))) || [];
+                const cached = filterActiveRoster(
+                    (await getCachedJson<Camper[]>(campersCacheKey(companyId, season, divisionFilter))) || [],
+                );
                 return await applyQueuedCamperOps(cached, companyId, season);
             }
         },

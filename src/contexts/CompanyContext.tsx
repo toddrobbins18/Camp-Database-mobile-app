@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
-import { isTimberLakeCamp, isTimberLakeWest, isTylerHillCamp } from '../constants/camps';
+import { isTimberLakeCamp, isTimberLakeWest, isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from '../constants/camps';
 
 /** Super-admins can switch camps in-app; profile.company_id alone would reset to "home" camp on every auth refetch. */
 const SUPER_ADMIN_COMPANY_PREFERENCE_KEY = '@the_nest_active_company_id';
@@ -107,8 +107,8 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
             setCompanySlug(company.slug);
             setCompanyThemeColor(company.theme_color ?? null);
             setIsTylerHill(isTylerHillCamp(company.slug));
-            setIsTimberLakeCampState(isTimberLakeCamp(company.slug));
-            setIsTimberLakeWestState(isTimberLakeWest(company.slug));
+            setIsTimberLakeCampState(shouldShowTigerTimes(company));
+            setIsTimberLakeWestState(isTimberLakeWestCompany(company));
             setOwlPayEnabled(computeOwlPayEnabled(company, company.slug));
             void AsyncStorage.setItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY, newCompanyId);
         }
@@ -136,8 +136,8 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 setCompanySlug(fromList.slug);
                 setCompanyThemeColor(fromList.theme_color ?? null);
                 setIsTylerHill(isTylerHillCamp(fromList.slug));
-                setIsTimberLakeCampState(isTimberLakeCamp(fromList.slug));
-                setIsTimberLakeWestState(isTimberLakeWest(fromList.slug));
+                setIsTimberLakeCampState(shouldShowTigerTimes(fromList));
+                setIsTimberLakeWestState(isTimberLakeWestCompany(fromList));
                 setOwlPayEnabled(computeOwlPayEnabled(fromList, fromList.slug));
             }
         };
@@ -232,8 +232,8 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                         setCompanySlug(companyData.slug);
                         setCompanyThemeColor(companyData.theme_color ?? null);
                         setIsTylerHill(isTylerHillCamp(companyData.slug));
-                        setIsTimberLakeCampState(isTimberLakeCamp(companyData.slug));
-                        setIsTimberLakeWestState(isTimberLakeWest(companyData.slug));
+                        setIsTimberLakeCampState(shouldShowTigerTimes(companyData));
+                        setIsTimberLakeWestState(isTimberLakeWestCompany(companyData));
                         setOwlPayEnabled(computeOwlPayEnabled(companyData, companyData.slug));
                     }
                 }
