@@ -8,6 +8,12 @@ import {
     syncStaffFromCsv,
 } from './csvRosterSync';
 import {
+    describeMissingChildPersonIds,
+    normalizeCsvPersonId,
+    personIdResolutionHint,
+    resolveChildPersonIdsBatched,
+} from './csvPersonIdResolve';
+import {
     awardSchema,
     calendarEventSchema,
     childSchema,
@@ -35,6 +41,7 @@ import {
     staffSchema,
     tripSchema,
 } from './validationSchemas';
+import { defaultMedicationStartDate } from './medicationStartDate';
 
 /** Tables supported by web `CSVUploader` plus sports_academy & special_events_activities (referenced by web pages). */
 export type CsvTableName =
@@ -234,9 +241,9 @@ function normalizeMedicationDaysOfWeek(raw: unknown): string[] {
     return Array.from(new Set(out));
 }
 
-function sanitizeMedicationLogRowForInsert(row: Record<string, unknown>): void {
+function sanitizeMedicationLogRowForInsert(row: Record<string, unknown>, season: string): void {
     const normalizedDate = normalizeDateStringOrNull(row.date);
-    row.date = normalizedDate || localDateYmd();
+    row.date = normalizedDate || defaultMedicationStartDate(season);
 
     row.end_date = normalizeDateStringOrNull(row.end_date);
 
@@ -278,21 +285,10 @@ async function resolveChildPersonIds(
     client: SupabaseClient,
     companyId: string,
     season: string,
-    personIds: string[]
+    personIds: string[],
+    includeInactive = false,
 ): Promise<Map<string, string>> {
-    if (!companyId || personIds.length === 0) return new Map();
-    const { data } = await client
-        .from('children')
-        .select('id, person_id')
-        .eq('company_id', companyId)
-        .eq('season', season)
-        .neq('status', 'inactive')
-        .in('person_id', personIds);
-    const mapping = new Map<string, string>();
-    (data || []).forEach((child: { id: string; person_id: string | null }) => {
-        if (child.person_id) mapping.set(child.person_id, child.id);
-    });
-    return mapping;
+    return resolveChildPersonIdsBatched(client, companyId, season, personIds, { includeInactive });
 }
 
 async function resolveStaffPersonIds(
@@ -424,28 +420,43 @@ export async function uploadCsvFromText(
     if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
         const personIds = new Set<string>();
         validatedRows.forEach((row) => {
-            if (row.person_id) personIds.add(row.person_id);
-            if (row.person_ids) (row.person_ids as string[]).forEach((id: string) => personIds.add(id));
+            if (row.person_id) personIds.add(normalizeCsvPersonId(row.person_id));
+            if (row.person_ids) (row.person_ids as string[]).forEach((id: string) => personIds.add(normalizeCsvPersonId(id)));
         });
-        childPersonIdMap = await resolveChildPersonIds(client, companyId, season, Array.from(personIds));
+        const includeInactive =
+            tableName === 'medication_logs' ||
+            tableName === 'daily_notes' ||
+            tableName === 'awards' ||
+            tableName === 'incident_reports';
+        childPersonIdMap = await resolveChildPersonIds(
+            client,
+            companyId,
+            season,
+            Array.from(personIds).filter(Boolean),
+            includeInactive,
+        );
 
         const missingIds: string[] = [];
-        validatedRows.forEach((row, i) => {
-            if (row.person_id && !childPersonIdMap.has(row.person_id)) {
-                missingIds.push(`Row ${i + 2}: Person ID "${row.person_id}" not found`);
+        validatedRows.forEach((row) => {
+            const pid = normalizeCsvPersonId(row.person_id);
+            if (pid && !childPersonIdMap.has(pid)) {
+                missingIds.push(pid);
             }
             if (row.person_ids) {
                 (row.person_ids as string[]).forEach((id: string) => {
-                    if (!childPersonIdMap.has(id)) {
-                        missingIds.push(`Row ${i + 2}: Person ID "${id}" not found`);
+                    const personId = normalizeCsvPersonId(id);
+                    if (personId && !childPersonIdMap.has(personId)) {
+                        missingIds.push(personId);
                     }
                 });
             }
         });
         if (missingIds.length > 0) {
-            const head = missingIds.slice(0, 5).join('\n');
-            const more = missingIds.length > 5 ? `\n...and ${missingIds.length - 5} more` : '';
-            return { ok: false, error: `Person ID errors:\n${head}${more}` };
+            const uniqueMissing = Array.from(new Set(missingIds));
+            const details = await describeMissingChildPersonIds(client, companyId, season, uniqueMissing);
+            const head = details.slice(0, 5).join('\n');
+            const more = details.length > 5 ? `\n...and ${details.length - 5} more` : '';
+            return { ok: false, error: `Person ID errors:\n${head}${more}${personIdResolutionHint(season)}` };
         }
     }
 
@@ -467,7 +478,7 @@ export async function uploadCsvFromText(
         for (let i = 0; i < validatedRows.length; i++) {
             const row = validatedRows[i];
             const ids = (row.person_ids as string[]) || [];
-            const childIds = ids.map((pid) => childPersonIdMap.get(pid)).filter(Boolean) as string[];
+            const childIds = ids.map((pid) => childPersonIdMap.get(normalizeCsvPersonId(pid))).filter(Boolean) as string[];
             if (childIds.length === 0) {
                 fail.push(`Row ${i + 2}: at least one valid Person ID is required`);
                 continue;
@@ -556,10 +567,13 @@ export async function uploadCsvFromText(
 
         if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
             if (row.person_id) {
-                baseRow.child_id = childPersonIdMap.get(row.person_id);
+                baseRow.child_id = childPersonIdMap.get(normalizeCsvPersonId(row.person_id));
                 delete baseRow.person_id;
             }
             if (row.person_ids) {
+                baseRow.child_ids = (row.person_ids as string[])
+                    .map((id: string) => childPersonIdMap.get(normalizeCsvPersonId(id)))
+                    .filter(Boolean);
                 delete baseRow.person_ids;
             }
             if (row.reporter_person_id && staffPersonIdMap.has(row.reporter_person_id)) {
@@ -588,7 +602,7 @@ export async function uploadCsvFromText(
         }
 
         if (tableName === 'medication_logs') {
-            sanitizeMedicationLogRowForInsert(baseRow);
+            sanitizeMedicationLogRowForInsert(baseRow, season);
         }
 
         if (tableName === 'daily_notes') {

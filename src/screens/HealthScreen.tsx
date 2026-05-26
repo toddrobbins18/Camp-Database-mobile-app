@@ -18,6 +18,7 @@ import {
     resolveBedtimeOptionFromDivisionName,
     formatMedicationMealTimeForDisplay,
 } from '../constants/medicationBedtimeOptions';
+import { defaultMedicationStartDate } from '../lib/medicationStartDate';
 
 const getChildDisplayName = (child: any) =>
     (child?.name != null && child.name !== '')
@@ -187,6 +188,10 @@ export const HealthScreen = ({ navigation }: any) => {
         const d = new Date();
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }, []);
+    const medicationStartDate = useMemo(
+        () => defaultMedicationStartDate(season || String(new Date().getFullYear())),
+        [season],
+    );
     const dateString = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
     const medicationQueryDate = activeView === 'list' ? todayDateString : dateString;
 
@@ -395,7 +400,7 @@ export const HealthScreen = ({ navigation }: any) => {
             child_id: child.id as string,
             medication_name: medicationName,
             dosage: dosage || null,
-            date: todayDateString,
+            date: medicationStartDate,
             notes: notes || null,
             alert_sent: false,
             is_recurring: isRecurring,
