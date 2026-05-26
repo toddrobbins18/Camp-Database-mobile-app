@@ -3,7 +3,7 @@
     "name": "The Nest",
     "slug": "datacamp-mobile",
     "scheme": "datacampmobile",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.thenest.camp.unlisted",
-      "buildNumber": "13",
+      "buildNumber": "15",
       "supportsTablet": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false

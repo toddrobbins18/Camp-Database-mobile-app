@@ -574,7 +574,11 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     <Text style={styles.cardTitle}>CampMinder Sync</Text>
                 </View>
                 <Text style={styles.dataImportDescription}>
-                    Sync campers, staff, divisions, and sessions from CampMinder API for the 2025 season. Auto-sync runs every hour for all configured camps.
+                    Sync campers, staff, divisions, and sessions from CampMinder API for the {season} season.
+                    {' '}Automatic sync runs twice daily Eastern: campers at{' '}
+                    <Text style={styles.dataImportDescriptionStrong}>6 AM / 6 PM</Text>, staff at{' '}
+                    <Text style={styles.dataImportDescriptionStrong}>7 AM / 7 PM</Text>, Owl Pay financials at{' '}
+                    <Text style={styles.dataImportDescriptionStrong}>8 AM / 8 PM</Text>.
                 </Text>
 
                 {/* Camp Card */}
@@ -661,7 +665,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                     <Text style={styles.importantNotesTitle}>Important Notes:</Text>
                 </View>
                 <View style={styles.notesList}>
-                    <Text style={styles.noteItem}>• CampMinder sync runs automatically every hour for all configured camps</Text>
+                    <Text style={styles.noteItem}>• CampMinder sync runs automatically twice daily Eastern: campers at 6 AM/PM, staff at 7 AM/PM, Owl Pay financials at 8 AM/PM</Text>
                     <Text style={styles.noteItem}>• The import process uses person_id to link historical data across seasons</Text>
                     <Text style={styles.noteItem}>• When a camper returns in future seasons with the same person_id, all their historical awards will be visible</Text>
                     <Text style={styles.noteItem}>• Duplicate person_ids within the same season will be skipped</Text>
@@ -3374,6 +3378,10 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
         marginBottom: theme.spacing.md,
         lineHeight: 18,
+    },
+    dataImportDescriptionStrong: {
+        fontWeight: '700',
+        color: theme.colors.textSecondary,
     },
     campCard: {
         backgroundColor: theme.colors.background,
