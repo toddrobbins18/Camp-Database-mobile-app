@@ -2,6 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { Camper } from './campers';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
+import {
+    enrichSportsAcademyEnrollments,
+    enrollmentMatchesSpecialistSports,
+} from '../lib/sportsAcademyUtils';
 
 export interface SportsEnrollment {
     id?: string;
@@ -49,28 +53,44 @@ async function applyQueuedSportsOps(base: SportsEnrollment[]): Promise<SportsEnr
     return out;
 }
 
-export const useSportsEnrollments = (companyId: string | null, season: string) => {
+export const useSportsEnrollments = (
+    companyId: string | null,
+    season: string,
+    specialistSports: string[] | null = null,
+) => {
     return useQuery({
-        queryKey: ['sports_enrollments', companyId, season],
+        queryKey: ['sports_enrollments', companyId, season, specialistSports],
         queryFn: async () => {
             if (!companyId) return [];
             try {
                 const { data, error } = await supabase
                     .from('sports_academy')
-                    .select(`
-                        *,
-                        children!inner(*, division:divisions(id, name, gender, sort_order))
-                    `)
-                    .eq('children.company_id', companyId)
-                    .eq('children.season', season)
+                    .select('*')
+                    .eq('company_id', companyId)
+                    .eq('season', season)
                     .order('created_at', { ascending: false });
 
                 if (error) throw error;
-                const rows = (data as SportsEnrollment[]) || [];
+                let rows = await enrichSportsAcademyEnrollments(
+                    supabase,
+                    (data as SportsEnrollment[]) || [],
+                    companyId,
+                    season,
+                );
+                if (specialistSports && specialistSports.length > 0) {
+                    rows = rows.filter((row) =>
+                        enrollmentMatchesSpecialistSports(row, specialistSports),
+                    );
+                }
                 await setCachedJson(sportsCacheKey(companyId, season), rows);
                 return await applyQueuedSportsOps(rows);
             } catch {
-                const cached = (await getCachedJson<SportsEnrollment[]>(sportsCacheKey(companyId, season))) || [];
+                let cached = (await getCachedJson<SportsEnrollment[]>(sportsCacheKey(companyId, season))) || [];
+                if (specialistSports && specialistSports.length > 0) {
+                    cached = cached.filter((row) =>
+                        enrollmentMatchesSpecialistSports(row, specialistSports),
+                    );
+                }
                 return await applyQueuedSportsOps(cached);
             }
         },

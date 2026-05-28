@@ -42,6 +42,7 @@ import {
     tripSchema,
 } from './validationSchemas';
 import { defaultMedicationStartDate } from './medicationStartDate';
+import { applyDailyMedicationDefaults } from './medicationSchedule';
 
 /** Tables supported by web `CSVUploader` plus sports_academy & special_events_activities (referenced by web pages). */
 export type CsvTableName =
@@ -279,6 +280,8 @@ function sanitizeMedicationLogRowForInsert(row: Record<string, unknown>, season:
     } else {
         row.scheduled_time = STANDARD_MEAL_SCHEDULE_HHMM[label] ?? '12:00';
     }
+
+    applyDailyMedicationDefaults(row, season);
 }
 
 async function resolveChildPersonIds(

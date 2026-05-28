@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     View,
     Text,
@@ -29,6 +29,8 @@ import {
     useUpdateSportsEnrollment,
 } from '../api/sports';
 import { useCampers, useDivisions } from '../api/campers';
+import { useSpecialistSportScope } from '../hooks/useSpecialistSportScope';
+import { sportsAcademyCamperName } from '../lib/sportsAcademyUtils';
 
 interface SportsScreenProps {
     navigation: any;
@@ -95,9 +97,18 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const [sportsCsvUploading, setSportsCsvUploading] = useState(false);
 
     const { companyId, season } = useCompany();
+    const {
+        assignedSports,
+        hasSportScope,
+        loading: sportScopeLoading,
+    } = useSpecialistSportScope();
     const queryClient = useQueryClient();
     const { data: campersData = [] } = useCampers(companyId, season);
-    const { data: enrollmentsData = [] } = useSportsEnrollments(companyId, season);
+    const { data: enrollmentsData = [] } = useSportsEnrollments(
+        companyId,
+        season,
+        hasSportScope ? assignedSports : null,
+    );
     const { data: divisionsData = [] } = useDivisions(companyId);
 
     /** All Sports + catalog (same as add form) + any sports only present in enrollments — matches Division/Gender always-full pickers. */
@@ -105,10 +116,17 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         const fromEnrollments = new Set(
             enrollmentsData.map((e) => e.sport_name).filter(Boolean) as string[],
         );
-        const merged = new Set<string>([...ENROLLMENT_SPORTS, ...fromEnrollments]);
+        const baseSports = hasSportScope ? assignedSports : ENROLLMENT_SPORTS;
+        const merged = new Set<string>([...baseSports, ...fromEnrollments]);
         const sorted = [...merged].sort((a, b) => a.localeCompare(b));
         return ['All Sports', ...sorted];
-    }, [enrollmentsData]);
+    }, [enrollmentsData, hasSportScope, assignedSports]);
+
+    useEffect(() => {
+        if (hasSportScope && assignedSports.length === 1) {
+            setSelectedSport(assignedSports[0]);
+        }
+    }, [hasSportScope, assignedSports]);
 
     const filteredEnrollments = useMemo(() => {
         let filtered = enrollmentsData;
@@ -127,7 +145,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         if (searchQuery) {
             const lowerQuery = searchQuery.toLowerCase();
             filtered = filtered.filter(e => 
-                (e.children?.name && e.children.name.toLowerCase().includes(lowerQuery)) ||
+                sportsAcademyCamperName(e).toLowerCase().includes(lowerQuery) ||
                 (e.sport_name && e.sport_name.toLowerCase().includes(lowerQuery)) ||
                 (e.instructor && e.instructor.toLowerCase().includes(lowerQuery))
             );
@@ -160,7 +178,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                     time: enroll.schedule_periods?.filter(Boolean).join(', ') || undefined,
                     location: enroll.instructor || undefined,
                     type: 'sports',
-                    tags: enroll.children?.name ? [enroll.children.name] : undefined,
+                    tags: sportsAcademyCamperName(enroll) !== 'Unknown Camper' ? [sportsAcademyCamperName(enroll)] : undefined,
                     accent: SPORTS_CALENDAR_ACCENT,
                 });
                 const next = new Date(cur);
@@ -542,7 +560,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                             <View key={enroll.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
                                 <Text style={{ ...theme.typography.body, fontWeight: '600' }}>{enroll.sport_name}</Text>
                                 <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>
-                                    {enroll.children?.name} • {enroll.instructor || 'No Instructor'}
+                                    {sportsAcademyCamperName(enroll)} • {enroll.instructor || 'No Instructor'}
                                 </Text>
                             </View>
                         ))
@@ -798,7 +816,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                             filteredEnrollments.map(enroll => (
                                 <StyledCard key={enroll.id} style={{ padding: theme.spacing.md, marginBottom: theme.spacing.md }}>
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm }}>
-                                        <Text style={{ ...theme.typography.h3 }}>{enroll.children?.name || 'Unknown Camper'}</Text>
+                                        <Text style={{ ...theme.typography.h3 }}>{sportsAcademyCamperName(enroll)}</Text>
                                         <View style={{ flexDirection: 'row', gap: 10 }}>
                                             <TouchableOpacity onPress={() => handleEditEnrollment(enroll)}>
                                                 <Ionicons name="pencil-outline" size={20} color={theme.colors.text} />
