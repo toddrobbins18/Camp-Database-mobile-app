@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
+import {
+    findDaySpecificMedicationLog,
+    mergeMedicationsForDate,
+    type MedicationLogRow,
+} from '../lib/medicationSchedule';
 
 // --- Types ---
 
@@ -22,7 +27,11 @@ export interface MedicationLog {
     days_of_week?: string[] | null;
     end_date?: string | null;
     alert_sent?: boolean;
+    season?: string;
     created_at?: string;
+    _fromRecurringTemplate?: boolean;
+    _templateId?: string;
+    _displayDate?: string;
     children?: {
         id: string;
         name: string;
@@ -31,7 +40,26 @@ export interface MedicationLog {
     };
 }
 
-const medicationCacheKey = (companyId: string, dateString: string) => `medication_logs:${companyId}:${dateString}`;
+export type MedicationAdministrationInput = {
+    med: MedicationLog;
+    companyId: string;
+    season: string;
+    dateString: string;
+    administered: boolean;
+};
+
+const medicationSelect = `
+    *,
+    children (
+        id,
+        name,
+        group_name,
+        division:divisions(name)
+    )
+`;
+
+const medicationCacheKey = (companyId: string, dateString: string, season: string) =>
+    `medication_logs:${companyId}:${dateString}:${season}`;
 const admissionsCacheKey = (companyId: string, season: string | null | undefined) =>
     `health_center_admissions:${companyId}:${season ?? ''}`;
 
@@ -88,33 +116,77 @@ export interface HealthCenterAdmission {
 
 // --- Hooks for Medication Logs ---
 
-export const useMedicationLogs = (companyId: string | null, dateString: string) => {
+async function fetchDaySpecificLogs(
+    med: MedicationLog,
+    dateString: string,
+    companyId: string,
+    season: string,
+) {
+    const { data, error } = await supabase
+        .from('medication_logs')
+        .select('id, child_id, medication_name, meal_time')
+        .eq('child_id', med.child_id)
+        .eq('date', dateString)
+        .eq('company_id', companyId)
+        .eq('season', season);
+
+    if (error) throw error;
+    return data || [];
+}
+
+async function resolveStaffId(companyId: string): Promise<string | null> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) return null;
+    const { data: staffRow } = await supabase
+        .from('staff')
+        .select('id')
+        .eq('email', user.email)
+        .eq('company_id', companyId)
+        .maybeSingle();
+    return staffRow?.id ?? null;
+}
+
+export const useMedicationLogs = (companyId: string | null, dateString: string, season?: string | null) => {
+    const seasonKey = season || String(new Date().getFullYear());
+
     return useQuery({
-        queryKey: ['medication_logs', companyId, dateString],
+        queryKey: ['medication_logs', companyId, dateString, seasonKey],
         queryFn: async () => {
             if (!companyId) return [];
             try {
-                const { data, error } = await supabase
-                    .from('medication_logs')
-                    .select(`
-                        *,
-                        children (
-                            id,
-                            name,
-                            group_name,
-                            division:divisions(name)
-                        )
-                    `)
-                    .eq('company_id', companyId)
-                    .eq('date', dateString)
-                    .order('scheduled_time', { ascending: true });
+                const [dateResult, recurringResult] = await Promise.all([
+                    supabase
+                        .from('medication_logs')
+                        .select(medicationSelect)
+                        .eq('company_id', companyId)
+                        .eq('season', seasonKey)
+                        .eq('date', dateString)
+                        .order('scheduled_time', { ascending: true }),
+                    supabase
+                        .from('medication_logs')
+                        .select(medicationSelect)
+                        .eq('company_id', companyId)
+                        .eq('season', seasonKey)
+                        .eq('is_recurring', true)
+                        .lte('date', dateString)
+                        .or(`end_date.is.null,end_date.gte.${dateString}`),
+                ]);
 
-                if (error) throw error;
-                const rows = (data as MedicationLog[]) || [];
-                await setCachedJson(medicationCacheKey(companyId, dateString), rows);
-                return await applyQueuedMedicationOps(rows);
+                if (dateResult.error) throw dateResult.error;
+                if (recurringResult.error) throw recurringResult.error;
+
+                const merged = mergeMedicationsForDate(
+                    (dateResult.data || []) as MedicationLogRow[],
+                    (recurringResult.data || []) as MedicationLogRow[],
+                    dateString,
+                    seasonKey,
+                ) as MedicationLog[];
+
+                await setCachedJson(medicationCacheKey(companyId, dateString, seasonKey), merged);
+                return await applyQueuedMedicationOps(merged);
             } catch {
-                const cached = (await getCachedJson<MedicationLog[]>(medicationCacheKey(companyId, dateString))) || [];
+                const cached =
+                    (await getCachedJson<MedicationLog[]>(medicationCacheKey(companyId, dateString, seasonKey))) || [];
                 return await applyQueuedMedicationOps(cached);
             }
         },
@@ -151,38 +223,102 @@ export const useAddMedicationLog = () => {
 
 /**
  * medication_logs.administered_by references staff(id), NOT auth.users(id).
- * Passing auth uid causes FK violation → PostgREST 409 Conflict.
- * Resolve staff row by logged-in user's email + company (same as web Nurse page).
+ * Handles recurring template rows by creating/updating day-specific logs.
  */
-export const useAdministerMedication = () => {
+export const useSetMedicationAdministration = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ id, companyId }: { id: string; companyId: string | null | undefined }) => {
-            const { data: { user } } = await supabase.auth.getUser();
-            let staffId: string | null = null;
-            if (user?.email && companyId) {
-                const { data: staffRow } = await supabase
-                    .from('staff')
-                    .select('id')
-                    .eq('email', user.email)
-                    .eq('company_id', companyId)
-                    .maybeSingle();
-                staffId = staffRow?.id ?? null;
+        mutationFn: async ({ med, companyId, season, dateString, administered }: MedicationAdministrationInput) => {
+            const staffId = administered ? await resolveStaffId(companyId) : null;
+            const update = administered
+                ? {
+                    administered: true,
+                    administered_by: staffId,
+                    administered_at: new Date().toISOString(),
+                }
+                : {
+                    administered: false,
+                    administered_by: null,
+                    administered_at: null,
+                };
+
+            if (med._fromRecurringTemplate) {
+                const dayLogs = await fetchDaySpecificLogs(med, dateString, companyId, season);
+                const existingDayLog = findDaySpecificMedicationLog(dayLogs, med);
+
+                if (administered) {
+                    if (existingDayLog?.id) {
+                        if (await isOnlineNow()) {
+                            const { error } = await supabase
+                                .from('medication_logs')
+                                .update(update)
+                                .eq('id', existingDayLog.id);
+                            if (error) throw error;
+                        } else {
+                            await enqueueSync('medication_logs.administer', { id: existingDayLog.id, update });
+                        }
+                        return existingDayLog.id;
+                    }
+
+                    const insertRow = {
+                        child_id: med.child_id,
+                        date: dateString,
+                        medication_name: med.medication_name,
+                        dosage: med.dosage,
+                        meal_time: med.meal_time,
+                        scheduled_time: med.scheduled_time,
+                        notes: med.notes,
+                        is_recurring: false,
+                        frequency: med.frequency,
+                        days_of_week: med.days_of_week,
+                        end_date: med.end_date,
+                        company_id: companyId,
+                        season,
+                        ...update,
+                    };
+
+                    if (await isOnlineNow()) {
+                        const { data, error } = await supabase
+                            .from('medication_logs')
+                            .insert([insertRow])
+                            .select('id')
+                            .single();
+                        if (error) throw error;
+                        return data.id as string;
+                    }
+
+                    await enqueueSync('medication_logs.insert', [insertRow]);
+                    return `offline-${Date.now()}`;
+                }
+
+                if (!existingDayLog?.id) {
+                    throw new Error('No administration record exists for this date.');
+                }
+
+                if (await isOnlineNow()) {
+                    const { error } = await supabase
+                        .from('medication_logs')
+                        .update(update)
+                        .eq('id', existingDayLog.id);
+                    if (error) throw error;
+                } else {
+                    await enqueueSync('medication_logs.administer', { id: existingDayLog.id, update });
+                }
+                return existingDayLog.id;
             }
 
-            const update = {
-                administered: true,
-                administered_by: staffId,
-                administered_at: new Date().toISOString(),
-            };
+            if (!med.id) {
+                throw new Error('Medication record is missing an id.');
+            }
+
             if (await isOnlineNow()) {
-                const { error } = await supabase.from('medication_logs').update(update).eq('id', id);
+                const { error } = await supabase.from('medication_logs').update(update).eq('id', med.id);
                 if (error) throw error;
             } else {
-                await enqueueSync('medication_logs.administer', { id, update });
+                await enqueueSync('medication_logs.administer', { id: med.id, update });
             }
-            return id;
+            return med.id;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['medication_logs'] });

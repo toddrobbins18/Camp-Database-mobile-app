@@ -23,15 +23,35 @@ export type MedicationLogRow = {
     days_of_week?: string[] | null;
     medication_name?: string;
     meal_time?: string[] | string | null;
+    dosage?: string | null;
+    scheduled_time?: string | null;
+    notes?: string | null;
     administered?: boolean;
+    administered_by?: string | null;
+    administered_at?: string | null;
     _fromRecurringTemplate?: boolean;
     _templateId?: string;
     _displayDate?: string;
 };
 
 function mealTimeKey(mealTime: unknown): string {
-    if (Array.isArray(mealTime)) return mealTime.join('|');
-    return String(mealTime ?? '');
+    if (mealTime == null) return '';
+    if (Array.isArray(mealTime)) {
+        return mealTime.map(String).sort().join('|');
+    }
+    if (typeof mealTime === 'string') {
+        const trimmed = mealTime.trim();
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+            try {
+                const parsed = JSON.parse(trimmed) as unknown;
+                if (Array.isArray(parsed)) return parsed.map(String).sort().join('|');
+            } catch {
+                /* use raw string */
+            }
+        }
+        return trimmed;
+    }
+    return String(mealTime);
 }
 
 export function medicationSlotKey(
@@ -77,6 +97,9 @@ export function mergeMedicationsForDate(
         if (existingKeys.has(key)) continue;
         result.push({
             ...template,
+            administered: false,
+            administered_by: null,
+            administered_at: null,
             _fromRecurringTemplate: true,
             _templateId: template.id,
             _displayDate: dateYmd,
@@ -85,6 +108,14 @@ export function mergeMedicationsForDate(
     }
 
     return result;
+}
+
+export function findDaySpecificMedicationLog(
+    dayRows: Pick<MedicationLogRow, 'id' | 'child_id' | 'medication_name' | 'meal_time'>[],
+    med: Pick<MedicationLogRow, 'child_id' | 'medication_name' | 'meal_time'>,
+): Pick<MedicationLogRow, 'id'> | undefined {
+    const slotKey = medicationSlotKey(med);
+    return dayRows.find((row) => medicationSlotKey(row) === slotKey);
 }
 
 export function applyDailyMedicationDefaults(row: Record<string, unknown>, season: string): void {

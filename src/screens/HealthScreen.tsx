@@ -8,7 +8,7 @@ import { StyledCard } from '../components/StyledCard';
 import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useDivisions, getCamperDivisionName } from '../api/campers';
-import { useMedicationLogs, useAddMedicationLog, useAdministerMedication, useDeleteMedicationLog, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
+import { useMedicationLogs, useAddMedicationLog, useSetMedicationAdministration, useDeleteMedicationLog, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
 import { supabase } from '../lib/supabase';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
@@ -140,6 +140,8 @@ function medicationScheduleLabel(med: any): string {
     return typeof st === 'string' ? st : '';
 }
 
+const medicationRowKey = (med: any) => `${med.id}-${med._displayDate ?? med.date}`;
+
 export const HealthScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const { companyId, season } = useCompany();
@@ -196,9 +198,9 @@ export const HealthScreen = ({ navigation }: any) => {
     const medicationQueryDate = activeView === 'list' ? todayDateString : dateString;
 
     // Medications (list view = today; calendar view = selected date)
-    const { data: medicationsData } = useMedicationLogs(companyId, medicationQueryDate);
+    const { data: medicationsData } = useMedicationLogs(companyId, medicationQueryDate, season);
     const addMedicationMutation = useAddMedicationLog();
-    const administerMutation = useAdministerMedication();
+    const setAdministrationMutation = useSetMedicationAdministration();
     const deleteMedicationMutation = useDeleteMedicationLog();
     const safeMedications = Array.isArray(medicationsData) ? medicationsData : [];
 
@@ -431,12 +433,47 @@ export const HealthScreen = ({ navigation }: any) => {
         }
     };
 
-    const handleMarkAdministered = (medId: string) => {
-        administerMutation.mutate({ id: medId, companyId });
+    const submitMedicationAdministration = async (med: any, administered: boolean) => {
+        if (!companyId || !season) return;
+        try {
+            await setAdministrationMutation.mutateAsync({
+                med,
+                companyId,
+                season,
+                dateString: medicationQueryDate,
+                administered,
+            });
+        } catch (error: any) {
+            Alert.alert(
+                administered ? 'Error' : 'Nothing to undo',
+                error?.message ?? 'Could not update medication.',
+            );
+        }
     };
 
-    const handleDeleteMedication = (medId: string) => {
-        setItemToDelete({ id: medId });
+    const handleMedicationAdministration = (med: any, administered: boolean) => {
+        if (!administered) {
+            Alert.alert(
+                'Mark as not administered?',
+                med.medication_name
+                    ? `"${med.medication_name}" will be marked as pending again.`
+                    : 'This medication will be marked as pending again.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Yes, undo',
+                        style: 'destructive',
+                        onPress: () => void submitMedicationAdministration(med, false),
+                    },
+                ],
+            );
+            return;
+        }
+        void submitMedicationAdministration(med, true);
+    };
+
+    const handleDeleteMedication = (med: any) => {
+        setItemToDelete({ id: med._fromRecurringTemplate ? med._templateId : med.id });
         setIsDeleteConfirmVisible(true);
     };
 
@@ -664,9 +701,56 @@ export const HealthScreen = ({ navigation }: any) => {
                             {isPastDate(selectedDate) && (
                                 <Text style={styles.pastDateText}>Past date - View only with notes option</Text>
                             )}
-                            <View style={styles.emptyState}>
-                                <Text style={styles.emptyText}>No medications scheduled for this date</Text>
-                            </View>
+                            {safeMedications.length === 0 ? (
+                                <View style={styles.emptyState}>
+                                    <Text style={styles.emptyText}>No medications scheduled for this date</Text>
+                                </View>
+                            ) : (
+                                <View style={{ marginTop: 12 }}>
+                                    {safeMedications.map((med: any) => (
+                                        <View key={medicationRowKey(med)} style={styles.medicationCard}>
+                                            <View style={styles.medicationCardHeader}>
+                                                <Text style={styles.medicationCardName}>{med.children?.name}</Text>
+                                                <View style={styles.medicationCardBadges}>
+                                                    {med.administered ? (
+                                                        <View style={[styles.statusBadge, styles.statusBadgeGiven]}>
+                                                            <Ionicons name="checkmark-circle" size={14} color="#10b981" />
+                                                            <Text style={styles.statusBadgeGivenText}>Given</Text>
+                                                        </View>
+                                                    ) : (
+                                                        <View style={[styles.statusBadge, styles.statusBadgePending]}>
+                                                            <Ionicons name="warning" size={14} color={theme.colors.warning || '#f59e0b'} />
+                                                            <Text style={styles.statusBadgePendingText}>Pending</Text>
+                                                        </View>
+                                                    )}
+                                                    <TouchableOpacity onPress={() => handleDeleteMedication(med)} style={styles.medicationCardIconBtn}>
+                                                        <Ionicons name="trash-outline" size={18} color={theme.colors.danger || '#ef4444'} />
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+                                            <Text style={styles.medicationCardDetail}>{med.medication_name}{med.dosage ? ` - ${med.dosage}` : ''}</Text>
+                                            <Text style={styles.medicationCardTime}>{medicationScheduleLabel(med)}</Text>
+                                            {!isPastDate(selectedDate) && (
+                                                med.administered ? (
+                                                    <TouchableOpacity
+                                                        style={[styles.markAdministeredButton, styles.unadministerButton]}
+                                                        onPress={() => handleMedicationAdministration(med, false)}
+                                                    >
+                                                        <Text style={styles.unadministerButtonText}>Mark as Not Administered</Text>
+                                                    </TouchableOpacity>
+                                                ) : (
+                                                    <TouchableOpacity
+                                                        style={styles.markAdministeredButton}
+                                                        onPress={() => handleMedicationAdministration(med, true)}
+                                                    >
+                                                        <Text style={styles.markAdministeredButtonText}>Mark as Administered</Text>
+                                                    </TouchableOpacity>
+                                                )
+                                            )}
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
                         </StyledCard>
                     </>
                 ) : (
@@ -736,7 +820,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </View>
                                 ) : (
                                     safeMedications.map((med: any) => (
-                                        <View key={med.id} style={styles.medicationCard}>
+                                        <View key={medicationRowKey(med)} style={styles.medicationCard}>
                                             <View style={styles.medicationCardHeader}>
                                                 <Text style={styles.medicationCardName}>{med.children?.name}</Text>
                                                 <View style={styles.medicationCardBadges}>
@@ -751,7 +835,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                             <Text style={styles.statusBadgePendingText}>Pending</Text>
                                                         </View>
                                                     )}
-                                                    <TouchableOpacity onPress={() => handleDeleteMedication(med.id)} style={styles.medicationCardIconBtn}>
+                                                    <TouchableOpacity onPress={() => handleDeleteMedication(med)} style={styles.medicationCardIconBtn}>
                                                         <Ionicons name="trash-outline" size={18} color={theme.colors.danger || '#ef4444'} />
                                                     </TouchableOpacity>
                                                 </View>
@@ -766,10 +850,17 @@ export const HealthScreen = ({ navigation }: any) => {
                                                     <Text style={styles.medicationCardDate}>Started: {new Date(med.date + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' })}</Text>
                                                 </View>
                                             ) : null}
-                                            {!med.administered && (
+                                            {med.administered ? (
+                                                <TouchableOpacity
+                                                    style={[styles.markAdministeredButton, styles.unadministerButton]}
+                                                    onPress={() => handleMedicationAdministration(med, false)}
+                                                >
+                                                    <Text style={styles.unadministerButtonText}>Mark as Not Administered</Text>
+                                                </TouchableOpacity>
+                                            ) : (
                                                 <TouchableOpacity
                                                     style={styles.markAdministeredButton}
-                                                    onPress={() => med.id && handleMarkAdministered(med.id)}
+                                                    onPress={() => handleMedicationAdministration(med, true)}
                                                 >
                                                     <Text style={styles.markAdministeredButtonText}>Mark as Administered</Text>
                                                 </TouchableOpacity>
@@ -1297,20 +1388,28 @@ export const HealthScreen = ({ navigation }: any) => {
                                                             <View style={styles.divisionTagSmall}><Text style={styles.divisionTagSmallText}>{groupName}</Text></View>
                                                         </View>
                                                         {meds.map((med: any) => (
-                                                            <View key={med.id} style={styles.dailyLogMedRow}>
+                                                            <View key={medicationRowKey(med)} style={styles.dailyLogMedRow}>
                                                                 <Text style={styles.dailyLogMedDetail}>{med.medication_name}{med.dosage ? ` - ${med.dosage}` : ''}</Text>
                                                                 <Text style={styles.dailyLogMedTime}>
                                                                     {medicationScheduleLabel(med)}
                                                                 </Text>
                                                                 {med.administered ? (
-                                                                    <View style={[styles.statusBadge, styles.statusBadgeGiven, { alignSelf: 'flex-start', marginTop: 4 }]}>
-                                                                        <Ionicons name="checkmark-circle" size={14} color="#10b981" />
-                                                                        <Text style={styles.statusBadgeGivenText}>Given</Text>
-                                                                    </View>
+                                                                    <>
+                                                                        <View style={[styles.statusBadge, styles.statusBadgeGiven, { alignSelf: 'flex-start', marginTop: 4 }]}>
+                                                                            <Ionicons name="checkmark-circle" size={14} color="#10b981" />
+                                                                            <Text style={styles.statusBadgeGivenText}>Given</Text>
+                                                                        </View>
+                                                                        <TouchableOpacity
+                                                                            style={[styles.markAdministeredButton, styles.unadministerButton, { marginTop: 6 }]}
+                                                                            onPress={() => handleMedicationAdministration(med, false)}
+                                                                        >
+                                                                            <Text style={styles.unadministerButtonText}>Mark as Not Administered</Text>
+                                                                        </TouchableOpacity>
+                                                                    </>
                                                                 ) : (
                                                                     <TouchableOpacity
                                                                         style={[styles.markAdministeredButton, { marginTop: 6 }]}
-                                                                        onPress={() => med.id && handleMarkAdministered(med.id)}
+                                                                        onPress={() => handleMedicationAdministration(med, true)}
                                                                     >
                                                                         <Text style={styles.markAdministeredButtonText}>Mark as Administered</Text>
                                                                     </TouchableOpacity>
@@ -2742,6 +2841,16 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: 'white',
+    },
+    unadministerButton: {
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    unadministerButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
     },
     dailyLogChildCard: {
         backgroundColor: theme.colors.surface,
