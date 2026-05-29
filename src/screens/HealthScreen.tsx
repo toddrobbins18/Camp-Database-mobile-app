@@ -142,6 +142,25 @@ function medicationScheduleLabel(med: any): string {
 
 const medicationRowKey = (med: any) => `${med.id}-${med._displayDate ?? med.date}`;
 
+const isPastDate = (date: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    return checkDate < today;
+};
+
+const formatSelectedDate = (date: Date) => {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+    return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+};
+
+const isSameCalendarDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+
 export const HealthScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const { companyId, season } = useCompany();
@@ -155,8 +174,8 @@ export const HealthScreen = ({ navigation }: any) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
     const [showDivisionPicker, setShowDivisionPicker] = useState(false);
-    const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1)); // January 2026
-    const [selectedDate, setSelectedDate] = useState(new Date(2026, 0, 22)); // January 22, 2026
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState(new Date());
     const [rfidInput, setRfidInput] = useState('');
     const [healthCenterRfidInput, setHealthCenterRfidInput] = useState('');
     const [searchChildrenQuery, setSearchChildrenQuery] = useState('');
@@ -186,18 +205,21 @@ export const HealthScreen = ({ navigation }: any) => {
     const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const todayDateString = useMemo(() => {
-        const d = new Date();
+    const dateString = useMemo(() => {
+        const d = selectedDate;
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    }, []);
+    }, [selectedDate]);
+    const isSelectedDateToday = useMemo(() => isSameCalendarDay(selectedDate, new Date()), [selectedDate]);
+    const medicationQueryDate = dateString;
+    const selectedDateEmptyLabel = isSelectedDateToday
+        ? 'No medications scheduled for today'
+        : `No medications scheduled for ${formatSelectedDate(selectedDate)}`;
     const medicationStartDate = useMemo(
         () => defaultMedicationStartDate(season || String(new Date().getFullYear())),
         [season],
     );
-    const dateString = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
-    const medicationQueryDate = activeView === 'list' ? todayDateString : dateString;
 
-    // Medications (list view = today; calendar view = selected date)
+    // Medications — always driven by selectedDate (matches web Nurse)
     const { data: medicationsData } = useMedicationLogs(companyId, medicationQueryDate, season);
     const addMedicationMutation = useAddMedicationLog();
     const setAdministrationMutation = useSetMedicationAdministration();
@@ -495,18 +517,9 @@ export const HealthScreen = ({ navigation }: any) => {
         }
     };
 
-    const isPastDate = (date: Date) => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const checkDate = new Date(date);
-        checkDate.setHours(0, 0, 0, 0);
-        return checkDate < today;
-    };
-
-    const formatSelectedDate = (date: Date) => {
-        const months = ['January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'];
-        return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+    const handleSelectedDateChange = (date: Date) => {
+        setSelectedDate(date);
+        setCurrentDate(date);
     };
 
     const handleUploadCSV = async () => {
@@ -687,7 +700,7 @@ export const HealthScreen = ({ navigation }: any) => {
                             currentDate={currentDate}
                             onCurrentDateChange={setCurrentDate}
                             selectedDate={selectedDate}
-                            onSelectedDateChange={setSelectedDate}
+                            onSelectedDateChange={handleSelectedDateChange}
                             views={['Month', 'Week', 'Day', 'Agenda']}
                             showZoom={true}
                             showNavigation={true}
@@ -755,6 +768,18 @@ export const HealthScreen = ({ navigation }: any) => {
                     </>
                 ) : (
                     <>
+                        {!isSelectedDateToday && (
+                            <View style={styles.selectedDateBanner}>
+                                <Ionicons name="calendar-outline" size={16} color={theme.colors.secondary} />
+                                <Text style={styles.selectedDateBannerText}>
+                                    Showing medications for {formatSelectedDate(selectedDate)}
+                                </Text>
+                                <TouchableOpacity onPress={() => handleSelectedDateChange(new Date())}>
+                                    <Text style={styles.selectedDateBannerAction}>Today</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
                         {/* Tabs */}
                         <ScrollView
                             horizontal
@@ -778,7 +803,9 @@ export const HealthScreen = ({ navigation }: any) => {
                         {/* Conditional Content Based on Active Tab */}
                         {activeTab === "Today's Medications" ? (
                             <StyledCard style={styles.todaysMedicationsCard}>
-                                <Text style={styles.todaysMedicationsTitle}>Today's Medications</Text>
+                                <Text style={styles.todaysMedicationsTitle}>
+                                    {isSelectedDateToday ? "Today's Medications" : `Medications for ${formatSelectedDate(selectedDate)}`}
+                                </Text>
                                 <Text style={styles.todaysMedicationsSubtitle}>Track medication administration</Text>
 
                                 {/* RFID Quick Check-In Card */}
@@ -815,7 +842,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                 {/* Empty State or List - card per medication with Pending/Given, Mark as Administered, Edit, Delete */}
                                 {safeMedications.length === 0 ? (
                                     <View style={styles.emptyStateRow}>
-                                        <Text style={styles.emptyText}>No medications scheduled for today</Text>
+                                        <Text style={styles.emptyText}>{selectedDateEmptyLabel}</Text>
                                         <View style={styles.emptyDot} />
                                     </View>
                                 ) : (
@@ -850,20 +877,22 @@ export const HealthScreen = ({ navigation }: any) => {
                                                     <Text style={styles.medicationCardDate}>Started: {new Date(med.date + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' })}</Text>
                                                 </View>
                                             ) : null}
-                                            {med.administered ? (
-                                                <TouchableOpacity
-                                                    style={[styles.markAdministeredButton, styles.unadministerButton]}
-                                                    onPress={() => handleMedicationAdministration(med, false)}
-                                                >
-                                                    <Text style={styles.unadministerButtonText}>Mark as Not Administered</Text>
-                                                </TouchableOpacity>
-                                            ) : (
-                                                <TouchableOpacity
-                                                    style={styles.markAdministeredButton}
-                                                    onPress={() => handleMedicationAdministration(med, true)}
-                                                >
-                                                    <Text style={styles.markAdministeredButtonText}>Mark as Administered</Text>
-                                                </TouchableOpacity>
+                                            {!isPastDate(selectedDate) && (
+                                                med.administered ? (
+                                                    <TouchableOpacity
+                                                        style={[styles.markAdministeredButton, styles.unadministerButton]}
+                                                        onPress={() => handleMedicationAdministration(med, false)}
+                                                    >
+                                                        <Text style={styles.unadministerButtonText}>Mark as Not Administered</Text>
+                                                    </TouchableOpacity>
+                                                ) : (
+                                                    <TouchableOpacity
+                                                        style={styles.markAdministeredButton}
+                                                        onPress={() => handleMedicationAdministration(med, true)}
+                                                    >
+                                                        <Text style={styles.markAdministeredButtonText}>Mark as Administered</Text>
+                                                    </TouchableOpacity>
+                                                )
                                             )}
                                         </View>
                                     ))
@@ -1364,10 +1393,14 @@ export const HealthScreen = ({ navigation }: any) => {
                         ) : (
                             <StyledCard style={styles.medicationLogCard}>
                                 <Text style={styles.logTitle}>Daily Medication Log</Text>
-                                <Text style={styles.logDescription}>Mark off medications administered today.</Text>
+                                <Text style={styles.logDescription}>
+                                    {isSelectedDateToday
+                                        ? 'Mark off medications administered today.'
+                                        : `Mark off medications administered on ${formatSelectedDate(selectedDate)}.`}
+                                </Text>
                                 {safeMedications.length === 0 ? (
                                     <View style={styles.emptyState}>
-                                        <Text style={styles.emptyText}>No medications scheduled for today.</Text>
+                                        <Text style={styles.emptyText}>{selectedDateEmptyLabel}.</Text>
                                     </View>
                                 ) : (
                                     <View style={{ marginTop: 12 }}>
@@ -1393,27 +1426,31 @@ export const HealthScreen = ({ navigation }: any) => {
                                                                 <Text style={styles.dailyLogMedTime}>
                                                                     {medicationScheduleLabel(med)}
                                                                 </Text>
-                                                                {med.administered ? (
-                                                                    <>
-                                                                        <View style={[styles.statusBadge, styles.statusBadgeGiven, { alignSelf: 'flex-start', marginTop: 4 }]}>
-                                                                            <Ionicons name="checkmark-circle" size={14} color="#10b981" />
-                                                                            <Text style={styles.statusBadgeGivenText}>Given</Text>
-                                                                        </View>
-                                                                        <TouchableOpacity
-                                                                            style={[styles.markAdministeredButton, styles.unadministerButton, { marginTop: 6 }]}
-                                                                            onPress={() => handleMedicationAdministration(med, false)}
-                                                                        >
-                                                                            <Text style={styles.unadministerButtonText}>Mark as Not Administered</Text>
-                                                                        </TouchableOpacity>
-                                                                    </>
-                                                                ) : (
-                                                                    <TouchableOpacity
-                                                                        style={[styles.markAdministeredButton, { marginTop: 6 }]}
-                                                                        onPress={() => handleMedicationAdministration(med, true)}
-                                                                    >
-                                                                        <Text style={styles.markAdministeredButtonText}>Mark as Administered</Text>
-                                                                    </TouchableOpacity>
-                                                                )}
+                                            {med.administered ? (
+                                                <>
+                                                    <View style={[styles.statusBadge, styles.statusBadgeGiven, { alignSelf: 'flex-start', marginTop: 4 }]}>
+                                                        <Ionicons name="checkmark-circle" size={14} color="#10b981" />
+                                                        <Text style={styles.statusBadgeGivenText}>Given</Text>
+                                                    </View>
+                                                    {!isPastDate(selectedDate) && (
+                                                        <TouchableOpacity
+                                                            style={[styles.markAdministeredButton, styles.unadministerButton, { marginTop: 6 }]}
+                                                            onPress={() => handleMedicationAdministration(med, false)}
+                                                        >
+                                                            <Text style={styles.unadministerButtonText}>Mark as Not Administered</Text>
+                                                        </TouchableOpacity>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                !isPastDate(selectedDate) && (
+                                                    <TouchableOpacity
+                                                        style={[styles.markAdministeredButton, { marginTop: 6 }]}
+                                                        onPress={() => handleMedicationAdministration(med, true)}
+                                                    >
+                                                        <Text style={styles.markAdministeredButtonText}>Mark as Administered</Text>
+                                                    </TouchableOpacity>
+                                                )
+                                            )}
                                                             </View>
                                                         ))}
                                                     </View>
@@ -1874,6 +1911,28 @@ const styles = StyleSheet.create({
         gap: theme.spacing.sm,
         marginBottom: theme.spacing.sm,
         flexWrap: 'wrap',
+    },
+    selectedDateBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: theme.spacing.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: '#eff6ff',
+        borderWidth: 1,
+        borderColor: '#bfdbfe',
+    },
+    selectedDateBannerText: {
+        flex: 1,
+        fontSize: 13,
+        color: theme.colors.text,
+    },
+    selectedDateBannerAction: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: theme.colors.secondary,
     },
     searchContainer: {
         flex: 1,

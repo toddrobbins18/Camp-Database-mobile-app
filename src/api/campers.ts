@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { filterActiveRoster } from '../lib/rosterStatus';
+import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 
 /** Matches web Roster / usePermissions: these roles see all divisions for roster queries. */
 const ROSTER_FULL_DIVISION_ACCESS_ROLES = [
