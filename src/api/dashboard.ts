@@ -24,6 +24,16 @@ async function readThroughCache<T>(cacheKey: string, fetcher: () => Promise<T>):
     }
 }
 
+/** Match web Dashboard.tsx: today + 2 days = next 3 calendar days inclusive. */
+function addCalendarDaysYmd(ymd: string, days: number): string {
+    const d = new Date(`${ymd}T12:00:00`);
+    d.setDate(d.getDate() + days);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 /**
  * Mirrors Dashboard.tsx getDivisionFilter + birthday branch:
  * - null → full division access, do not add .in('division_id', …)
@@ -184,7 +194,7 @@ export const useTodayEvents = (
     });
 };
 
-/** Upcoming transportation trips from `trips` (Timber Lake Camp dashboard). */
+/** Upcoming transportation trips from `trips` (Timber Lake / Tiger Times dashboard). */
 export const useUpcomingTripsForDashboard = (
     companyId: string | null,
     todayString: string,
@@ -192,19 +202,21 @@ export const useUpcomingTripsForDashboard = (
     enabled: boolean,
 ) => {
     const seasonKey = season ?? '';
+    const tripWindowEnd = addCalendarDaysYmd(todayString, 2);
     return useQuery({
-        queryKey: ['dashboard_upcoming_trips', companyId, todayString, seasonKey],
+        queryKey: ['dashboard_upcoming_trips', companyId, todayString, tripWindowEnd, seasonKey],
         queryFn: async () => {
             if (!companyId) return [];
-            const cacheKey = `dashboard_upcoming_trips:${companyId}:${todayString}:${seasonKey}`;
+            const cacheKey = `dashboard_upcoming_trips:${companyId}:${todayString}:${tripWindowEnd}:${seasonKey}`;
             return readThroughCache<any[]>(cacheKey, async () => {
                 let q = supabase
                     .from('trips')
                     .select('id, name, date, type, departure_time, destination')
                     .eq('company_id', companyId)
                     .gte('date', todayString)
+                    .lte('date', tripWindowEnd)
                     .order('date', { ascending: true })
-                    .limit(8);
+                    .limit(5);
                 if (seasonKey) {
                     q = q.eq('season', seasonKey);
                 }

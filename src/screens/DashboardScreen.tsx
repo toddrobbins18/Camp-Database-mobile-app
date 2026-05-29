@@ -487,7 +487,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                                 <Ionicons name="bus-outline" size={20} color="#0284c7" />
                                 <Text style={styles.cardTitle}>Upcoming Trips</Text>
                             </View>
-                            <Text style={styles.cardSubtitle}>Transportation & trip schedule</Text>
+                            <Text style={styles.cardSubtitle}>Next 3 days</Text>
                             {upcomingTrips.length === 0 ? (
                                 <View style={styles.emptyState}>
                                     <Text style={styles.emptyText}>No upcoming trips</Text>
