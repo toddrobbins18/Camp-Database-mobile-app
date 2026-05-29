@@ -19,6 +19,13 @@ import {
     formatMedicationMealTimeForDisplay,
 } from '../constants/medicationBedtimeOptions';
 import { defaultMedicationStartDate } from '../lib/medicationStartDate';
+import { childMatchesGenderFilter } from '../lib/medicationSchedule';
+
+const GENDER_FILTER_OPTIONS = [
+    { value: 'all' as const, label: 'All Genders' },
+    { value: 'boys' as const, label: 'Boys' },
+    { value: 'girls' as const, label: 'Girls' },
+];
 
 const getChildDisplayName = (child: any) =>
     (child?.name != null && child.name !== '')
@@ -173,7 +180,9 @@ export const HealthScreen = ({ navigation }: any) => {
     const [activeTab, setActiveTab] = useState('Daily Log');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('All Divisions');
+    const [selectedGender, setSelectedGender] = useState<'all' | 'boys' | 'girls'>('all');
     const [showDivisionPicker, setShowDivisionPicker] = useState(false);
+    const [showGenderPicker, setShowGenderPicker] = useState(false);
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [rfidInput, setRfidInput] = useState('');
@@ -226,9 +235,31 @@ export const HealthScreen = ({ navigation }: any) => {
     const deleteMedicationMutation = useDeleteMedicationLog();
     const safeMedications = Array.isArray(medicationsData) ? medicationsData : [];
 
+    const filteredCampersForNurse = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        return safeCampers.filter((child: any) => {
+            const displayName = getChildDisplayName(child).toLowerCase();
+            const matchesSearch = !query || displayName.includes(query);
+            const matchesDivision =
+                selectedDivision === 'All Divisions' || child.division_id === selectedDivision;
+            const matchesGender = childMatchesGenderFilter(child, selectedGender);
+            return matchesSearch && matchesDivision && matchesGender;
+        });
+    }, [safeCampers, searchQuery, selectedDivision, selectedGender]);
+
+    const visibleChildIds = useMemo(
+        () => new Set(filteredCampersForNurse.map((child: any) => child.id)),
+        [filteredCampersForNurse],
+    );
+
+    const visibleMedications = useMemo(
+        () => safeMedications.filter((med: any) => visibleChildIds.has(med.child_id)),
+        [safeMedications, visibleChildIds],
+    );
+
     const calendarWidgetEvents: CalendarWidgetEvent[] = useMemo(() => {
-        if (!safeMedications || safeMedications.length === 0) return [];
-        return safeMedications.map((med: any) => ({
+        if (!visibleMedications || visibleMedications.length === 0) return [];
+        return visibleMedications.map((med: any) => ({
             id: med.id,
             title: med.medication_name || 'Medication',
             date: new Date((med.date || medicationQueryDate) + 'T00:00:00'),
@@ -237,7 +268,7 @@ export const HealthScreen = ({ navigation }: any) => {
             type: 'health',
             accent: { bg: '#fce7f3', text: '#9d174d', marker: '#ec4899' },
         }));
-    }, [safeMedications, medicationQueryDate]);
+    }, [visibleMedications, medicationQueryDate]);
 
     // Admissions
     const admissionsQuery = useHealthCenterAdmissions(companyId, season);
@@ -685,6 +716,15 @@ export const HealthScreen = ({ navigation }: any) => {
                         <Text style={styles.dropdownText}>{selectedDivision === 'All Divisions' ? 'All Divisions' : safeDivisions.find((d: any) => d.id === selectedDivision)?.name || 'Select Division'}</Text>
                         <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                     </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.dropdownContainer}
+                        onPress={() => setShowGenderPicker(true)}
+                    >
+                        <Text style={styles.dropdownText}>
+                            {GENDER_FILTER_OPTIONS.find((o) => o.value === selectedGender)?.label ?? 'All Genders'}
+                        </Text>
+                        <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity style={styles.sortBtn}>
@@ -714,13 +754,13 @@ export const HealthScreen = ({ navigation }: any) => {
                             {isPastDate(selectedDate) && (
                                 <Text style={styles.pastDateText}>Past date - View only with notes option</Text>
                             )}
-                            {safeMedications.length === 0 ? (
+                            {visibleMedications.length === 0 ? (
                                 <View style={styles.emptyState}>
                                     <Text style={styles.emptyText}>No medications scheduled for this date</Text>
                                 </View>
                             ) : (
                                 <View style={{ marginTop: 12 }}>
-                                    {safeMedications.map((med: any) => (
+                                    {visibleMedications.map((med: any) => (
                                         <View key={medicationRowKey(med)} style={styles.medicationCard}>
                                             <View style={styles.medicationCardHeader}>
                                                 <Text style={styles.medicationCardName}>{med.children?.name}</Text>
@@ -840,13 +880,13 @@ export const HealthScreen = ({ navigation }: any) => {
                                 </StyledCard>
 
                                 {/* Empty State or List - card per medication with Pending/Given, Mark as Administered, Edit, Delete */}
-                                {safeMedications.length === 0 ? (
+                                {visibleMedications.length === 0 ? (
                                     <View style={styles.emptyStateRow}>
                                         <Text style={styles.emptyText}>{selectedDateEmptyLabel}</Text>
                                         <View style={styles.emptyDot} />
                                     </View>
                                 ) : (
-                                    safeMedications.map((med: any) => (
+                                    visibleMedications.map((med: any) => (
                                         <View key={medicationRowKey(med)} style={styles.medicationCard}>
                                             <View style={styles.medicationCardHeader}>
                                                 <Text style={styles.medicationCardName}>{med.children?.name}</Text>
@@ -1398,7 +1438,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                         ? 'Mark off medications administered today.'
                                         : `Mark off medications administered on ${formatSelectedDate(selectedDate)}.`}
                                 </Text>
-                                {safeMedications.length === 0 ? (
+                                {visibleMedications.length === 0 ? (
                                     <View style={styles.emptyState}>
                                         <Text style={styles.emptyText}>{selectedDateEmptyLabel}.</Text>
                                     </View>
@@ -1406,7 +1446,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     <View style={{ marginTop: 12 }}>
                                         {(() => {
                                             const byChild: Record<string, any[]> = {};
-                                            safeMedications.forEach((med: any) => {
+                                            visibleMedications.forEach((med: any) => {
                                                 const key = med.child_id;
                                                 if (!byChild[key]) byChild[key] = [];
                                                 byChild[key].push(med);
@@ -1496,6 +1536,42 @@ export const HealthScreen = ({ navigation }: any) => {
                                 >
                                     <Text style={styles.pickerOptionText}>{division}</Text>
                                     {selectedDivision === division && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Gender Picker Modal */}
+            <Modal
+                visible={showGenderPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowGenderPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowGenderPicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Filter by Gender</Text>
+                            <TouchableOpacity onPress={() => setShowGenderPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.pickerContent} showsVerticalScrollIndicator={true}>
+                            {GENDER_FILTER_OPTIONS.map((option) => (
+                                <TouchableOpacity
+                                    key={option.value}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setSelectedGender(option.value);
+                                        setShowGenderPicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{option.label}</Text>
+                                    {selectedGender === option.value && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
                                     )}
                                 </TouchableOpacity>
