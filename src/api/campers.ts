@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { filterActiveRoster } from '../lib/rosterStatus';
+import { expandDivisionIdsForRosterFilter } from '../lib/divisionFilterUtils';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 
 /** Matches web Roster / usePermissions: these roles see all divisions for roster queries. */
@@ -200,15 +202,23 @@ function useCampersPaged(
  */
 export const useCampers = (companyId: string | null, season: string) => {
     const divFilter = useRosterDivisionFilter(companyId);
-    const paged = useCampersPaged(companyId, season, divFilter.data ?? null, {
-        enabled: !!companyId && !!season && divFilter.isSuccess,
+    const { data: divisions = [], isSuccess: divisionsReady } = useDivisions(companyId);
+    const expandedDivisionFilter = useMemo(() => {
+        if (divFilter.data == null) return null;
+        if (divFilter.data.length === 0) return [];
+        return expandDivisionIdsForRosterFilter(divFilter.data, divisions);
+    }, [divFilter.data, divisions]);
+
+    const paged = useCampersPaged(companyId, season, expandedDivisionFilter, {
+        enabled: !!companyId && !!season && divFilter.isSuccess && divisionsReady,
     });
 
     return {
         ...paged,
         isLoading:
             (!!companyId && !!season && divFilter.isLoading) ||
-            (divFilter.isSuccess && paged.isLoading),
+            (!!companyId && !divisionsReady) ||
+            (divFilter.isSuccess && divisionsReady && paged.isLoading),
         isError: divFilter.isError || paged.isError,
     };
 };

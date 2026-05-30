@@ -8,6 +8,11 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useAddCamper, useEditCamper, useDeleteCamper, useDivisions } from '../api/campers';
+import {
+    camperMatchesDivisionFilter,
+    getDivisionDropdownLabel,
+    normalizeDivisionNameForFilter,
+} from '../lib/divisionFilterUtils';
 import { useRole } from '../hooks/useRole';
 import { useStaff } from '../api/staff';
 import { supabase } from '../lib/supabase';
@@ -257,33 +262,26 @@ export const CamperScreen = ({ navigation }: any) => {
     });
     const campersPerPage = 50;
 
-    const normalizeDivisionNameForFilter = (name?: string | null) => {
-        if (!name) return '';
-        return name.replace(/\bSuper\s+Senior\b/gi, 'Super').trim().toLowerCase();
-    };
-
-    const getDivisionDisplayName = (name?: string | null) => {
-        if (!name) return '';
-        return name.trim().toLowerCase() === 'super girls' ? 'Super Senior Girls' : name;
-    };
-
     const selectedDivisionLabel = useMemo(() => {
         if (selectedDivisionId === 'all') return 'All Divisions';
         const match = divisionsData.find((d: any) => String(d?.id) === String(selectedDivisionId));
-        return getDivisionDisplayName(match?.name) ?? 'All Divisions';
+        return getDivisionDropdownLabel(match?.name) ?? 'All Divisions';
     }, [divisionsData, selectedDivisionId]);
 
     const filteredCampers = useMemo(() => {
         const q = (searchQuery || '').trim().toLowerCase();
         const selectedDivision = divisionsData.find((d: any) => String(d?.id) === String(selectedDivisionId));
-        const selectedDivisionNormalized = normalizeDivisionNameForFilter(selectedDivision?.name);
         return campersData.filter(camper => {
             if (selectedDivisionId !== 'all') {
                 const camperDivisionId = String((camper as any).division_id ?? (camper as any).division?.id ?? '');
-                const camperDivisionNormalized = normalizeDivisionNameForFilter((camper as any).division?.name ?? '');
-                const matchesById = camperDivisionId === String(selectedDivisionId);
-                const matchesByEquivalentName = !!selectedDivisionNormalized && camperDivisionNormalized === selectedDivisionNormalized;
-                if (!matchesById && !matchesByEquivalentName) return false;
+                if (!camperMatchesDivisionFilter(
+                    camperDivisionId || null,
+                    (camper as any).division?.name ?? null,
+                    String(selectedDivisionId),
+                    selectedDivision?.name,
+                )) {
+                    return false;
+                }
             }
             if (q) {
                 const name = (camper.name || '').toLowerCase();
@@ -294,9 +292,12 @@ export const CamperScreen = ({ navigation }: any) => {
             return true;
         }).sort((a, b) => {
             if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
-            return (((a as any).division?.name || '') as string).localeCompare(((b as any).division?.name || '') as string);
+            const divA = normalizeDivisionNameForFilter((a as any).division?.name || '');
+            const divB = normalizeDivisionNameForFilter((b as any).division?.name || '');
+            if (divA !== divB) return divA.localeCompare(divB);
+            return (a.name || '').localeCompare(b.name || '');
         });
-    }, [campersData, selectedDivisionId, sortBy, searchQuery]);
+    }, [campersData, selectedDivisionId, sortBy, searchQuery, divisionsData]);
 
     const totalCampers = filteredCampers.length;
     const totalPages = Math.ceil(totalCampers / campersPerPage);
@@ -905,7 +906,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                             styles.bottomSheetOptionText,
                                             selectedDivisionId === division.id && styles.bottomSheetOptionTextSelected
                                         ]}>
-                                            {getDivisionDisplayName(division.name)}
+                                            {getDivisionDropdownLabel(division.name)}
                                         </Text>
                                         {selectedDivisionId === division.id && (
                                             <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
@@ -1330,7 +1331,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 }}
                                             >
                                                 <Text style={[styles.formSelectText, !formData.division && styles.formSelectPlaceholder]}>
-                                                    {getDivisionDisplayName(divisionsData.find(d => d.id === formData.division)?.name) || 'Select division'}
+                                                    {getDivisionDropdownLabel(divisionsData.find(d => d.id === formData.division)?.name) || 'Select division'}
                                                 </Text>
                                                 <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                                             </TouchableOpacity>
@@ -1686,7 +1687,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                         styles.bottomSheetOptionText,
                                                         formData.division === division.id && styles.bottomSheetOptionTextSelected
                                                     ]}>
-                                                        {getDivisionDisplayName(division.name)}
+                                                        {getDivisionDropdownLabel(division.name)}
                                                     </Text>
                                                     {formData.division === division.id && (
                                                         <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
@@ -1954,7 +1955,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                 }}
                                             >
                                                 <Text style={[styles.formSelectText, !editFormData.division && styles.formSelectPlaceholder]}>
-                                                    {getDivisionDisplayName(divisionsData.find(d => d.id === editFormData.division)?.name) || 'Select division'}
+                                                    {getDivisionDropdownLabel(divisionsData.find(d => d.id === editFormData.division)?.name) || 'Select division'}
                                                 </Text>
                                                 <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                                             </TouchableOpacity>
@@ -2647,7 +2648,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                             styles.bottomSheetOptionText,
                                             editFormData.division === division.id && styles.bottomSheetOptionTextSelected
                                         ]}>
-                                            {getDivisionDisplayName(division.name)}
+                                            {getDivisionDropdownLabel(division.name)}
                                         </Text>
                                         {editFormData.division === division.id && (
                                             <Ionicons name="checkmark" size={18} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
