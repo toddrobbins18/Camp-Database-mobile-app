@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
+import { fetchAwardsForSeason } from '../lib/awardsQueries';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -68,14 +69,8 @@ export const AwardsScreen = ({ navigation }: any) => {
         queryKey: ['awards', companyId, activeSeason],
         queryFn: async () => {
             if (!companyId) return [];
-            const { data, error } = await supabase
-                .from('awards')
-                .select('*, children(id, name)')
-                .eq('company_id', companyId)
-                .or(`season.eq.${activeSeason},season.is.null`)
-                .order('date', { ascending: false });
-            if (error) throw error;
-            return (data || []).map((award: any) => ({
+            const rows = await fetchAwardsForSeason(supabase, companyId, activeSeason, null);
+            return rows.map((award) => ({
                 ...award,
                 childId: award.child_id,
                 childName: award.children?.name?.trim() || 'Unknown',
