@@ -4,7 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { useDivisionsLookup, useDivisionPermissions, useUpdateDivisionPermission } from '../api/permissions';
+import {
+    useDivisionsLookup,
+    useDivisionPermissions,
+    useUpdateDivisionPermission,
+    useBulkUpdateDivisionPermissions,
+} from '../api/permissions';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { useQuery } from '@tanstack/react-query';
@@ -23,6 +28,7 @@ interface UserDivisionPermissions {
 }
 
 const EMPTY_ROWS: unknown[] = [];
+const DIVISION_SCOPED_ROLES = new Set(['division_leader', 'viewer']);
 
 export const DivisionPermissionsScreen = ({ navigation }: any) => {
     const { companyId } = useCompany();
@@ -30,7 +36,6 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
     const dbDivisions = dbDivisionsData ?? EMPTY_ROWS;
     const divisions = useMemo(() => dbDivisions.map((d: any) => ({ id: d.id, name: d.name })), [dbDivisions]);
 
-    // Fetch approved users in current company (match Lovable), then their roles from user_roles
     const { data: usersData, isLoading: usersLoading } = useQuery({
         queryKey: ['profiles_division_perms', companyId],
         queryFn: async () => {
@@ -45,11 +50,9 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
             const profiles = profilesData || [];
             if (profiles.length === 0) return [];
 
-            const userIds = profiles.map((p: any) => p.id);
             const { data: rolesData, error: rolesError } = await supabase
                 .from('user_roles')
                 .select('user_id, role')
-                .in('user_id', userIds)
                 .eq('company_id', companyId);
             if (rolesError) throw rolesError;
 
@@ -72,47 +75,60 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
     });
     const users = usersData ?? EMPTY_ROWS;
 
-    // Fetch existing division permissions from Supabase
+    const scopedUsers = useMemo(
+        () => users.filter((user: User) => DIVISION_SCOPED_ROLES.has(user.role)),
+        [users],
+    );
+    const otherUsers = useMemo(
+        () => users.filter((user: User) => !DIVISION_SCOPED_ROLES.has(user.role)),
+        [users],
+    );
+
     const { data: dbPermsData, isLoading: permsLoading } = useDivisionPermissions(companyId);
     const dbPerms = dbPermsData ?? EMPTY_ROWS;
     const updateDivPermMutation = useUpdateDivisionPermission();
+    const bulkUpdateMutation = useBulkUpdateDivisionPermissions();
 
     const [userDivisionPermissions, setUserDivisionPermissions] = useState<UserDivisionPermissions>({});
+    const [busyUserId, setBusyUserId] = useState<string | null>(null);
 
-    // Hydrate local state from Supabase division permissions
     useEffect(() => {
         if (!companyId) return;
         if (divLoading || usersLoading || permsLoading) return;
+        if (scopedUsers.length === 0 || divisions.length === 0) {
+            setUserDivisionPermissions({});
+            return;
+        }
 
         const perms: UserDivisionPermissions = {};
-        users.forEach((u: any) => {
+        scopedUsers.forEach((u: User) => {
             perms[u.id] = {};
-            divisions.forEach((d: any) => {
+            divisions.forEach((d) => {
                 perms[u.id][d.id] = false;
             });
         });
 
         dbPerms.forEach((p: any) => {
-            if (perms[p.user_id] && p.division_id) {
-                perms[p.user_id][p.division_id] = !!p.can_access;
+            if (p.can_access && perms[p.user_id] && p.division_id) {
+                perms[p.user_id][p.division_id] = true;
             }
         });
 
         setUserDivisionPermissions(perms);
-    }, [companyId, dbPerms, users, divisions, divLoading, usersLoading, permsLoading]);
+    }, [companyId, dbPerms, scopedUsers, divisions, divLoading, usersLoading, permsLoading]);
 
     const handleToggleDivision = async (userId: string, divisionId: string) => {
-        if (!companyId) return;
+        if (!companyId || busyUserId) return;
 
         const previousValue = userDivisionPermissions[userId]?.[divisionId] ?? false;
         const newValue = !previousValue;
 
-        setUserDivisionPermissions(prev => ({
+        setUserDivisionPermissions((prev) => ({
             ...prev,
             [userId]: {
                 ...(prev[userId] || {}),
                 [divisionId]: newValue,
-            }
+            },
         }));
 
         try {
@@ -122,50 +138,43 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
                 company_id: companyId,
                 can_access: newValue,
             });
-        } catch (e) {
-            // Revert on failure
-            setUserDivisionPermissions(prev => ({
+        } catch {
+            setUserDivisionPermissions((prev) => ({
                 ...prev,
                 [userId]: {
                     ...(prev[userId] || {}),
                     [divisionId]: previousValue,
-                }
+                },
             }));
         }
     };
 
     const handleSetAllDivisionsForUser = async (userId: string, desiredValue: boolean) => {
-        if (!companyId) return;
+        if (!companyId || busyUserId || divisions.length === 0) return;
+
         const snapshot = { ...(userDivisionPermissions[userId] || {}) };
+        const nextForUser = Object.fromEntries(divisions.map((d) => [d.id, desiredValue]));
 
-        const tasks = divisions
-            .filter((d) => (snapshot[d.id] ?? false) !== desiredValue)
-            .map((d) => updateDivPermMutation.mutateAsync({
-                user_id: userId,
-                division_id: d.id,
-                company_id: companyId,
-                can_access: desiredValue,
-            }));
-
-        // Optimistic update
-        const nextForUser = divisions.reduce<Record<string, boolean>>((acc, d) => {
-            acc[d.id] = desiredValue;
-            return acc;
-        }, {});
-
-        setUserDivisionPermissions(prev => ({
+        setBusyUserId(userId);
+        setUserDivisionPermissions((prev) => ({
             ...prev,
             [userId]: nextForUser,
         }));
 
         try {
-            if (tasks.length) await Promise.all(tasks);
-        } catch (e) {
-            // Revert on failure
-            setUserDivisionPermissions(prev => ({
+            await bulkUpdateMutation.mutateAsync({
+                company_id: companyId,
+                user_id: userId,
+                division_ids: divisions.map((d) => d.id),
+                can_access: desiredValue,
+            });
+        } catch {
+            setUserDivisionPermissions((prev) => ({
                 ...prev,
                 [userId]: snapshot,
             }));
+        } finally {
+            setBusyUserId(null);
         }
     };
 
@@ -199,9 +208,10 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
         }
     };
 
+    const isLoading = divLoading || usersLoading || permsLoading;
+
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.openDrawer()}>
                     <Ionicons name="menu" size={28} color={theme.colors.text} />
@@ -216,92 +226,123 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
-                {/* Title Section */}
                 <View style={styles.titleSection}>
                     <Text style={styles.title}>Division Permissions</Text>
                     <Text style={styles.subtitle}>Control which divisions each user can access</Text>
                 </View>
 
-                {/* Users List */}
-                {divLoading || usersLoading || permsLoading ? (
+                {isLoading ? (
                     <View style={{ paddingVertical: theme.spacing.lg }}>
                         <ActivityIndicator size="large" color={theme.colors.textSecondary} />
                     </View>
                 ) : null}
-                {users.map((user) => (
-                    <StyledCard key={user.id} style={styles.userCard}>
-                        {/* User Info Header */}
-                        <View style={styles.userHeader}>
-                            <View style={styles.userInfo}>
-                                <Ionicons name="shield-outline" size={24} color={getRoleColor(user.role)} />
-                                <View style={styles.userDetails}>
-                                    <Text style={styles.userName}>{user.name}</Text>
-                                    <Text style={styles.userEmail}>{user.email}</Text>
-                                    {user.role === 'super_admin' && (
-                                        <Text style={styles.fullAccessNote}>Full access to entire app</Text>
-                                    )}
+
+                {scopedUsers.map((user: User) => {
+                    const isBusy = busyUserId === user.id;
+                    const selectedCount = divisions.filter(
+                        (division) => userDivisionPermissions[user.id]?.[division.id],
+                    ).length;
+
+                    return (
+                        <StyledCard key={user.id} style={styles.userCard}>
+                            <View style={styles.userHeader}>
+                                <View style={styles.userInfo}>
+                                    <Ionicons name="shield-outline" size={24} color={getRoleColor(user.role)} />
+                                    <View style={styles.userDetails}>
+                                        <Text style={styles.userName}>{user.name}</Text>
+                                        <Text style={styles.userEmail}>{user.email}</Text>
+                                    </View>
+                                </View>
+                                <View style={styles.userHeaderRight}>
+                                    <Text style={styles.selectionCount}>
+                                        {selectedCount}/{divisions.length} selected
+                                    </Text>
+                                    <View style={styles.userHeaderActions}>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.userHeaderActionBtn,
+                                                styles.userHeaderActionBtnPrimary,
+                                                (isBusy || selectedCount === divisions.length) && styles.actionDisabled,
+                                            ]}
+                                            disabled={isBusy || selectedCount === divisions.length}
+                                            onPress={() => handleSetAllDivisionsForUser(user.id, true)}
+                                        >
+                                            <Text style={[styles.userHeaderActionText, styles.userHeaderActionTextPrimary]}>
+                                                Select All
+                                            </Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.userHeaderActionBtn,
+                                                styles.userHeaderActionBtnMuted,
+                                                (isBusy || selectedCount === 0) && styles.actionDisabled,
+                                            ]}
+                                            disabled={isBusy || selectedCount === 0}
+                                            onPress={() => handleSetAllDivisionsForUser(user.id, false)}
+                                        >
+                                            <Text style={[styles.userHeaderActionText, styles.userHeaderActionTextMuted]}>
+                                                Deselect All
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={[styles.roleBadge, { backgroundColor: getRoleColor(user.role) }]}>
+                                        <Text style={styles.roleBadgeText}>{formatRole(user.role)}</Text>
+                                    </View>
                                 </View>
                             </View>
-                            <View style={styles.userHeaderRight}>
-                                <View style={styles.userHeaderActions}>
-                                    <TouchableOpacity
-                                        style={[styles.userHeaderActionBtn, styles.userHeaderActionBtnPrimary]}
-                                        disabled={updateDivPermMutation.isPending}
-                                        onPress={() => handleSetAllDivisionsForUser(user.id, true)}
-                                    >
-                                        <Text style={[styles.userHeaderActionText, styles.userHeaderActionTextPrimary]}>Select All</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[styles.userHeaderActionBtn, styles.userHeaderActionBtnMuted]}
-                                        disabled={updateDivPermMutation.isPending}
-                                        onPress={() => handleSetAllDivisionsForUser(user.id, false)}
-                                    >
-                                        <Text style={[styles.userHeaderActionText, styles.userHeaderActionTextMuted]}>Deselect All</Text>
-                                    </TouchableOpacity>
-                                </View>
+
+                            <View style={styles.divisionsListContainer}>
+                                {divisions.map((division) => {
+                                    const isEnabled = userDivisionPermissions[user.id]?.[division.id] || false;
+                                    return (
+                                        <View key={division.id} style={styles.divisionItem}>
+                                            <View style={styles.divisionLeft}>
+                                                <Ionicons
+                                                    name="people-outline"
+                                                    size={20}
+                                                    color={theme.colors.textSecondary}
+                                                />
+                                                <Text style={styles.divisionName}>{division.name}</Text>
+                                            </View>
+                                            <Switch
+                                                value={isEnabled}
+                                                onValueChange={() => handleToggleDivision(user.id, division.id)}
+                                                trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
+                                                thumbColor="#ffffff"
+                                                ios_backgroundColor="#e2e8f0"
+                                                disabled={isBusy}
+                                            />
+                                        </View>
+                                    );
+                                })}
+                            </View>
+                        </StyledCard>
+                    );
+                })}
+
+                {!isLoading && otherUsers.length > 0 && (
+                    <StyledCard style={styles.userCard}>
+                        <Text style={styles.otherRolesTitle}>Other roles</Text>
+                        <Text style={styles.otherRolesSubtitle}>
+                            Admins, staff, specialists, and health center users already have access to all divisions.
+                        </Text>
+                        {otherUsers.map((user: User) => (
+                            <View key={user.id} style={styles.otherUserRow}>
+                                <Text style={styles.otherUserName}>{user.name}</Text>
                                 <View style={[styles.roleBadge, { backgroundColor: getRoleColor(user.role) }]}>
                                     <Text style={styles.roleBadgeText}>{formatRole(user.role)}</Text>
                                 </View>
                             </View>
-                        </View>
-
-                        {/* Divisions List */}
-                        <ScrollView
-                            style={styles.divisionsListContainer}
-                            nestedScrollEnabled={true}
-                            showsVerticalScrollIndicator={true}
-                        >
-                            {divisions.map((division) => {
-                                const isEnabled = userDivisionPermissions[user.id]?.[division.id] || false;
-                                return (
-                                    <View key={division.id} style={styles.divisionItem}>
-                                        <View style={styles.divisionLeft}>
-                                            <Ionicons
-                                                name="people-outline"
-                                                size={20}
-                                                color={theme.colors.textSecondary}
-                                            />
-                                            <Text style={styles.divisionName}>{division.name}</Text>
-                                        </View>
-                                        <Switch
-                                            key={`${division.id}-${isEnabled}`}
-                                            value={isEnabled}
-                                            onValueChange={() => handleToggleDivision(user.id, division.id)}
-                                            trackColor={{ false: '#e2e8f0', true: theme.colors.secondary }}
-                                            thumbColor="#ffffff"
-                                            // @ts-ignore
-                                            activeThumbColor="#ffffff"
-                                            ios_backgroundColor="#e2e8f0"
-                                            disabled={updateDivPermMutation.isPending}
-                                        />
-                                    </View>
-                                );
-                            })}
-                        </ScrollView>
+                        ))}
                     </StyledCard>
-                ))}
-            </ScrollView>
+                )}
 
+                {!isLoading && scopedUsers.length === 0 && (
+                    <StyledCard style={styles.userCard}>
+                        <Text style={styles.emptyText}>No division leaders or viewers found for this camp.</Text>
+                    </StyledCard>
+                )}
+            </ScrollView>
         </SafeAreaView>
     );
 };
@@ -372,6 +413,10 @@ const styles = StyleSheet.create({
         gap: theme.spacing.sm,
         marginLeft: theme.spacing.md,
     },
+    selectionCount: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
     userHeaderActions: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -401,6 +446,9 @@ const styles = StyleSheet.create({
     userHeaderActionTextMuted: {
         color: theme.colors.textSecondary,
     },
+    actionDisabled: {
+        opacity: 0.5,
+    },
     userDetails: {
         flex: 1,
     },
@@ -416,12 +464,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: theme.colors.textSecondary,
     },
-    fullAccessNote: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-        marginTop: 2,
-        fontStyle: 'italic',
-    },
     roleBadge: {
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.xs,
@@ -434,7 +476,7 @@ const styles = StyleSheet.create({
         color: 'white',
     },
     divisionsListContainer: {
-        maxHeight: 400,
+        gap: 0,
     },
     divisionItem: {
         flexDirection: 'row',
@@ -456,21 +498,34 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         flex: 1,
     },
-    fab: {
-        position: 'absolute',
-        bottom: theme.spacing.xl,
-        right: theme.spacing.xl,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: theme.colors.secondary,
+    otherRolesTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: theme.spacing.xs,
+    },
+    otherRolesSubtitle: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.md,
+    },
+    otherUserRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        justifyContent: 'center',
-        ...theme.shadows.card,
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
-        zIndex: 100,
+        paddingVertical: theme.spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    otherUserName: {
+        fontSize: 14,
+        color: theme.colors.text,
+        flex: 1,
+        marginRight: theme.spacing.sm,
+    },
+    emptyText: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
     },
 });
-

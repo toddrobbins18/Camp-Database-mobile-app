@@ -93,7 +93,8 @@ export const useDivisionPermissions = (companyId: string | null) => {
             try {
                 const { data, error } = await supabase
                     .from('division_permissions')
-                    .select('*, division:divisions(name, gender)')
+                    .select('user_id, division_id, company_id, can_access')
+                    .eq('company_id', companyId)
                     .order('created_at', { ascending: true });
                 if (error) throw error;
                 const rows = (data || []) as any[];
@@ -132,7 +133,6 @@ export const useDivisionsLookup = (companyId: string | null) => {
 };
 
 export const useUpdateDivisionPermission = () => {
-    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({ user_id, division_id, company_id, can_access }: { user_id: string; division_id: string; company_id?: string; can_access: boolean }) => {
             const row: Record<string, unknown> = { user_id, division_id, can_access };
@@ -149,9 +149,44 @@ export const useUpdateDivisionPermission = () => {
             await enqueueSync('division_permissions.upsert', { row });
             return row as any;
         },
+    });
+};
+
+export const useBulkUpdateDivisionPermissions = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({
+            company_id,
+            user_id,
+            division_ids,
+            can_access,
+        }: {
+            company_id: string;
+            user_id: string;
+            division_ids: string[];
+            can_access: boolean;
+        }) => {
+            const rows = division_ids.map((division_id) => ({
+                user_id,
+                division_id,
+                company_id,
+                can_access,
+            }));
+
+            if (await isOnlineNow()) {
+                const { error } = await supabase
+                    .from('division_permissions')
+                    .upsert(rows, { onConflict: 'user_id,division_id' });
+                if (error) throw error;
+                return;
+            }
+
+            for (const row of rows) {
+                await enqueueSync('division_permissions.upsert', { row });
+            }
+        },
         onSuccess: (_data, variables) => {
-            // Keep invalidation aligned with useDivisionPermissions(companyId)
-            queryClient.invalidateQueries({ queryKey: ['division_permissions', variables.company_id ?? null] });
+            queryClient.invalidateQueries({ queryKey: ['division_permissions', variables.company_id] });
         },
     });
 };
