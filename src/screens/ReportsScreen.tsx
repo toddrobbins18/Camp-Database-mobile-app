@@ -18,6 +18,9 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useDivisionsLookup } from '../api/permissions';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
+import { fetchAwardsForSeason } from '../lib/awardsQueries';
+import { fetchExpandedMedicationSchedule } from '../lib/medicationReportSchedule';
+import { parseMedicationMealTimeLabels } from '../lib/medicationMealTimeDisplay';
 
 interface ReportsScreenProps {
     navigation: any;
@@ -278,22 +281,32 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                     break;
                 }
                 case 'awards': {
-                    const { data } = await supabase
-                        .from('awards')
-                        .select('date, title, category, description, children(name, division_id, divisions(name))')
-                        .eq('company_id', companyId)
-                        .eq('season', season)
-                        .gte('date', fromDate)
-                        .lte('date', toDate)
-                        .order('date', { ascending: false });
-
-                    const filtered = (data || []).filter((row: any) =>
-                        selectedDivisionId === 'all' ? true : row.children?.division_id === selectedDivisionId
+                    const divisionNameById = new Map(
+                        (divisions as any[]).map((d: any) => [d.id, d.name]),
                     );
+                    const awardsList = await fetchAwardsForSeason(
+                        supabase,
+                        companyId,
+                        season,
+                        allowedDivisionIds,
+                        (divisions as any[]).map((d: any) => ({ id: d.id, name: d.name })),
+                    );
+                    const dateFiltered = awardsList.filter(
+                        (a) => a.date >= fromDate && a.date <= toDate,
+                    );
+                    const filtered =
+                        selectedDivisionId === 'all'
+                            ? dateFiltered
+                            : dateFiltered.filter(
+                                  (a) => a.children?.division_id === selectedDivisionId,
+                              );
                     dataRows = filtered.map((row: any) => ({
                         Date: row.date,
                         Child: row.children?.name || 'Unknown',
-                        Division: row.children?.divisions?.name || 'N/A',
+                        Division:
+                            (row.children?.division_id &&
+                                divisionNameById.get(row.children.division_id)) ||
+                            'N/A',
                         Title: row.title || 'N/A',
                         Category: row.category || 'N/A',
                         Description: row.description || '',
@@ -391,30 +404,49 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                     break;
                 }
                 case 'medications': {
-                    const { data } = await supabase
-                        .from('medication_logs')
-                        .select('date, medication_name, dosage, meal_time, scheduled_time, administered, notes, child_id, children(name, division_id, divisions(name))')
-                        .eq('company_id', companyId)
-                        .eq('season', season)
-                        .gte('date', fromDate)
-                        .lte('date', toDate)
-                        .order('date', { ascending: false });
-                    const filtered = (data || []).filter((row: any) =>
-                        selectedDivisionId === 'all' ? true : row.children?.division_id === selectedDivisionId
+                    const expanded = await fetchExpandedMedicationSchedule(
+                        supabase,
+                        companyId,
+                        season,
+                        startDate,
+                        endDate,
                     );
-                    dataRows = filtered.map((row: any) => ({
-                        Date: row.date,
-                        Child: row.children?.name || 'Unknown',
-                        Division: row.children?.divisions?.name || 'N/A',
-                        Medication: row.medication_name || 'N/A',
-                        Dosage: row.dosage || 'N/A',
-                        'Meal Time': Array.isArray(row.meal_time) ? row.meal_time.join(', ') : row.meal_time || 'N/A',
-                        'Scheduled Time': row.scheduled_time || 'N/A',
-                        Administered: row.administered ? 'Yes' : 'No',
-                        Notes: row.notes || '',
-                    }));
+                    const filtered = expanded.filter((row: any) => {
+                        if (selectedDivisionId !== 'all') {
+                            return row.children?.division_id === selectedDivisionId;
+                        }
+                        if (allowedDivisionIds !== null) {
+                            return (
+                                row.children?.division_id &&
+                                allowedDivisionIds.includes(row.children.division_id)
+                            );
+                        }
+                        return true;
+                    });
+                    dataRows = filtered.map((row: any) => {
+                        const divisionName = row.children?.divisions?.name ?? null;
+                        const mealLabel = parseMedicationMealTimeLabels(
+                            row.meal_time,
+                            divisionName,
+                        ).join(', ');
+                        return {
+                            Date: row._displayDate || row.date,
+                            Child: row.children?.name || 'Unknown',
+                            Division: divisionName || 'N/A',
+                            Medication: row.medication_name || 'N/A',
+                            Dosage: row.dosage || 'N/A',
+                            'Meal Time': mealLabel || 'N/A',
+                            'Scheduled Time': row.scheduled_time || 'N/A',
+                            Administered: row.administered ? 'Yes' : 'No',
+                            Notes: row.notes || '',
+                        };
+                    });
+                    const uniqueChildren = new Set(filtered.map((r: any) => r.child_id));
+                    const uniqueMeds = new Set(filtered.map((r: any) => r.medication_name));
                     summaryRows = {
                         'Total Medication Entries': filtered.length,
+                        'Unique Children': uniqueChildren.size,
+                        'Different Medications': uniqueMeds.size,
                         Administered: filtered.filter((r: any) => r.administered).length,
                         Pending: filtered.filter((r: any) => !r.administered).length,
                     };
