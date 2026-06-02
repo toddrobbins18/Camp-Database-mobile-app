@@ -20,6 +20,12 @@ import {
 } from '../constants/medicationBedtimeOptions';
 import { defaultMedicationStartDate } from '../lib/medicationStartDate';
 import { childMatchesGenderFilter } from '../lib/medicationSchedule';
+import {
+    MEDICATION_MEAL_FILTER_OPTIONS,
+    medicationMatchesListVisibility,
+    getMealTimeSortPriority,
+} from '../lib/medicationMealTimeDisplay';
+import { MedicationMealTimeBadges } from '../components/nurse/MedicationMealTimeBadges';
 
 const GENDER_FILTER_OPTIONS = [
     { value: 'all' as const, label: 'All Genders' },
@@ -183,6 +189,10 @@ export const HealthScreen = ({ navigation }: any) => {
     const [selectedGender, setSelectedGender] = useState<'all' | 'boys' | 'girls'>('all');
     const [showDivisionPicker, setShowDivisionPicker] = useState(false);
     const [showGenderPicker, setShowGenderPicker] = useState(false);
+    const [medMealFilter, setMedMealFilter] = useState('all');
+    const [medSortBy, setMedSortBy] = useState<'meal_time' | 'name' | 'division' | 'gender'>('meal_time');
+    const [showMealFilterPicker, setShowMealFilterPicker] = useState(false);
+    const [showMedSortPicker, setShowMedSortPicker] = useState(false);
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [rfidInput, setRfidInput] = useState('');
@@ -255,6 +265,95 @@ export const HealthScreen = ({ navigation }: any) => {
     const visibleMedications = useMemo(
         () => safeMedications.filter((med: any) => visibleChildIds.has(med.child_id)),
         [safeMedications, visibleChildIds],
+    );
+
+    const activeListMedications = useMemo(() => {
+        return visibleMedications.filter((med: any) => {
+            const child = safeCampers.find((c: any) => c.id === med.child_id);
+            const divisionName = child?.division?.name ?? med.children?.division?.name ?? null;
+            const childName = child ? getChildDisplayName(child) : med.children?.name ?? '';
+            return medicationMatchesListVisibility(med, {
+                searchQuery,
+                mealFilter: medMealFilter,
+                divisionName,
+                childName,
+            });
+        });
+    }, [visibleMedications, safeCampers, searchQuery, medMealFilter]);
+
+    const sortedActiveListMedications = useMemo(() => {
+        const meds = [...activeListMedications];
+        switch (medSortBy) {
+            case 'name':
+                return meds.sort((a, b) =>
+                    (a.children?.name || '').localeCompare(b.children?.name || ''),
+                );
+            case 'division':
+                return meds.sort((a, b) => {
+                    const divA = a.children?.division?.name || a.children?.group_name || '';
+                    const divB = b.children?.division?.name || b.children?.group_name || '';
+                    if (divA !== divB) return divA.localeCompare(divB);
+                    return (a.children?.name || '').localeCompare(b.children?.name || '');
+                });
+            case 'gender':
+                return meds.sort((a, b) => {
+                    const gA = String(a.children?.gender ?? a.children?.division?.gender ?? '');
+                    const gB = String(b.children?.gender ?? b.children?.division?.gender ?? '');
+                    if (gA !== gB) return gA.localeCompare(gB);
+                    return (a.children?.name || '').localeCompare(b.children?.name || '');
+                });
+            case 'meal_time':
+            default:
+                return meds.sort((a, b) => {
+                    const divA = a.children?.division?.name ?? null;
+                    const divB = b.children?.division?.name ?? null;
+                    return (
+                        getMealTimeSortPriority(a.meal_time, divA) -
+                        getMealTimeSortPriority(b.meal_time, divB)
+                    );
+                });
+        }
+    }, [activeListMedications, medSortBy]);
+
+    const renderMedicationMetaBadges = (med: any, divisionName?: string | null) => (
+        <View style={styles.medMetaBadgeRow}>
+            {med.is_recurring ? (
+                <View style={styles.recurringBadge}>
+                    <Text style={styles.recurringBadgeText}>Recurring</Text>
+                </View>
+            ) : null}
+            <MedicationMealTimeBadges mealTime={med.meal_time} divisionName={divisionName} />
+        </View>
+    );
+
+    const renderMedFilterControls = () => (
+        <View style={styles.medFilterRow}>
+            <TouchableOpacity
+                style={styles.medFilterDropdown}
+                onPress={() => setShowMealFilterPicker(true)}
+            >
+                <Text style={styles.medFilterDropdownText} numberOfLines={1}>
+                    {MEDICATION_MEAL_FILTER_OPTIONS.find((o) => o.value === medMealFilter)?.label ?? 'All meal times'}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={styles.medFilterDropdown}
+                onPress={() => setShowMedSortPicker(true)}
+            >
+                <Ionicons name="swap-vertical-outline" size={16} color={theme.colors.text} />
+                <Text style={styles.medFilterDropdownText} numberOfLines={1}>
+                    {medSortBy === 'meal_time'
+                        ? 'Sort by Meal Time'
+                        : medSortBy === 'name'
+                          ? 'Sort by Name'
+                          : medSortBy === 'division'
+                            ? 'Sort by Division'
+                            : 'Sort by Gender'}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+        </View>
     );
 
     const calendarWidgetEvents: CalendarWidgetEvent[] = useMemo(() => {
@@ -846,7 +945,10 @@ export const HealthScreen = ({ navigation }: any) => {
                                 <Text style={styles.todaysMedicationsTitle}>
                                     {isSelectedDateToday ? "Today's Medications" : `Medications for ${formatSelectedDate(selectedDate)}`}
                                 </Text>
-                                <Text style={styles.todaysMedicationsSubtitle}>Track medication administration</Text>
+                                <Text style={styles.todaysMedicationsSubtitle}>
+                                    Given meds and meds without a meal time are hidden — search by child or medication name to find them.
+                                </Text>
+                                {renderMedFilterControls()}
 
                                 {/* RFID Quick Check-In Card */}
                                 <StyledCard style={styles.rfidCard}>
@@ -880,13 +982,13 @@ export const HealthScreen = ({ navigation }: any) => {
                                 </StyledCard>
 
                                 {/* Empty State or List - card per medication with Pending/Given, Mark as Administered, Edit, Delete */}
-                                {visibleMedications.length === 0 ? (
+                                {activeListMedications.length === 0 ? (
                                     <View style={styles.emptyStateRow}>
                                         <Text style={styles.emptyText}>{selectedDateEmptyLabel}</Text>
                                         <View style={styles.emptyDot} />
                                     </View>
                                 ) : (
-                                    visibleMedications.map((med: any) => (
+                                    sortedActiveListMedications.map((med: any) => (
                                         <View key={medicationRowKey(med)} style={styles.medicationCard}>
                                             <View style={styles.medicationCardHeader}>
                                                 <Text style={styles.medicationCardName}>{med.children?.name}</Text>
@@ -896,21 +998,17 @@ export const HealthScreen = ({ navigation }: any) => {
                                                             <Ionicons name="checkmark-circle" size={14} color="#10b981" />
                                                             <Text style={styles.statusBadgeGivenText}>Given</Text>
                                                         </View>
-                                                    ) : (
-                                                        <View style={[styles.statusBadge, styles.statusBadgePending]}>
-                                                            <Ionicons name="warning" size={14} color={theme.colors.warning || '#f59e0b'} />
-                                                            <Text style={styles.statusBadgePendingText}>Pending</Text>
-                                                        </View>
-                                                    )}
+                                                    ) : null}
                                                     <TouchableOpacity onPress={() => handleDeleteMedication(med)} style={styles.medicationCardIconBtn}>
                                                         <Ionicons name="trash-outline" size={18} color={theme.colors.danger || '#ef4444'} />
                                                     </TouchableOpacity>
                                                 </View>
                                             </View>
                                             <Text style={styles.medicationCardDetail}>{med.medication_name}{med.dosage ? ` - ${med.dosage}` : ''}</Text>
-                                            <Text style={styles.medicationCardTime}>
-                                                {medicationScheduleLabel(med)}
-                                            </Text>
+                                            {renderMedicationMetaBadges(
+                                                med,
+                                                med.children?.division?.name ?? med.children?.group_name,
+                                            )}
                                             {med.date ? (
                                                 <View style={styles.medicationCardDateRow}>
                                                     <Ionicons name="calendar-outline" size={12} color={theme.colors.textSecondary} />
@@ -1435,10 +1533,11 @@ export const HealthScreen = ({ navigation }: any) => {
                                 <Text style={styles.logTitle}>Daily Medication Log</Text>
                                 <Text style={styles.logDescription}>
                                     {isSelectedDateToday
-                                        ? 'Mark off medications administered today.'
+                                        ? 'Mark off medications administered today. Given meds are hidden — search to find and undo.'
                                         : `Mark off medications administered on ${formatSelectedDate(selectedDate)}.`}
                                 </Text>
-                                {visibleMedications.length === 0 ? (
+                                {renderMedFilterControls()}
+                                {activeListMedications.length === 0 ? (
                                     <View style={styles.emptyState}>
                                         <Text style={styles.emptyText}>{selectedDateEmptyLabel}.</Text>
                                     </View>
@@ -1446,7 +1545,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     <View style={{ marginTop: 12 }}>
                                         {(() => {
                                             const byChild: Record<string, any[]> = {};
-                                            visibleMedications.forEach((med: any) => {
+                                            sortedActiveListMedications.forEach((med: any) => {
                                                 const key = med.child_id;
                                                 if (!byChild[key]) byChild[key] = [];
                                                 byChild[key].push(med);
@@ -1463,9 +1562,10 @@ export const HealthScreen = ({ navigation }: any) => {
                                                         {meds.map((med: any) => (
                                                             <View key={medicationRowKey(med)} style={styles.dailyLogMedRow}>
                                                                 <Text style={styles.dailyLogMedDetail}>{med.medication_name}{med.dosage ? ` - ${med.dosage}` : ''}</Text>
-                                                                <Text style={styles.dailyLogMedTime}>
-                                                                    {medicationScheduleLabel(med)}
-                                                                </Text>
+                                                                {renderMedicationMetaBadges(
+                                                                    med,
+                                                                    meds[0]?.children?.division?.name ?? meds[0]?.children?.group_name,
+                                                                )}
                                             {med.administered ? (
                                                 <>
                                                     <View style={[styles.statusBadge, styles.statusBadgeGiven, { alignSelf: 'flex-start', marginTop: 4 }]}>
@@ -1572,6 +1672,83 @@ export const HealthScreen = ({ navigation }: any) => {
                                 >
                                     <Text style={styles.pickerOptionText}>{option.label}</Text>
                                     {selectedGender === option.value && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            <Modal
+                visible={showMealFilterPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowMealFilterPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowMealFilterPicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Filter by Meal Time</Text>
+                            <TouchableOpacity onPress={() => setShowMealFilterPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.pickerContent} showsVerticalScrollIndicator={true}>
+                            {MEDICATION_MEAL_FILTER_OPTIONS.map((option) => (
+                                <TouchableOpacity
+                                    key={option.value}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setMedMealFilter(option.value);
+                                        setShowMealFilterPicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{option.label}</Text>
+                                    {medMealFilter === option.value && (
+                                        <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            <Modal
+                visible={showMedSortPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowMedSortPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowMedSortPicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Sort Medications</Text>
+                            <TouchableOpacity onPress={() => setShowMedSortPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.pickerContent} showsVerticalScrollIndicator={true}>
+                            {(
+                                [
+                                    { value: 'meal_time' as const, label: 'Sort by Meal Time' },
+                                    { value: 'name' as const, label: 'Sort by Name' },
+                                    { value: 'division' as const, label: 'Sort by Division' },
+                                    { value: 'gender' as const, label: 'Sort by Gender' },
+                                ] as const
+                            ).map((option) => (
+                                <TouchableOpacity
+                                    key={option.value}
+                                    style={styles.pickerOption}
+                                    onPress={() => {
+                                        setMedSortBy(option.value);
+                                        setShowMedSortPicker(false);
+                                    }}
+                                >
+                                    <Text style={styles.pickerOptionText}>{option.label}</Text>
+                                    {medSortBy === option.value && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
                                     )}
                                 </TouchableOpacity>
@@ -2224,7 +2401,52 @@ const styles = StyleSheet.create({
         ...theme.typography.bodySmall,
         fontSize: 14,
         color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.md,
+    },
+    medFilterRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
         marginBottom: theme.spacing.lg,
+        width: '100%',
+    },
+    medFilterDropdown: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 6,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+    },
+    medFilterDropdownText: {
+        flex: 1,
+        fontSize: 13,
+        color: theme.colors.text,
+    },
+    medMetaBadgeRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 6,
+    },
+    recurringBadge: {
+        backgroundColor: '#ccfbf1',
+        borderWidth: 1,
+        borderColor: '#5eead4',
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+    },
+    recurringBadgeText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#115e59',
     },
     rfidCard: {
         backgroundColor: theme.colors.surface,
