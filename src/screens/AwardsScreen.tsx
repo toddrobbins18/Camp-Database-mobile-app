@@ -10,6 +10,8 @@ import { useCompany } from '../contexts/CompanyContext';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { fetchAwardsForSeason } from '../lib/awardsQueries';
+import { useRosterDivisionFilter } from '../api/campers';
+import { useDivisionsLookup } from '../api/permissions';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -63,20 +65,31 @@ export const AwardsScreen = ({ navigation }: any) => {
     const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
     const activeSeason = season || new Date().getFullYear().toString();
+    const { data: divisionFilter, isLoading: divisionFilterLoading } = useRosterDivisionFilter(companyId);
+    const { data: divisions = [] } = useDivisionsLookup(companyId);
 
     // Fetch awards from Supabase (children table has "name", not first_name/last_name)
     const { data: awards = [], isLoading: isLoadingAwards } = useQuery({
-        queryKey: ['awards', companyId, activeSeason],
+        queryKey: ['awards', companyId, activeSeason, divisionFilter],
         queryFn: async () => {
             if (!companyId) return [];
-            const rows = await fetchAwardsForSeason(supabase, companyId, activeSeason, null);
+            const rows = await fetchAwardsForSeason(
+                supabase,
+                companyId,
+                activeSeason,
+                divisionFilter ?? null,
+                divisions.map((d: { id: string; name?: string | null }) => ({
+                    id: d.id,
+                    name: d.name,
+                })),
+            );
             return rows.map((award) => ({
                 ...award,
                 childId: award.child_id,
                 childName: award.children?.name?.trim() || 'Unknown',
             }));
         },
-        enabled: !!companyId,
+        enabled: !!companyId && !divisionFilterLoading,
     });
 
     // Fetch children for Add Award dropdown (children table has "name", filter by season)

@@ -283,37 +283,103 @@ export const HealthScreen = ({ navigation }: any) => {
 
     const sortedActiveListMedications = useMemo(() => {
         const meds = [...activeListMedications];
+        const resolveChild = (med: any) =>
+            safeCampers.find((c: any) => c.id === med.child_id) ?? med.children;
+
         switch (medSortBy) {
             case 'name':
                 return meds.sort((a, b) =>
-                    (a.children?.name || '').localeCompare(b.children?.name || ''),
+                    (resolveChild(a)?.name || a.children?.name || '').localeCompare(
+                        resolveChild(b)?.name || b.children?.name || '',
+                    ),
                 );
             case 'division':
                 return meds.sort((a, b) => {
-                    const divA = a.children?.division?.name || a.children?.group_name || '';
-                    const divB = b.children?.division?.name || b.children?.group_name || '';
-                    if (divA !== divB) return divA.localeCompare(divB);
-                    return (a.children?.name || '').localeCompare(b.children?.name || '');
+                    const childA = resolveChild(a);
+                    const childB = resolveChild(b);
+                    const divA = childA?.division?.sort_order ?? 999;
+                    const divB = childB?.division?.sort_order ?? 999;
+                    if (divA !== divB) return divA - divB;
+                    return (childA?.name || a.children?.name || '').localeCompare(
+                        childB?.name || b.children?.name || '',
+                    );
                 });
             case 'gender':
                 return meds.sort((a, b) => {
-                    const gA = String(a.children?.gender ?? a.children?.division?.gender ?? '');
-                    const gB = String(b.children?.gender ?? b.children?.division?.gender ?? '');
+                    const childA = resolveChild(a);
+                    const childB = resolveChild(b);
+                    const gA = String(childA?.gender ?? childA?.division?.gender ?? '');
+                    const gB = String(childB?.gender ?? childB?.division?.gender ?? '');
                     if (gA !== gB) return gA.localeCompare(gB);
-                    return (a.children?.name || '').localeCompare(b.children?.name || '');
+                    return (childA?.name || a.children?.name || '').localeCompare(
+                        childB?.name || b.children?.name || '',
+                    );
                 });
             case 'meal_time':
             default:
                 return meds.sort((a, b) => {
-                    const divA = a.children?.division?.name ?? null;
-                    const divB = b.children?.division?.name ?? null;
+                    const divA = resolveChild(a)?.division?.name ?? a.children?.division?.name ?? null;
+                    const divB = resolveChild(b)?.division?.name ?? b.children?.division?.name ?? null;
                     return (
                         getMealTimeSortPriority(a.meal_time, divA) -
                         getMealTimeSortPriority(b.meal_time, divB)
                     );
                 });
         }
-    }, [activeListMedications, medSortBy]);
+    }, [activeListMedications, medSortBy, safeCampers]);
+
+    const sortedDailyLogChildIds = useMemo(() => {
+        const childIds = [
+            ...new Set(activeListMedications.map((med: any) => med.child_id)),
+        ];
+        const childRows = childIds
+            .map((id) => safeCampers.find((c: any) => c.id === id))
+            .filter(Boolean) as any[];
+
+        return [...childRows].sort((a, b) => {
+            switch (medSortBy) {
+                case 'division': {
+                    const divA = a.division?.sort_order ?? 999;
+                    const divB = b.division?.sort_order ?? 999;
+                    if (divA !== divB) return divA - divB;
+                    return getChildDisplayName(a).localeCompare(getChildDisplayName(b));
+                }
+                case 'gender': {
+                    const gA = String(a.gender ?? a.division?.gender ?? '');
+                    const gB = String(b.gender ?? b.division?.gender ?? '');
+                    if (gA !== gB) return gA.localeCompare(gB);
+                    return getChildDisplayName(a).localeCompare(getChildDisplayName(b));
+                }
+                case 'name':
+                    return getChildDisplayName(a).localeCompare(getChildDisplayName(b));
+                case 'meal_time':
+                default: {
+                    const priorityA = Math.min(
+                        ...activeListMedications
+                            .filter((med: any) => med.child_id === a.id)
+                            .map((med: any) =>
+                                getMealTimeSortPriority(
+                                    med.meal_time,
+                                    a.division?.name ?? med.children?.division?.name ?? null,
+                                ),
+                            ),
+                    );
+                    const priorityB = Math.min(
+                        ...activeListMedications
+                            .filter((med: any) => med.child_id === b.id)
+                            .map((med: any) =>
+                                getMealTimeSortPriority(
+                                    med.meal_time,
+                                    b.division?.name ?? med.children?.division?.name ?? null,
+                                ),
+                            ),
+                    );
+                    if (priorityA !== priorityB) return priorityA - priorityB;
+                    return getChildDisplayName(a).localeCompare(getChildDisplayName(b));
+                }
+            }
+        }).map((child) => child.id);
+    }, [activeListMedications, medSortBy, safeCampers]);
 
     const renderMedicationMetaBadges = (med: any, divisionName?: string | null) => (
         <View style={styles.medMetaBadgeRow}>
@@ -1543,18 +1609,19 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </View>
                                 ) : (
                                     <View style={{ marginTop: 12 }}>
-                                        {(() => {
-                                            const byChild: Record<string, any[]> = {};
-                                            sortedActiveListMedications.forEach((med: any) => {
-                                                const key = med.child_id;
-                                                if (!byChild[key]) byChild[key] = [];
-                                                byChild[key].push(med);
-                                            });
-                                            return Object.entries(byChild).map(([cid, meds]) => {
-                                                const name = meds[0]?.children?.name || 'Unknown';
-                                                const groupName = meds[0]?.children?.group_name || '';
-                                                return (
-                                                    <View key={cid} style={styles.dailyLogChildCard}>
+                                        {sortedDailyLogChildIds.map((cid) => {
+                                            const meds = sortedActiveListMedications.filter(
+                                                (med: any) => med.child_id === cid,
+                                            );
+                                            const child = safeCampers.find((c: any) => c.id === cid);
+                                            const name = child ? getChildDisplayName(child) : meds[0]?.children?.name || 'Unknown';
+                                            const groupName =
+                                                child?.division?.name ??
+                                                meds[0]?.children?.division?.name ??
+                                                meds[0]?.children?.group_name ??
+                                                '';
+                                            return (
+                                                <View key={cid} style={styles.dailyLogChildCard}>
                                                         <View style={styles.dailyLogChildHeader}>
                                                             <Text style={styles.dailyLogChildName}>{name}</Text>
                                                             <View style={styles.divisionTagSmall}><Text style={styles.divisionTagSmallText}>{groupName}</Text></View>
@@ -1595,8 +1662,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                         ))}
                                                     </View>
                                                 );
-                                            });
-                                        })()}
+                                        })}
                                     </View>
                                 )}
                             </StyledCard>

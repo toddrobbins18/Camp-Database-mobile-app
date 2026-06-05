@@ -216,6 +216,32 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
         enabled: !!camper?.id && !!companyId,
     });
 
+    const { data: healthAdmissionNotes = {} as Record<string, { id: string; note: string; created_at: string }[]> } = useQuery({
+        queryKey: ['camper_health_admission_notes', camper?.id, companyId, healthAdmissions.map((a: any) => a.id).join(',')],
+        queryFn: async () => {
+            if (!companyId || healthAdmissions.length === 0) return {};
+            const admissionIds = healthAdmissions.map((a: any) => a.id);
+            const { data, error } = await supabase
+                .from('health_center_admission_notes')
+                .select('id, admission_id, note, created_at')
+                .eq('company_id', companyId)
+                .in('admission_id', admissionIds)
+                .order('created_at', { ascending: true });
+            if (error) throw error;
+            const grouped: Record<string, { id: string; note: string; created_at: string }[]> = {};
+            (data || []).forEach((row: any) => {
+                if (!grouped[row.admission_id]) grouped[row.admission_id] = [];
+                grouped[row.admission_id].push({
+                    id: row.id,
+                    note: row.note,
+                    created_at: row.created_at,
+                });
+            });
+            return grouped;
+        },
+        enabled: !!companyId && healthAdmissions.length > 0,
+    });
+
     const { data: healthMedications = [], isLoading: healthMedicationsLoading } = useQuery({
         queryKey: ['camper_health_medications', camper?.id, companyId],
         queryFn: async () => {
@@ -794,6 +820,35 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                         return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
                                     };
 
+                                    const renderAdmissionNotes = (
+                                        admissionId: string,
+                                        initialNotes?: string | null,
+                                    ) => {
+                                        const extraNotes = healthAdmissionNotes[admissionId] || [];
+                                        if (!initialNotes && extraNotes.length === 0) return null;
+                                        return (
+                                            <View style={[styles.healthCenterField, styles.healthCenterFieldWide]}>
+                                                <Text style={styles.healthCenterFieldLabel}>Notes</Text>
+                                                {initialNotes ? (
+                                                    <Text style={styles.healthCenterFieldValue}>{initialNotes}</Text>
+                                                ) : null}
+                                                {extraNotes.map((note) => (
+                                                    <View key={note.id} style={{ marginTop: initialNotes ? 8 : 0 }}>
+                                                        <Text style={styles.healthCenterFieldValue}>{note.note}</Text>
+                                                        <Text style={styles.healthHistoryReason}>
+                                                            {new Date(note.created_at).toLocaleString('en-US', {
+                                                                month: 'short',
+                                                                day: 'numeric',
+                                                                hour: 'numeric',
+                                                                minute: '2-digit',
+                                                            })}
+                                                        </Text>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        );
+                                    };
+
                                     return (
                                         <>
                                             {currentAdmission ? (
@@ -824,12 +879,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                                 {getAdmissionDuration(currentAdmission.admitted_at)}
                                                             </Text>
                                                         </View>
-                                                        {currentAdmission.notes ? (
-                                                            <View style={[styles.healthCenterField, styles.healthCenterFieldWide]}>
-                                                                <Text style={styles.healthCenterFieldLabel}>Notes</Text>
-                                                                <Text style={styles.healthCenterFieldValue}>{currentAdmission.notes}</Text>
-                                                            </View>
-                                                        ) : null}
+                                                        {renderAdmissionNotes(currentAdmission.id, currentAdmission.notes)}
                                                     </View>
                                                 </StyledCard>
                                             ) : (
@@ -879,9 +929,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                                     {admission.reason ? (
                                                                         <Text style={styles.healthHistoryReason}>{admission.reason}</Text>
                                                                     ) : null}
-                                                                    {admission.notes ? (
-                                                                        <Text style={styles.healthHistoryNotes}>{admission.notes}</Text>
-                                                                    ) : null}
+                                                                    {renderAdmissionNotes(admission.id, admission.notes)}
                                                                 </View>
                                                             ))}
                                                         </View>
