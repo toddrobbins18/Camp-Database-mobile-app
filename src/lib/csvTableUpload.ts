@@ -43,6 +43,7 @@ import {
 } from './validationSchemas';
 import { defaultMedicationStartDate } from './medicationStartDate';
 import { applyDailyMedicationDefaults } from './medicationSchedule';
+import { normalizeSpreadsheetDate } from './spreadsheetDates';
 
 /** Tables supported by web `CSVUploader` plus sports_academy & special_events_activities (referenced by web pages). */
 export type CsvTableName =
@@ -211,16 +212,7 @@ export function normalizeFlexibleDate(raw: string | undefined | null): string {
 }
 
 function normalizeDateStringOrNull(value: unknown): string | null {
-    const raw = String(value ?? '').trim();
-    if (!raw) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-    const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (us) {
-        const mm = us[1].padStart(2, '0');
-        const dd = us[2].padStart(2, '0');
-        return `${us[3]}-${mm}-${dd}`;
-    }
-    return null;
+    return normalizeSpreadsheetDate(value);
 }
 
 function normalizeMedicationFrequencyValue(raw: unknown): string | null {
@@ -247,6 +239,10 @@ function sanitizeMedicationLogRowForInsert(row: Record<string, unknown>, season:
     row.date = normalizedDate || defaultMedicationStartDate(season);
 
     row.end_date = normalizeDateStringOrNull(row.end_date);
+
+    if (row.dosage === '' || row.dosage === undefined) {
+        row.dosage = null;
+    }
 
     const normalizedFrequency = normalizeMedicationFrequencyValue(row.frequency);
     row.frequency = normalizedFrequency;
@@ -354,6 +350,17 @@ export type CsvUploadResult = { ok: true; message: string } | { ok: false; error
 
 export type { CsvImportMode };
 
+export async function uploadSpreadsheetRows(
+    tableName: CsvTableName,
+    rawRows: Record<string, unknown>[],
+    ctx: { companyId: string; season: string; mode?: CsvImportMode },
+    client: SupabaseClient = supabase,
+): Promise<CsvUploadResult> {
+    if (rawRows.length === 0) return { ok: false, error: 'Spreadsheet is empty' };
+    if (rawRows.length > 1000) return { ok: false, error: 'Maximum 1000 data rows allowed.' };
+    return executeValidatedUpload(tableName, rawRows, ctx, client);
+}
+
 /**
  * Validates and uploads CSV text to Supabase — mirrors web `CSVUploader` behavior.
  */
@@ -363,11 +370,19 @@ export async function uploadCsvFromText(
     ctx: { companyId: string; season: string; mode?: CsvImportMode },
     client: SupabaseClient = supabase
 ): Promise<CsvUploadResult> {
-    const { companyId, season, mode = 'merge' } = ctx;
-    if (!companyId) return { ok: false, error: 'Company is not selected.' };
-
     const parsed = parseCsvToRawRows(csvText);
     if ('error' in parsed) return { ok: false, error: parsed.error };
+    return uploadSpreadsheetRows(tableName, parsed.rawRows, ctx, client);
+}
+
+async function executeValidatedUpload(
+    tableName: CsvTableName,
+    rawRows: Record<string, unknown>[],
+    ctx: { companyId: string; season: string; mode?: CsvImportMode },
+    client: SupabaseClient = supabase,
+): Promise<CsvUploadResult> {
+    const { companyId, season, mode = 'merge' } = ctx;
+    if (!companyId) return { ok: false, error: 'Company is not selected.' };
 
     const sp = getSchemaParser(tableName);
     if ('error' in sp) return { ok: false, error: sp.error };
@@ -376,15 +391,14 @@ export async function uploadCsvFromText(
     const validatedRows: any[] = [];
     const errors: string[] = [];
 
-    for (let i = 0; i < parsed.rawRows.length; i++) {
+    for (let i = 0; i < rawRows.length; i++) {
         try {
-            const raw = parsed.rawRows[i] as Record<string, any>;
+            const raw = rawRows[i] as Record<string, any>;
             const pre = parser(raw);
             if (tableName === 'medication_logs') {
                 const pid = String(pre.person_id ?? '').trim();
                 const med = String(pre.medication_name ?? '').trim();
-                const dose = String(pre.dosage ?? '').trim();
-                if (!pid && !med && !dose) continue;
+                if (!pid && !med) continue;
             }
             const validated = schema.parse(pre);
             validatedRows.push(validated);
@@ -403,7 +417,24 @@ export async function uploadCsvFromText(
         return { ok: false, error: `Validation failed:\n${head}${more}` };
     }
 
-    // --- CHILDREN / STAFF: merge or replace roster ---
+    if (validatedRows.length === 0) {
+        return {
+            ok: false,
+            error: 'No data rows to import. For medications, each row needs person_id and medication_name.',
+        };
+    }
+
+    return continueUploadAfterValidation(tableName, validatedRows, { companyId, season, mode }, client);
+}
+
+async function continueUploadAfterValidation(
+    tableName: CsvTableName,
+    validatedRows: any[],
+    ctx: { companyId: string; season: string; mode?: CsvImportMode },
+    client: SupabaseClient = supabase,
+): Promise<CsvUploadResult> {
+    const { companyId, season, mode = 'merge' } = ctx;
+
     if (tableName === 'children') {
         const result = await syncChildrenFromCsv(client, validatedRows, { companyId, season, mode });
         if ('error' in result) return { ok: false, error: result.error };

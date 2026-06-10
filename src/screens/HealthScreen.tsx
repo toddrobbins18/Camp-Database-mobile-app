@@ -10,8 +10,9 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useDivisions, getCamperDivisionName } from '../api/campers';
 import { useMedicationLogs, useAddMedicationLog, useSetMedicationAdministration, useDeleteMedicationLog, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
 import { supabase } from '../lib/supabase';
-import { pickAndReadCsvText } from '../lib/pickCsvDocument';
-import { uploadCsvFromText } from '../lib/csvTableUpload';
+import { pickAndReadSpreadsheetRows } from '../lib/pickCsvDocument';
+import { parseCsvDocument } from '../lib/csvLine';
+import { uploadSpreadsheetRows } from '../lib/csvTableUpload';
 import {
     STANDARD_MEAL_SCHEDULE_HHMM,
     STANDARD_MEAL_LABEL_ORDER,
@@ -80,11 +81,12 @@ const CSV_GUIDE_FORMATS: Record<
     medication_logs: {
         title: 'Medication Logs',
         shortLabel: 'Meds',
-        columns: 'person_id, medication_name, dosage',
-        optionalColumns: 'scheduled_time, date, notes, is_recurring, frequency, days_of_week, end_date',
-        example: 'P12345, Tylenol, 5ml, 08:00, 2024-01-15, Take with food, false, daily, ,',
+        columns: 'person_id, medication_name (required). dosage optional.',
+        optionalColumns:
+            'SCHEDULED TIME / Meal Time, START DATE / date, END DATE, NOTES, RECURRING (YES/NO), FREQUENCY, days_of_week. CampMinder Excel columns (CHILD NAME, LAST NAME, DIVISION, DOB) are ignored — camper is matched by person_id. Upload .csv or .xlsx.',
+        example: '15956699, Supplements, 1 package, BEFORE BREAKFAST, Give with food, YES, DAILY, (start), (end)',
         notes:
-            'REQUIRED for every row: person_id, medication_name, dosage. OPTIONAL: scheduling and recurrence columns above. Header row lists required columns first, then optional ones you need. Uploads accept person_id or child_id UUID (mapper resolves person_id → child_id). Use meal_time or scheduled_time only when scheduling is needed.',
+            'REQUIRED: person_id + medication_name on each row (must match a camper in your roster for the selected season). All other columns are optional — missing dosage, dates, or meal time is fine. Excel date serials (e.g. 46198) are converted automatically. Defaults: start = Jun 26 (or today after camp opens), end = Aug 12 for daily recurring meds.',
     },
     trips: {
         title: 'Transportation/Trips',
@@ -723,15 +725,15 @@ export const HealthScreen = ({ navigation }: any) => {
             Alert.alert('Missing context', 'Company or season is not available yet.');
             return;
         }
-        const picked = await pickAndReadCsvText();
+        const picked = await pickAndReadSpreadsheetRows(parseCsvDocument);
         if (!picked.ok) {
             if (picked.error === 'canceled') return;
-            Alert.alert('CSV', picked.message || 'Could not read file.');
+            Alert.alert('Upload', picked.message || 'Could not read file.');
             return;
         }
         setMedCsvUploading(true);
         try {
-            const result = await uploadCsvFromText('medication_logs', picked.text, { companyId, season });
+            const result = await uploadSpreadsheetRows('medication_logs', picked.rows, { companyId, season });
             if (result.ok) {
                 await queryClient.invalidateQueries({ queryKey: ['medication_logs'] });
                 Alert.alert('Success', result.message);
