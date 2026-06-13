@@ -26,9 +26,12 @@ import {
     useTodaySpecialEventsActivities,
     useDailyWolfContentRow,
     useUpcomingTripsForDashboard,
+    useThreeDaySportsOutlook,
 } from '../api/dashboard';
 import { useInboxUnreadCount } from '../api/messages';
 import { supabase } from '../lib/supabase';
+import { formatTime12Hour } from '../lib/formatTime';
+import { formatMenuMealTypeLabel } from '../api/menu';
 
 const DEFAULT_WEATHER_ZIP = '18469';
 
@@ -97,7 +100,7 @@ export const DashboardScreen = ({ navigation }: any) => {
         season ?? null,
         isDashboardFocused,
     );
-    const { data: meals = null } = useTodayMeals(companyId, todayString, season ?? null);
+    const { data: todayMenuItems = [] } = useTodayMeals(companyId, todayString, season ?? null);
 
     const { data: upcomingTrips = [] } = useUpcomingTripsForDashboard(
         companyId,
@@ -106,17 +109,26 @@ export const DashboardScreen = ({ navigation }: any) => {
         isTimberLakeCamp,
     );
 
+    const usesSportsCalendar = isTylerHill || isTimberLakeWest || isTimberLakeCamp;
+    const usesSpecialEventsTable = usesSportsCalendar;
+
     const { data: sportsToday = [] } = useTodaySportsCalendar(
         companyId,
         todayString,
         season ?? null,
-        isTimberLakeWest || isTimberLakeCamp,
+        usesSportsCalendar,
+    );
+    const { data: threeDaySportsOutlook = [] } = useThreeDaySportsOutlook(
+        companyId,
+        todayString,
+        season ?? null,
+        isTylerHill,
     );
     const { data: specialActivitiesToday = [] } = useTodaySpecialEventsActivities(
         companyId,
         todayString,
         season ?? null,
-        isTimberLakeWest,
+        usesSpecialEventsTable,
     );
     const { data: dailyWolfRow } = useDailyWolfContentRow(
         companyId,
@@ -126,7 +138,7 @@ export const DashboardScreen = ({ navigation }: any) => {
     );
 
     const athleticsEvents = useMemo(() => {
-        if (isTimberLakeWest) {
+        if (usesSportsCalendar) {
             return sportsToday.map((s: any) => ({
                 id: s.id,
                 title: s.title,
@@ -145,11 +157,14 @@ export const DashboardScreen = ({ navigation }: any) => {
                 str.includes('athletic')
             );
         });
-    }, [isTimberLakeWest, sportsToday, todayEvents]);
+    }, [usesSportsCalendar, sportsToday, todayEvents]);
 
     const specialEvents = useMemo(() => {
         if (isTimberLakeWest) {
             return specialActivitiesToday.filter((e: any) => e.event_type !== 'evening-activity');
+        }
+        if (usesSpecialEventsTable) {
+            return specialActivitiesToday;
         }
         const ath = todayEvents.filter((e: any) => {
             const str = `${e.title} ${e.description}`.toLowerCase();
@@ -162,25 +177,37 @@ export const DashboardScreen = ({ navigation }: any) => {
             );
         });
         return todayEvents.filter((e: any) => !ath.includes(e));
-    }, [isTimberLakeWest, specialActivitiesToday, todayEvents]);
+    }, [isTimberLakeWest, usesSpecialEventsTable, specialActivitiesToday, todayEvents]);
 
     const eveningEvents = useMemo(() => {
         if (!isTimberLakeWest) return [];
         return specialActivitiesToday.filter((e: any) => e.event_type === 'evening-activity');
     }, [isTimberLakeWest, specialActivitiesToday]);
 
-    const formattedDateLong = new Date().toLocaleDateString(undefined, {
+    const [now, setNow] = useState(() => new Date());
+    useEffect(() => {
+        const id = setInterval(() => setNow(new Date()), 30_000);
+        return () => clearInterval(id);
+    }, []);
+
+    const formattedDateLong = now.toLocaleDateString(undefined, {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
         year: 'numeric',
+    });
+    const formattedTime = now.toLocaleTimeString(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
     });
 
     const dashboardTitle = isTimberLakeCamp
         ? 'Tiger Times'
         : isTimberLakeWest
           ? 'The Daily Wolf'
-          : 'Dashboard';
+          : isTylerHill
+            ? 'The Bear'
+            : 'Dashboard';
 
     const [weather, setWeather] = useState<any>(null);
     const [weatherLoading, setWeatherLoading] = useState(true);
@@ -359,11 +386,14 @@ export const DashboardScreen = ({ navigation }: any) => {
                 {/* Title Section */}
                 <View style={styles.titleSection}>
                     <Text style={[styles.title, hasDashboardHeroBg && styles.titleOnHero]}>{dashboardTitle}</Text>
-                    <Text style={[styles.welcomeText, hasDashboardHeroBg && styles.welcomeOnHero]}>
-                        {isTimberLakeCamp || isTimberLakeWest || isTylerHill
-                            ? formattedDateLong
-                            : "Welcome back! Here's what's happening today."}
-                    </Text>
+                    <View style={styles.dateTimeBlock}>
+                        <Text style={[styles.welcomeText, hasDashboardHeroBg && styles.welcomeOnHero]}>
+                            {formattedDateLong}
+                        </Text>
+                        <Text style={[styles.dashboardTime, hasDashboardHeroBg && styles.welcomeOnHero]}>
+                            {formattedTime}
+                        </Text>
+                    </View>
                 </View>
 
                 {/* Weather Widget */}
@@ -423,21 +453,23 @@ export const DashboardScreen = ({ navigation }: any) => {
                     </View>
                     <Text style={styles.cardSubtitle}>Meal schedule for today</Text>
                     <View style={styles.menuGrid}>
-                        {(['breakfast', 'lunch', 'snack', 'dinner'] as const).map((mealKey) => {
-                            const value = meals?.[mealKey]?.trim();
-                            return (
-                                <TouchableOpacity key={mealKey} style={styles.menuItem}>
+                        {todayMenuItems.length === 0 ? (
+                            <Text style={styles.menuEmptyText}>No meals scheduled for today</Text>
+                        ) : (
+                            todayMenuItems.map((item) => (
+                                <View key={item.id} style={styles.menuItem}>
                                     <Text style={styles.menuMealType}>
-                                        {mealKey.charAt(0).toUpperCase() + mealKey.slice(1)}
+                                        {formatMenuMealTypeLabel(item.meal_type)}
                                     </Text>
-                                    {value ? (
-                                        <Text style={styles.menuMealValue} numberOfLines={4}>
-                                            {value}
-                                        </Text>
+                                    {item.items?.trim() ? (
+                                        <Text style={styles.menuMealValue}>{item.items.trim()}</Text>
                                     ) : null}
-                                </TouchableOpacity>
-                            );
-                        })}
+                                    {item.allergens?.trim() ? (
+                                        <Text style={styles.menuAllergenValue}>Allergens: {item.allergens.trim()}</Text>
+                                    ) : null}
+                                </View>
+                            ))
+                        )}
                     </View>
                     <TouchableOpacity
                         style={[styles.viewMenuBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
@@ -467,7 +499,8 @@ export const DashboardScreen = ({ navigation }: any) => {
                                     <View key={evt.id} style={{ marginBottom: 8 }}>
                                         <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
                                         <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                            {(evt.time || 'Time TBD') + (evt.location ? ` · ${evt.location}` : '')}
+                                            {(formatTime12Hour(evt.time) || evt.time || 'Time TBD') +
+                                                (evt.location ? ` · ${evt.location}` : '')}
                                         </Text>
                                     </View>
                                 ))
@@ -497,13 +530,20 @@ export const DashboardScreen = ({ navigation }: any) => {
                                     <View key={trip.id} style={{ marginBottom: 8 }}>
                                         <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{trip.name}</Text>
                                         <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                            {trip.date
-                                                ? new Date(trip.date + 'T12:00:00').toLocaleDateString(undefined, {
-                                                      month: 'short',
-                                                      day: 'numeric',
-                                                  })
-                                                : ''}{' '}
-                                            {trip.type ? `· ${trip.type}` : ''}
+                                            {[
+                                                trip.date
+                                                    ? new Date(trip.date + 'T12:00:00').toLocaleDateString(undefined, {
+                                                          month: 'short',
+                                                          day: 'numeric',
+                                                      })
+                                                    : '',
+                                                trip.departure_time
+                                                    ? formatTime12Hour(trip.departure_time)
+                                                    : '',
+                                                trip.type || '',
+                                            ]
+                                                .filter(Boolean)
+                                                .join(' · ')}
                                         </Text>
                                     </View>
                                 ))
@@ -527,20 +567,47 @@ export const DashboardScreen = ({ navigation }: any) => {
                         <Text style={styles.cardTitle}>Athletics Schedule</Text>
                     </View>
                     <Text style={styles.cardSubtitle}>Today & upcoming events</Text>
-                    {athleticsEvents.length === 0 ? (
+                    {athleticsEvents.length === 0 && (!isTylerHill || threeDaySportsOutlook.length === 0) ? (
                         <View style={styles.emptyState}>
                             <Text style={styles.emptyText}>No sports events today</Text>
                         </View>
                     ) : (
-                        athleticsEvents.map((evt: any) => (
-                            <View key={evt.id} style={{ marginBottom: 8 }}>
-                                <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
-                                <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                    {evt.time || 'TBD'} • {evt.location || 'TBD'}
-                                    {isTimberLakeWest && evt.sport_type ? ` • ${evt.sport_type}` : ''}
-                                </Text>
-                            </View>
-                        ))
+                        <>
+                            {isTylerHill && athleticsEvents.length > 0 && (
+                                <Text style={styles.athleticsSectionLabel}>Today</Text>
+                            )}
+                            {athleticsEvents.map((evt: any) => (
+                                <View key={evt.id} style={{ marginBottom: 8 }}>
+                                    <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
+                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                                        {formatTime12Hour(evt.time) || evt.time || 'TBD'}
+                                        {evt.location ? ` • ${evt.location}` : ''}
+                                        {evt.sport_type ? ` • ${evt.sport_type}` : ''}
+                                    </Text>
+                                </View>
+                            ))}
+                            {isTylerHill && threeDaySportsOutlook.length > 0 && (
+                                <>
+                                    <Text style={[styles.athleticsSectionLabel, styles.threeDayOutlookLabel]}>
+                                        Three Day Outlook
+                                    </Text>
+                                    {threeDaySportsOutlook.map((evt: any) => (
+                                        <View key={evt.id} style={{ marginBottom: 8 }}>
+                                            <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
+                                            <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                                                {new Date(evt.event_date + 'T12:00:00').toLocaleDateString(undefined, {
+                                                    weekday: 'short',
+                                                    month: 'short',
+                                                    day: 'numeric',
+                                                })}{' '}
+                                                • {formatTime12Hour(evt.time) || evt.time || 'TBD'}
+                                                {evt.sport_type ? ` • ${evt.sport_type}` : ''}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </>
+                            )}
+                        </>
                     )}
                     <TouchableOpacity
                         style={[styles.outlineBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
@@ -610,7 +677,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                                 <View key={evt.id} style={{ marginBottom: 8 }}>
                                     <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
                                     <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                        {evt.time_slot || 'All day'}
+                                        {formatTime12Hour(evt.time_slot) || evt.time_slot || 'All day'}
                                         {evt.location ? ` • ${evt.location}` : ''}
                                     </Text>
                                 </View>
@@ -645,7 +712,11 @@ export const DashboardScreen = ({ navigation }: any) => {
                             <View key={evt.id} style={{ marginBottom: 8 }}>
                                 <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
                                 <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                    {(isTimberLakeWest ? evt.time_slot : evt.time) || 'TBD'}{' '}
+                                    {formatTime12Hour(
+                                        usesSpecialEventsTable ? evt.time_slot : evt.time,
+                                    ) ||
+                                        (usesSpecialEventsTable ? evt.time_slot : evt.time) ||
+                                        (usesSpecialEventsTable ? 'All day' : 'TBD')}{' '}
                                     • {evt.location || 'TBD'}
                                 </Text>
                             </View>
@@ -959,10 +1030,30 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         marginBottom: theme.spacing.xs,
     },
+    dateTimeBlock: {
+        gap: 2,
+    },
     welcomeText: {
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.textSecondary,
+    },
+    dashboardTime: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    athleticsSectionLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: theme.colors.secondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 6,
+    },
+    threeDayOutlookLabel: {
+        color: '#d97706',
+        marginTop: theme.spacing.sm,
     },
     widgetCard: {
         backgroundColor: theme.colors.surface,
@@ -1088,6 +1179,19 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         color: theme.colors.text,
         textAlign: 'center',
+    },
+    menuAllergenValue: {
+        fontSize: 11,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        marginTop: 4,
+    },
+    menuEmptyText: {
+        width: '100%',
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        paddingVertical: theme.spacing.sm,
     },
     viewMenuBtn: {
         marginTop: theme.spacing.sm,

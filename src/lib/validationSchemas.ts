@@ -102,9 +102,10 @@ export const menuItemSchema = z.object({
         .string()
         .min(1, 'Meal type is required')
         .transform((s) => s.toLowerCase().trim())
-        .pipe(z.enum(['breakfast', 'lunch', 'snack', 'dinner'])),
+        .pipe(z.enum(['breakfast', 'lunch', 'snack', 'dinner', 'special_meal'])),
     items: z.string().min(1, 'Menu items are required'),
     allergens: z.string().nullable().optional(),
+    division_ids: z.array(z.string().uuid()).nullable().optional(),
 });
 
 // Incident report validation schema

@@ -23,9 +23,9 @@ import {
     useTodaySpecialEventsActivities,
     useTodayMeals,
 } from '../api/dashboard';
+import { formatMenuMealTypeLabel } from '../api/menu';
 
 const FOOTER_TAGLINE = 'Have a great day at Timber Lake West!';
-const MEAL_KEYS = ['breakfast', 'lunch', 'snack', 'dinner'] as const;
 
 function formatLongDate(d: Date): string {
     return d.toLocaleDateString('en-US', {
@@ -97,11 +97,11 @@ export const DailyWolfPrintableScreen = ({ navigation }: any) => {
     );
     const { data: specialActivitiesToday = [], isLoading: loadingSpecial } =
         useTodaySpecialEventsActivities(companyId, todayString, season ?? null, isTimberLakeWest);
-    const { data: meals, isLoading: loadingMeals } = useTodayMeals(companyId, todayString, season ?? null);
+    const { data: todayMenuItems = [], isLoading: loadingMeals } = useTodayMeals(companyId, todayString, season ?? null);
 
     const loading = loadingBirthdays || loadingWolf || loadingSports || loadingSpecial || loadingMeals;
 
-    const hasAnyMenu = MEAL_KEYS.some((k) => meals?.[k]?.trim());
+    const hasAnyMenu = todayMenuItems.some((item) => item.items?.trim());
     const hasBirthdays = birthdays.length > 0;
 
     const birthdayLine = useMemo(() => {
@@ -116,12 +116,10 @@ export const DailyWolfPrintableScreen = ({ navigation }: any) => {
     const notesText = dailyWolfRow?.notes?.trim() || '';
 
     const menuShareLines = useMemo(() => {
-        return MEAL_KEYS.map((k) => {
-            const label = k.charAt(0).toUpperCase() + k.slice(1);
-            const body = meals?.[k]?.trim();
-            return body ? `${label}: ${body}` : label;
-        });
-    }, [meals]);
+        return todayMenuItems
+            .filter((item) => item.items?.trim())
+            .map((item) => `${formatMenuMealTypeLabel(item.meal_type)}: ${item.items.trim()}`);
+    }, [todayMenuItems]);
 
     const sharePlainText = useMemo(() => {
         const lines = [
@@ -211,19 +209,16 @@ export const DailyWolfPrintableScreen = ({ navigation }: any) => {
             >
                 {hasAnyMenu ? (
                     <View style={styles.menuGrid}>
-                        {MEAL_KEYS.map((mealKey) => {
-                            const value = meals?.[mealKey]?.trim();
-                            return (
-                                <View key={mealKey} style={styles.menuCell}>
-                                    <Text style={styles.menuCellLabel}>
-                                        {mealKey.charAt(0).toUpperCase() + mealKey.slice(1)}
-                                    </Text>
-                                    {value ? (
-                                        <Text style={styles.menuCellBody}>{value}</Text>
-                                    ) : null}
-                                </View>
-                            );
-                        })}
+                        {todayMenuItems.map((item) => (
+                            <View key={item.id} style={styles.menuCell}>
+                                <Text style={styles.menuCellLabel}>
+                                    {formatMenuMealTypeLabel(item.meal_type)}
+                                </Text>
+                                {item.items?.trim() ? (
+                                    <Text style={styles.menuCellBody}>{item.items.trim()}</Text>
+                                ) : null}
+                            </View>
+                        ))}
                     </View>
                 ) : (
                     <EmptyHint>No menu items for today</EmptyHint>

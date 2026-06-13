@@ -24,12 +24,13 @@ import { MobileUserMenu } from '../components/MobileUserMenu';
 import { useCompany } from '../contexts/CompanyContext';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
-import { useMenuItems, useAddMenuItem, useDeleteMenuItem, MenuItem } from '../api/menu';
+import { useMenuItems, useAddMenuItem, useDeleteMenuItem, MenuItem, MEAL_TYPE_OPTIONS, normalizeMenuMealType, formatMenuMealTypeLabel } from '../api/menu';
+import { useDivisions } from '../api/campers';
 import { supabase } from '../lib/supabase';
 import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
 
-type AddMenuSubsheet = 'date' | 'mealType' | null;
+type AddMenuSubsheet = 'date' | 'mealType' | 'divisions' | null;
 
 export const MenuScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
@@ -40,6 +41,7 @@ export const MenuScreen = ({ navigation }: any) => {
     const [activeSubTab, setActiveSubTab] = useState('Roster');
     const { companyId, season } = useCompany();
     const { data: menuItemsList = [] } = useMenuItems(companyId);
+    const { data: divisionsData = [] } = useDivisions(companyId);
     const addMenuItemMutation = useAddMenuItem();
     const deleteMenuItemMutation = useDeleteMenuItem();
     const [itemToDelete, setItemToDelete] = useState<any>(null);
@@ -51,12 +53,22 @@ export const MenuScreen = ({ navigation }: any) => {
     const [mealType, setMealType] = useState('');
     const [menuItemsText, setMenuItemsText] = useState('');
     const [allergens, setAllergens] = useState('');
+    const [selectedDivisionIds, setSelectedDivisionIds] = useState<string[]>([]);
     const [addMenuSubsheet, setAddMenuSubsheet] = useState<AddMenuSubsheet>(null);
     const [calendarCurrentDate, setCalendarCurrentDate] = useState(new Date());
     const [calendarSelectedDate, setCalendarSelectedDate] = useState(new Date());
     const [menuCsvUploading, setMenuCsvUploading] = useState(false);
 
-    const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+    const mealTypes = [...MEAL_TYPE_OPTIONS];
+    const isSpecialMeal = normalizeMenuMealType(mealType) === 'special_meal';
+    const divisionNameById = (id: string) =>
+        divisionsData.find((d: { id: string; name?: string }) => d.id === id)?.name ?? 'Division';
+    const selectedDivisionLabel =
+        selectedDivisionIds.length === 0
+            ? ''
+            : selectedDivisionIds.length === 1
+              ? divisionNameById(selectedDivisionIds[0])
+              : `${selectedDivisionIds.length} divisions selected`;
     const closeAddMenuTransientUi = () => {
         setAddMenuSubsheet(null);
     };
@@ -107,11 +119,17 @@ export const MenuScreen = ({ navigation }: any) => {
         setMealType('');
         setMenuItemsText('');
         setAllergens('');
+        setSelectedDivisionIds([]);
     };
 
     const handleSaveMenuItem = () => {
+        const normalizedMealType = normalizeMenuMealType(mealType);
         if (!mealType || !menuItemsText.trim() || !companyId) {
-            // Basic validation - could show an alert here
+            Alert.alert('Required', 'Please select a meal type and enter menu items.');
+            return;
+        }
+        if (normalizedMealType === 'special_meal' && selectedDivisionIds.length === 0) {
+            Alert.alert('Required', 'Select at least one division for a special meal.');
             return;
         }
 
@@ -120,9 +138,10 @@ export const MenuScreen = ({ navigation }: any) => {
         addMenuItemMutation.mutate({
             company_id: companyId,
             date: formattedDate,
-            meal_type: mealType,
+            meal_type: normalizedMealType,
             items: menuItemsText.trim(),
             allergens: allergens.trim() || null,
+            division_ids: normalizedMealType === 'special_meal' ? selectedDivisionIds : null,
         }, {
             onSuccess: handleCloseAddMenuItem
         });
@@ -163,6 +182,8 @@ export const MenuScreen = ({ navigation }: any) => {
                 return '#e0e7ff';
             case 'snack':
                 return '#fce7f3';
+            case 'special_meal':
+                return '#ecfccb';
             default:
                 return '#f3f4f6';
         }
@@ -171,7 +192,7 @@ export const MenuScreen = ({ navigation }: any) => {
     const calendarEvents = useMemo<CalendarWidgetEvent[]>(() => {
         return menuItemsList.map((item) => {
             const parsedDate = new Date(`${item.date}T00:00:00`);
-            const meal = item.meal_type || 'Meal';
+            const meal = formatMenuMealTypeLabel(item.meal_type);
             const preview = item.items?.split(',')[0]?.trim() || item.items || 'Menu item';
             return {
                 id: item.id || `${item.date}-${meal}-${preview}`,
@@ -276,8 +297,15 @@ export const MenuScreen = ({ navigation }: any) => {
                                 ) : (
                                     selectedDateMenuItems.map((item) => (
                                         <View key={item.id || `${item.date}-${item.meal_type}`} style={styles.selectedDayMealRow}>
-                                            <Text style={styles.selectedDayMealType}>{item.meal_type}</Text>
+                                            <Text style={styles.selectedDayMealType}>{formatMenuMealTypeLabel(item.meal_type)}</Text>
                                             <Text style={styles.selectedDayMealItems}>{item.items}</Text>
+                                            {item.meal_type?.toLowerCase() === 'special_meal' &&
+                                                Array.isArray(item.division_ids) &&
+                                                item.division_ids.length > 0 && (
+                                                    <Text style={styles.selectedDayDivisionText}>
+                                                        Divisions: {item.division_ids.map((id) => divisionNameById(id)).join(', ')}
+                                                    </Text>
+                                                )}
                                         </View>
                                     ))
                                 )}
@@ -299,7 +327,7 @@ export const MenuScreen = ({ navigation }: any) => {
                                 >
                                     <View style={styles.menuItemHeader}>
                                         <View style={styles.menuItemHeaderLeft}>
-                                            <Text style={styles.menuItemMealType}>{item.meal_type}</Text>
+                                            <Text style={styles.menuItemMealType}>{formatMenuMealTypeLabel(item.meal_type)}</Text>
                                             <Text style={styles.menuItemDate}>{item.date}</Text>
                                         </View>
                                         <TouchableOpacity
@@ -310,6 +338,13 @@ export const MenuScreen = ({ navigation }: any) => {
                                         </TouchableOpacity>
                                     </View>
                                     <Text style={styles.menuItemText}>{item.items}</Text>
+                                    {item.meal_type?.toLowerCase() === 'special_meal' &&
+                                        Array.isArray(item.division_ids) &&
+                                        item.division_ids.length > 0 && (
+                                            <Text style={styles.divisionMetaText}>
+                                                Divisions: {item.division_ids.map((id) => divisionNameById(id)).join(', ')}
+                                            </Text>
+                                        )}
                                     {item.allergens && (
                                         <View style={styles.allergenContainer}>
                                             <Ionicons name="warning-outline" size={14} color={theme.colors.warning} />
@@ -531,6 +566,29 @@ export const MenuScreen = ({ navigation }: any) => {
                                 </TouchableOpacity>
                             </View>
 
+                            {isSpecialMeal && (
+                                <View style={styles.formSection}>
+                                    <Text style={styles.formLabel}>Divisions</Text>
+                                    <TouchableOpacity
+                                        style={styles.inputContainer}
+                                        onPress={() => setAddMenuSubsheet('divisions')}
+                                    >
+                                        <TextInput
+                                            style={styles.inputField}
+                                            placeholder="Select divisions"
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            value={selectedDivisionLabel}
+                                            editable={false}
+                                            pointerEvents="none"
+                                        />
+                                        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                                    </TouchableOpacity>
+                                    <Text style={styles.helperText}>
+                                        For kitchen reference only — this meal still appears for everyone on the menu.
+                                    </Text>
+                                </View>
+                            )}
+
                             {/* Menu Items Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Menu Items</Text>
@@ -573,7 +631,13 @@ export const MenuScreen = ({ navigation }: any) => {
                     <ModalPickerOverlay
                         visible
                         onClose={() => setAddMenuSubsheet(null)}
-                        title={addMenuSubsheet === 'date' ? 'Select Date' : 'Select Meal Type'}
+                        title={
+                            addMenuSubsheet === 'date'
+                                ? 'Select Date'
+                                : addMenuSubsheet === 'mealType'
+                                  ? 'Select Meal Type'
+                                  : 'Select Divisions'
+                        }
                     >
                         {addMenuSubsheet === 'date' ? (
                             <View style={styles.datePickerContainer}>
@@ -667,6 +731,37 @@ export const MenuScreen = ({ navigation }: any) => {
                                     <Text style={styles.pickerConfirmBtnText}>Confirm</Text>
                                 </TouchableOpacity>
                             </View>
+                        ) : addMenuSubsheet === 'divisions' ? (
+                            <View style={styles.pickerContent}>
+                                {divisionsData.length === 0 ? (
+                                    <Text style={styles.helperText}>No divisions available.</Text>
+                                ) : (
+                                    divisionsData.map((div: { id: string; name?: string }) => {
+                                        const selected = selectedDivisionIds.includes(div.id);
+                                        return (
+                                            <TouchableOpacity
+                                                key={div.id}
+                                                style={styles.pickerOption}
+                                                onPress={() => {
+                                                    setSelectedDivisionIds((prev) =>
+                                                        selected
+                                                            ? prev.filter((id) => id !== div.id)
+                                                            : [...prev, div.id],
+                                                    );
+                                                }}
+                                            >
+                                                <Text style={styles.pickerOptionText}>{div.name}</Text>
+                                                {selected ? (
+                                                    <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                                ) : null}
+                                            </TouchableOpacity>
+                                        );
+                                    })
+                                )}
+                                <TouchableOpacity style={styles.pickerConfirmBtn} onPress={() => setAddMenuSubsheet(null)}>
+                                    <Text style={styles.pickerConfirmBtnText}>Done</Text>
+                                </TouchableOpacity>
+                            </View>
                         ) : (
                             <View style={styles.pickerContent}>
                                 {mealTypes.map((type) => (
@@ -675,6 +770,9 @@ export const MenuScreen = ({ navigation }: any) => {
                                         style={styles.pickerOption}
                                         onPress={() => {
                                             setMealType(type);
+                                            if (normalizeMenuMealType(type) !== 'special_meal') {
+                                                setSelectedDivisionIds([]);
+                                            }
                                             setAddMenuSubsheet(null);
                                         }}
                                     >
@@ -877,6 +975,12 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
         marginTop: 2,
     },
+    selectedDayDivisionText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+        fontStyle: 'italic',
+    },
     menuItemHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -907,6 +1011,19 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         marginBottom: theme.spacing.xs,
         lineHeight: 20,
+    },
+    divisionMetaText: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.xs,
+        fontStyle: 'italic',
+    },
+    helperText: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: theme.spacing.xs,
     },
     allergenContainer: {
         flexDirection: 'row',

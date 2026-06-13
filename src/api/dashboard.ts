@@ -306,7 +306,33 @@ export const useDailyNewsSchedule = (companyId: string | null, todayString: stri
     });
 };
 
-// Fetch today's menu from menu_items table
+// Fetch today's menu rows from menu_items (all entries for the date — dashboard expands with count).
+export interface TodayMenuItem {
+    id: string;
+    meal_type: string;
+    items: string;
+    allergens?: string | null;
+    division_ids?: string[] | null;
+}
+
+const MEAL_TYPE_SORT_ORDER: Record<string, number> = {
+    breakfast: 1,
+    lunch: 2,
+    snack: 3,
+    dinner: 4,
+    special_meal: 5,
+};
+
+function sortTodayMenuItems(items: TodayMenuItem[]): TodayMenuItem[] {
+    return [...items].sort((a, b) => {
+        const aKey = (a.meal_type || '').toLowerCase();
+        const bKey = (b.meal_type || '').toLowerCase();
+        const orderDiff = (MEAL_TYPE_SORT_ORDER[aKey] ?? 99) - (MEAL_TYPE_SORT_ORDER[bKey] ?? 99);
+        if (orderDiff !== 0) return orderDiff;
+        return (a.items || '').localeCompare(b.items || '');
+    });
+}
+
 export const useTodayMeals = (
     companyId: string | null,
     todayString: string,
@@ -315,37 +341,64 @@ export const useTodayMeals = (
     return useQuery({
         queryKey: ['dashboard_meals', companyId, todayString, season ?? ''],
         queryFn: async () => {
-            if (!companyId) return null;
+            if (!companyId) return [];
             const cacheKey = `dashboard_meals:${companyId}:${todayString}:${season ?? ''}`;
-            return readThroughCache<{ breakfast: string; lunch: string; snack: string; dinner: string } | null>(
-                cacheKey,
-                async () => {
-                    let q = supabase
-                        .from('menu_items')
-                        .select('*')
-                        .eq('company_id', companyId)
-                        .eq('date', todayString);
-                    if (season != null && String(season).trim() !== '') {
-                        q = q.or(`season.eq.${season},season.is.null`);
-                    }
-                    const { data, error } = await q;
-
-                    if (error) throw error;
-
-                    const meals = { breakfast: '', lunch: '', snack: '', dinner: '' };
-                    (data || []).forEach((item) => {
-                        const type = item.meal_type?.toLowerCase() || '';
-                        const content = item.items ?? item.description ?? '';
-                        if (type === 'breakfast') meals.breakfast = content;
-                        if (type === 'lunch') meals.lunch = content;
-                        if (type === 'dinner') meals.dinner = content;
-                        if (type === 'snack') meals.snack = content;
-                    });
-                    return meals;
+            return readThroughCache<TodayMenuItem[]>(cacheKey, async () => {
+                let q = supabase
+                    .from('menu_items')
+                    .select('id, meal_type, items, allergens, division_ids')
+                    .eq('company_id', companyId)
+                    .eq('date', todayString);
+                if (season != null && String(season).trim() !== '') {
+                    q = q.or(`season.eq.${season},season.is.null`);
                 }
-            );
+                const { data, error } = await q;
+
+                if (error) throw error;
+
+                return sortTodayMenuItems(
+                    (data || []).map((item) => ({
+                        id: item.id,
+                        meal_type: item.meal_type,
+                        items: item.items ?? item.description ?? '',
+                        allergens: item.allergens,
+                        division_ids: item.division_ids,
+                    })),
+                );
+            });
         },
         enabled: !!companyId,
+    });
+};
+
+/** Tyler Hill: sports events for the next 3 days after today (matches web Three Day Outlook). */
+export const useThreeDaySportsOutlook = (
+    companyId: string | null,
+    todayString: string,
+    season: string | null,
+    enabled: boolean,
+) => {
+    const windowEnd = addCalendarDaysYmd(todayString, 3);
+    return useQuery({
+        queryKey: ['dashboard_three_day_sports', companyId, todayString, windowEnd, season],
+        queryFn: async () => {
+            if (!companyId || !season) return [];
+            const cacheKey = `dashboard_three_day_sports:${companyId}:${todayString}:${windowEnd}:${season}`;
+            return readThroughCache<any[]>(cacheKey, async () => {
+                const { data, error } = await supabase
+                    .from('sports_calendar')
+                    .select('id, title, time, location, sport_type, event_date')
+                    .eq('company_id', companyId)
+                    .gt('event_date', todayString)
+                    .lte('event_date', windowEnd)
+                    .eq('season', season)
+                    .order('event_date', { ascending: true })
+                    .order('time', { ascending: true });
+                if (error) throw error;
+                return data || [];
+            });
+        },
+        enabled: !!companyId && !!season && enabled,
     });
 };
 

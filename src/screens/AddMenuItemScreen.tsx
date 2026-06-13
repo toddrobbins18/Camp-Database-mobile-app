@@ -5,19 +5,32 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
-import { useAddMenuItem } from '../api/menu';
+import { useAddMenuItem, MEAL_TYPE_OPTIONS, normalizeMenuMealType } from '../api/menu';
+import { useDivisions } from '../api/campers';
 
 export const AddMenuItemScreen = ({ navigation }: any) => {
     const { companyId } = useCompany();
+    const { data: divisionsData = [] } = useDivisions(companyId);
     const addMenuItemMutation = useAddMenuItem();
     const [menuDate, setMenuDate] = useState(new Date());
     const [mealType, setMealType] = useState('');
     const [menuItems, setMenuItems] = useState('');
     const [allergens, setAllergens] = useState('');
+    const [selectedDivisionIds, setSelectedDivisionIds] = useState<string[]>([]);
     const [showMealTypePicker, setShowMealTypePicker] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showDivisionPicker, setShowDivisionPicker] = useState(false);
 
-    const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+    const mealTypes = [...MEAL_TYPE_OPTIONS];
+    const isSpecialMeal = normalizeMenuMealType(mealType) === 'special_meal';
+    const divisionNameById = (id: string) =>
+        divisionsData.find((d: { id: string; name?: string }) => d.id === id)?.name ?? 'Division';
+    const selectedDivisionLabel =
+        selectedDivisionIds.length === 0
+            ? ''
+            : selectedDivisionIds.length === 1
+              ? divisionNameById(selectedDivisionIds[0])
+              : `${selectedDivisionIds.length} divisions selected`;
 
     const formatDate = (date: Date): string => {
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -35,9 +48,13 @@ export const AddMenuItemScreen = ({ navigation }: any) => {
             Alert.alert('Error', 'Company not loaded.');
             return;
         }
-        const meal = (mealType || '').trim().toLowerCase();
-        if (!meal || !['breakfast', 'lunch', 'dinner', 'snack'].includes(meal)) {
+        const meal = normalizeMenuMealType(mealType || '');
+        if (!meal || !['breakfast', 'lunch', 'dinner', 'snack', 'special_meal'].includes(meal)) {
             Alert.alert('Required', 'Please select a meal type.');
+            return;
+        }
+        if (meal === 'special_meal' && selectedDivisionIds.length === 0) {
+            Alert.alert('Required', 'Select at least one division for a special meal.');
             return;
         }
         if (!(menuItems || '').trim()) {
@@ -51,6 +68,7 @@ export const AddMenuItemScreen = ({ navigation }: any) => {
                 meal_type: meal,
                 items: (menuItems || '').trim(),
                 allergens: (allergens || '').trim() || null,
+                division_ids: meal === 'special_meal' ? selectedDivisionIds : null,
             },
             {
                 onSuccess: () => {
@@ -122,6 +140,29 @@ export const AddMenuItemScreen = ({ navigation }: any) => {
                             <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
+
+                    {isSpecialMeal && (
+                        <View style={styles.formSection}>
+                            <Text style={styles.formLabel}>Divisions</Text>
+                            <TouchableOpacity
+                                style={styles.inputContainer}
+                                onPress={() => setShowDivisionPicker(true)}
+                            >
+                                <TextInput
+                                    style={styles.inputField}
+                                    placeholder="Select divisions"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    value={selectedDivisionLabel}
+                                    editable={false}
+                                    pointerEvents="none"
+                                />
+                                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                            <Text style={styles.helperText}>
+                                For kitchen reference only — this meal still appears for everyone on the menu.
+                            </Text>
+                        </View>
+                    )}
 
                     {/* Menu Items Section */}
                     <View style={styles.formSection}>
@@ -302,6 +343,9 @@ export const AddMenuItemScreen = ({ navigation }: any) => {
                                     style={styles.pickerOption}
                                     onPress={() => {
                                         setMealType(type);
+                                        if (normalizeMenuMealType(type) !== 'special_meal') {
+                                            setSelectedDivisionIds([]);
+                                        }
                                         setShowMealTypePicker(false);
                                     }}
                                 >
@@ -311,6 +355,51 @@ export const AddMenuItemScreen = ({ navigation }: any) => {
                                     )}
                                 </TouchableOpacity>
                             ))}
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            <Modal
+                visible={showDivisionPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowDivisionPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowDivisionPicker(false)}>
+                    <Pressable style={styles.pickerModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Divisions</Text>
+                            <TouchableOpacity onPress={() => setShowDivisionPicker(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.pickerContent}>
+                            {divisionsData.length === 0 ? (
+                                <Text style={styles.helperText}>No divisions available.</Text>
+                            ) : (
+                                divisionsData.map((div: { id: string; name?: string }) => {
+                                    const selected = selectedDivisionIds.includes(div.id);
+                                    return (
+                                        <TouchableOpacity
+                                            key={div.id}
+                                            style={styles.pickerOption}
+                                            onPress={() => {
+                                                setSelectedDivisionIds((prev) =>
+                                                    selected
+                                                        ? prev.filter((id) => id !== div.id)
+                                                        : [...prev, div.id],
+                                                );
+                                            }}
+                                        >
+                                            <Text style={styles.pickerOptionText}>{div.name}</Text>
+                                            {selected ? (
+                                                <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                            ) : null}
+                                        </TouchableOpacity>
+                                    );
+                                })
+                            )}
                         </View>
                     </Pressable>
                 </Pressable>
@@ -540,6 +629,12 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: 'white',
+    },
+    helperText: {
+        ...theme.typography.bodySmall,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: theme.spacing.xs,
     },
 });
 

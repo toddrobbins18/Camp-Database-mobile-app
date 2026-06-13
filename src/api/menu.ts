@@ -9,7 +9,28 @@ export interface MenuItem {
     meal_type: string;
     items: string;
     allergens?: string | null;
+    division_ids?: string[] | null;
     created_at?: string;
+}
+
+export const MEAL_TYPE_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Special Meal'] as const;
+
+export function normalizeMenuMealType(label: string): string {
+    const key = label.trim().toLowerCase().replace(/\s+/g, '_');
+    const map: Record<string, string> = {
+        breakfast: 'breakfast',
+        lunch: 'lunch',
+        dinner: 'dinner',
+        snack: 'snack',
+        special_meal: 'special_meal',
+    };
+    return map[key] ?? key;
+}
+
+export function formatMenuMealTypeLabel(mealType?: string): string {
+    if (!mealType) return 'Meal';
+    if (mealType.toLowerCase() === 'special_meal') return 'Special Meal';
+    return mealType.charAt(0).toUpperCase() + mealType.slice(1);
 }
 
 const menuCacheKey = (companyId: string) => `menu_items:${companyId}`;
