@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { ageOnLocalDate, isActiveRosterStatus, parseBirthdayCalendarParts } from '../lib/birthdayDate';
+import { expandDivisionIdsForRosterFilter } from '../lib/divisionFilterUtils';
 import { getCachedJson, setCachedJson } from '../offline/engine';
 
 /** Same as lovable-web-app usePermissions fullDivisionAccessRoles. */
@@ -60,10 +61,19 @@ async function resolveDashboardDivisionFilter(companyId: string): Promise<string
         .from('division_permissions')
         .select('division_id')
         .eq('user_id', user.id)
+        .eq('company_id', companyId)
         .eq('can_access', true);
 
     const ids = [...new Set((dp ?? []).map((r) => r.division_id).filter(Boolean))] as string[];
-    return ids;
+    if (ids.length === 0) return [];
+
+    const { data: divisions } = await supabase
+        .from('divisions')
+        .select('id, name')
+        .eq('company_id', companyId)
+        .eq('is_active', true);
+
+    return expandDivisionIdsForRosterFilter(ids, divisions ?? []);
 }
 
 // Fetch today's birthdays from children and staff — same roster pool as Dashboard + Daily News web (season + calendar DOB parsing).
@@ -360,7 +370,7 @@ export const useTodayMeals = (
                     (data || []).map((item) => ({
                         id: item.id,
                         meal_type: item.meal_type,
-                        items: item.items ?? item.description ?? '',
+                        items: item.items ?? '',
                         allergens: item.allergens,
                         division_ids: item.division_ids,
                     })),

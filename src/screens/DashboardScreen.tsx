@@ -560,6 +560,72 @@ export const DashboardScreen = ({ navigation }: any) => {
                     </>
                 )}
 
+                {isTimberLakeWest && (
+                    <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
+                        <View style={styles.cardHeader}>
+                            <Ionicons name="moon-outline" size={20} color="#a855f7" />
+                            <Text style={styles.cardTitle}>Evening Activities</Text>
+                        </View>
+                        <Text style={styles.cardSubtitle}>Tonight's schedule</Text>
+                        {eveningEvents.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyText}>No evening activities tonight</Text>
+                            </View>
+                        ) : (
+                            eveningEvents.map((evt: any) => (
+                                <View key={evt.id} style={{ marginBottom: 8 }}>
+                                    <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
+                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                                        {formatTime12Hour(evt.time_slot) || evt.time_slot || 'All day'}
+                                        {evt.location ? ` • ${evt.location}` : ''}
+                                    </Text>
+                                </View>
+                            ))
+                        )}
+                        <TouchableOpacity
+                            style={[styles.outlineBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
+                            onPress={() => navigation.navigate('SpecialEvents')}
+                        >
+                            <Text style={[styles.outlineBtnText, hasDashboardHeroBg && styles.outlineBtnTextOnHero]}>
+                                View All Events
+                            </Text>
+                        </TouchableOpacity>
+                    </StyledCard>
+                )}
+
+                {isTimberLakeWest && (
+                    <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
+                        <View style={styles.cardHeader}>
+                            <Ionicons name="calendar-outline" size={20} color={theme.colors.secondary} />
+                            <Text style={styles.cardTitle}>Special Events</Text>
+                        </View>
+                        <Text style={styles.cardSubtitle}>Today's schedule</Text>
+                        {specialEvents.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyText}>No special events today</Text>
+                            </View>
+                        ) : (
+                            specialEvents.map((evt: any) => (
+                                <View key={evt.id} style={{ marginBottom: 8 }}>
+                                    <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
+                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                                        {formatTime12Hour(evt.time_slot) || evt.time_slot || 'All day'}{' '}
+                                        • {evt.location || 'TBD'}
+                                    </Text>
+                                </View>
+                            ))
+                        )}
+                        <TouchableOpacity
+                            style={[styles.outlineBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
+                            onPress={() => navigation.navigate('SpecialEvents')}
+                        >
+                            <Text style={[styles.outlineBtnText, hasDashboardHeroBg && styles.outlineBtnTextOnHero]}>
+                                View All Events
+                            </Text>
+                        </TouchableOpacity>
+                    </StyledCard>
+                )}
+
                 {/* Athletics Schedule */}
                 <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                     <View style={styles.cardHeader}>
@@ -660,25 +726,28 @@ export const DashboardScreen = ({ navigation }: any) => {
                     </View>
                 </StyledCard>
 
-                {/* Evening Activities — Timber Lake West only (matches web) */}
-                {isTimberLakeWest && (
+                {!isTimberLakeWest ? (
                     <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                         <View style={styles.cardHeader}>
-                            <Ionicons name="moon-outline" size={20} color="#a855f7" />
-                            <Text style={styles.cardTitle}>Evening Activities</Text>
+                            <Ionicons name="calendar-outline" size={20} color={theme.colors.secondary} />
+                            <Text style={styles.cardTitle}>Special Events & Activities</Text>
                         </View>
-                        <Text style={styles.cardSubtitle}>Tonight's schedule</Text>
-                        {eveningEvents.length === 0 ? (
+                        <Text style={styles.cardSubtitle}>Today's schedule</Text>
+                        {specialEvents.length === 0 ? (
                             <View style={styles.emptyState}>
-                                <Text style={styles.emptyText}>No evening activities tonight</Text>
+                                <Text style={styles.emptyText}>No special events today</Text>
                             </View>
                         ) : (
-                            eveningEvents.map((evt: any) => (
+                            specialEvents.map((evt: any) => (
                                 <View key={evt.id} style={{ marginBottom: 8 }}>
                                     <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
                                     <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                        {formatTime12Hour(evt.time_slot) || evt.time_slot || 'All day'}
-                                        {evt.location ? ` • ${evt.location}` : ''}
+                                        {formatTime12Hour(
+                                            usesSpecialEventsTable ? evt.time_slot : evt.time,
+                                        ) ||
+                                            (usesSpecialEventsTable ? evt.time_slot : evt.time) ||
+                                            (usesSpecialEventsTable ? 'All day' : 'TBD')}{' '}
+                                        • {evt.location || 'TBD'}
                                     </Text>
                                 </View>
                             ))
@@ -692,45 +761,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                             </Text>
                         </TouchableOpacity>
                     </StyledCard>
-                )}
-
-                {/* Special Events (Timber Lake West: match web — no "& Activities") */}
-                <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
-                    <View style={styles.cardHeader}>
-                        <Ionicons name="calendar-outline" size={20} color={theme.colors.secondary} />
-                        <Text style={styles.cardTitle}>
-                            {isTimberLakeWest ? 'Special Events' : 'Special Events & Activities'}
-                        </Text>
-                    </View>
-                    <Text style={styles.cardSubtitle}>Today's schedule</Text>
-                    {specialEvents.length === 0 ? (
-                        <View style={styles.emptyState}>
-                            <Text style={styles.emptyText}>No special events today</Text>
-                        </View>
-                    ) : (
-                        specialEvents.map((evt: any) => (
-                            <View key={evt.id} style={{ marginBottom: 8 }}>
-                                <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
-                                <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                    {formatTime12Hour(
-                                        usesSpecialEventsTable ? evt.time_slot : evt.time,
-                                    ) ||
-                                        (usesSpecialEventsTable ? evt.time_slot : evt.time) ||
-                                        (usesSpecialEventsTable ? 'All day' : 'TBD')}{' '}
-                                    • {evt.location || 'TBD'}
-                                </Text>
-                            </View>
-                        ))
-                    )}
-                    <TouchableOpacity
-                        style={[styles.outlineBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
-                        onPress={() => navigation.navigate('SpecialEvents')}
-                    >
-                        <Text style={[styles.outlineBtnText, hasDashboardHeroBg && styles.outlineBtnTextOnHero]}>
-                            View All Events
-                        </Text>
-                    </TouchableOpacity>
-                </StyledCard>
+                ) : null}
 
                 {/* Notes (Tyler Hill only) */}
                 {isTylerHill && (

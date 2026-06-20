@@ -69,14 +69,25 @@ export const AdminPanelScreen = ({ navigation }: any) => {
     const [showFilterTagPicker, setShowFilterTagPicker] = useState(false);
 
     const sendTimingOptions = [
-        { value: 'on_create', label: 'When Created', description: 'Send immediately when record is created.' },
-        { value: 'on_update', label: 'When Updated', description: 'Send immediately when record is updated.' },
-        { value: 'day_before', label: 'Day Before', description: 'Send 24 hours before the event.' },
-        { value: 'morning_of', label: 'Morning Of (8 AM)', description: 'Send at 8:00 AM on the event day.' },
-        { value: '2_hours_before', label: '2 Hours Before', description: 'Send 2 hours before event time.' },
-        { value: '4_hours_before', label: '4 Hours Before', description: 'Send 4 hours before event time.' },
-        { value: '1_week_before', label: '1 Week Before', description: 'Send 7 days before the event.' },
+        { value: 'on_create', label: 'When Created', description: 'Send immediately when record is created.', applicableTo: ['all'] },
+        { value: 'on_update', label: 'When Updated', description: 'Send immediately when record is updated.', applicableTo: ['all'] },
+        { value: 'day_before', label: 'Day Before', description: 'Send 24 hours before the event.', applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update', 'transportation_events', 'tutoring_therapy', 'appointment'] },
+        { value: '1_hour_before', label: '1 Hour Before', description: 'Send 1 hour before the session.', applicableTo: ['sports_academy'] },
+        { value: 'morning_of', label: 'Morning Of (8 AM)', description: 'Send at 8:00 AM on the event day.', applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update'] },
+        { value: '2_hours_before', label: '2 Hours Before', description: 'Send 2 hours before event time.', applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update'] },
+        { value: '4_hours_before', label: '4 Hours Before', description: 'Send 4 hours before event time.', applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update'] },
+        { value: '1_week_before', label: '1 Week Before', description: 'Send 7 days before the event.', applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update'] },
     ];
+
+    const getApplicableTimings = (emailType: string) =>
+        sendTimingOptions.filter(
+            (option) => option.applicableTo.includes('all') || option.applicableTo.includes(emailType),
+        );
+
+    const getTimingDisplayLabel = (emailType: string, timing: string) => {
+        if (emailType === 'sports_academy' && timing === 'day_before') return '1 Hour Before';
+        return sendTimingOptions.find((t) => t.value === timing)?.label || timing;
+    };
 
     const emailTagOptions = [
         { value: 'nurse', label: 'Nurse / Health Center' },
@@ -521,7 +532,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                                 <Ionicons name="time-outline" size={16} color={theme.colors.text} />
                                 <Text style={styles.emailSectionTitle}>Send Timing (select multiple)</Text>
                             </View>
-                            {sendTimingOptions.map((option) => {
+                            {getApplicableTimings(config.title).map((option) => {
                                 const isSelected = config.selectedTimings.includes(option.value);
                                 return (
                                     <TouchableOpacity
@@ -549,7 +560,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
                                     {config.selectedTimings.map((timing) => (
                                         <View key={timing} style={styles.selectedTimingTag}>
                                             <Text style={styles.selectedTimingTagText}>
-                                                {sendTimingOptions.find((t) => t.value === timing)?.label || timing}
+                                                {getTimingDisplayLabel(config.title, timing)}
                                             </Text>
                                         </View>
                                     ))}

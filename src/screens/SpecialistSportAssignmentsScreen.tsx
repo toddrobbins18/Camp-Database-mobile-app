@@ -7,11 +7,7 @@ import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-
-const AVAILABLE_SPORTS = [
-  'Baseball', 'Basketball', 'Dance', 'Football', 'Golf', 'Gymnastics',
-  'Hockey', 'Lacrosse', 'Soccer', 'Softball', 'Tennis', 'Volleyball', 'Waterfront'
-];
+import { getAvailableSpecialistSports } from '../constants/specialistSportOptions';
 
 function normalizeStaffEmail(value: string | null | undefined): string | null {
   if (!value || typeof value !== 'string') return null;
@@ -30,9 +26,10 @@ type StaffSpecialist = {
 };
 
 export const SpecialistSportAssignmentsScreen = ({ navigation }: any) => {
-  const { companyId, season, availableCompanies } = useCompany();
+  const { companyId, season, availableCompanies, companySlug } = useCompany();
   const companyName = companyId ? availableCompanies.find(c => c.id === companyId)?.name : null;
   const queryClient = useQueryClient();
+  const availableSports = getAvailableSpecialistSports(companySlug);
 
   const { data: specialists = [], isLoading: leadersLoading } = useQuery({
     queryKey: ['specialist_sport_leaders', companyId, season],
@@ -213,7 +210,7 @@ export const SpecialistSportAssignmentsScreen = ({ navigation }: any) => {
     onToggle: (sport: string, isAssigned: boolean) => void,
   ) => (
     <View style={styles.sportsGrid}>
-      {AVAILABLE_SPORTS.map((sport) => {
+      {availableSports.map((sport) => {
         const isAssigned = getAssigned(sport);
         return (
           <View key={`${keyPrefix}-${sport}`} style={styles.sportRow}>

@@ -1014,7 +1014,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     {isSelectedDateToday ? "Today's Medications" : `Medications for ${formatSelectedDate(selectedDate)}`}
                                 </Text>
                                 <Text style={styles.todaysMedicationsSubtitle}>
-                                    Given meds and meds without a meal time are hidden — search by child or medication name to find them.
+                                    As-needed meds stay on the camper profile only. Given meds and meds without a meal time are hidden — search by child or medication name to find them.
                                 </Text>
                                 {renderMedFilterControls()}
 
@@ -1601,8 +1601,8 @@ export const HealthScreen = ({ navigation }: any) => {
                                 <Text style={styles.logTitle}>Daily Medication Log</Text>
                                 <Text style={styles.logDescription}>
                                     {isSelectedDateToday
-                                        ? 'Mark off medications administered today. Given meds are hidden — search to find and undo.'
-                                        : `Mark off medications administered on ${formatSelectedDate(selectedDate)}.`}
+                                        ? 'Mark off medications administered today. As-needed meds stay on the camper profile only. Given meds are hidden — search to find and undo.'
+                                        : `Mark off medications administered on ${formatSelectedDate(selectedDate)}. As-needed meds stay on the camper profile only.`}
                                 </Text>
                                 {renderMedFilterControls()}
                                 {activeListMedications.length === 0 ? (

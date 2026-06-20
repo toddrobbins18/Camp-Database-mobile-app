@@ -13,6 +13,7 @@ import {
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { useQuery } from '@tanstack/react-query';
+import { getDivisionDropdownLabel } from '../lib/divisionFilterUtils';
 
 interface User {
     id: string;
@@ -302,7 +303,7 @@ export const DivisionPermissionsScreen = ({ navigation }: any) => {
                                                     size={20}
                                                     color={theme.colors.textSecondary}
                                                 />
-                                                <Text style={styles.divisionName}>{division.name}</Text>
+                                                <Text style={styles.divisionName}>{getDivisionDropdownLabel(division.name)}</Text>
                                             </View>
                                             <Switch
                                                 value={isEnabled}
