@@ -107,8 +107,8 @@ const CustomDrawerContent = (props: any) => {
         );
     };
 
-    // Web keeps admin section role-gated (admin/super_admin), not role_permissions-driven.
-    const canSeeAdminScreens = isAdmin || !isRoleLoaded;
+    // Administration section is admin/super_admin only (matches web).
+    const canSeeAdminScreens = isAdmin;
 
     const menuTheme = getMenuDrawerThemeFromCompany({
         companySlug,
@@ -223,40 +223,48 @@ const CustomDrawerContent = (props: any) => {
         }
     }
 
-    if (canSeeAdminScreens) {
-        if (hasMenuAccess('awards')) mainMenuItems.push({ key: 'awards', label: 'Awards', icon: 'ribbon-outline', onPress: () => props.navigation.navigate('Awards') });
-        if (hasMenuAccess('incidents')) mainMenuItems.push({ key: 'incident-reports', label: 'Incident Reports', icon: 'warning-outline', onPress: () => props.navigation.navigate('IncidentReports') });
-        if (hasMenuAccess('rainy-day')) mainMenuItems.push({ key: 'rainy-day-schedule', label: 'Rainy Day Schedule', icon: 'rainy-outline', onPress: () => props.navigation.navigate('RainyDaySchedule') });
-        if (hasMenuAccess('reports')) mainMenuItems.push({ key: 'reports', label: 'Reports', icon: 'bar-chart-outline', onPress: () => props.navigation.navigate('Reports') });
-        if (!isTimberLakeWest && hasMenuAccess('tutoring-therapy')) mainMenuItems.push({ key: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', onPress: () => props.navigation.navigate('TutoringTherapy') });
-
-        if (companySlug === 'tyler-hill-camp' && !isTimberLakeWest && hasMenuAccess('roster-templates')) {
-            mainMenuItems.push({
-                key: 'roster-templates',
-                label: 'Roster Templates',
-                icon: 'list-outline',
-                onPress: () => props.navigation.navigate('RosterTemplates'),
-            });
+    // Role-permission items (match web AppSidebar — NOT admin-only)
+    if (hasMenuAccess('awards')) {
+        mainMenuItems.push({ key: 'awards', label: 'Awards', icon: 'ribbon-outline', onPress: () => props.navigation.navigate('Awards') });
+    }
+    if (hasMenuAccess('incidents')) {
+        mainMenuItems.push({ key: 'incident-reports', label: 'Incident Reports', icon: 'warning-outline', onPress: () => props.navigation.navigate('IncidentReports') });
+    }
+    if (hasMenuAccess('rainy-day')) {
+        mainMenuItems.push({ key: 'rainy-day-schedule', label: 'Rainy Day Schedule', icon: 'rainy-outline', onPress: () => props.navigation.navigate('RainyDaySchedule') });
+    }
+    if (hasMenuAccess('reports')) {
+        mainMenuItems.push({ key: 'reports', label: 'Reports', icon: 'bar-chart-outline', onPress: () => props.navigation.navigate('Reports') });
+    }
+    if (!isTimberLakeWest && hasMenuAccess('tutoring-therapy')) {
+        mainMenuItems.push({ key: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', onPress: () => props.navigation.navigate('TutoringTherapy') });
+    }
+    if (companySlug === 'tyler-hill-camp' && !isTimberLakeWest && hasMenuAccess('roster-templates')) {
+        mainMenuItems.push({
+            key: 'roster-templates',
+            label: 'Roster Templates',
+            icon: 'list-outline',
+            onPress: () => props.navigation.navigate('RosterTemplates'),
+        });
+    }
+    if (companySlug !== 'timber-lake-camp' && hasMenuAccess('notes')) {
+        mainMenuItems.push({
+            key: 'daily-news-notes',
+            label: companySlug === 'tyler-hill-camp' ? 'Daily News' : 'Daily Notes',
+            icon: 'document-text-outline',
+            onPress: () => props.navigation.navigate('DailyNews'),
+        });
+    }
+    if (companySlug === 'timber-lake-west') {
+        if (hasMenuAccess('daily-wolf-management')) {
+            mainMenuItems.push(
+                { key: 'daily-wolf-management', label: 'Daily Wolf Management', icon: 'newspaper-outline', onPress: () => props.navigation.navigate('DailyWolfManagement') }
+            );
         }
-        if (companySlug !== 'timber-lake-camp' && hasMenuAccess('notes')) {
-            mainMenuItems.push({
-                key: 'daily-news-notes',
-                label: companySlug === 'tyler-hill-camp' ? 'Daily News' : 'Daily Notes',
-                icon: 'document-text-outline',
-                onPress: () => props.navigation.navigate('DailyNews'),
-            });
-        }
-        if (companySlug === 'timber-lake-west') {
-            if (hasMenuAccess('daily-wolf-management')) {
-                mainMenuItems.push(
-                    { key: 'daily-wolf-management', label: 'Daily Wolf Management', icon: 'newspaper-outline', onPress: () => props.navigation.navigate('DailyWolfManagement') }
-                );
-            }
-            if (hasMenuAccess('daily-wolf-printable')) {
-                mainMenuItems.push(
-                    { key: 'daily-wolf-printable', label: 'Daily Wolf Printable', icon: 'document-text-outline', onPress: () => props.navigation.navigate('DailyWolfPrintable') }
-                );
-            }
+        if (hasMenuAccess('daily-wolf-printable')) {
+            mainMenuItems.push(
+                { key: 'daily-wolf-printable', label: 'Daily Wolf Printable', icon: 'document-text-outline', onPress: () => props.navigation.navigate('DailyWolfPrintable') }
+            );
         }
     }
 

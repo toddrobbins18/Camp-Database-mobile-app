@@ -37,7 +37,7 @@ const PERIODS = [
     { id: 'period-5', label: 'Period 5', time: '4:30 – 5:30 PM' },
 ];
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+const DAYS = ['Monday', 'Tuesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 function mondayOfWeekContaining(d: Date): string {
     const x = new Date(d);
