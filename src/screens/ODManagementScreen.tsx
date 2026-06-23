@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator, useWindowDimensions, Platform, Switch } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator, useWindowDimensions, Platform, Switch, Share } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView as GHScrollView, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,11 @@ import {
     staffIsScheduledOff,
     shouldRemoveDayOffRecord,
 } from '../lib/odNightOffSchedule';
+import {
+    importStaffDaysOffSchedule,
+    STAFF_DAYS_OFF_CSV_TEMPLATE,
+    type StaffDaysOffCsvUploadResult,
+} from '../lib/staffDaysOffCsvImport';
 
 interface StaffMember {
     id: string;
@@ -103,6 +108,10 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const [nightOffSchedule, setNightOffSchedule] = useState<NightOffScheduleEntry[]>([]);
     const [loadingNightSchedule, setLoadingNightSchedule] = useState(false);
     const [savingNightDate, setSavingNightDate] = useState<string | null>(null);
+
+    const [showScheduleUploadModal, setShowScheduleUploadModal] = useState(false);
+    const [scheduleUploading, setScheduleUploading] = useState(false);
+    const [scheduleUploadResult, setScheduleUploadResult] = useState<StaffDaysOffCsvUploadResult | null>(null);
 
     const [scannerMode, setScannerMode] = useState(false);
     const [rfidInput, setRfidInput] = useState('');
@@ -769,6 +778,71 @@ export const ODManagementScreen = ({ navigation }: any) => {
         }
     };
 
+    const handleUploadScheduleCsv = async () => {
+        if (!companyId || !season) {
+            Alert.alert('Missing context', 'Company or season is not available yet.');
+            return;
+        }
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                copyToCacheDirectory: true,
+                type: ['text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel'],
+            });
+            const file = result.assets?.[0];
+            if (!file) return;
+
+            setScheduleUploading(true);
+            setScheduleUploadResult(null);
+
+            const csvText = await (await fetch(file.uri)).text();
+            const lines = csvText.split(/\r?\n/).filter((line) => line.trim().length > 0);
+            if (lines.length < 2) {
+                Alert.alert('Invalid file', 'CSV is empty or missing data rows.');
+                return;
+            }
+
+            const headers = lines[0].split(',').map((h) => h.trim().replace(/"/g, '').toLowerCase());
+            const rows = lines.slice(1).map((line) => {
+                const values = line.split(',').map((v) => v.trim().replace(/"/g, ''));
+                const obj: Record<string, unknown> = {};
+                headers.forEach((header, index) => {
+                    obj[header] = values[index] ?? null;
+                });
+                return obj;
+            });
+
+            const summary = await importStaffDaysOffSchedule(supabase, {
+                companyId,
+                season,
+                rows,
+            });
+            setScheduleUploadResult(summary);
+            await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+
+            if (summary.success > 0) {
+                Alert.alert('Upload complete', `Imported ${summary.success} schedule row(s).`);
+            }
+            if (summary.failed > 0 && summary.success === 0) {
+                Alert.alert('Upload failed', summary.errors[0] || `${summary.failed} row(s) failed.`);
+            }
+        } catch (error: any) {
+            Alert.alert('Upload failed', error?.message || 'Failed to process CSV file');
+        } finally {
+            setScheduleUploading(false);
+        }
+    };
+
+    const shareScheduleTemplate = async () => {
+        try {
+            await Share.share({
+                message: STAFF_DAYS_OFF_CSV_TEMPLATE,
+                title: 'staff_days_off_template.csv',
+            });
+        } catch {
+            Alert.alert('Template', STAFF_DAYS_OFF_CSV_TEMPLATE);
+        }
+    };
+
     const handleApproveLateOverride = async () => {
         if (!lateOverrideStaffId || !companyId) return;
         if (!lateOverrideReason.trim()) {
@@ -839,6 +913,16 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         <Text style={[styles.actionButtonText, scannerMode && { color: theme.colors.surface }]}>
                             {scannerMode ? 'Scanner active' : 'Scan Wristband'}
                         </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => {
+                            setScheduleUploadResult(null);
+                            setShowScheduleUploadModal(true);
+                        }}
+                    >
+                        <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.text} />
+                        <Text style={styles.actionButtonText}>Upload Schedule</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={styles.actionButton}
@@ -1620,6 +1704,65 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 </View>
             </Modal>
 
+            {/* Upload Schedule Modal */}
+            <Modal
+                visible={showScheduleUploadModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowScheduleUploadModal(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowScheduleUploadModal(false)}>
+                    <Pressable style={styles.modal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Upload Day & Night Off Schedule</Text>
+                            <TouchableOpacity onPress={() => setShowScheduleUploadModal(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.modalContent}>
+                            <Text style={styles.modalSubtitle}>
+                                Bulk-import staff day offs and night offs by Person ID and date. One row per staff member per date.
+                            </Text>
+                            <View style={styles.scheduleUploadHelp}>
+                                <Text style={styles.scheduleUploadHelpTitle}>CSV columns</Text>
+                                <Text style={styles.scheduleUploadHelpText}>Person ID, Date, Day Off (yes/no), Night Off (yes/no), Notes (optional)</Text>
+                                <Text style={[styles.scheduleUploadHelpText, { marginTop: 8 }]}>
+                                    Example: day off Wednesday (yes/no) plus night offs on other dates as separate rows with Night Off = yes.
+                                </Text>
+                            </View>
+                            <TouchableOpacity style={styles.scheduleTemplateBtn} onPress={() => void shareScheduleTemplate()}>
+                                <Ionicons name="document-text-outline" size={18} color={theme.colors.primary} />
+                                <Text style={styles.scheduleTemplateBtnText}>Share CSV Template</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.scheduleUploadBtn, scheduleUploading && { opacity: 0.65 }]}
+                                onPress={() => void handleUploadScheduleCsv()}
+                                disabled={scheduleUploading}
+                            >
+                                {scheduleUploading ? (
+                                    <ActivityIndicator color="#fff" size="small" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+                                        <Text style={styles.scheduleUploadBtnText}>Choose CSV File</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                            {scheduleUploadResult && scheduleUploadResult.errors.length > 0 ? (
+                                <View style={styles.scheduleUploadErrors}>
+                                    <Text style={styles.scheduleUploadErrorsTitle}>
+                                        {scheduleUploadResult.failed} row(s) failed
+                                    </Text>
+                                    {scheduleUploadResult.errors.slice(0, 8).map((err, idx) => (
+                                        <Text key={idx} style={styles.scheduleUploadErrorLine}>{err}</Text>
+                                    ))}
+                                </View>
+                            ) : null}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
             {/* Manage Nights Modal */}
             <Modal
                 visible={showManageNightsModal}
@@ -2058,6 +2201,70 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: theme.colors.textSecondary,
         marginTop: 2,
+    },
+    scheduleUploadHelp: {
+        backgroundColor: theme.colors.background,
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    scheduleUploadHelpTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: theme.colors.text,
+        marginBottom: 6,
+    },
+    scheduleUploadHelpText: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        lineHeight: 18,
+    },
+    scheduleTemplateBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 12,
+        paddingVertical: 8,
+    },
+    scheduleTemplateBtnText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: theme.colors.primary,
+    },
+    scheduleUploadBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: theme.colors.primary,
+        borderRadius: 10,
+        paddingVertical: 12,
+        marginBottom: 12,
+    },
+    scheduleUploadBtnText: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    scheduleUploadErrors: {
+        backgroundColor: '#fef2f2',
+        borderRadius: 8,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: '#fecaca',
+    },
+    scheduleUploadErrorsTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#991b1b',
+        marginBottom: 8,
+    },
+    scheduleUploadErrorLine: {
+        fontSize: 12,
+        color: '#991b1b',
+        marginBottom: 4,
     },
     staffCard: {
         marginBottom: theme.spacing.md,

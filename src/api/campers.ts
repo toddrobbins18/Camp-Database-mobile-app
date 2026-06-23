@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { filterActiveRoster } from '../lib/rosterStatus';
-import { expandDivisionIdsForRosterFilter } from '../lib/divisionFilterUtils';
+import { resolvePermissionDivisionIds } from '../lib/divisionFilterUtils';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 
 /** Matches web Roster / usePermissions: these roles see all divisions for roster queries. */
@@ -200,14 +200,33 @@ function useCampersPaged(
  * Campers for the active company/season, aligned with web Roster:
  * excludes inactive status, applies division_leader/viewer division filter, and pages past Supabase max_rows.
  */
+/** All divisions (including inactive aliases) — needed to resolve permission UUIDs like web AuthContext. */
+export const useDivisionsForPermissions = (companyId: string | null) => {
+    return useQuery({
+        queryKey: ['divisions_for_permissions', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('divisions')
+                .select('id, name, company_id, is_active')
+                .eq('company_id', companyId)
+                .order('sort_order', { ascending: true });
+            if (error) throw error;
+            return data ?? [];
+        },
+        enabled: !!companyId,
+    });
+};
+
 export const useCampers = (companyId: string | null, season: string) => {
     const divFilter = useRosterDivisionFilter(companyId);
-    const { data: divisions = [], isSuccess: divisionsReady } = useDivisions(companyId);
+    const { data: divisionsForPermissions = [], isSuccess: divisionsReady } =
+        useDivisionsForPermissions(companyId);
     const expandedDivisionFilter = useMemo(() => {
         if (divFilter.data == null) return null;
         if (divFilter.data.length === 0) return [];
-        return expandDivisionIdsForRosterFilter(divFilter.data, divisions);
-    }, [divFilter.data, divisions]);
+        return resolvePermissionDivisionIds(divFilter.data, divisionsForPermissions);
+    }, [divFilter.data, divisionsForPermissions]);
 
     const paged = useCampersPaged(companyId, season, expandedDivisionFilter, {
         enabled: !!companyId && !!season && divFilter.isSuccess && divisionsReady,
