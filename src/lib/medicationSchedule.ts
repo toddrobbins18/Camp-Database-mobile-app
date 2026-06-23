@@ -1,4 +1,5 @@
 import { format, parseISO } from 'date-fns';
+import { isAsNeededMedication } from './medicationMealTimeDisplay';
 import { campProgramStartDate } from './medicationStartDate';
 
 function parseSeasonYear(season: string): number {
@@ -91,6 +92,7 @@ export function mergeMedicationsForDate(
 
     for (const template of recurringRows) {
         if (!template.is_recurring) continue;
+        if (isAsNeededMedication(template)) continue;
         if (template.date === dateYmd) continue;
         if (!medicationAppliesOnDate(template, dateYmd, season)) continue;
         const key = medicationSlotKey(template);

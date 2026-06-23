@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator, useWindowDimensions, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator, useWindowDimensions, Platform, Switch } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView as GHScrollView, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +13,14 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useStaff } from '../api/staff';
 import { isTylerHillCamp } from '../constants/camps';
 import { enqueueSync, isOnlineNow } from '../offline/engine';
+import {
+    buildNightOffScheduleDateRange,
+    formatNightOffScheduleLabel,
+    mergeNightOffScheduleEntries,
+    type NightOffScheduleEntry,
+    staffIsScheduledOff,
+    shouldRemoveDayOffRecord,
+} from '../lib/odNightOffSchedule';
 
 interface StaffMember {
     id: string;
@@ -23,6 +31,7 @@ interface StaffMember {
     isSleepingOut: boolean;
     /** Matches web: on duty = not marked day off */
     isDayOff: boolean;
+    isNightOff: boolean;
     staffId: string;
     bunkId: string;
     dayOffId?: string;
@@ -87,6 +96,13 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const [showLateOverrideModal, setShowLateOverrideModal] = useState(false);
     const [lateOverrideReason, setLateOverrideReason] = useState('');
     const [lateOverrideStaffId, setLateOverrideStaffId] = useState<string | null>(null);
+
+    const [showManageNightsModal, setShowManageNightsModal] = useState(false);
+    const [manageNightsStaffId, setManageNightsStaffId] = useState<string | null>(null);
+    const [manageNightsStaffName, setManageNightsStaffName] = useState('');
+    const [nightOffSchedule, setNightOffSchedule] = useState<NightOffScheduleEntry[]>([]);
+    const [loadingNightSchedule, setLoadingNightSchedule] = useState(false);
+    const [savingNightDate, setSavingNightDate] = useState<string | null>(null);
 
     const [scannerMode, setScannerMode] = useState(false);
     const [rfidInput, setRfidInput] = useState('');
@@ -360,6 +376,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 isIn: !!dayOff?.checked_in,
                 isSleepingOut: !!dayOff?.is_sleeping_out,
                 isDayOff: !!dayOff?.is_day_off,
+                isNightOff: !!dayOff?.is_night_off,
             };
         })
         .filter(Boolean) as StaffMember[];
@@ -376,7 +393,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
             (genderFilter === 'boys' && bunkGender === 'boys');
         if (!matchesGender) return false;
         if (activeTab === 'OD') return !staff.isDayOff;
-        if (activeTab === 'OFF') return staff.isDayOff;
+        if (activeTab === 'OFF') return staff.isDayOff || staff.isNightOff;
         if (activeTab === 'FREE_PLAY') return staff.isSleepingOut;
         return true;
     });
@@ -564,8 +581,14 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 setRfidInput('');
                 return;
             }
-            const { data: row } = await supabase.from('staff_days_off').select('id, checked_out, checked_in').eq('staff_id', staffMember.id).eq('company_id', companyId).eq('date', dateString).maybeSingle();
-            if (!row) {
+            const { data: row } = await supabase
+                .from('staff_days_off')
+                .select('id, is_day_off, is_night_off, checked_out, checked_in')
+                .eq('staff_id', staffMember.id)
+                .eq('company_id', companyId)
+                .eq('date', dateString)
+                .maybeSingle();
+            if (!row || !staffIsScheduledOff(row)) {
                 setLateOverrideStaffId(staffMember.id);
                 setShowLateOverrideModal(true);
                 setRfidInput('');
@@ -599,7 +622,6 @@ export const ODManagementScreen = ({ navigation }: any) => {
         }
     };
 
-    /** Align with web `handleToggleDayOff` (ODManagement.tsx) */
     const handleToggleDayOff = async (staffId: string, field: 'is_day_off' | 'is_night_off' | 'is_sleeping_out') => {
         if (!companyId || !season) return;
         const existing = (staffDaysOff as any[]).find((d) => d.staff_id === staffId);
@@ -608,8 +630,15 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 const cur = !!existing[field];
                 const newValue = !cur;
                 const updates: Record<string, boolean> = { [field]: newValue };
-                if (field === 'is_day_off') updates.is_night_off = newValue;
-                if (await isOnlineNow()) {
+                const merged = { ...existing, ...updates };
+                if (shouldRemoveDayOffRecord(merged)) {
+                    if (await isOnlineNow()) {
+                        const { error } = await supabase.from('staff_days_off').delete().eq('id', existing.id);
+                        if (error) throw error;
+                    } else {
+                        await enqueueSync('staff_days_off.delete', { id: existing.id });
+                    }
+                } else if (await isOnlineNow()) {
                     const { error } = await supabase.from('staff_days_off').update(updates).eq('id', existing.id);
                     if (error) throw error;
                 } else {
@@ -622,7 +651,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     date: dateString,
                     season,
                     is_day_off: field === 'is_day_off',
-                    is_night_off: field === 'is_day_off' || field === 'is_night_off',
+                    is_night_off: field === 'is_night_off',
                     is_sleeping_out: field === 'is_sleeping_out',
                 };
                 if (await isOnlineNow()) {
@@ -635,6 +664,108 @@ export const ODManagementScreen = ({ navigation }: any) => {
             await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
         } catch (e: any) {
             Alert.alert('Error', e?.message ?? 'Could not update');
+        }
+    };
+
+    const loadNightOffSchedule = async (staffId: string) => {
+        if (!companyId || !season) return;
+        setLoadingNightSchedule(true);
+        try {
+            const rangeDates = buildNightOffScheduleDateRange(selectedDate);
+            const startDate = rangeDates[0];
+            const endDate = rangeDates[rangeDates.length - 1];
+            const { data, error } = await supabase
+                .from('staff_days_off')
+                .select('id, date, is_day_off, is_night_off, is_sleeping_out, checked_out, checked_in')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .eq('staff_id', staffId)
+                .gte('date', startDate)
+                .lte('date', endDate);
+            if (error) throw error;
+            setNightOffSchedule(mergeNightOffScheduleEntries(rangeDates, data || []));
+        } catch (e: any) {
+            Alert.alert('Error', e?.message ?? 'Could not load night schedule');
+        } finally {
+            setLoadingNightSchedule(false);
+        }
+    };
+
+    const openManageNights = (staffId: string, staffName: string) => {
+        setManageNightsStaffId(staffId);
+        setManageNightsStaffName(staffName);
+        setShowManageNightsModal(true);
+        void loadNightOffSchedule(staffId);
+    };
+
+    const handleSetNightOffForDate = async (staffId: string, dateYmd: string, enabled: boolean) => {
+        if (!companyId || !season) return;
+        setSavingNightDate(dateYmd);
+        try {
+            const { data: existing, error: fetchError } = await supabase
+                .from('staff_days_off')
+                .select('id, is_day_off, is_night_off, is_sleeping_out, checked_out, checked_in')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .eq('staff_id', staffId)
+                .eq('date', dateYmd)
+                .maybeSingle();
+            if (fetchError) throw fetchError;
+
+            if (enabled) {
+                if (existing) {
+                    const update = { is_night_off: true };
+                    if (await isOnlineNow()) {
+                        const { error } = await supabase.from('staff_days_off').update(update).eq('id', existing.id);
+                        if (error) throw error;
+                    } else {
+                        await enqueueSync('staff_days_off.update', { id: existing.id, update });
+                    }
+                } else {
+                    const newRecord = {
+                        company_id: companyId,
+                        staff_id: staffId,
+                        date: dateYmd,
+                        season,
+                        is_day_off: false,
+                        is_night_off: true,
+                        is_sleeping_out: false,
+                    };
+                    if (await isOnlineNow()) {
+                        const { error } = await supabase.from('staff_days_off').insert(newRecord);
+                        if (error) throw error;
+                    } else {
+                        await enqueueSync('staff_days_off.insert', [newRecord]);
+                    }
+                }
+            } else if (existing) {
+                const nextRecord = { ...existing, is_night_off: false };
+                if (shouldRemoveDayOffRecord(nextRecord)) {
+                    if (await isOnlineNow()) {
+                        const { error } = await supabase.from('staff_days_off').delete().eq('id', existing.id);
+                        if (error) throw error;
+                    } else {
+                        await enqueueSync('staff_days_off.delete', { id: existing.id });
+                    }
+                } else {
+                    const update = { is_night_off: false };
+                    if (await isOnlineNow()) {
+                        const { error } = await supabase.from('staff_days_off').update(update).eq('id', existing.id);
+                        if (error) throw error;
+                    } else {
+                        await enqueueSync('staff_days_off.update', { id: existing.id, update });
+                    }
+                }
+            }
+
+            await loadNightOffSchedule(staffId);
+            if (dateYmd === dateString) {
+                await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+            }
+        } catch (e: any) {
+            Alert.alert('Error', e?.message ?? 'Could not update night off');
+        } finally {
+            setSavingNightDate(null);
         }
     };
 
@@ -651,7 +782,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
             date: dateString,
             season,
             is_day_off: true,
-            is_night_off: true,
+            is_night_off: false,
             checked_out: true,
             checked_out_at: new Date().toISOString(),
             checked_out_by: user?.id ?? null,
@@ -864,7 +995,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                 {activeTab === 'OD'
                                     ? 'No staff on duty found.'
                                     : activeTab === 'OFF'
-                                      ? 'No staff off today.'
+                                      ? 'No staff with a day off or night off today.'
                                       : 'No staff scheduled for Free Play today.'}
                             </Text>
                         </View>
@@ -898,22 +1029,50 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         </View>
                     ) : activeTab === 'OFF' ? (
                         <View style={styles.staffList}>
-                            <View style={styles.tableHeaders}>
-                                <Text style={[styles.tableHeader, { flex: 1.5 }]}>Bunk</Text>
-                                <Text style={[styles.tableHeader, { flex: 2 }]}>Name</Text>
-                                <Text style={[styles.tableHeader, { flex: 1 }]}>Actions</Text>
-                            </View>
                             {filteredStaff.map((staff) => (
-                                <View key={staff.id} style={styles.staffRow}>
-                                    <Text style={[styles.staffCell, { flex: 1.5 }]}>{staff.bunk}</Text>
-                                    <Text style={[styles.staffCell, { flex: 2 }]}>{staff.name}</Text>
-                                    <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                <View key={staff.id} style={styles.offStaffCard}>
+                                    <View style={styles.offStaffCardHeader}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.offStaffName}>{staff.name}</Text>
+                                            <Text style={styles.offStaffBunk}>{staff.bunk}</Text>
+                                            <View style={styles.offStaffBadges}>
+                                                {staff.isDayOff ? (
+                                                    <View style={styles.dayOffBadge}>
+                                                        <Text style={styles.dayOffBadgeText}>Day Off</Text>
+                                                    </View>
+                                                ) : null}
+                                                {staff.isNightOff ? (
+                                                    <View style={styles.nightOffBadge}>
+                                                        <Text style={styles.nightOffBadgeText}>Night Off</Text>
+                                                    </View>
+                                                ) : null}
+                                            </View>
+                                        </View>
+                                    </View>
+                                    <View style={styles.offStaffActions}>
                                         <TouchableOpacity
-                                            onPress={() => handleToggleDayOff(staff.staffId, 'is_day_off')}
-                                            hitSlop={8}
+                                            style={styles.manageNightsBtn}
+                                            onPress={() => openManageNights(staff.staffId, staff.name)}
                                         >
-                                            <Text style={styles.removeLink}>Remove</Text>
+                                            <Ionicons name="moon-outline" size={16} color={theme.colors.primary} />
+                                            <Text style={styles.manageNightsBtnText}>Manage Nights</Text>
                                         </TouchableOpacity>
+                                        {staff.isDayOff ? (
+                                            <TouchableOpacity
+                                                onPress={() => handleToggleDayOff(staff.staffId, 'is_day_off')}
+                                                hitSlop={8}
+                                            >
+                                                <Text style={styles.removeLink}>Remove Day Off</Text>
+                                            </TouchableOpacity>
+                                        ) : null}
+                                        {staff.isNightOff && !staff.isDayOff ? (
+                                            <TouchableOpacity
+                                                onPress={() => handleToggleDayOff(staff.staffId, 'is_night_off')}
+                                                hitSlop={8}
+                                            >
+                                                <Text style={styles.removeLink}>Remove Night Off</Text>
+                                            </TouchableOpacity>
+                                        ) : null}
                                     </View>
                                 </View>
                             ))}
@@ -945,12 +1104,30 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                             <Ionicons name="close-circle-outline" size={20} color={theme.colors.textSecondary} />
                                         )}
                                     </View>
-                                    <View style={{ flex: 1, alignItems: 'center' }}>
+                                    <View style={{ flex: 1.4, alignItems: 'flex-end', gap: 6 }}>
                                         <TouchableOpacity
                                             style={[styles.markOffPill, { backgroundColor: theme.colors.secondary }]}
                                             onPress={() => handleToggleDayOff(staff.staffId, 'is_day_off')}
                                         >
                                             <Text style={styles.markOffPillText}>Mark Off</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.markOffPill,
+                                                staff.isNightOff
+                                                    ? { backgroundColor: theme.colors.primary }
+                                                    : { backgroundColor: '#e5e7eb' },
+                                            ]}
+                                            onPress={() => handleToggleDayOff(staff.staffId, 'is_night_off')}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.markOffPillText,
+                                                    !staff.isNightOff && { color: theme.colors.text },
+                                                ]}
+                                            >
+                                                {staff.isNightOff ? 'Remove Night Off' : 'Night Off'}
+                                            </Text>
                                         </TouchableOpacity>
                                     </View>
                                 </View>
@@ -1443,6 +1620,59 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 </View>
             </Modal>
 
+            {/* Manage Nights Modal */}
+            <Modal
+                visible={showManageNightsModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowManageNightsModal(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowManageNightsModal(false)}>
+                    <Pressable style={styles.modal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Manage Night Offs</Text>
+                            <TouchableOpacity onPress={() => setShowManageNightsModal(false)}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.modalContent}>
+                            <Text style={styles.modalSubtitle}>
+                                {manageNightsStaffName} — toggle night off for dates around {formatDate(selectedDate)}.
+                                Day off and night off are scheduled independently.
+                            </Text>
+                            {loadingNightSchedule ? (
+                                <ActivityIndicator style={{ marginVertical: 24 }} color={theme.colors.primary} />
+                            ) : (
+                                nightOffSchedule.map((entry) => (
+                                    <View key={entry.date} style={styles.nightScheduleRow}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.nightScheduleDate}>
+                                                {formatNightOffScheduleLabel(entry.date)}
+                                            </Text>
+                                            {entry.date === dateString ? (
+                                                <Text style={styles.nightScheduleHint}>Selected day</Text>
+                                            ) : null}
+                                            {entry.is_day_off ? (
+                                                <Text style={styles.nightScheduleHint}>Day off</Text>
+                                            ) : null}
+                                        </View>
+                                        <Switch
+                                            value={entry.is_night_off}
+                                            disabled={savingNightDate === entry.date || !manageNightsStaffId}
+                                            onValueChange={(enabled) => {
+                                                if (manageNightsStaffId) {
+                                                    void handleSetNightOffForDate(manageNightsStaffId, entry.date, enabled);
+                                                }
+                                            }}
+                                        />
+                                    </View>
+                                ))
+                            )}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
             {/* Late Sign-Out Override Modal */}
             <Modal
                 visible={showLateOverrideModal}
@@ -1740,6 +1970,94 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 12,
         fontWeight: '700',
+    },
+    offStaffCard: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 10,
+        backgroundColor: theme.colors.surface,
+    },
+    offStaffCardHeader: {
+        flexDirection: 'row',
+        marginBottom: 10,
+    },
+    offStaffName: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: theme.colors.text,
+    },
+    offStaffBunk: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
+    offStaffBadges: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginTop: 8,
+    },
+    dayOffBadge: {
+        backgroundColor: '#dbeafe',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
+    },
+    dayOffBadgeText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#1e40af',
+    },
+    nightOffBadge: {
+        backgroundColor: '#ede9fe',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
+    },
+    nightOffBadgeText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#5b21b6',
+    },
+    offStaffActions: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 12,
+    },
+    manageNightsBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingVertical: 4,
+    },
+    manageNightsBtnText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.primary,
+    },
+    nightScheduleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        marginBottom: 8,
+    },
+    nightScheduleDate: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    nightScheduleHint: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
     },
     staffCard: {
         marginBottom: theme.spacing.md,

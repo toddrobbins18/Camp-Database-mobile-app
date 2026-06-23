@@ -425,8 +425,8 @@ export const HealthScreen = ({ navigation }: any) => {
     );
 
     const calendarWidgetEvents: CalendarWidgetEvent[] = useMemo(() => {
-        if (!visibleMedications || visibleMedications.length === 0) return [];
-        return visibleMedications.map((med: any) => ({
+        if (!activeListMedications || activeListMedications.length === 0) return [];
+        return activeListMedications.map((med: any) => ({
             id: med.id,
             title: med.medication_name || 'Medication',
             date: new Date((med.date || medicationQueryDate) + 'T00:00:00'),
@@ -435,7 +435,7 @@ export const HealthScreen = ({ navigation }: any) => {
             type: 'health',
             accent: { bg: '#fce7f3', text: '#9d174d', marker: '#ec4899' },
         }));
-    }, [visibleMedications, medicationQueryDate]);
+    }, [activeListMedications, medicationQueryDate]);
 
     // Admissions
     const admissionsQuery = useHealthCenterAdmissions(companyId, season);
@@ -921,13 +921,13 @@ export const HealthScreen = ({ navigation }: any) => {
                             {isPastDate(selectedDate) && (
                                 <Text style={styles.pastDateText}>Past date - View only with notes option</Text>
                             )}
-                            {visibleMedications.length === 0 ? (
+                            {activeListMedications.length === 0 ? (
                                 <View style={styles.emptyState}>
                                     <Text style={styles.emptyText}>No medications scheduled for this date</Text>
                                 </View>
                             ) : (
                                 <View style={{ marginTop: 12 }}>
-                                    {visibleMedications.map((med: any) => (
+                                    {sortedActiveListMedications.map((med: any) => (
                                         <View key={medicationRowKey(med)} style={styles.medicationCard}>
                                             <View style={styles.medicationCardHeader}>
                                                 <Text style={styles.medicationCardName}>{med.children?.name}</Text>

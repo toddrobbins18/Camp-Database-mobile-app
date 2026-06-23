@@ -72,6 +72,7 @@ export type SyncAction =
     | 'bunk_staff.delete'
     | 'staff_days_off.insert'
     | 'staff_days_off.update'
+    | 'staff_days_off.delete'
     | 'staff_days_off.upsert';
 
 type QueueRow = {
@@ -798,6 +799,12 @@ async function executeAction(action: SyncAction, payload: any): Promise<void> {
     if (action === 'staff_days_off.update') {
         const { id, update } = payload ?? {};
         const { error } = await supabase.from('staff_days_off').update(update).eq('id', id);
+        if (error) throw error;
+        return;
+    }
+    if (action === 'staff_days_off.delete') {
+        const { id } = payload ?? {};
+        const { error } = await supabase.from('staff_days_off').delete().eq('id', id);
         if (error) throw error;
         return;
     }
