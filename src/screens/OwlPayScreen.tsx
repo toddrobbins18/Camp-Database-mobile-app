@@ -36,6 +36,10 @@ import {
 } from '../api/owlpay';
 import { supabase } from '../lib/supabase';
 import { enqueueSync, isOnlineNow } from '../offline/engine';
+import {
+    buildOwlPayPurchaseRows,
+    calculateOwlPayCartPricing,
+} from '../lib/owlPayFreeItem';
 
 type OwlPayTab = 'pos' | 'items' | 'balances' | 'reports' | 'settings';
 type ItemCategory = 'Food' | 'Snacks' | 'Drinks' | 'Other';
@@ -61,7 +65,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const [camperQuery, setCamperQuery] = useState('');
     const [selectedCamperId, setSelectedCamperId] = useState<string | null>(null);
     const [selectedIsStaff, setSelectedIsStaff] = useState(false);
-    const [isFirstScanToday, setIsFirstScanToday] = useState(false);
+    const [hasFreeDailyItemAvailable, setHasFreeDailyItemAvailable] = useState(false);
     const [cart, setCart] = useState<Array<OwlPayItem & { quantity: number }>>([]);
     const [isCompletingTransaction, setIsCompletingTransaction] = useState(false);
     const [showAddItemModal, setShowAddItemModal] = useState(false);
@@ -81,7 +85,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
         camperName: string;
         chargedAmount: number;
         newBalance: number;
-        isFirstScan: boolean;
+        freeItemApplied: boolean;
         isStaff: boolean;
     } | null>(null);
     const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
@@ -222,11 +226,29 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const totalStaffSpendAll = staffSpendRows.reduce((sum, r) => sum + r.total_spent, 0);
     const avgStaffSpendDisplay = staffSpendRows.length ? totalStaffSpendAll / staffSpendRows.length : 0;
     const posActiveItems = useMemo(() => allItems.filter((item) => item.active), [allItems]);
-    const subtotal = cart.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
-    const total = isFirstScanToday ? 0 : subtotal;
+    const cartPricing = useMemo(
+        () =>
+            calculateOwlPayCartPricing(
+                cart.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    price: Number(item.price),
+                    category: item.category,
+                    quantity: item.quantity,
+                })),
+                {
+                    hasFreeDailyItemAvailable,
+                    isStaff: selectedIsStaff,
+                }
+            ),
+        [cart, hasFreeDailyItemAvailable, selectedIsStaff]
+    );
+    const subtotal = cartPricing.subtotal;
+    const total = cartPricing.total;
+    const freeDiscount = cartPricing.freeDiscount;
     const currentBalance = Number(selectedCamper?.owl_pay_balance || 0);
     const newBalance = selectedIsStaff ? currentBalance + total : currentBalance - total;
-    const hasInsufficientFunds = !selectedIsStaff && !isFirstScanToday && cart.length > 0 && newBalance < 0;
+    const hasInsufficientFunds = !selectedIsStaff && cart.length > 0 && newBalance < 0;
     const scanStatusLabel =
         scanStatus === 'scanning'
             ? 'Reading scanner input...'
@@ -328,7 +350,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
         }
     };
 
-    const checkFirstScanToday = async (childId: string) => {
+    const checkFreeDailyItemAvailable = async (childId: string) => {
         const today = new Date().toISOString().split('T')[0];
         const { data, error } = await supabase
             .from('owl_pay_daily_scans')
@@ -345,18 +367,18 @@ export const OwlPayScreen = ({ navigation }: any) => {
         setSelectedIsStaff(false);
         setCart([]);
         try {
-            const isFirst = await checkFirstScanToday(camperId);
-            setIsFirstScanToday(isFirst);
+            const hasFreeItem = await checkFreeDailyItemAvailable(camperId);
+            setHasFreeDailyItemAvailable(hasFreeItem);
         } catch (err: any) {
-            setIsFirstScanToday(false);
-            Alert.alert('Owl Pay', err?.message || 'Unable to check first scan status');
+            setHasFreeDailyItemAvailable(false);
+            Alert.alert('Owl Pay', err?.message || 'Unable to check free item status');
         }
     };
 
     const handleSelectStaff = (staffId: string) => {
         setSelectedCamperId(staffId);
         setSelectedIsStaff(true);
-        setIsFirstScanToday(false);
+        setHasFreeDailyItemAvailable(false);
         setCart([]);
     };
 
@@ -441,11 +463,11 @@ export const OwlPayScreen = ({ navigation }: any) => {
             Alert.alert('Owl Pay', 'Select a camper first');
             return;
         }
-        if (cart.length === 0 && !isFirstScanToday) {
+        if (cart.length === 0) {
             Alert.alert('Owl Pay', 'Add at least one item');
             return;
         }
-        if (!selectedIsStaff && !isFirstScanToday && newBalance < 0) {
+        if (!selectedIsStaff && newBalance < 0) {
             Alert.alert('Owl Pay', 'Insufficient funds');
             return;
         }
@@ -455,55 +477,42 @@ export const OwlPayScreen = ({ navigation }: any) => {
             const { data: authData } = await supabase.auth.getUser();
             const createdBy = authData.user?.id;
             const online = await isOnlineNow();
+            const pricing = cartPricing;
 
-            if (!selectedIsStaff && isFirstScanToday) {
+            if (!selectedIsStaff && pricing.freeItemApplied) {
                 const scanRow = {
                     child_id: selectedCamperId,
                     company_id: companyId,
                 };
-                const firstScanTxRow = {
-                    child_id: selectedCamperId,
-                    staff_id: null,
-                    company_id: companyId,
-                    amount: 0,
-                    is_free: true,
-                    transaction_type: 'first_scan',
-                    notes: 'First scan of the day - free entry',
-                    created_by: createdBy,
-                };
                 if (online) {
                     const { error: scanError } = await supabase.from('owl_pay_daily_scans').insert(scanRow);
                     if (scanError) throw scanError;
-
-                    const { error: firstScanTxError } = await supabase.from('owl_pay_transactions').insert(firstScanTxRow);
-                    if (firstScanTxError) throw firstScanTxError;
                 } else {
                     await enqueueSync('owl_pay_daily_scans.insert', [scanRow]);
-                    await enqueueSync('owl_pay_transactions.insert_many', [firstScanTxRow]);
                 }
             }
 
-            if (cart.length > 0) {
-                const txRows = cart.flatMap((item) =>
-                    Array(item.quantity)
-                        .fill(null)
-                        .map(() => ({
-                            child_id: selectedIsStaff ? null : selectedCamperId,
-                            staff_id: selectedIsStaff ? selectedCamperId : null,
-                            company_id: companyId,
-                            item_id: item.id,
-                            amount: isFirstScanToday ? 0 : Number(item.price),
-                            is_free: isFirstScanToday,
-                            transaction_type: 'purchase',
-                            created_by: createdBy,
-                        }))
-                );
-                if (online) {
-                    const { error: txError } = await supabase.from('owl_pay_transactions').insert(txRows);
-                    if (txError) throw txError;
-                } else {
-                    await enqueueSync('owl_pay_transactions.insert_many', txRows);
+            const txRows = buildOwlPayPurchaseRows(
+                cart.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    price: Number(item.price),
+                    category: item.category,
+                    quantity: item.quantity,
+                })),
+                pricing,
+                {
+                    child_id: selectedIsStaff ? null : selectedCamperId,
+                    staff_id: selectedIsStaff ? selectedCamperId : null,
+                    company_id: companyId,
+                    created_by: createdBy,
                 }
+            );
+            if (online) {
+                const { error: txError } = await supabase.from('owl_pay_transactions').insert(txRows);
+                if (txError) throw txError;
+            } else {
+                await enqueueSync('owl_pay_transactions.insert_many', txRows);
             }
 
             if (!selectedIsStaff && selectedCamper && total !== 0) {
@@ -521,7 +530,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 }
             }
 
-            if (online && cart.length > 0 && !isFirstScanToday) {
+            if (online && cart.length > 0) {
                 try {
                     await supabase.functions.invoke('send-owlpay-notifications', {
                         body: {
@@ -542,13 +551,13 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 camperName: selectedDisplayName || 'Selection',
                 chargedAmount: total,
                 newBalance,
-                isFirstScan: isFirstScanToday,
+                freeItemApplied: pricing.freeItemApplied,
                 isStaff: selectedIsStaff,
             });
             setCart([]);
             setSelectedCamperId(null);
             setSelectedIsStaff(false);
-            setIsFirstScanToday(false);
+            setHasFreeDailyItemAvailable(false);
             queryClient.invalidateQueries({ queryKey: ['owlpay_campers'] });
             queryClient.invalidateQueries({ queryKey: ['owlpay_reports'] });
         } catch (err: any) {
@@ -789,8 +798,8 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 <Text style={styles.selectionText}>
                     {selectedDisplayName ? `Selected: ${selectedDisplayName}` : 'Select a camper/staff to begin'}
                 </Text>
-                {isFirstScanToday && !selectedIsStaff && (
-                    <Text style={styles.firstScanBadge}>First scan today - total will be $0.00</Text>
+                {hasFreeDailyItemAvailable && !selectedIsStaff && (
+                    <Text style={styles.firstScanBadge}>1 free snack or drink available today</Text>
                 )}
             </StyledCard>
 
@@ -840,14 +849,19 @@ export const OwlPayScreen = ({ navigation }: any) => {
                         <Text style={styles.sectionTitle}>Transaction</Text>
                     </View>
                 </View>
-                {cart.length === 0 && !isFirstScanToday ? (
+                {cart.length === 0 ? (
                     <Text style={styles.emptyStateText}>No items added yet.</Text>
                 ) : (
                     <View style={styles.itemsList}>
                         {cart.map((item) => (
                             <View key={item.id} style={styles.itemRowMain}>
                                 <View>
-                                    <Text style={styles.itemName}>{item.name}</Text>
+                                    <Text style={styles.itemName}>
+                                        {item.name}
+                                        {cartPricing.freeItemLineId === item.id && cartPricing.freeItemApplied
+                                            ? ' (1 free)'
+                                            : ''}
+                                    </Text>
                                     <Text style={styles.itemMeta}>{currency(Number(item.price))} each</Text>
                                 </View>
                                 <View style={styles.qtyControlRow}>
@@ -866,6 +880,11 @@ export const OwlPayScreen = ({ navigation }: any) => {
 
                 <View style={styles.totalsBox}>
                     <Text style={styles.totalsLine}>Subtotal: {currency(subtotal)}</Text>
+                    {freeDiscount > 0 && (
+                        <Text style={[styles.totalsLine, styles.freeDiscountText]}>
+                            Free daily item: -{currency(freeDiscount)}
+                        </Text>
+                    )}
                     <Text style={styles.totalsLine}>Total: {currency(total)}</Text>
                     {!selectedIsStaff && selectedCamper && (
                         <Text
@@ -887,11 +906,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     disabled={!selectedCamperId || isCompletingTransaction || hasInsufficientFunds}
                 >
                     <Text style={styles.primaryButtonText}>
-                        {isCompletingTransaction
-                            ? 'Processing...'
-                            : isFirstScanToday && cart.length === 0
-                              ? 'Record First Scan'
-                              : 'Complete Transaction'}
+                        {isCompletingTransaction ? 'Processing...' : 'Complete Transaction'}
                     </Text>
                 </TouchableOpacity>
             </StyledCard>
@@ -1499,11 +1514,12 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     <Pressable style={styles.successCard} onPress={(e) => e.stopPropagation()}>
                         <Ionicons name="checkmark-circle" size={48} color={theme.colors.success} />
                         <Text style={styles.successTitle}>{successData?.camperName}</Text>
-                        {successData?.isFirstScan ? (
-                            <Text style={styles.successSubtext}>First scan recorded for free entry</Text>
+                        {successData?.freeItemApplied && (successData?.chargedAmount || 0) === 0 ? (
+                            <Text style={styles.successSubtext}>Free daily snack or drink applied</Text>
                         ) : (
                             <Text style={styles.successSubtext}>
                                 Charged: {currency(successData?.chargedAmount || 0)}
+                                {successData?.freeItemApplied ? ' (includes 1 free item)' : ''}
                             </Text>
                         )}
                         {!successData?.isStaff && (
@@ -1712,6 +1728,9 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '700',
         textAlign: 'center',
+    },
+    freeDiscountText: {
+        color: theme.colors.success,
     },
     sectionHeaderRow: {
         flexDirection: 'row',

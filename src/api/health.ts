@@ -2,7 +2,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 import {
+    dedupeMedicationSlots,
     findDaySpecificMedicationLog,
+    medicationSlotKey,
     mergeMedicationsForDate,
     type MedicationLogRow,
 } from '../lib/medicationSchedule';
@@ -66,24 +68,44 @@ const admissionsCacheKey = (companyId: string, season: string | null | undefined
 async function applyQueuedMedicationOps(base: MedicationLog[]): Promise<MedicationLog[]> {
     const out = [...base];
     const queued = await listQueued('medication_logs.');
+
+    const patchSlot = (
+        med: Pick<MedicationLog, 'child_id' | 'medication_name' | 'meal_time'>,
+        update: Partial<MedicationLog>,
+    ) => {
+        const slotKey = medicationSlotKey(med);
+        for (let i = 0; i < out.length; i++) {
+            if (medicationSlotKey(out[i]) === slotKey) {
+                out[i] = { ...out[i], ...update } as MedicationLog;
+            }
+        }
+    };
+
     for (const q of queued) {
         if (q.action === 'medication_logs.insert') {
             const rows = Array.isArray(q.payload) ? (q.payload as any[]) : [];
             for (const row of rows) {
-                out.push({
+                const inserted = {
                     ...(row as any),
                     id: `offline-${q.id}`,
                     children: (row as any).children ?? undefined,
-                } as MedicationLog);
+                } as MedicationLog;
+                out.push(inserted);
+                if (inserted.administered === true) {
+                    patchSlot(inserted, {
+                        administered: true,
+                        administered_at: inserted.administered_at ?? new Date().toISOString(),
+                    });
+                }
             }
         } else if (q.action === 'medication_logs.administer') {
             const payload = q.payload as any;
             const id = payload?.id as string | undefined;
-            const update = payload?.update as any;
+            const update = payload?.update as Partial<MedicationLog> | undefined;
             if (!id || !update) continue;
-            const idx = out.findIndex((m) => m.id === id);
-            if (idx >= 0) {
-                out[idx] = { ...out[idx], ...update } as MedicationLog;
+            const existing = out.find((m) => m.id === id);
+            if (existing) {
+                patchSlot(existing, update);
             }
         } else if (q.action === 'medication_logs.delete') {
             const id = (q.payload as any)?.id as string | undefined;
@@ -92,7 +114,8 @@ async function applyQueuedMedicationOps(base: MedicationLog[]): Promise<Medicati
             if (idx >= 0) out.splice(idx, 1);
         }
     }
-    return out;
+
+    return dedupeMedicationSlots(out as MedicationLogRow[]) as MedicationLog[];
 }
 
 export interface HealthCenterAdmission {
@@ -229,6 +252,32 @@ export const useSetMedicationAdministration = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
+        onMutate: async ({ med, companyId, season, dateString, administered }) => {
+            const seasonKey = season || String(new Date().getFullYear());
+            const queryKey = ['medication_logs', companyId, dateString, seasonKey] as const;
+            await queryClient.cancelQueries({ queryKey });
+            const previous = queryClient.getQueryData<MedicationLog[]>(queryKey);
+            const slotKey = medicationSlotKey(med);
+            const patch =
+                administered === true
+                    ? {
+                          administered: true,
+                          administered_at: new Date().toISOString(),
+                      }
+                    : {
+                          administered: false,
+                          administered_by: null,
+                          administered_at: null,
+                      };
+
+            queryClient.setQueryData<MedicationLog[]>(queryKey, (current) =>
+                (current ?? []).map((row) =>
+                    medicationSlotKey(row) === slotKey ? { ...row, ...patch } : row,
+                ),
+            );
+
+            return { previous, queryKey };
+        },
         mutationFn: async ({ med, companyId, season, dateString, administered }: MedicationAdministrationInput) => {
             const staffId = administered ? await resolveStaffId(companyId) : null;
             const update = administered
@@ -319,6 +368,11 @@ export const useSetMedicationAdministration = () => {
                 await enqueueSync('medication_logs.administer', { id: med.id, update });
             }
             return med.id;
+        },
+        onError: (_error, _variables, context) => {
+            if (context?.previous && context.queryKey) {
+                queryClient.setQueryData(context.queryKey, context.previous);
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['medication_logs'] });

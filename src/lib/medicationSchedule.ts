@@ -35,24 +35,57 @@ export type MedicationLogRow = {
     _displayDate?: string;
 };
 
-function mealTimeKey(mealTime: unknown): string {
-    if (mealTime == null) return '';
+function normalizeMealTimeEntries(mealTime: unknown): string[] {
+    if (mealTime == null) return [];
     if (Array.isArray(mealTime)) {
-        return mealTime.map(String).sort().join('|');
+        return mealTime.map((entry) => String(entry).trim()).filter(Boolean).sort();
     }
     if (typeof mealTime === 'string') {
         const trimmed = mealTime.trim();
+        if (!trimmed) return [];
         if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
             try {
                 const parsed = JSON.parse(trimmed) as unknown;
-                if (Array.isArray(parsed)) return parsed.map(String).sort().join('|');
+                if (Array.isArray(parsed)) {
+                    return parsed.map((entry) => String(entry).trim()).filter(Boolean).sort();
+                }
             } catch {
                 /* use raw string */
             }
         }
-        return trimmed;
+        return [trimmed];
     }
-    return String(mealTime);
+    const single = String(mealTime).trim();
+    return single ? [single] : [];
+}
+
+function mealTimeKey(mealTime: unknown): string {
+    return normalizeMealTimeEntries(mealTime).join('|');
+}
+
+function preferMedicationRow(a: MedicationLogRow, b: MedicationLogRow): boolean {
+    if (Boolean(a.administered) !== Boolean(b.administered)) {
+        return Boolean(a.administered);
+    }
+    if (Boolean(a.is_recurring) !== Boolean(b.is_recurring)) {
+        return !a.is_recurring;
+    }
+    if (Boolean(a._fromRecurringTemplate) !== Boolean(b._fromRecurringTemplate)) {
+        return !a._fromRecurringTemplate;
+    }
+    return false;
+}
+
+export function dedupeMedicationSlots(rows: MedicationLogRow[]): MedicationLogRow[] {
+    const byKey = new Map<string, MedicationLogRow>();
+    for (const row of rows) {
+        const key = medicationSlotKey(row);
+        const existing = byKey.get(key);
+        if (!existing || preferMedicationRow(row, existing)) {
+            byKey.set(key, row);
+        }
+    }
+    return [...byKey.values()];
 }
 
 export function medicationSlotKey(
@@ -87,8 +120,9 @@ export function mergeMedicationsForDate(
     dateYmd: string,
     season: string,
 ): MedicationLogRow[] {
-    const result: MedicationLogRow[] = [...dateRows];
-    const existingKeys = new Set(dateRows.map((row) => medicationSlotKey(row)));
+    const dedupedDateRows = dedupeMedicationSlots(dateRows);
+    const result: MedicationLogRow[] = [...dedupedDateRows];
+    const existingKeys = new Set(dedupedDateRows.map((row) => medicationSlotKey(row)));
 
     for (const template of recurringRows) {
         if (!template.is_recurring) continue;
@@ -97,6 +131,10 @@ export function mergeMedicationsForDate(
         if (!medicationAppliesOnDate(template, dateYmd, season)) continue;
         const key = medicationSlotKey(template);
         if (existingKeys.has(key)) continue;
+
+        const dayLog = dedupedDateRows.find((row) => medicationSlotKey(row) === key);
+        if (dayLog?.administered === true) continue;
+
         result.push({
             ...template,
             administered: false,
@@ -109,7 +147,7 @@ export function mergeMedicationsForDate(
         existingKeys.add(key);
     }
 
-    return result;
+    return dedupeMedicationSlots(result);
 }
 
 export function findDaySpecificMedicationLog(
