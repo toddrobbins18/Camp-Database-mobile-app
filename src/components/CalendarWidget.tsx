@@ -84,6 +84,9 @@ function formatEventDate(date: Date) {
 function formatTime12Hour(timeStr?: string): string {
     if (!timeStr || typeof timeStr !== 'string') return '';
     const t = timeStr.trim();
+    if (t.toUpperCase().includes('AM') || t.toUpperCase().includes('PM')) {
+      return t.toUpperCase();
+    }
     const m = t.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
     if (!m) return t;
     let h = parseInt(m[1], 10);

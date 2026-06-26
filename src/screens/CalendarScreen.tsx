@@ -46,6 +46,9 @@ function getTimeOfDayFromTime(timeStr?: string): string {
 function formatTime12Hour(timeStr?: string): string {
     if (!timeStr || typeof timeStr !== 'string') return '';
     const t = timeStr.trim();
+    if (t.toUpperCase().includes('AM') || t.toUpperCase().includes('PM')) {
+      return t.toUpperCase();
+    }
     const m = t.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
     if (!m) return t;
     let h = parseInt(m[1], 10);
@@ -53,7 +56,6 @@ function formatTime12Hour(timeStr?: string): string {
     const ampm = (m[3] || '').toLowerCase();
     if (ampm === 'pm' && h < 12) h += 12;
     if (ampm === 'am' && h === 12) h = 0;
-    if (!ampm && h >= 0 && h <= 23) { /* 24h */ } else if (!ampm) { if (h >= 12) { h -= 12; } }
     const period = h >= 12 ? 'PM' : 'AM';
     const hour12 = h % 12 || 12;
     return `${hour12}:${String(min).padStart(2, '0')} ${period}`;

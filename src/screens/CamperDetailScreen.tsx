@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useStaff } from '../api/staff';
+import { useSetMedicationAdministration } from '../api/health';
 import { useDivisions, useEditCamper } from '../api/campers';
 import { useCompany } from '../contexts/CompanyContext';
 import { useQuery } from '@tanstack/react-query';
@@ -280,6 +281,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
     });
 
     const editCamperMutation = useEditCamper();
+    const setAdministrationMutation = useSetMedicationAdministration();
     const [activeTab, setActiveTab] = useState<TabType>('overview');
     const [activeBirthdaySubTab, setActiveBirthdaySubTab] = useState<BirthdaySubTabType>('info');
     const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -982,6 +984,23 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                                         {med.notes ? (
                                                                             <Text style={styles.healthHistoryNotes}>{med.notes}</Text>
                                                                         ) : null}
+                                                                        <View style={{ marginTop: 8, alignSelf: 'flex-end' }}>
+                                                                            <TouchableOpacity
+                                                                                onPress={() => {
+                                                                                    setAdministrationMutation.mutate({
+                                                                                        med,
+                                                                                        companyId,
+                                                                                        season,
+                                                                                        dateString: new Date().toISOString().split('T')[0],
+                                                                                        administered: !administered,
+                                                                                    });
+                                                                                }}
+                                                                            >
+                                                                                <Text style={{ fontSize: 12, color: administered ? theme.colors.danger : theme.colors.primary, fontWeight: '500' }}>
+                                                                                    {administered ? 'Undo Administration' : 'Mark as Administered'}
+                                                                                </Text>
+                                                                            </TouchableOpacity>
+                                                                        </View>
                                                                     </View>
                                                                 );
                                                             })}

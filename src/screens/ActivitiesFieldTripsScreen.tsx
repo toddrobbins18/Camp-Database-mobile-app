@@ -621,11 +621,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     // Format time for display (12-hour format)
     const formatTime = (timeString: string) => {
         if (!timeString) return '';
-        // If time is in HH:MM format, convert to 12-hour
+        if (timeString.toUpperCase().includes('AM') || timeString.toUpperCase().includes('PM')) {
+            return timeString.toUpperCase();
+        }
         if (timeString.includes(':')) {
             const [hours, minutes] = timeString.split(':');
-            const hour = parseInt(hours);
-            const minute = parseInt(minutes);
+            const hour = parseInt(hours, 10);
+            const minute = parseInt(minutes, 10);
             const ampm = hour >= 12 ? 'PM' : 'AM';
             const hour12 = hour % 12 || 12;
             return `${hour12}:${minute.toString().padStart(2, '0')} ${ampm}`;

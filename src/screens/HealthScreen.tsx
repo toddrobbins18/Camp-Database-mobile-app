@@ -569,6 +569,110 @@ export const HealthScreen = ({ navigation }: any) => {
         }
     };
 
+    const handleHealthCenterRfidScan = async () => {
+        const val = healthCenterRfidInput.trim();
+        if (!val) return;
+
+        try {
+            const { data: child, error: childError } = await supabase
+                .from('children')
+                .select('id, name')
+                .ilike('rfid', val)
+                .eq('company_id', companyId)
+                .maybeSingle();
+                
+            let entity = child;
+            let isStaff = false;
+            
+            if (!child) {
+                const { data: staff } = await supabase
+                    .from('staff')
+                    .select('id, name')
+                    .ilike('rfid', val)
+                    .eq('company_id', companyId)
+                    .maybeSingle();
+                if (staff) {
+                    entity = staff;
+                    isStaff = true;
+                }
+            }
+            
+            if (!entity) {
+                Alert.alert('Not Found', 'No camper or staff found with this RFID.');
+                setHealthCenterRfidInput('');
+                return;
+            }
+
+            const checkCol = isStaff ? 'staff_id' : 'child_id';
+            const { data: existing } = await supabase
+                .from('health_center_admissions')
+                .select('id')
+                .eq('company_id', companyId)
+                .eq(checkCol, entity.id)
+                .is('checked_out_at', null)
+                .maybeSingle();
+
+            if (existing) {
+                await handleCheckoutChild(existing.id);
+            } else {
+                if (isStaff) {
+                    Alert.alert('Staff Admission', 'Use the web portal to admit staff.');
+                } else {
+                    setChildToAdmit({ id: entity.id, name: entity.name });
+                    setAdmitReason('');
+                    setAdmitNotes('');
+                    setShowAdmitModal(true);
+                }
+            }
+            setHealthCenterRfidInput('');
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+        }
+    };
+
+    const handleMedicationRfidScan = async () => {
+        const val = rfidInput.trim();
+        if (!val) return;
+
+        try {
+            const { data: child } = await supabase
+                .from('children')
+                .select('id, name')
+                .ilike('rfid', val)
+                .eq('company_id', companyId)
+                .maybeSingle();
+            
+            if (!child) {
+                Alert.alert('Not Found', 'No camper found with this RFID.');
+                setRfidInput('');
+                return;
+            }
+
+            const todayMeds = activeListMedications.filter(
+                (med: any) => med.child_id === child.id && !med.administered
+            );
+
+            if (todayMeds.length === 0) {
+                Alert.alert('Up to date', `${child.name} has no pending medications today.`);
+                setRfidInput('');
+                return;
+            }
+
+            const sortedMeds = [...todayMeds].sort((a, b) => {
+                if (!a.scheduled_time) return 1;
+                if (!b.scheduled_time) return -1;
+                return a.scheduled_time.localeCompare(b.scheduled_time);
+            });
+
+            const nextMed = sortedMeds[0];
+            await handleMedicationAdministration(nextMed, true);
+            Alert.alert('Administered', `${nextMed.medication_name} given to ${child.name}.`);
+            setRfidInput('');
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+        }
+    };
+
     const handleAddMedication = async () => {
         if (!selectedMedicationChild || !medicationName || !companyId) return;
 
@@ -1036,7 +1140,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                             value={rfidInput}
                                             onChangeText={setRfidInput}
                                         />
-                                        <TouchableOpacity style={styles.scanButton}>
+                                        <TouchableOpacity style={styles.scanButton} onPress={handleMedicationRfidScan}>
                                             <Ionicons name="scan-outline" size={18} color="white" />
                                             <Text style={styles.scanButtonText}>Scan</Text>
                                         </TouchableOpacity>
@@ -1182,7 +1286,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                             value={healthCenterRfidInput}
                                             onChangeText={setHealthCenterRfidInput}
                                         />
-                                        <TouchableOpacity style={styles.scanButton}>
+                                        <TouchableOpacity style={styles.scanButton} onPress={handleHealthCenterRfidScan}>
                                             <Ionicons name="scan-outline" size={18} color="white" />
                                             <Text style={styles.scanButtonText}>Scan</Text>
                                         </TouchableOpacity>

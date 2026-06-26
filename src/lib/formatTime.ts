@@ -2,6 +2,10 @@
 export function formatTime12Hour(timeStr?: string | null): string {
     if (!timeStr || typeof timeStr !== 'string') return '';
     const t = timeStr.trim();
+    // If it already looks like a fully formatted 12-hour string with AM/PM, just ensure case
+    if (t.toUpperCase().includes('AM') || t.toUpperCase().includes('PM')) {
+      return t.toUpperCase();
+    }
     const m = t.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
     if (!m) return t;
     let h = parseInt(m[1], 10);
