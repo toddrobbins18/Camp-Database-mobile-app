@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.send-owlpay-notifications]
 verify_jwt = false
+
+[functions.send-daily-dashboard]
+verify_jwt = false
