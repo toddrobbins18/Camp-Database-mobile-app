@@ -2919,6 +2919,9 @@ export const CamperScreen = ({ navigation }: any) => {
 
                                 <View style={styles.cardFooter}>
                                     <Text style={styles.divisionText}>Division: {(camper as any).division?.name || "N/A"}</Text>
+                                    {(camper as any).bunk ? (
+                                        <Text style={styles.divisionText}>Bunk: {(camper as any).bunk.bunk_name || `Bunk ${(camper as any).bunk.bunk_number}`}</Text>
+                                    ) : null}
                                     {(camper as any).group_name ? (
                                         <Text style={styles.divisionText}>Team: {(camper as any).group_name}</Text>
                                     ) : null}

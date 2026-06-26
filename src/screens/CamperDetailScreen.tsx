@@ -65,7 +65,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             if (!camperParam?.id) return null;
             const { data, error } = await supabase
                 .from('children')
-                .select('*, division:divisions(id, name, gender, sort_order), leader:leader_id(id, name, role)')
+                .select('*, division:divisions(id, name, gender, sort_order), leader:leader_id(id, name, role), bunk:bunk_id(id, bunk_number, bunk_name)')
                 .eq('id', camperParam.id)
                 .single();
             if (error) throw error;
@@ -546,6 +546,16 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                 <View style={styles.infoValueBox}>
                                                     <Text style={styles.infoValueText}>
                                                         {(camper as any).division?.name || (camper as any).category}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        ) : null}
+                                        {(camper as any).bunk ? (
+                                            <View style={styles.infoGridItem}>
+                                                <Text style={styles.infoLabel}>Bunk</Text>
+                                                <View style={styles.infoValueBox}>
+                                                    <Text style={styles.infoValueText}>
+                                                        {(camper as any).bunk?.bunk_name || `Bunk ${(camper as any).bunk?.bunk_number}`}
                                                     </Text>
                                                 </View>
                                             </View>

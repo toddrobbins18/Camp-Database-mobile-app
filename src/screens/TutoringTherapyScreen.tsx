@@ -105,7 +105,7 @@ function matchesGenderFilter(childGender: string | null | undefined, selectedGen
 type SheetOption = { value: string; label: string };
 
 export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps) => {
-    const { companyId, season } = useCompany();
+    const { companyId, companySlug, season } = useCompany();
     const queryClient = useQueryClient();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -123,6 +123,7 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
     const [selectedServiceType, setSelectedServiceType] = useState('');
     const [instructorName, setInstructorName] = useState('');
     const [selectedPeriods, setSelectedPeriods] = useState<string[]>([]);
+    const [selectedWeekdays, setSelectedWeekdays] = useState<string[]>([]);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [notes, setNotes] = useState('');
@@ -429,6 +430,7 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                         setSelectedServiceType('');
                         setInstructorName('');
                         setSelectedPeriods([]);
+                        setSelectedWeekdays([]);
                         setStartDate('');
                         setEndDate('');
                         setNotes('');
@@ -535,7 +537,14 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                         <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 2 }}>
                                             Instructor: {entry.instructor || 'N/A'} • Periods: {(entry.schedule_periods || []).join(', ') || 'N/A'}
                                         </Text>
-                                        {(entry.start_date || entry.end_date) && (
+                                        
+                                        {companySlug === 'timber-lake-camp' && entry.weekdays && entry.weekdays.length > 0 && (
+                                            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }}>
+                                                {entry.weekdays.join(', ')}
+                                            </Text>
+                                        )}
+
+                                        {(companySlug !== 'timber-lake-camp' && (entry.start_date || entry.end_date)) && (
                                             <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }}>
                                                 {entry.start_date ? isoToMmddyyyy(entry.start_date) : '?'} —{' '}
                                                 {entry.end_date ? isoToMmddyyyy(entry.end_date) : 'Ongoing'}
@@ -553,6 +562,7 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                                 setSelectedServiceType(entry.service_type);
                                                 setInstructorName(entry.instructor || '');
                                                 setSelectedPeriods([...(entry.schedule_periods || [])]);
+                                                setSelectedWeekdays([...(entry.weekdays || [])]);
                                                 setStartDate(isoToMmddyyyy(entry.start_date));
                                                 setEndDate(isoToMmddyyyy(entry.end_date));
                                                 setNotes(entry.notes || '');
@@ -704,39 +714,67 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                 </View>
                             </View>
 
-                            {/* Start Date */}
-                            <View style={styles.formGroup}>
-                                <Text style={styles.formLabel}>Start Date</Text>
-                                <TouchableOpacity
-                                    style={styles.dateInput}
-                                    onPress={() => {
-                                        setShowStartDatePicker(true);
-                                        setShowEndDatePicker(false);
-                                    }}
-                                >
-                                    <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
-                                    <Text style={[styles.dateInputText, !startDate && styles.placeholder]}>
-                                        {startDate || 'Pick a date'}
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
+                            {companySlug === 'timber-lake-camp' ? (
+                                <View style={styles.formGroup}>
+                                    <Text style={styles.formLabel}>Weekdays</Text>
+                                    <View style={styles.periodsGrid}>
+                                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
+                                            const isSelected = selectedWeekdays.includes(day);
+                                            return (
+                                                <TouchableOpacity
+                                                    key={day}
+                                                    style={[styles.periodChip, isSelected && styles.periodChipSelected]}
+                                                    onPress={() => {
+                                                        setSelectedWeekdays(prev =>
+                                                            prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+                                                        );
+                                                    }}
+                                                >
+                                                    <Text style={[styles.periodChipText, isSelected && styles.periodChipTextSelected]}>
+                                                        {day.substring(0, 3)}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                </View>
+                            ) : (
+                                <>
+                                    {/* Start Date */}
+                                    <View style={styles.formGroup}>
+                                        <Text style={styles.formLabel}>Start Date</Text>
+                                        <TouchableOpacity
+                                            style={styles.dateInput}
+                                            onPress={() => {
+                                                setShowStartDatePicker(true);
+                                                setShowEndDatePicker(false);
+                                            }}
+                                        >
+                                            <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
+                                            <Text style={[styles.dateInputText, !startDate && styles.placeholder]}>
+                                                {startDate || 'Pick a date'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
 
-                            {/* End Date */}
-                            <View style={styles.formGroup}>
-                                <Text style={styles.formLabel}>End Date</Text>
-                                <TouchableOpacity
-                                    style={styles.dateInput}
-                                    onPress={() => {
-                                        setShowEndDatePicker(true);
-                                        setShowStartDatePicker(false);
-                                    }}
-                                >
-                                    <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
-                                    <Text style={[styles.dateInputText, !endDate && styles.placeholder]}>
-                                        {endDate || 'Pick a date'}
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
+                                    {/* End Date */}
+                                    <View style={styles.formGroup}>
+                                        <Text style={styles.formLabel}>End Date</Text>
+                                        <TouchableOpacity
+                                            style={styles.dateInput}
+                                            onPress={() => {
+                                                setShowEndDatePicker(true);
+                                                setShowStartDatePicker(false);
+                                            }}
+                                        >
+                                            <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
+                                            <Text style={[styles.dateInputText, !endDate && styles.placeholder]}>
+                                                {endDate || 'Pick a date'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </>
+                            )}
 
                             {/* Notes */}
                             <View style={styles.formGroup}>
@@ -780,10 +818,11 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                         child_id: selectedCamperId,
                                         company_id: companyId,
                                         season,
-                                        service_type: selectedServiceType,
-                                        instructor: instructorName.trim() || null,
-                                        schedule_periods: selectedPeriods.length ? selectedPeriods : [],
-                                        start_date: startIso,
+                                          service_type: selectedServiceType,
+                                          instructor: instructorName.trim() || null,
+                                          schedule_periods: selectedPeriods.length ? selectedPeriods : [],
+                                          weekdays: selectedWeekdays.length ? selectedWeekdays : [],
+                                          start_date: startIso,
                                         end_date: endIso,
                                         notes: notes.trim() || null,
                                     };

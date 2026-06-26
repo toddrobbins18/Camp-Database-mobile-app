@@ -116,7 +116,8 @@ const campersCacheKey = (companyId: string, season: string) =>
 const CAMPERS_SELECT = `
   *,
   division:division_id(id, name, gender, sort_order),
-  leader:leader_id(id, name)
+  leader:leader_id(id, name),
+  bunk:bunk_id(id, bunk_number, bunk_name)
 `;
 
 async function safeSetCachedJson<T>(key: string, value: T): Promise<void> {
