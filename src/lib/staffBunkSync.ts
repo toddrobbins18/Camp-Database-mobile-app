@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 
 export type BunkListItem = {
     id: string;
-    bunk_number: number;
+    bunk_number: string;
     bunk_name: string | null;
 };
 

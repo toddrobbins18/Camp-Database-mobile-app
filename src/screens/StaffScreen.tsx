@@ -316,7 +316,7 @@ export const StaffScreen = ({ navigation }: any) => {
             if (error) throw error;
             if (data) {
                 const row = data as BunkListItem;
-                setBunkOptions((prev) => [...prev.filter((p) => p.id !== row.id), row].sort((a, b) => a.bunk_number - b.bunk_number));
+                setBunkOptions((prev) => [...prev.filter((p) => p.id !== row.id), row].sort((a, b) => String(a.bunk_number).localeCompare(String(b.bunk_number), undefined, { numeric: true })));
                 if (modalVisible.editStaff) setEditStaffBunkId(row.id);
                 else setAddStaffBunkId(row.id);
             }

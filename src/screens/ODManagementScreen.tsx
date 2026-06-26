@@ -44,7 +44,7 @@ interface StaffMember {
 
 interface BunkRow {
     id: string;
-    bunk_number: number;
+    bunk_number: string;
     bunk_name: string | null;
     division_id: string | null;
     divisions?: { id?: string; name?: string; gender?: string | null } | null;
@@ -440,7 +440,13 @@ export const ODManagementScreen = ({ navigation }: any) => {
 
     useEffect(() => {
         if (!showManageBunksModal) return;
-        const nextBunkNumber = (bunksList.length ? Math.max(...bunksList.map((b) => b.bunk_number)) + 1 : 1).toString();
+        const maxBunk = bunksList.length 
+            ? Math.max(...bunksList.map((b) => {
+                const n = parseInt(b.bunk_number);
+                return isNaN(n) ? 0 : n;
+            }))
+            : 0;
+        const nextBunkNumber = (maxBunk + 1).toString();
         setNewBunkNumber((prev) => {
             if (!prev || prev === '1') return nextBunkNumber;
             return prev;
@@ -490,17 +496,17 @@ export const ODManagementScreen = ({ navigation }: any) => {
             (staffRows || []).forEach((s: any) => {
                 if (s.person_id) staffByPersonId.set(String(s.person_id).toLowerCase().trim(), s.id);
             });
-            const bunkByNumber = new Map<number, string>();
-            (bunkRows || []).forEach((b: any) => bunkByNumber.set(Number(b.bunk_number), b.id));
+            const bunkByNumber = new Map<string, string>();
+            (bunkRows || []).forEach((b: any) => bunkByNumber.set(String(b.bunk_number).trim(), b.id));
 
             const summary: CsvUploadResult = { success: 0, failed: 0, errors: [] };
             for (let i = 1; i < lines.length; i += 1) {
                 const values = lines[i].split(',').map((v) => v.trim().replace(/"/g, ''));
                 const personId = String(values[personIdx] || '').toLowerCase().trim();
-                const bunkNumber = Number(values[bunkIdx] || '');
+                const bunkNumber = String(values[bunkIdx] || '').trim();
                 const isPrimaryRaw = String(values[primaryIdx] || '').toLowerCase();
                 const isPrimary = ['true', '1', 'yes', 'y'].includes(isPrimaryRaw);
-                if (!personId || !Number.isFinite(bunkNumber)) {
+                if (!personId || !bunkNumber) {
                     summary.failed += 1;
                     summary.errors.push(`Row ${i + 1}: Invalid person id or bunk number`);
                     continue;
