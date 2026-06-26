@@ -11,6 +11,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { getAwardCategoryChips } from '../lib/awardCategory';
 import { formatMedicationMealTimeForDisplay } from '../constants/medicationBedtimeOptions';
+import { formatBirthdayDisplay } from '../lib/birthdayDate';
+import { formatIsoDateToUs, toIsoDateOrNull } from '../api/staffPayload';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -352,7 +354,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                 name: camper.name || '',
                 person_id: c.person_id || c.personId || '',
                 age: c.age?.toString() || '',
-                dateOfBirth: c.dateOfBirth || c.date_of_birth || '',
+                dateOfBirth: formatIsoDateToUs(c.dateOfBirth || c.date_of_birth),
                 gender: c.gender || '',
                 division: camper.division_id || c.division?.id || '',
                 bunk: c.bunk_id || c.bunk || '',
@@ -655,12 +657,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                     <View style={styles.birthdayDateText}>
                                                         <Text style={styles.birthdayDateLabel}>Date of Birth</Text>
                                                         <Text style={styles.birthdayDateValue}>
-                                                            {new Date((camper as any).dateOfBirth || (camper as any).date_of_birth).toLocaleDateString('en-US', {
-                                                                weekday: 'long',
-                                                                year: 'numeric',
-                                                                month: 'long',
-                                                                day: 'numeric'
-                                                            })}
+                                                            {formatBirthdayDisplay((camper as any).dateOfBirth || (camper as any).date_of_birth)}
                                                         </Text>
                                                     </View>
                                                 </View>
@@ -2065,7 +2062,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                     allergies: editProfileFormData.allergies || null,
                                                     medical_notes: editProfileFormData.medicalNotes || null,
                                                     leader_id: editProfileFormData.assignedLeaderId || null,
-                                                    date_of_birth: editProfileFormData.dateOfBirth || null,
+                                                    date_of_birth: toIsoDateOrNull(editProfileFormData.dateOfBirth),
                                                     tshirt_size: editProfileFormData.tshirtSize || null,
                                                     birthday_party_type: editProfileFormData.birthdayPartyType || null,
                                                     birthday_party_comments: editProfileFormData.birthdayPartyComments || null,

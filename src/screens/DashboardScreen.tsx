@@ -646,7 +646,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                                 <View key={evt.id} style={{ marginBottom: 8 }}>
                                     <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
                                     <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                        {formatTime12Hour(evt.time) || evt.time || 'TBD'}
+                                        {formatTime12Hour(evt.start_time_field || evt.time || evt.depart_time) || evt.start_time_field || evt.time || evt.depart_time || 'TBD'}
                                         {evt.location ? ` • ${evt.location}` : ''}
                                         {evt.sport_type ? ` • ${evt.sport_type}` : ''}
                                     </Text>
@@ -666,7 +666,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                                                     month: 'short',
                                                     day: 'numeric',
                                                 })}{' '}
-                                                • {formatTime12Hour(evt.time) || evt.time || 'TBD'}
+                                                • {formatTime12Hour(evt.start_time_field || evt.time || evt.depart_time) || evt.start_time_field || evt.time || evt.depart_time || 'TBD'}
                                                 {evt.sport_type ? ` • ${evt.sport_type}` : ''}
                                             </Text>
                                         </View>

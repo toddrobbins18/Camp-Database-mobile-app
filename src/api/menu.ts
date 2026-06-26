@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { clearExistingMenuItemsForKeys } from '../lib/csvRosterSync';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 
 export interface MenuItem {
@@ -43,6 +44,18 @@ async function applyQueuedMenuOps(base: MenuItem[], companyId: string): Promise<
             const rows = Array.isArray(q.payload) ? (q.payload as any[]) : [q.payload as any];
             for (const row of rows) {
                 if (!row || row.company_id !== companyId) continue;
+                const date = row.date as string;
+                const mealType = String(row.meal_type ?? '').toLowerCase();
+                if (date && mealType) {
+                    for (let i = out.length - 1; i >= 0; i--) {
+                        if (
+                            out[i].date === date &&
+                            String(out[i].meal_type ?? '').toLowerCase() === mealType
+                        ) {
+                            out.splice(i, 1);
+                        }
+                    }
+                }
                 out.push({ ...(row as MenuItem), id: (row.id as string) || `offline-${q.id}` });
             }
         } else if (q.action === 'menu_items.delete') {
@@ -86,6 +99,11 @@ export const useAddMenuItem = () => {
     return useMutation({
         mutationFn: async (newMenuItem: Omit<MenuItem, 'id' | 'created_at'>) => {
             if (await isOnlineNow()) {
+                const clearResult = await clearExistingMenuItemsForKeys(supabase, newMenuItem.company_id, [
+                    { date: newMenuItem.date, meal_type: newMenuItem.meal_type },
+                ]);
+                if (clearResult.error) throw new Error(clearResult.error);
+
                 const { data, error } = await supabase
                     .from('menu_items')
                     .insert([newMenuItem])

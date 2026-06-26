@@ -147,12 +147,19 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                 console.warn('[ElectiveSignUp] electives query', electivesRes.error.message);
             }
             const rawElectives = electivesRes.data || [];
-            setElectives(rawElectives.filter((e: { is_active?: boolean | null }) => e.is_active !== false));
+            
+            let filteredElectives = rawElectives.filter((e: { is_active?: boolean | null }) => e.is_active !== false);
+            // Timberlake Water Ski logic: Only available periods 3, 4, 5 for all days
+            if (tlc && (selectedPeriod < 3 || selectedPeriod > 5)) {
+                filteredElectives = filteredElectives.filter(e => !e.name.toLowerCase().includes('water ski'));
+            }
+            
+            setElectives(filteredElectives);
             if (signupsRes.data) setSignups(signupsRes.data);
             if (allChildrenRes.data) setAllChildren(allChildrenRes.data);
             await setCachedJson(`elective_signup_bundle:${companyId}:${season}:${weekStart}:${selectedDay}:${selectedPeriod}`, {
                 divisions: [...rawDivs].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
-                electives: rawElectives.filter((e: { is_active?: boolean | null }) => e.is_active !== false),
+                electives: filteredElectives,
                 signups: signupsRes.data || [],
                 allChildren: allChildrenRes.data || [],
             });
@@ -213,12 +220,20 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                 Alert.alert('Could not load electives', error.message);
                 return;
             }
-            setElectives((data || []).filter((e: { is_active?: boolean | null }) => e.is_active !== false));
+            
+            let filtered = (data || []).filter((e: { is_active?: boolean | null }) => e.is_active !== false);
+            
+            // Timberlake Water Ski logic: Only available periods 3, 4, 5 for all days
+            if (tlc && (selectedPeriod < 3 || selectedPeriod > 5)) {
+                filtered = filtered.filter(e => !e.name.toLowerCase().includes('water ski'));
+            }
+            
+            setElectives(filtered);
         })();
         return () => {
             cancelled = true;
         };
-    }, [assignChildId, companyId, tlc]);
+    }, [assignChildId, companyId, tlc, selectedPeriod]);
 
     const fetchChildrenForDivision = async (divisionId: string) => {
         if (!companyId || !season) return;

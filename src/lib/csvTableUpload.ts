@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import {
     CSV_REPLACE_CLEAR_TABLES,
+    clearExistingMenuItemsForKeys,
     type CsvImportMode,
     syncChildrenFromCsv,
     syncStaffFromCsv,
@@ -663,6 +664,18 @@ async function continueUploadAfterValidation(
             .eq('company_id', companyId)
             .eq('season', season);
         if (clearError) return { ok: false, error: clearError.message };
+    }
+
+    if (tableName === 'menu_items' && mode === 'merge') {
+        const clearResult = await clearExistingMenuItemsForKeys(
+            client,
+            companyId,
+            rowsWithCompany.map((row) => ({
+                date: String(row.date ?? ''),
+                meal_type: String(row.meal_type ?? ''),
+            })),
+        );
+        if (clearResult.error) return { ok: false, error: clearResult.error };
     }
 
     const { error } = await client.from(tableName as any).insert(rowsWithCompany as any);

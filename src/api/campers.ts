@@ -1,8 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { filterActiveRoster } from '../lib/rosterStatus';
-import { resolvePermissionDivisionIds } from '../lib/divisionFilterUtils';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 
 /** Matches web Roster / usePermissions: these roles see all divisions for roster queries. */
@@ -111,8 +109,31 @@ export function getCamperDivisionName(child: {
 
 const CAMPERS_PAGE_SIZE = 1000;
 
-const campersCacheKey = (companyId: string, season: string, divisionFilter: string[] | null | undefined) =>
-    `campers:${companyId}:${season}:${JSON.stringify(divisionFilter ?? null)}`;
+const campersCacheKey = (companyId: string, season: string) =>
+    `campers:${companyId}:${season}`;
+
+/** Match web Roster embeds; RLS scopes rows for division_leader/viewer. */
+const CAMPERS_SELECT = `
+  *,
+  division:division_id(id, name, gender, sort_order),
+  leader:leader_id(id, name)
+`;
+
+async function safeSetCachedJson<T>(key: string, value: T): Promise<void> {
+    try {
+        await setCachedJson(key, value);
+    } catch {
+        // Offline cache is optional (e.g. expo-sqlite on web).
+    }
+}
+
+async function safeGetCachedJson<T>(key: string): Promise<T | null> {
+    try {
+        return await getCachedJson<T>(key);
+    } catch {
+        return null;
+    }
+}
 
 async function applyQueuedCamperOps(base: Camper[], companyId: string, season: string): Promise<Camper[]> {
     const out = [...base];
@@ -144,38 +165,27 @@ async function applyQueuedCamperOps(base: Camper[], companyId: string, season: s
     return out;
 }
 
-function useCampersPaged(
-    companyId: string | null,
-    season: string,
-    divisionFilter: string[] | null | undefined,
-    options?: { enabled?: boolean }
-) {
-    const enabled = options?.enabled !== false;
-
+function useCampersPaged(companyId: string | null, season: string) {
     return useQuery({
-        queryKey: ['campers', companyId, season, divisionFilter ?? null],
+        queryKey: ['campers', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
+            const cacheKey = campersCacheKey(companyId, season);
             try {
                 const rows: Camper[] = [];
                 let from = 0;
 
                 for (;;) {
                     const to = from + CAMPERS_PAGE_SIZE - 1;
-                    let q = supabase
+                    const { data, error } = await supabase
                         .from('children')
-                        .select('*, division:divisions(id, name, gender, sort_order), leader:leader_id(id, name, role)')
+                        .select(CAMPERS_SELECT)
                         .eq('company_id', companyId)
                         .eq('season', season)
                         .neq('status', 'inactive')
                         .order('name', { ascending: true })
                         .range(from, to);
 
-                    if (divisionFilter != null && divisionFilter.length > 0) {
-                        q = q.in('division_id', divisionFilter);
-                    }
-
-                    const { data, error } = await q;
                     if (error) throw error;
                     const batch = (data ?? []) as Camper[];
                     rows.push(...batch);
@@ -183,22 +193,33 @@ function useCampersPaged(
                     from += CAMPERS_PAGE_SIZE;
                 }
 
-                await setCachedJson(campersCacheKey(companyId, season, divisionFilter), rows);
-                return await applyQueuedCamperOps(filterActiveRoster(rows), companyId, season);
-            } catch {
+                await safeSetCachedJson(cacheKey, rows);
+                try {
+                    return await applyQueuedCamperOps(filterActiveRoster(rows), companyId, season);
+                } catch {
+                    return filterActiveRoster(rows);
+                }
+            } catch (err) {
                 const cached = filterActiveRoster(
-                    (await getCachedJson<Camper[]>(campersCacheKey(companyId, season, divisionFilter))) || [],
+                    (await safeGetCachedJson<Camper[]>(cacheKey)) || [],
                 );
-                return await applyQueuedCamperOps(cached, companyId, season);
+                if (cached.length > 0) {
+                    try {
+                        return await applyQueuedCamperOps(cached, companyId, season);
+                    } catch {
+                        return cached;
+                    }
+                }
+                throw err;
             }
         },
-        enabled: !!companyId && !!season && enabled,
+        enabled: !!companyId && !!season,
     });
 }
 
 /**
  * Campers for the active company/season, aligned with web Roster:
- * excludes inactive status, applies division_leader/viewer division filter, and pages past Supabase max_rows.
+ * excludes inactive status, relies on RLS for division access, and pages past Supabase max_rows.
  */
 /** All divisions (including inactive aliases) — needed to resolve permission UUIDs like web AuthContext. */
 export const useDivisionsForPermissions = (companyId: string | null) => {
@@ -219,27 +240,7 @@ export const useDivisionsForPermissions = (companyId: string | null) => {
 };
 
 export const useCampers = (companyId: string | null, season: string) => {
-    const divFilter = useRosterDivisionFilter(companyId);
-    const { data: divisionsForPermissions = [], isSuccess: divisionsReady } =
-        useDivisionsForPermissions(companyId);
-    const expandedDivisionFilter = useMemo(() => {
-        if (divFilter.data == null) return null;
-        if (divFilter.data.length === 0) return [];
-        return resolvePermissionDivisionIds(divFilter.data, divisionsForPermissions);
-    }, [divFilter.data, divisionsForPermissions]);
-
-    const paged = useCampersPaged(companyId, season, expandedDivisionFilter, {
-        enabled: !!companyId && !!season && divFilter.isSuccess && divisionsReady,
-    });
-
-    return {
-        ...paged,
-        isLoading:
-            (!!companyId && !!season && divFilter.isLoading) ||
-            (!!companyId && !divisionsReady) ||
-            (divFilter.isSuccess && divisionsReady && paged.isLoading),
-        isError: divFilter.isError || paged.isError,
-    };
+    return useCampersPaged(companyId, season);
 };
 
 // Hook to add a camper

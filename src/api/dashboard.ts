@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { dedupeMenuItemsForDisplay } from '../lib/csvRosterSync';
 import { supabase } from '../lib/supabase';
 import { ageOnLocalDate, isActiveRosterStatus, parseBirthdayCalendarParts } from '../lib/birthdayDate';
 import { expandDivisionIdsForRosterFilter } from '../lib/divisionFilterUtils';
@@ -316,7 +317,7 @@ export const useDailyNewsSchedule = (companyId: string | null, todayString: stri
     });
 };
 
-// Fetch today's menu rows from menu_items (all entries for the date — dashboard expands with count).
+// Fetch today's menu rows from menu_items (one entry per standard meal type).
 export interface TodayMenuItem {
     id: string;
     meal_type: string;
@@ -356,7 +357,7 @@ export const useTodayMeals = (
             return readThroughCache<TodayMenuItem[]>(cacheKey, async () => {
                 let q = supabase
                     .from('menu_items')
-                    .select('id, meal_type, items, allergens, division_ids')
+                    .select('id, meal_type, items, allergens, division_ids, created_at')
                     .eq('company_id', companyId)
                     .eq('date', todayString);
                 if (season != null && String(season).trim() !== '') {
@@ -367,13 +368,16 @@ export const useTodayMeals = (
                 if (error) throw error;
 
                 return sortTodayMenuItems(
-                    (data || []).map((item) => ({
-                        id: item.id,
-                        meal_type: item.meal_type,
-                        items: item.items ?? '',
-                        allergens: item.allergens,
-                        division_ids: item.division_ids,
-                    })),
+                    dedupeMenuItemsForDisplay(
+                        (data || []).map((item) => ({
+                            id: item.id,
+                            meal_type: item.meal_type,
+                            items: item.items ?? '',
+                            allergens: item.allergens,
+                            division_ids: item.division_ids,
+                            created_at: item.created_at,
+                        })),
+                    ),
                 );
             });
         },
@@ -397,15 +401,22 @@ export const useThreeDaySportsOutlook = (
             return readThroughCache<any[]>(cacheKey, async () => {
                 const { data, error } = await supabase
                     .from('sports_calendar')
-                    .select('id, title, time, location, sport_type, event_date')
+                    .select('id, title, time, start_time_field, depart_time, location, sport_type, event_date')
                     .eq('company_id', companyId)
                     .gt('event_date', todayString)
                     .lte('event_date', windowEnd)
                     .eq('season', season)
-                    .order('event_date', { ascending: true })
-                    .order('time', { ascending: true });
+                    .order('event_date', { ascending: true });
                 if (error) throw error;
-                return data || [];
+                
+                const events = data || [];
+                events.sort((a: any, b: any) => {
+                    const timeA = a.start_time_field || a.time || a.depart_time || '23:59';
+                    const timeB = b.start_time_field || b.time || b.depart_time || '23:59';
+                    return timeA.localeCompare(timeB);
+                });
+                
+                return events;
             });
         },
         enabled: !!companyId && !!season && enabled,
@@ -427,13 +438,20 @@ export const useTodaySportsCalendar = (
             return readThroughCache<any[]>(cacheKey, async () => {
                 const { data, error } = await supabase
                     .from('sports_calendar')
-                    .select('id, title, time, location, sport_type, event_date')
+                    .select('id, title, time, start_time_field, depart_time, location, sport_type, event_date')
                     .eq('company_id', companyId)
                     .eq('event_date', todayString)
-                    .eq('season', season)
-                    .order('time');
+                    .eq('season', season);
                 if (error) throw error;
-                return data || [];
+                
+                const events = data || [];
+                events.sort((a: any, b: any) => {
+                    const timeA = a.start_time_field || a.time || a.depart_time || '23:59';
+                    const timeB = b.start_time_field || b.time || b.depart_time || '23:59';
+                    return timeA.localeCompare(timeB);
+                });
+                
+                return events;
             });
         },
         enabled: !!companyId && !!season && enabled,

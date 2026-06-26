@@ -44,4 +44,21 @@ export function ageOnLocalDate(
     return age;
 }
 
+/** Display a birthday without UTC timezone shifts from `new Date("YYYY-MM-DD")`. */
+export function formatBirthdayDisplay(
+    value: unknown,
+    options?: Intl.DateTimeFormatOptions
+): string {
+    const parts = parseBirthdayCalendarParts(value);
+    if (!parts) return '';
+    const date = new Date(parts.year, parts.month - 1, parts.day);
+    const defaultOptions: Intl.DateTimeFormatOptions = {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    };
+    return date.toLocaleDateString('en-US', options || defaultOptions);
+}
+
 export { isActiveRosterStatus } from './rosterStatus';

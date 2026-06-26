@@ -20,6 +20,7 @@ import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText, type CsvImportMode } from '../lib/csvTableUpload';
 import { showAppAlert } from '../utils/showAppAlert';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
+import { formatIsoDateToUs, toIsoDateOrNull } from '../api/staffPayload';
 
 type BulkAssignRowResult = {
     name: string;
@@ -554,7 +555,7 @@ export const CamperScreen = ({ navigation }: any) => {
             setPickedCsvLabel(asset.name || 'File loaded');
             const res = await fetch(asset.uri);
             const text = await res.text();
-            const lines = text.split(/\n/);
+            const lines = text.split(/\r?\n/);
             const first = (lines[0] || '').toLowerCase();
             if (first.includes('name') || first.includes('rfid') || first.includes('person')) {
                 setCsvData(lines.slice(1).join('\n'));
@@ -578,71 +579,122 @@ export const CamperScreen = ({ navigation }: any) => {
         const newResults: BulkAssignRowResult[] = [];
 
         try {
-            const lines = csvData.trim().split('\n');
+            const lines = csvData.trim().split(/\r?\n/);
+            const tasks = [];
             for (const line of lines) {
-                const parts = line.split(',').map((p) => p.trim());
-                if (parts.length < 2) continue;
-                const [identifier, rfidValRaw] = parts;
-                if (!identifier || !rfidValRaw) continue;
-                const rfidVal = normalizeRfidInput(rfidValRaw);
-                if (!rfidVal) continue;
-
-                let query = supabase
-                    .from('children')
-                    .select('id, name')
-                    .eq('company_id', companyId)
-                    .eq('season', season);
-
-                const isPersonId = /^[0-9a-f-]+$/i.test(identifier) && identifier.length > 5;
-                if (isPersonId) {
-                    query = query.eq('person_id', identifier);
+                if (!line.trim()) continue;
+                
+                // Handle both CSV (commas) and TSV (Excel copy-paste)
+                // If the line has tabs, assume tab-separated. Otherwise comma-separated.
+                let parts: string[];
+                if (line.includes('\t')) {
+                    parts = line.split('\t').map((p) => p.trim());
                 } else {
-                    query = query.ilike('name', identifier);
+                    // Simple CSV split that respects quotes (e.g. "Last, First", 123)
+                    parts = [];
+                    let current = '';
+                    let inQuotes = false;
+                    for (let i = 0; i < line.length; i++) {
+                        const char = line[i];
+                        if (char === '"') inQuotes = !inQuotes;
+                        else if (char === ',' && !inQuotes) {
+                            parts.push(current.trim());
+                            current = '';
+                        } else current += char;
+                    }
+                    parts.push(current.trim());
+                    // Remove surrounding quotes if present
+                    parts = parts.map(p => (p.startsWith('"') && p.endsWith('"') ? p.slice(1, -1).trim() : p));
                 }
 
-                const { data: foundRows, error } = await query.limit(1);
-                const data = foundRows?.[0];
-
-                if (error || !data) {
+                if (parts.length < 2) {
                     newResults.push({
-                        name: identifier,
-                        rfid: rfidVal,
-                        status: 'not_found',
-                        message: 'Camper not found',
+                        name: line.substring(0, 20) + '...',
+                        rfid: '',
+                        status: 'error',
+                        message: 'Invalid format (needs name/id and RFID)',
                     });
                     continue;
                 }
+                const [identifierRaw, rfidValRaw] = parts;
+                let identifier = identifierRaw.trim();
+                const rfidValRawTrimmed = rfidValRaw.trim();
+                
+                if (!identifier || !rfidValRawTrimmed) continue;
+                const rfidVal = normalizeRfidInput(rfidValRawTrimmed);
+                if (!rfidVal) continue;
 
-                await supabase
-                    .from('children')
-                    .update({ rfid: null })
-                    .eq('company_id', companyId)
-                    .eq('season', season)
-                    .eq('rfid', rfidVal)
-                    .neq('id', data.id);
-
-                const { data: updatedRows, error: updateError } = await supabase
-                    .from('children')
-                    .update({ rfid: rfidVal })
-                    .eq('id', data.id)
-                    .select('id, rfid');
-
-                const updatedRow = updatedRows?.[0];
-                if (updateError || !updatedRow || normalizeRfidInput(String(updatedRow.rfid ?? '')) !== rfidVal) {
-                    newResults.push({
-                        name: data.name,
-                        rfid: rfidVal,
-                        status: 'error',
-                        message: updateError?.message || 'Update blocked or did not apply',
-                    });
-                } else {
-                    newResults.push({
-                        name: data.name,
-                        rfid: rfidVal,
-                        status: 'success',
-                        message: 'Wristband assigned',
-                    });
+                // If identifier is "Last, First", convert to "First Last" to match DB
+                if (identifier.includes(',') && !/^[0-9a-f-]+$/i.test(identifier)) {
+                    const nameParts = identifier.split(',');
+                    if (nameParts.length === 2) {
+                        identifier = `${nameParts[1].trim()} ${nameParts[0].trim()}`;
+                    }
                 }
+                tasks.push({ identifier, rfidVal });
+            }
+
+            const BATCH_SIZE = 10;
+            for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
+                const batch = tasks.slice(i, i + BATCH_SIZE);
+                await Promise.all(batch.map(async ({ identifier, rfidVal }) => {
+                    let query = supabase
+                        .from('children')
+                        .select('id, name')
+                        .eq('company_id', companyId)
+                        .eq('season', season);
+
+                    const isPersonId = /^[0-9a-f-]+$/i.test(identifier) && identifier.length > 5;
+                    if (isPersonId) {
+                        query = query.eq('person_id', identifier);
+                    } else {
+                        query = query.ilike('name', identifier);
+                    }
+
+                    const { data: foundRows, error } = await query.limit(1);
+                    const data = foundRows?.[0];
+
+                    if (error || !data) {
+                        newResults.push({
+                            name: identifier,
+                            rfid: rfidVal,
+                            status: 'not_found',
+                            message: 'Camper not found',
+                        });
+                        return;
+                    }
+
+                    await supabase
+                        .from('children')
+                        .update({ rfid: null })
+                        .eq('company_id', companyId)
+                        .eq('season', season)
+                        .eq('rfid', rfidVal)
+                        .neq('id', data.id);
+
+                    const { data: updatedRows, error: updateError } = await supabase
+                        .from('children')
+                        .update({ rfid: rfidVal })
+                        .eq('id', data.id)
+                        .select('id, rfid');
+
+                    const updatedRow = updatedRows?.[0];
+                    if (updateError || !updatedRow || normalizeRfidInput(String(updatedRow.rfid ?? '')) !== rfidVal) {
+                        newResults.push({
+                            name: data.name,
+                            rfid: rfidVal,
+                            status: 'error',
+                            message: updateError?.message || 'Update blocked or did not apply',
+                        });
+                    } else {
+                        newResults.push({
+                            name: data.name,
+                            rfid: rfidVal,
+                            status: 'success',
+                            message: 'Wristband assigned',
+                        });
+                    }
+                }));
             }
 
             setBulkAssignResults(newResults);
@@ -2405,7 +2457,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                                 ? editFormData.birthdayCakeAllergies
                                                                 : null,
                                                         birthday_cake_message: editFormData.birthdayCakeMessage || null,
-                                                        date_of_birth: editFormData.dateOfBirth
+                                                        date_of_birth: toIsoDateOrNull(editFormData.dateOfBirth)
                                                     } as any);
                                                 }
                                                 closeEditChildTransientUi();
@@ -2821,7 +2873,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     name: camperAny.name || '',
                                                     person_id: camperAny.person_id || '',
                                                     age: camperAny.age !== undefined && camperAny.age !== null ? String(camperAny.age) : '',
-                                                    dateOfBirth: camperAny.date_of_birth || camperAny.dateOfBirth || '',
+                                                    dateOfBirth: formatIsoDateToUs(camperAny.date_of_birth || camperAny.dateOfBirth),
                                                     gender: camperAny.gender || '',
                                                     division: camperAny.division_id || camperAny.division?.id || '',
                                                     bunk: camperAny.bunk_id || camperAny.bunk || '',
