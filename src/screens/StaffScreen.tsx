@@ -15,6 +15,11 @@ import { StaffLeaderAssignmentModal } from '../components/StaffLeaderAssignmentM
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText, type CsvImportMode } from '../lib/csvTableUpload';
 import { normalizeRfidInput } from '../lib/rfidUtils';
+import {
+    filterSupervisorCandidates,
+    formatSupervisorOptionLabel,
+    type SupervisorCandidate,
+} from '../lib/staffSupervisorUtils';
 
 const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
     <View style={styles.header}>
@@ -151,7 +156,7 @@ export const StaffScreen = ({ navigation }: any) => {
         season: '2026',
         staffType: '',
         allergies: '',
-        reportsTo: '',
+        leaderId: '',
         rfid: ''
     });
 
@@ -168,7 +173,7 @@ export const StaffScreen = ({ navigation }: any) => {
         season: '2026',
         staffType: '',
         allergies: '',
-        reportsTo: '',
+        leaderId: '',
         rfid: ''
     });
 
@@ -226,9 +231,45 @@ export const StaffScreen = ({ navigation }: any) => {
     const [newBunkName, setNewBunkName] = useState('');
     const [bunkLoadError, setBunkLoadError] = useState<string | null>(null);
     const [isReportsToPickerVisible, setIsReportsToPickerVisible] = useState(false);
-    const SUPERVISORS = ['No Supervisor', 'Wendy Siegel - Director'];
+    const [supervisorOptions, setSupervisorOptions] = useState<SupervisorCandidate[]>([]);
 
     const seasonKeyForBunks = modalVisible.editStaff ? editStaffData.season : addStaffData.season;
+    const activeLeaderId = modalVisible.editStaff ? editStaffData.leaderId : addStaffData.leaderId;
+    const activeStaffIdForSupervisor = modalVisible.editStaff ? editStaffData.id : undefined;
+
+    const supervisorLabel = (leaderId: string) => {
+        if (!leaderId) return '';
+        const match = supervisorOptions.find((option) => option.id === leaderId);
+        return match ? formatSupervisorOptionLabel(match) : '';
+    };
+
+    const fetchSupervisorOptions = async (seasonKey: string, excludeStaffId?: string, includeLeaderId?: string) => {
+        if (!companyId || !seasonKey) {
+            setSupervisorOptions([]);
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('staff')
+            .select('id, name, role, staff_type')
+            .eq('company_id', companyId)
+            .eq('season', seasonKey)
+            .neq('status', 'inactive')
+            .order('name', { ascending: true });
+
+        if (error) {
+            console.error('[STAFF] Supervisor fetch failed:', error);
+            setSupervisorOptions([]);
+            return;
+        }
+
+        setSupervisorOptions(
+            filterSupervisorCandidates((data || []) as SupervisorCandidate[], {
+                excludeStaffId,
+                includeStaffIds: includeLeaderId ? [includeLeaderId] : [],
+            }),
+        );
+    };
 
     /** Load bunk dropdown for whichever staff modal is open (OD `bunks` table). */
     useEffect(() => {
@@ -254,6 +295,21 @@ export const StaffScreen = ({ navigation }: any) => {
             cancelled = true;
         };
     }, [companyId, modalVisible.addStaff, modalVisible.editStaff, seasonKeyForBunks]);
+
+    useEffect(() => {
+        if (!companyId || (!modalVisible.addStaff && !modalVisible.editStaff)) return;
+
+        const seasonKey = (seasonKeyForBunks || season || '2026').trim();
+        void fetchSupervisorOptions(seasonKey, activeStaffIdForSupervisor, activeLeaderId || undefined);
+    }, [
+        companyId,
+        modalVisible.addStaff,
+        modalVisible.editStaff,
+        seasonKeyForBunks,
+        season,
+        activeStaffIdForSupervisor,
+        activeLeaderId,
+    ]);
 
     /** Current bunk from `bunk_staff` when editing (refresh when season changes). */
     useEffect(() => {
@@ -775,23 +831,41 @@ const pickersModals = (
                         </View>
 
                         <ScrollView style={{ maxHeight: 350 }}>
-                            {SUPERVISORS.map((supervisor) => (
+                            <TouchableOpacity
+                                style={[styles.pickerItem, !activeLeaderId && styles.selectedPickerItem]}
+                                onPress={() => {
+                                    if (modalVisible.editStaff) {
+                                        setEditStaffData((prev) => ({ ...prev, leaderId: '' }));
+                                    } else {
+                                        setAddStaffData((prev) => ({ ...prev, leaderId: '' }));
+                                    }
+                                    setIsReportsToPickerVisible(false);
+                                }}
+                            >
+                                <Text style={[styles.pickerItemText, !activeLeaderId && styles.selectedPickerItemText]}>
+                                    No Supervisor
+                                </Text>
+                                {!activeLeaderId && (
+                                    <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
+                                )}
+                            </TouchableOpacity>
+                            {supervisorOptions.map((supervisor) => (
                                 <TouchableOpacity
-                                    key={supervisor}
-                                    style={[styles.pickerItem, (modalVisible.editStaff ? editStaffData.reportsTo : addStaffData.reportsTo) === supervisor && styles.selectedPickerItem]}
+                                    key={supervisor.id}
+                                    style={[styles.pickerItem, activeLeaderId === supervisor.id && styles.selectedPickerItem]}
                                     onPress={() => {
                                         if (modalVisible.editStaff) {
-                                            setEditStaffData(prev => ({ ...prev, reportsTo: supervisor }));
+                                            setEditStaffData((prev) => ({ ...prev, leaderId: supervisor.id }));
                                         } else {
-                                            setAddStaffData(prev => ({ ...prev, reportsTo: supervisor }));
+                                            setAddStaffData((prev) => ({ ...prev, leaderId: supervisor.id }));
                                         }
                                         setIsReportsToPickerVisible(false);
                                     }}
                                 >
-                                    <Text style={[styles.pickerItemText, (modalVisible.editStaff ? editStaffData.reportsTo : addStaffData.reportsTo) === supervisor && styles.selectedPickerItemText]}>
-                                        {supervisor}
+                                    <Text style={[styles.pickerItemText, activeLeaderId === supervisor.id && styles.selectedPickerItemText]}>
+                                        {formatSupervisorOptionLabel(supervisor)}
                                     </Text>
-                                    {(modalVisible.editStaff ? editStaffData.reportsTo : addStaffData.reportsTo) === supervisor && (
+                                    {activeLeaderId === supervisor.id && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
                                     )}
                                 </TouchableOpacity>
@@ -965,7 +1039,7 @@ const pickersModals = (
                                                     season: staff.season || season || '2026',
                                                     staffType: formatStaffTypeFromDb((staff as any).staff_type),
                                                     allergies: staff.allergies || '',
-                                                    reportsTo: '',
+                                                    leaderId: (staff as any).leader_id || '',
                                                     rfid: staff.rfid || '',
                                                 });
                                                 toggleModal('editStaff', true);
@@ -1262,7 +1336,7 @@ const pickersModals = (
                                     <TextInput
                                         style={[styles.input, { marginBottom: 0 }]}
                                         placeholder="No Supervisor"
-                                        value={addStaffData.reportsTo}
+                                        value={supervisorLabel(addStaffData.leaderId)}
                                         editable={false}
                                         pointerEvents="none"
                                     />
@@ -1295,7 +1369,7 @@ const pickersModals = (
                                             staffType: addStaffData.staffType,
                                             allergies: addStaffData.allergies,
                                             rfid: normalizeRfidInput(addStaffData.rfid) || null,
-                                        });
+                                        }, { leaderId: addStaffData.leaderId || null });
                                         const inserted = (await addStaffMutation.mutateAsync(row)) as {
                                             id: string;
                                             season?: string;
@@ -1321,7 +1395,7 @@ const pickersModals = (
                                             season: season || '2026',
                                             staffType: '',
                                             allergies: '',
-                                            reportsTo: '',
+                                            leaderId: '',
                                             rfid: '',
                                         });
                                         toggleModal('addStaff', false);
@@ -1680,7 +1754,7 @@ const pickersModals = (
                                     <TextInput
                                         style={[styles.input, { marginBottom: 0 }]}
                                         placeholder="No Supervisor"
-                                        value={editStaffData.reportsTo}
+                                        value={supervisorLabel(editStaffData.leaderId)}
                                         editable={false}
                                         pointerEvents="none"
                                     />
@@ -1736,7 +1810,8 @@ const pickersModals = (
                                                 staff_type: st,
                                                 allergies: editStaffData.allergies?.trim() || null,
                                                 rfid: normalizeRfidInput(editStaffData.rfid) || null,
-                                            } as Partial<StaffMember> & { id: string });
+                                                leader_id: editStaffData.leaderId?.trim() || null,
+                                            } as Partial<StaffMember> & { id: string; leader_id?: string | null });
                                             await syncStaffBunkStaff({
                                                 staffId: editStaffData.id,
                                                 companyId,
