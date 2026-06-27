@@ -143,12 +143,130 @@ export interface HealthCenterAdmission {
     } | null;
 }
 
-export function getAdmissionDisplayName(admission: Pick<HealthCenterAdmission, 'children' | 'staff'>): string {
-    return admission.children?.name || admission.staff?.name || 'Unknown';
+export function getAdmissionDisplayName(
+    admission: Pick<HealthCenterAdmission, 'children' | 'staff' | 'child_id' | 'staff_id'>,
+): string {
+    if (admission.children?.name) return admission.children.name;
+    if (admission.staff?.name) return admission.staff.name;
+    if (admission.staff_id && !admission.child_id) return 'Unknown Staff';
+    if (admission.child_id) return 'Unknown Camper';
+    return 'Unknown';
 }
 
-export function getAdmissionEntityLabel(admission: Pick<HealthCenterAdmission, 'child_id' | 'staff_id'>): 'Camper' | 'Staff' {
-    return admission.staff_id && !admission.child_id ? 'Staff' : 'Camper';
+export function getAdmissionEntityLabel(
+    admission: Pick<HealthCenterAdmission, 'child_id' | 'staff_id'>,
+): 'Camper' | 'Staff' {
+    if (admission.child_id) return 'Camper';
+    if (admission.staff_id) return 'Staff';
+    return 'Camper';
+}
+
+type CamperNameSource = {
+    id: string;
+    name?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+    group_name?: string | null;
+};
+
+type StaffNameSource = {
+    id: string;
+    name?: string | null;
+    role?: string | null;
+};
+
+function camperDisplayName(child: CamperNameSource): string {
+    if (child.name?.trim()) return child.name.trim();
+    return [child.first_name, child.last_name].filter(Boolean).join(' ').trim();
+}
+
+/** Fill missing embed names from already-loaded roster lists (Health screen). */
+export function enrichAdmissionFromLists(
+    admission: HealthCenterAdmission,
+    campers: CamperNameSource[],
+    staffMembers: StaffNameSource[],
+): HealthCenterAdmission {
+    let next = admission;
+
+    if (admission.staff_id && !admission.staff?.name) {
+        const member = staffMembers.find((s) => s.id === admission.staff_id);
+        if (member?.name) {
+            next = {
+                ...next,
+                staff: { id: member.id, name: member.name, role: member.role ?? null },
+            };
+        }
+    }
+
+    if (admission.child_id && !admission.children?.name) {
+        const child = campers.find((c) => c.id === admission.child_id);
+        const name = child ? camperDisplayName(child) : '';
+        if (child && name) {
+            next = {
+                ...next,
+                children: { id: child.id, name, group_name: child.group_name ?? undefined },
+            };
+        }
+    }
+
+    return next;
+}
+
+async function enrichHealthCenterAdmissions(
+    rows: HealthCenterAdmission[],
+    companyId: string,
+): Promise<HealthCenterAdmission[]> {
+    const staffIds = [
+        ...new Set(rows.filter((r) => r.staff_id && !r.staff?.name).map((r) => r.staff_id as string)),
+    ];
+    const childIds = [
+        ...new Set(rows.filter((r) => r.child_id && !r.children?.name).map((r) => r.child_id as string)),
+    ];
+
+    const staffById = new Map<string, NonNullable<HealthCenterAdmission['staff']>>();
+    const childrenById = new Map<string, NonNullable<HealthCenterAdmission['children']>>();
+
+    if (staffIds.length > 0) {
+        const { data, error } = await supabase
+            .from('staff')
+            .select('id, name, role')
+            .eq('company_id', companyId)
+            .in('id', staffIds);
+        if (!error) {
+            (data ?? []).forEach((row) => {
+                if (row.name) staffById.set(row.id, row);
+            });
+        }
+    }
+
+    if (childIds.length > 0) {
+        const { data, error } = await supabase
+            .from('children')
+            .select('id, name, group_name')
+            .eq('company_id', companyId)
+            .in('id', childIds);
+        if (!error) {
+            (data ?? []).forEach((row) => {
+                if (row.name) childrenById.set(row.id, row);
+            });
+        }
+    }
+
+    return rows.map((row) => ({
+        ...row,
+        staff:
+            row.staff?.name
+                ? row.staff
+                : row.staff_id
+                  ? staffById.get(row.staff_id) ?? row.staff ?? null
+                  : row.staff ?? null,
+        children:
+            row.children?.name
+                ? row.children
+                : row.child_id
+                  ? childrenById.get(row.child_id) ?? row.children ?? null
+                  : row.children ?? null,
+    }));
 }
 
 // --- Hooks for Medication Logs ---
@@ -430,7 +548,7 @@ export const useHealthCenterAdmissions = (companyId: string | null, season?: str
                             name,
                             group_name
                         ),
-                        staff:staff_id (
+                        staff!health_center_admissions_staff_id_fkey (
                             id,
                             name,
                             role
@@ -449,7 +567,10 @@ export const useHealthCenterAdmissions = (companyId: string | null, season?: str
                     throw error;
                 }
                 console.log('[HEALTH] Fetched admissions:', data?.length, 'rows');
-                const rows = (data as HealthCenterAdmission[]) || [];
+                const rows = await enrichHealthCenterAdmissions(
+                    (data as HealthCenterAdmission[]) || [],
+                    companyId,
+                );
                 await safeSetCachedJson(admissionsCacheKey(companyId, season), rows);
                 return rows;
             } catch (err) {
@@ -457,7 +578,9 @@ export const useHealthCenterAdmissions = (companyId: string | null, season?: str
                 const cached = await getCachedJson<HealthCenterAdmission[]>(
                     admissionsCacheKey(companyId, season),
                 );
-                if (cached?.length) return cached;
+                if (cached?.length) {
+                    return enrichHealthCenterAdmissions(cached, companyId!);
+                }
                 throw err;
             }
         },

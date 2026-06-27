@@ -9,7 +9,7 @@ import { StyledCard } from '../components/StyledCard';
 import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useDivisions, getCamperDivisionName } from '../api/campers';
-import { useMedicationLogs, useAddMedicationLog, useSetMedicationAdministration, useDeleteMedicationLog, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission, getAdmissionDisplayName, getAdmissionEntityLabel } from '../api/health';
+import { useMedicationLogs, useAddMedicationLog, useSetMedicationAdministration, useDeleteMedicationLog, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission, getAdmissionDisplayName, getAdmissionEntityLabel, enrichAdmissionFromLists } from '../api/health';
 import { supabase } from '../lib/supabase';
 import { pickAndReadSpreadsheetRows } from '../lib/pickCsvDocument';
 import { parseCsvDocument } from '../lib/csvLine';
@@ -483,8 +483,19 @@ export const HealthScreen = ({ navigation }: any) => {
         }, [companyId, season, queryClient]),
     );
 
-    const currentlyAdmitted = useMemo(() => safeAdmissions.filter((a: any) => !a.checked_out_at), [safeAdmissions]);
-    const admissionHistory = useMemo(() => safeAdmissions.filter((a: any) => a.checked_out_at), [safeAdmissions]);
+    const admissionsWithEntities = useMemo(
+        () => safeAdmissions.map((admission) => enrichAdmissionFromLists(admission, safeCampers, safeStaff)),
+        [safeAdmissions, safeCampers, safeStaff],
+    );
+
+    const currentlyAdmitted = useMemo(
+        () => admissionsWithEntities.filter((a: any) => !a.checked_out_at),
+        [admissionsWithEntities],
+    );
+    const admissionHistory = useMemo(
+        () => admissionsWithEntities.filter((a: any) => a.checked_out_at),
+        [admissionsWithEntities],
+    );
     const groupedHistory = useMemo(() => {
         const acc: Record<string, { entity: any; entityType: 'Camper' | 'Staff'; admissions: any[] }> = {};
         admissionHistory.forEach((a: any) => {
