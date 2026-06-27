@@ -216,6 +216,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
     // Add appointment mutation
     const addAppointmentMutation = useMutation({
         mutationFn: async (newAppointment: any) => {
+            const { data: { user } } = await supabase.auth.getUser();
             const { data, error } = await supabase
                 .from('appointments')
                 .insert([{
@@ -232,6 +233,7 @@ export const AppointmentsScreen = ({ navigation }: any) => {
                     person_name: newAppointment.person,
                     child_id: newAppointment.appointmentFor === 'Camper' ? newAppointment.personId : null,
                     staff_id: newAppointment.appointmentFor === 'Staff' ? newAppointment.personId : null,
+                    created_by: user?.id ?? null,
                 }])
                 .select()
                 .single();
@@ -245,7 +247,10 @@ export const AppointmentsScreen = ({ navigation }: any) => {
             setIsAddModalOpen(false);
         },
         onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to create appointment');
+            Alert.alert(
+                'Error',
+                error?.message || 'Failed to create appointment. Confirm you have health center access for this camp.',
+            );
         },
     });
 

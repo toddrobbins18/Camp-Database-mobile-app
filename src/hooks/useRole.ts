@@ -1,12 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useCompany } from '../contexts/CompanyContext';
 
 /**
  * Track only the auth user id. Session.user is a new object reference on many auth events
  * (refresh, focus); storing the full user caused unnecessary renders and effect churn.
  */
-export const useRole = () => {
+export const useRole = (overrideCompanyId?: string | null) => {
+    const { companyId: contextCompanyId } = useCompany();
+    const effectiveCompanyId = overrideCompanyId ?? contextCompanyId;
+
     const [userId, setUserId] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState<string | null>(null);
 
@@ -28,32 +32,34 @@ export const useRole = () => {
     }, []);
 
     const query = useQuery({
-        queryKey: ['user_roles', userId],
+        queryKey: ['user_roles', userId, effectiveCompanyId],
         queryFn: async () => {
             if (!userId) return null;
 
-            // Get user's profile to find their company_id
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('company_id')
-                .eq('id', userId)
-                .single();
+            let targetCompanyId = effectiveCompanyId;
+            if (!targetCompanyId) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('company_id')
+                    .eq('id', userId)
+                    .maybeSingle();
+                targetCompanyId = profile?.company_id ?? null;
+            }
 
-            if (!profile?.company_id) return null;
+            if (!targetCompanyId) return null;
 
-            // Fetch roles for that company
             const { data, error } = await supabase
                 .from('user_roles')
                 .select('role')
                 .eq('user_id', userId)
-                .eq('company_id', profile.company_id);
+                .eq('company_id', targetCompanyId);
 
             if (error) {
-                console.error("Error fetching role:", error);
+                console.error('Error fetching role:', error);
                 return null;
             }
 
-            const roles = data.map(r => r.role);
+            const roles = (data ?? []).map((r) => r.role);
             const isSpecialist = roles.includes('specialist');
             const isDivisionLeader = roles.includes('division_leader');
             return {
@@ -61,6 +67,7 @@ export const useRole = () => {
                 isSuperAdmin: roles.includes('super_admin'),
                 isAdmin: roles.includes('admin') || roles.includes('super_admin'),
                 isStaff: roles.includes('staff'),
+                isHealthCenter: roles.includes('health_center'),
                 isSpecialist,
                 isDivisionLeader,
                 isLeaderRole: isDivisionLeader || isSpecialist,

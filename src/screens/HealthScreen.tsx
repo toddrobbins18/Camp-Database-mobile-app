@@ -29,7 +29,7 @@ import {
     getMealTimeSortPriority,
 } from '../lib/medicationMealTimeDisplay';
 import { MedicationMealTimeBadges } from '../components/nurse/MedicationMealTimeBadges';
-import { lookupCamperOrStaffByRfid, lookupChildByRfid } from '../lib/rfidUtils';
+import { findInListByRfid, lookupChildByRfid, normalizeRfidInput, resolveCamperOrStaffByRfid } from '../lib/rfidUtils';
 
 const GENDER_FILTER_OPTIONS = [
     { value: 'all' as const, label: 'All Genders' },
@@ -648,8 +648,17 @@ export const HealthScreen = ({ navigation }: any) => {
             return;
         }
 
+        const rfidValue = normalizeRfidInput(healthCenterRfidInput);
+        if (!rfidValue) {
+            Alert.alert('Scan required', 'Please scan or enter a wristband RFID.');
+            return;
+        }
+
         try {
-            const match = await lookupCamperOrStaffByRfid(healthCenterRfidInput, companyId, season);
+            const match = await resolveCamperOrStaffByRfid(rfidValue, companyId, season, {
+                campers: safeCampers,
+                staff: safeStaff,
+            });
 
             if (!match) {
                 Alert.alert('Not Found', 'No camper or staff found with this RFID.');
@@ -687,8 +696,24 @@ export const HealthScreen = ({ navigation }: any) => {
             return;
         }
 
+        const rfidValue = normalizeRfidInput(rfidInput);
+        if (!rfidValue) {
+            Alert.alert('Scan required', 'Please scan or enter a wristband RFID.');
+            return;
+        }
+
         try {
-            const child = await lookupChildByRfid(rfidInput, companyId, season);
+            const childMatch =
+                (await lookupChildByRfid(rfidValue, companyId, season)) ??
+                findInListByRfid(safeCampers, rfidValue);
+            const child = childMatch
+                ? {
+                      id: childMatch.id,
+                      name: 'name' in childMatch && childMatch.name
+                          ? String(childMatch.name)
+                          : getChildDisplayName(childMatch),
+                  }
+                : null;
             
             if (!child) {
                 Alert.alert('Not Found', 'No camper found with this RFID.');
