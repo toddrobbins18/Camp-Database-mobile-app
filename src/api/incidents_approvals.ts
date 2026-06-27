@@ -120,7 +120,7 @@ export const useAddIncidentReport = () => {
                         .from('incident_children')
                         .insert(childRows);
 
-                    if (childError) console.error('Error linking children:', childError);
+                    if (childError) throw childError;
                 }
 
                 return report;

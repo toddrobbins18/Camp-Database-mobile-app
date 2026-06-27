@@ -22,6 +22,11 @@ import {
     shouldRemoveDayOffRecord,
 } from '../lib/odNightOffSchedule';
 import {
+    bunkMatchesOdGenderFilter,
+    sortOdRowsByGenderThenBunkNumber,
+    type OdGenderFilter,
+} from '../lib/odManagementUtils';
+import {
     importStaffDaysOffSchedule,
     STAFF_DAYS_OFF_CSV_TEMPLATE,
     type StaffDaysOffCsvUploadResult,
@@ -80,7 +85,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [searchQuery, setSearchQuery] = useState('');
     /** Matches web ODManagement.tsx `genderFilter` */
-    const [genderFilter, setGenderFilter] = useState<'all' | 'girls' | 'boys'>('all');
+    const [genderFilter, setGenderFilter] = useState<OdGenderFilter>('all');
     const [showManageBunksModal, setShowManageBunksModal] = useState(false);
     const [showNewModal, setShowNewModal] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -360,52 +365,46 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const bunkById = new Map((bunksList || []).map((b: BunkRow) => [b.id, b]));
     const dayOffByStaffId = new Map((staffDaysOff || []).map((row: any) => [row.staff_id, row]));
 
-    /** Same as web `getBunkGender` (ODManagement.tsx) */
-    const getBunkGender = (bunk: BunkRow | undefined): string | null => {
-        if (!bunk) return null;
-        const d = bunk.divisions as { gender?: string | null } | { gender?: string | null }[] | null | undefined;
-        if (Array.isArray(d)) return d[0]?.gender ?? null;
-        return d?.gender ?? null;
-    };
+    const staffMembers: StaffMember[] = sortOdRowsByGenderThenBunkNumber(
+        (bunkStaffList || [])
+            .map((bs: BunkStaffRow) => {
+                const staff = bs.staff || staffById.get(bs.staff_id);
+                const bunk = bunkById.get(bs.bunk_id);
+                const dayOff = dayOffByStaffId.get(bs.staff_id);
+                if (!staff || !bunk) return null;
+                return {
+                    id: bs.id,
+                    staffId: bs.staff_id,
+                    name: staff.name || 'Unknown',
+                    bunk: bunk.bunk_name || `Bunk ${bunk.bunk_number}`,
+                    bunkId: bunk.id,
+                    dayOffId: dayOff?.id,
+                    isOut: !!dayOff?.checked_out,
+                    isIn: !!dayOff?.checked_in,
+                    isSleepingOut: !!dayOff?.is_sleeping_out,
+                    isDayOff: !!dayOff?.is_day_off,
+                    isNightOff: !!dayOff?.is_night_off,
+                };
+            })
+            .filter(Boolean) as StaffMember[],
+        (staff) => bunkById.get(staff.bunkId),
+        (staff) => bunkById.get(staff.bunkId)?.bunk_number,
+    );
 
-    const staffMembers: StaffMember[] = (bunkStaffList || [])
-        .map((bs: BunkStaffRow) => {
-            const staff = bs.staff || staffById.get(bs.staff_id);
-            const bunk = bunkById.get(bs.bunk_id);
-            const dayOff = dayOffByStaffId.get(bs.staff_id);
-            if (!staff || !bunk) return null;
-            return {
-                id: bs.id,
-                staffId: bs.staff_id,
-                name: staff.name || 'Unknown',
-                bunk: bunk.bunk_name || `Bunk ${bunk.bunk_number}`,
-                bunkId: bunk.id,
-                dayOffId: dayOff?.id,
-                isOut: !!dayOff?.checked_out,
-                isIn: !!dayOff?.checked_in,
-                isSleepingOut: !!dayOff?.is_sleeping_out,
-                isDayOff: !!dayOff?.is_day_off,
-                isNightOff: !!dayOff?.is_night_off,
-            };
-        })
-        .filter(Boolean) as StaffMember[];
-
-    const filteredStaff = staffMembers.filter((staff) => {
-        if (searchQuery && !staff.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-            !staff.bunk.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-        const bunk = bunkById.get(staff.bunkId);
-        const raw = getBunkGender(bunk);
-        const bunkGender = raw ? String(raw).toLowerCase() : null;
-        const matchesGender =
-            genderFilter === 'all' ||
-            (genderFilter === 'girls' && bunkGender === 'girls') ||
-            (genderFilter === 'boys' && bunkGender === 'boys');
-        if (!matchesGender) return false;
-        if (activeTab === 'OD') return !staff.isDayOff;
-        if (activeTab === 'OFF') return staff.isDayOff || staff.isNightOff;
-        if (activeTab === 'FREE_PLAY') return staff.isSleepingOut;
-        return true;
-    });
+    const filteredStaff = sortOdRowsByGenderThenBunkNumber(
+        staffMembers.filter((staff) => {
+            if (searchQuery && !staff.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+                !staff.bunk.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+            const bunk = bunkById.get(staff.bunkId);
+            if (!bunkMatchesOdGenderFilter(bunk, genderFilter)) return false;
+            if (activeTab === 'OD') return !staff.isDayOff;
+            if (activeTab === 'OFF') return staff.isDayOff || staff.isNightOff;
+            if (activeTab === 'FREE_PLAY') return staff.isSleepingOut;
+            return true;
+        }),
+        (staff) => bunkById.get(staff.bunkId),
+        (staff) => bunkById.get(staff.bunkId)?.bunk_number,
+    );
 
     useEffect(() => {
         if (!showFreePlay && activeTab === 'FREE_PLAY') setActiveTab('OD');

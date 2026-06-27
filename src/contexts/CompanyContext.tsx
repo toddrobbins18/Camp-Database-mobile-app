@@ -100,19 +100,31 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
     const [loadError, setLoadError] = useState<string | null>(null);
     const [owlPayEnabled, setOwlPayEnabled] = useState(false);
 
-    const switchCompany = useCallback((newCompanyId: string) => {
+    const switchCompany = useCallback(async (newCompanyId: string) => {
         const company = availableCompanies.find((c) => c.id === newCompanyId);
-        if (company) {
-            setCompanyId(newCompanyId);
-            setCompanySlug(company.slug);
-            setCompanyThemeColor(company.theme_color ?? null);
-            setIsTylerHill(isTylerHillCamp(company.slug));
-            setIsTimberLakeCampState(shouldShowTigerTimes(company));
-            setIsTimberLakeWestState(isTimberLakeWestCompany(company));
-            setOwlPayEnabled(computeOwlPayEnabled(company, company.slug));
-            void AsyncStorage.setItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY, newCompanyId);
+        if (!company) return;
+
+        if (!isSuperAdmin && profile?.id) {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ company_id: newCompanyId })
+                .eq('id', profile.id);
+            if (error) {
+                console.error('Failed to persist active camp on profile:', error);
+                return;
+            }
+            setProfile((prev: any) => (prev ? { ...prev, company_id: newCompanyId } : prev));
         }
-    }, [availableCompanies]);
+
+        setCompanyId(newCompanyId);
+        setCompanySlug(company.slug);
+        setCompanyThemeColor(company.theme_color ?? null);
+        setIsTylerHill(isTylerHillCamp(company.slug));
+        setIsTimberLakeCampState(shouldShowTigerTimes(company));
+        setIsTimberLakeWestState(isTimberLakeWestCompany(company));
+        setOwlPayEnabled(computeOwlPayEnabled(company, company.slug));
+        await AsyncStorage.setItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY, newCompanyId);
+    }, [availableCompanies, isSuperAdmin, profile?.id]);
 
     useEffect(() => {
         const applyCompanyMeta = (
@@ -173,6 +185,21 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 const superAdmin = roleData?.some(r => r.role === 'super_admin') || false;
                 setIsSuperAdmin(superAdmin);
 
+                const { data: roleCompanyRows } = await supabase
+                    .from('user_roles')
+                    .select('company_id')
+                    .eq('user_id', user.id);
+
+                if (seq !== fetchGenerationRef.current) return;
+
+                const allowedCompanyIds = new Set<string>();
+                for (const row of roleCompanyRows || []) {
+                    if (row.company_id) allowedCompanyIds.add(row.company_id);
+                }
+                if (profileData.company_id) {
+                    allowedCompanyIds.add(profileData.company_id);
+                }
+
                 let allowedCompanies: Company[] = [];
                 if (superAdmin) {
                     const { data: allCompanies } = await supabase
@@ -185,10 +212,21 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                     allowedCompanies = (allCompanies || []).filter((company) =>
                         ALLOWED_COMPANY_SLUGS.has(company.slug)
                     );
-                    setAvailableCompanies(allowedCompanies);
-                } else {
-                    setAvailableCompanies([]);
+                } else if (allowedCompanyIds.size > 0) {
+                    const { data: roleCompanies } = await supabase
+                        .from('companies')
+                        .select('id, name, slug, theme_color, owl_pay_enabled')
+                        .eq('is_active', true)
+                        .in('id', Array.from(allowedCompanyIds))
+                        .order('name');
+
+                    if (seq !== fetchGenerationRef.current) return;
+
+                    allowedCompanies = (roleCompanies || []).filter((company) =>
+                        ALLOWED_COMPANY_SLUGS.has(company.slug)
+                    );
                 }
+                setAvailableCompanies(allowedCompanies);
 
                 const { data: seasonRows } = await supabase
                     .from('children')
@@ -207,7 +245,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
 
                 let effectiveCompanyId: string | null = profileData.company_id ?? null;
 
-                if (superAdmin && allowedCompanies.length > 0) {
+                if ((superAdmin || allowedCompanies.length > 1) && allowedCompanies.length > 0) {
                     const stored = await AsyncStorage.getItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY);
                     if (seq !== fetchGenerationRef.current) return;
                     if (stored && allowedCompanies.some((c) => c.id === stored)) {

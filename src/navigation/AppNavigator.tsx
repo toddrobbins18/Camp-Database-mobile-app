@@ -352,8 +352,8 @@ const CustomDrawerContent = (props: any) => {
                     )}
                 </View>
 
-                {/* Camp Switcher (Super Admin only) */}
-                {(isSuperAdmin || isSuperAdminCompany) && availableCompanies.length > 1 && (
+                {/* Camp Switcher (multi-camp users) */}
+                {availableCompanies.length > 1 && (
                     <View style={styles.campSwitcherWrap}>
                         <TouchableOpacity
                             style={campSwitcherStyle}
