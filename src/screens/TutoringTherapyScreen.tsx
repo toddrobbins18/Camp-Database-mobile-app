@@ -27,6 +27,7 @@ import {
 } from '../api/rainy_day_tutoring';
 import { useDivisions, useCampers } from '../api/campers';
 import { useCompany } from '../contexts/CompanyContext';
+import { getTutoringTherapyServiceTypes } from '../lib/tutoringTherapyServiceTypes';
 
 interface TutoringTherapyScreenProps {
     navigation: any;
@@ -35,20 +36,6 @@ interface TutoringTherapyScreenProps {
 
 
 const GENDERS = ['All Genders', 'Boys', 'Girls'];
-
-const SERVICES = [
-    'All Services',
-    'Math Tutoring',
-    'Reading Tutoring',
-    'Science Tutoring',
-    'Speech Therapy',
-    'Occupational Therapy',
-    'Physical Therapy',
-    'Behavioral Therapy',
-    'Music Therapy',
-    'Art Therapy',
-    'ESL Tutoring',
-];
 
 // Fetch campers from Supabase instead of hardcoding
 const SCHEDULE_PERIODS = [
@@ -185,9 +172,24 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
         []
     );
 
+    const serviceTypeOptions = useMemo(
+        () => getTutoringTherapyServiceTypes(companySlug),
+        [companySlug],
+    );
+
     const serviceFilterOptions: SheetOption[] = useMemo(
-        () => SERVICES.map((s) => ({ value: s, label: s })),
-        []
+        () => [
+            { value: 'All Services', label: 'All Services' },
+            ...Array.from(
+                new Set([
+                    ...serviceTypeOptions,
+                    ...enrollments.map((e) => e.service_type).filter(Boolean),
+                ]),
+            )
+                .sort()
+                .map((s) => ({ value: s, label: s })),
+        ],
+        [serviceTypeOptions, enrollments],
     );
 
     const camperOptions: SheetOption[] = useMemo(
@@ -876,7 +878,7 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                     {renderBottomSheetDropdown(
                         showServiceTypeDropdown,
                         () => setShowServiceTypeDropdown(false),
-                        SERVICES.filter((s) => s !== 'All Services').map((s) => ({ value: s, label: s })),
+                        serviceTypeOptions.map((s) => ({ value: s, label: s })),
                         selectedServiceType,
                         setSelectedServiceType,
                         'Select Service Type'

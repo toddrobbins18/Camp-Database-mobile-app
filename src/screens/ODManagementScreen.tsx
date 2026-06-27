@@ -1721,13 +1721,15 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         </View>
                         <ScrollView style={styles.modalContent}>
                             <Text style={styles.modalSubtitle}>
-                                Bulk-import staff day offs and night offs by Person ID and date. One row per staff member per date.
+                                Import by Person ID + weekday (TUESDAY/WEDNESDAY/THURSDAY) for the full season, or use dated rows.
                             </Text>
                             <View style={styles.scheduleUploadHelp}>
-                                <Text style={styles.scheduleUploadHelpTitle}>CSV columns</Text>
-                                <Text style={styles.scheduleUploadHelpText}>Person ID, Date, Day Off (yes/no), Night Off (yes/no), Notes (optional)</Text>
+                                <Text style={styles.scheduleUploadHelpTitle}>Supported formats</Text>
+                                <Text style={styles.scheduleUploadHelpText}>
+                                    Weekly (Tyler Hill OD sheet): PersonID, Day Off — e.g. 20542345, TUESDAY. Legend rows are skipped.
+                                </Text>
                                 <Text style={[styles.scheduleUploadHelpText, { marginTop: 8 }]}>
-                                    Example: day off Wednesday (yes/no) plus night offs on other dates as separate rows with Night Off = yes.
+                                    Dated: Person ID, Date, Day Off (yes/no), Night Off (yes/no), Notes
                                 </Text>
                             </View>
                             <TouchableOpacity style={styles.scheduleTemplateBtn} onPress={() => void shareScheduleTemplate()}>
