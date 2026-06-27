@@ -21,6 +21,14 @@ import { StyledCard } from '../components/StyledCard';
 import { fetchAwardsForSeason } from '../lib/awardsQueries';
 import { fetchExpandedMedicationSchedule } from '../lib/medicationReportSchedule';
 import { parseMedicationMealTimeLabels } from '../lib/medicationMealTimeDisplay';
+import {
+    attachSportsEventSortTime,
+    buildDriverBySportsEventId,
+    compareSportsEventReportRows,
+    formatSportsEventMealOptions,
+    formatSportsEventReportTime,
+    getSportsEventRowSortTimeMinutes,
+} from '../lib/sportsEventReportUtils';
 
 interface ReportsScreenProps {
     navigation: any;
@@ -315,24 +323,40 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                     break;
                 }
                 case 'sports_events': {
-                    const { data } = await supabase
-                        .from('sports_calendar')
-                        .select('event_date, title, sport_type, team, opponent, location, time')
-                        .eq('company_id', companyId)
-                        .eq('season', season)
-                        .gte('event_date', fromDate)
-                        .lte('event_date', toDate)
-                        .order('event_date', { ascending: false });
-                    dataRows = (data || []).map((row: any) => ({
-                        Date: row.event_date,
-                        Title: row.title || 'N/A',
-                        Sport: row.sport_type || 'N/A',
-                        Team: row.team || '-',
-                        Opponent: row.opponent || '-',
-                        Location: row.location || '-',
-                        Time: row.time || '-',
-                    }));
-                    summaryRows = { 'Total Events': (data || []).length };
+                    const [{ data: sportsEvents }, { data: sportsTrips }] = await Promise.all([
+                        supabase
+                            .from('sports_calendar')
+                            .select('id, event_date, title, meal_options, start_time_field, time, depart_time')
+                            .eq('company_id', companyId)
+                            .eq('season', season)
+                            .gte('event_date', fromDate)
+                            .lte('event_date', toDate)
+                            .order('event_date', { ascending: true }),
+                        supabase
+                            .from('trips')
+                            .select('sports_event_id, driver')
+                            .eq('company_id', companyId)
+                            .eq('season', season)
+                            .not('sports_event_id', 'is', null),
+                    ]);
+
+                    const driverByEventId = buildDriverBySportsEventId(sportsTrips);
+
+                    dataRows = (sportsEvents || [])
+                        .map((row: any) =>
+                            attachSportsEventSortTime(
+                                {
+                                    Date: row.event_date,
+                                    Time: formatSportsEventReportTime(row),
+                                    Event: row.title || 'N/A',
+                                    'Meal Options': formatSportsEventMealOptions(row.meal_options),
+                                    Driver: (row.id && driverByEventId.get(row.id)) || '-',
+                                },
+                                row,
+                            ),
+                        )
+                        .sort((a, b) => compareSportsEventReportRows(a, b, 'asc'));
+                    summaryRows = { 'Total Events': dataRows.length };
                     break;
                 }
                 case 'trips': {
@@ -646,7 +670,34 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
     }, [reportType, companyId, season]);
 
     const sortedData = useMemo(() => {
+        if (!reportData.length) return reportData;
+
+        if (reportType === 'sports_events') {
+            const direction = sortColumn ? sortDirection : 'asc';
+
+            if (!sortColumn || sortColumn === 'Date') {
+                return [...reportData].sort((a, b) =>
+                    compareSportsEventReportRows(a, b, direction),
+                );
+            }
+
+            if (sortColumn === 'Time') {
+                return [...reportData].sort((a, b) => {
+                    const timeComparison =
+                        getSportsEventRowSortTimeMinutes(a) - getSportsEventRowSortTimeMinutes(b);
+                    if (timeComparison !== 0) {
+                        return sortDirection === 'asc' ? timeComparison : -timeComparison;
+                    }
+
+                    const dateComparison =
+                        new Date(`${a.Date}T00:00:00`).getTime() - new Date(`${b.Date}T00:00:00`).getTime();
+                    return sortDirection === 'asc' ? dateComparison : -dateComparison;
+                });
+            }
+        }
+
         if (!sortColumn) return reportData;
+
         return [...reportData].sort((a, b) => {
             const av = a[sortColumn];
             const bv = b[sortColumn];
@@ -663,7 +714,7 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
             }
             return sortDirection === 'asc' ? cmp : -cmp;
         });
-    }, [reportData, sortColumn, sortDirection]);
+    }, [reportData, reportType, sortColumn, sortDirection]);
 
     const toggleSort = (column: string) => {
         if (sortColumn !== column) {
@@ -675,9 +726,9 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
     };
 
     const exportCSV = () => {
-        if (!reportData.length) return;
-        const headers = Object.keys(reportData[0]);
-        const rows = reportData.map((row) => headers.map((h) => `"${sanitizeCell(row[h])}"`).join(','));
+        if (!sortedData.length) return;
+        const headers = Object.keys(sortedData[0]);
+        const rows = sortedData.map((row) => headers.map((h) => `"${sanitizeCell(row[h])}"`).join(','));
         const csv = [headers.join(','), ...rows].join('\n');
         const fileName = `${reportType}_report_${Date.now()}.csv`;
 
@@ -696,14 +747,14 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
     };
 
     const exportPDF = async () => {
-        if (!reportData.length) return;
+        if (!sortedData.length) return;
         if (!(Platform.OS === 'web' && typeof window !== 'undefined')) {
             alert('PDF download is currently supported on web in this build.');
             return;
         }
 
-        const headers = Object.keys(reportData[0]);
-        const body = reportData.map((row) => headers.map((h) => sanitizeCell(row[h])));
+        const headers = Object.keys(sortedData[0]);
+        const body = sortedData.map((row) => headers.map((h) => sanitizeCell(row[h])));
         const { jsPDF } = await import('jspdf');
         const autoTable = (await import('jspdf-autotable')).default as any;
 
