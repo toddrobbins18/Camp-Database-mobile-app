@@ -590,7 +590,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
 
     useEffect(() => {
         if (!successData) return;
-        const timer = setTimeout(() => setSuccessData(null), 2600);
+        const timer = setTimeout(() => setSuccessData(null), 8000);
         return () => clearTimeout(timer);
     }, [successData]);
 
@@ -1523,7 +1523,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 animationType="fade"
                 onRequestClose={() => setSuccessData(null)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setSuccessData(null)}>
+                <Pressable style={styles.modalOverlay} onPress={() => {}}>
                     <Pressable style={styles.successCard} onPress={(e) => e.stopPropagation()}>
                         <Ionicons name="checkmark-circle" size={48} color={theme.colors.success} />
                         <Text style={styles.successTitle}>{successData?.camperName}</Text>
@@ -1540,6 +1540,9 @@ export const OwlPayScreen = ({ navigation }: any) => {
                                 New Balance: {currency(successData?.newBalance || 0)}
                             </Text>
                         )}
+                        <TouchableOpacity style={styles.primaryButton} onPress={() => setSuccessData(null)}>
+                            <Text style={styles.primaryButtonText}>Done</Text>
+                        </TouchableOpacity>
                     </Pressable>
                 </Pressable>
             </Modal>

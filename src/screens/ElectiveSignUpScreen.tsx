@@ -20,6 +20,11 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
+import {
+    filterElectivesForPeriod,
+    TIMBER_LAKE_ELECTIVE_DAYS,
+    TIMBER_LAKE_ELECTIVE_PERIODS,
+} from '../constants/timberLakeElectiveSchedule';
 import { supabase } from '../lib/supabase';
 import { MobileUserMenu } from '../components/MobileUserMenu';
 import { isTimberLakeCamp } from '../constants/camps';
@@ -29,15 +34,8 @@ import { confirmAppAlert, showAppAlert } from '../utils/showAppAlert';
 import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 
 /** Matches lovable-web-app ElectiveSignUp.tsx */
-const PERIODS = [
-    { id: 'period-1', label: 'Period 1', time: '10:00 – 11:00 AM' },
-    { id: 'period-2', label: 'Period 2', time: '11:15 AM – 12:15 PM' },
-    { id: 'period-3', label: 'Period 3', time: '1:45 – 2:45 PM' },
-    { id: 'period-4', label: 'Period 4', time: '3:15 – 4:15 PM' },
-    { id: 'period-5', label: 'Period 5', time: '4:30 – 5:30 PM' },
-];
-
-const DAYS = ['Monday', 'Tuesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const PERIODS = [...TIMBER_LAKE_ELECTIVE_PERIODS];
+const DAYS = [...TIMBER_LAKE_ELECTIVE_DAYS];
 
 function mondayOfWeekContaining(d: Date): string {
     const x = new Date(d);
@@ -149,9 +147,8 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
             const rawElectives = electivesRes.data || [];
             
             let filteredElectives = rawElectives.filter((e: { is_active?: boolean | null }) => e.is_active !== false);
-            // Timberlake Water Ski logic: Only available periods 3, 4, 5 for all days
-            if (tlc && (selectedPeriod < 3 || selectedPeriod > 5)) {
-                filteredElectives = filteredElectives.filter(e => !e.name.toLowerCase().includes('water ski'));
+            if (tlc) {
+                filteredElectives = filterElectivesForPeriod(filteredElectives, selectedPeriod);
             }
             
             setElectives(filteredElectives);
@@ -222,12 +219,10 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
             }
             
             let filtered = (data || []).filter((e: { is_active?: boolean | null }) => e.is_active !== false);
-            
-            // Timberlake Water Ski logic: Only available periods 3, 4, 5 for all days
-            if (tlc && (selectedPeriod < 3 || selectedPeriod > 5)) {
-                filtered = filtered.filter(e => !e.name.toLowerCase().includes('water ski'));
+            if (tlc) {
+                filtered = filterElectivesForPeriod(filtered, selectedPeriod);
             }
-            
+
             setElectives(filtered);
         })();
         return () => {
