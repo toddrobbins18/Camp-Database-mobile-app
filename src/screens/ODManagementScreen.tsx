@@ -21,6 +21,7 @@ import {
     staffIsScheduledOff,
     shouldRemoveDayOffRecord,
 } from '../lib/odNightOffSchedule';
+import { lookupStaffByRfid, normalizeRfidInput } from '../lib/rfidUtils';
 import {
     bunkMatchesOdGenderFilter,
     sortOdRowsByGenderThenBunkNumber,
@@ -573,18 +574,12 @@ export const ODManagementScreen = ({ navigation }: any) => {
     };
 
     const handleRfidScan = async () => {
-        const value = (rfidInput || '').trim();
-        if (!value || !companyId) return;
+        const value = normalizeRfidInput(rfidInput);
+        if (!value || !companyId || !season) return;
         setIsScanning(true);
         try {
-            const { data: staffMember, error: staffErr } = await supabase
-                .from('staff')
-                .select('id, name')
-                .eq('rfid', value)
-                .eq('company_id', companyId)
-                .eq('season', season)
-                .maybeSingle();
-            if (staffErr || !staffMember) {
+            const staffMember = await lookupStaffByRfid(value, companyId, season);
+            if (!staffMember) {
                 Alert.alert('Not found', `Wristband not recognized (RFID: ${value.slice(0, 12)}...)`);
                 setRfidInput('');
                 return;

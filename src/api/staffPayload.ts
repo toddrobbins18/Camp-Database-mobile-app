@@ -3,6 +3,8 @@
  * DB check constraint on staff_type + DATE columns must match Postgres expectations.
  */
 
+import { normalizeRfidInput } from '../lib/rfidUtils';
+
 export type DbStaffType = 'general_counselor' | 'specialist' | 'both' | 'support' | 'leadership';
 
 const DB_STAFF_TYPE_LABEL: Record<string, string> = {
@@ -116,7 +118,7 @@ export function buildStaffInsertRow(
     const allergies = fields.allergies?.trim();
     if (allergies) row.allergies = allergies;
 
-    const rfid = fields.rfid?.trim();
+    const rfid = normalizeRfidInput(fields.rfid ?? '');
     if (rfid) row.rfid = rfid;
 
     const lid = options?.leaderId?.trim();

@@ -21,6 +21,7 @@ import { uploadCsvFromText, type CsvImportMode } from '../lib/csvTableUpload';
 import { showAppAlert } from '../utils/showAppAlert';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 import { formatIsoDateToUs, toIsoDateOrNull } from '../api/staffPayload';
+import { lookupChildByRfid, normalizeRfidInput } from '../lib/rfidUtils';
 
 type BulkAssignRowResult = {
     name: string;
@@ -28,11 +29,6 @@ type BulkAssignRowResult = {
     status: 'success' | 'error' | 'not_found';
     message: string;
 };
-
-/** Normalize scanner / manual RFID input (trailing newlines from Bluetooth wedge). */
-function normalizeRfidInput(raw: string): string {
-    return raw.replace(/\u0000/g, '').trim().replace(/\r\n/g, '').replace(/\n/g, '').replace(/\r/g, '');
-}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 600; // Mobile: full width cards
@@ -370,18 +366,9 @@ export const CamperScreen = ({ navigation }: any) => {
 
         setIsScanning(true);
         try {
-            const { data: rfidRows, error } = await supabase
-                .from('children')
-                .select('id, name, rfid')
-                .eq('rfid', valueToScan)
-                .eq('company_id', companyId)
-                .eq('season', season)
-                .neq('status', 'inactive')
-                .limit(1);
+            const child = await lookupChildByRfid(valueToScan, companyId, season);
 
-            const child = rfidRows?.[0];
-
-            if (error || !child) {
+            if (!child) {
                 const short = valueToScan.length > 18 ? `${valueToScan.slice(0, 18)}…` : valueToScan;
                 showAppAlert(
                     'Wristband not found',
@@ -1603,7 +1590,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                         group_name: formData.group || null,
                                                         person_id: formData.person_id.trim(),
                                                         emergency_contact: formData.emergencyContact || null,
-                                                        rfid: formData.rfid || null,
+                                                        rfid: normalizeRfidInput(formData.rfid) || null,
                                                         allergies: formData.allergies || null,
                                                         medical_notes: formData.medicalNotes || null,
                                                         guardian_email: formData.guardianEmail || null,
@@ -2433,7 +2420,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                                         bunk_id: editFormData.bunk && /^[0-9a-f-]{36}$/i.test(editFormData.bunk) ? editFormData.bunk : null,
                                                         person_id: editFormData.person_id,
                                                         emergency_contact: editFormData.emergencyContact,
-                                                        rfid: editFormData.rfid,
+                                                        rfid: normalizeRfidInput(editFormData.rfid) || null,
                                                         allergies: editFormData.allergies,
                                                         medical_notes: editFormData.medicalNotes,
                                                         guardian_email: editFormData.guardianEmail || null,

@@ -14,6 +14,7 @@ import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/Unified
 import { StaffLeaderAssignmentModal } from '../components/StaffLeaderAssignmentModal';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText, type CsvImportMode } from '../lib/csvTableUpload';
+import { normalizeRfidInput } from '../lib/rfidUtils';
 
 const ScreenHeader = ({ title, navigation }: { title: string, navigation: any }) => (
     <View style={styles.header}>
@@ -1293,7 +1294,7 @@ const pickersModals = (
                                             dob: addStaffData.dob,
                                             staffType: addStaffData.staffType,
                                             allergies: addStaffData.allergies,
-                                            rfid: addStaffData.rfid,
+                                            rfid: normalizeRfidInput(addStaffData.rfid) || null,
                                         });
                                         const inserted = (await addStaffMutation.mutateAsync(row)) as {
                                             id: string;
@@ -1734,7 +1735,7 @@ const pickersModals = (
                                                 season: editStaffData.season,
                                                 staff_type: st,
                                                 allergies: editStaffData.allergies?.trim() || null,
-                                                rfid: editStaffData.rfid?.trim() || null,
+                                                rfid: normalizeRfidInput(editStaffData.rfid) || null,
                                             } as Partial<StaffMember> & { id: string });
                                             await syncStaffBunkStaff({
                                                 staffId: editStaffData.id,

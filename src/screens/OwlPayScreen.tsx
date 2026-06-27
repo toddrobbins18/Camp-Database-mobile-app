@@ -40,6 +40,13 @@ import {
     buildOwlPayPurchaseRows,
     calculateOwlPayCartPricing,
 } from '../lib/owlPayFreeItem';
+import {
+    findInListByRfid,
+    lookupOwlPayCamperByRfid,
+    lookupOwlPayStaffByRfid,
+    normalizeRfidInput,
+    rfidsMatch,
+} from '../lib/rfidUtils';
 
 type OwlPayTab = 'pos' | 'items' | 'balances' | 'reports' | 'settings';
 type ItemCategory = 'Food' | 'Snacks' | 'Drinks' | 'Other';
@@ -393,10 +400,13 @@ export const OwlPayScreen = ({ navigation }: any) => {
     };
 
     const selectByRFID = async (rfidRaw: string) => {
-        const rfid = rfidRaw.trim().toLowerCase();
+        const rfid = normalizeRfidInput(rfidRaw);
         if (!rfid) return false;
 
-        const camperMatch = campers.find((c) => c.rfid?.toLowerCase() === rfid);
+        const camperMatch =
+            (companyId && season
+                ? await lookupOwlPayCamperByRfid(rfid, companyId, season)
+                : null) ?? findInListByRfid(campers, rfid);
         if (camperMatch) {
             setScanStatus('success');
             await handleSelectCamper(camperMatch.id);
@@ -405,7 +415,10 @@ export const OwlPayScreen = ({ navigation }: any) => {
             return true;
         }
 
-        const staffMatch = staffMembers.find((s) => s.rfid?.toLowerCase() === rfid);
+        const staffMatch =
+            (companyId && season
+                ? await lookupOwlPayStaffByRfid(rfid, companyId, season)
+                : null) ?? findInListByRfid(staffMembers, rfid);
         if (staffMatch) {
             setScanStatus('success');
             handleSelectStaff(staffMatch.id);
@@ -415,7 +428,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
         }
 
         setScanStatus('error');
-        Alert.alert('RFID not found', `No camper or staff with RFID: ${rfidRaw}`);
+        Alert.alert('RFID not found', `No camper or staff with RFID: ${rfid}`);
         resetScanStatus(1800);
         return false;
     };
