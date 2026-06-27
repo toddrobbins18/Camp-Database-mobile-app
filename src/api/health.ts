@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
+import { enqueueSync, getCachedJson, isOnlineNow, listQueued, safeSetCachedJson } from '../offline/engine';
 import {
     dedupeMedicationSlots,
     findDaySpecificMedicationLog,
@@ -121,7 +121,8 @@ async function applyQueuedMedicationOps(base: MedicationLog[]): Promise<Medicati
 export interface HealthCenterAdmission {
     id?: string;
     company_id: string;
-    child_id: string;
+    child_id?: string | null;
+    staff_id?: string | null;
     admitted_at?: string;
     admitted_by?: string | null;
     checked_out_at?: string | null;
@@ -134,7 +135,20 @@ export interface HealthCenterAdmission {
         id: string;
         name: string;
         group_name?: string;
-    };
+    } | null;
+    staff?: {
+        id: string;
+        name: string;
+        role?: string | null;
+    } | null;
+}
+
+export function getAdmissionDisplayName(admission: Pick<HealthCenterAdmission, 'children' | 'staff'>): string {
+    return admission.children?.name || admission.staff?.name || 'Unknown';
+}
+
+export function getAdmissionEntityLabel(admission: Pick<HealthCenterAdmission, 'child_id' | 'staff_id'>): 'Camper' | 'Staff' {
+    return admission.staff_id && !admission.child_id ? 'Staff' : 'Camper';
 }
 
 // --- Hooks for Medication Logs ---
@@ -205,7 +219,7 @@ export const useMedicationLogs = (companyId: string | null, dateString: string, 
                     seasonKey,
                 ) as MedicationLog[];
 
-                await setCachedJson(medicationCacheKey(companyId, dateString, seasonKey), merged);
+                await safeSetCachedJson(medicationCacheKey(companyId, dateString, seasonKey), merged);
                 return await applyQueuedMedicationOps(merged);
             } catch {
                 const cached =
@@ -415,6 +429,11 @@ export const useHealthCenterAdmissions = (companyId: string | null, season?: str
                             id,
                             name,
                             group_name
+                        ),
+                        staff:staff_id (
+                            id,
+                            name,
+                            role
                         )
                     `)
                     .eq('company_id', companyId);
@@ -431,13 +450,20 @@ export const useHealthCenterAdmissions = (companyId: string | null, season?: str
                 }
                 console.log('[HEALTH] Fetched admissions:', data?.length, 'rows');
                 const rows = (data as HealthCenterAdmission[]) || [];
-                await setCachedJson(admissionsCacheKey(companyId, season), rows);
+                await safeSetCachedJson(admissionsCacheKey(companyId, season), rows);
                 return rows;
-            } catch {
-                return (await getCachedJson<HealthCenterAdmission[]>(admissionsCacheKey(companyId, season))) || [];
+            } catch (err) {
+                console.error('[HEALTH] Admissions fetch error, using cache if available:', err);
+                const cached = await getCachedJson<HealthCenterAdmission[]>(
+                    admissionsCacheKey(companyId, season),
+                );
+                if (cached?.length) return cached;
+                throw err;
             }
         },
         enabled: !!companyId,
+        refetchOnMount: 'always',
+        staleTime: 30_000,
     });
 };
 
@@ -445,7 +471,13 @@ export const useAddHealthCenterAdmission = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (newAdmission: Partial<HealthCenterAdmission> & { company_id: string; child_id: string }) => {
+        mutationFn: async (
+            newAdmission: Partial<HealthCenterAdmission> & {
+                company_id: string;
+                child_id?: string | null;
+                staff_id?: string | null;
+            },
+        ) => {
             if (await isOnlineNow()) {
                 const { data, error } = await supabase
                     .from('health_center_admissions')

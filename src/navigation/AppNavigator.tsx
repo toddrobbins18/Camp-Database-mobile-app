@@ -139,12 +139,20 @@ const CustomDrawerContent = (props: any) => {
         onPress: () => void;
     }> = [
         { key: 'dashboard', label: 'Dashboard', icon: 'home-outline', onPress: () => props.navigation.navigate('Dashboard') },
-        { key: 'camper', label: 'Camper', icon: 'people-outline', onPress: () => props.navigation.navigate('Camper', { screen: 'CamperList' }) },
+    ];
+
+    if (hasMenuAccess('roster')) {
+        mainMenuItems.push(
+            { key: 'camper', label: 'Camper', icon: 'people-outline', onPress: () => props.navigation.navigate('Camper', { screen: 'CamperList' }) },
+        );
+    }
+
+    mainMenuItems.push(
         { key: 'master-calendar', label: 'Master Calendar', icon: 'calendar-outline', onPress: () => props.navigation.navigate('Calendar') },
         { key: 'menu', label: 'Menu', icon: 'restaurant-outline', onPress: () => props.navigation.navigate('Menu') },
         { key: 'messages', label: 'Messages', icon: 'mail-outline', onPress: () => props.navigation.navigate('Messages') },
         { key: 'notification-preferences', label: 'Notification Preferences', icon: 'notifications-outline', onPress: () => props.navigation.navigate('NotificationPreferences') },
-    ];
+    );
 
     if (hasMenuAccess('activities')) {
         mainMenuItems.push(

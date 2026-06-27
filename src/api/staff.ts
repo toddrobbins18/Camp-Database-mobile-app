@@ -72,14 +72,20 @@ export const useStaff = (companyId: string | null, season: string) => {
                 const rows = filterActiveRoster((data as StaffMember[]) || []);
                 await setCachedJson(staffCacheKey(companyId, season), rows);
                 return await applyQueuedStaffOps(rows, companyId, season);
-            } catch {
+            } catch (err) {
+                console.error('[STAFF] Fetch failed:', err);
                 const cached = filterActiveRoster(
                     (await getCachedJson<StaffMember[]>(staffCacheKey(companyId, season))) || [],
                 );
-                return await applyQueuedStaffOps(cached, companyId, season);
+                if (cached.length > 0) {
+                    return await applyQueuedStaffOps(cached, companyId, season);
+                }
+                throw err;
             }
         },
         enabled: !!companyId && !!season,
+        refetchOnMount: 'always',
+        staleTime: 30_000,
     });
 };
 

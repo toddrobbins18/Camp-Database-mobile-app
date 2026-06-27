@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator, Alert, Platform } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -8,7 +9,7 @@ import { StyledCard } from '../components/StyledCard';
 import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useDivisions, getCamperDivisionName } from '../api/campers';
-import { useMedicationLogs, useAddMedicationLog, useSetMedicationAdministration, useDeleteMedicationLog, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission } from '../api/health';
+import { useMedicationLogs, useAddMedicationLog, useSetMedicationAdministration, useDeleteMedicationLog, useHealthCenterAdmissions, useAddHealthCenterAdmission, useCheckoutHealthCenterAdmission, getAdmissionDisplayName, getAdmissionEntityLabel } from '../api/health';
 import { supabase } from '../lib/supabase';
 import { pickAndReadSpreadsheetRows } from '../lib/pickCsvDocument';
 import { parseCsvDocument } from '../lib/csvLine';
@@ -21,12 +22,14 @@ import {
 } from '../constants/medicationBedtimeOptions';
 import { defaultMedicationStartDate } from '../lib/medicationStartDate';
 import { childMatchesGenderFilter } from '../lib/medicationSchedule';
+import { filterActiveRoster } from '../lib/rosterStatus';
 import {
     MEDICATION_MEAL_FILTER_OPTIONS,
     medicationMatchesListVisibility,
     getMealTimeSortPriority,
 } from '../lib/medicationMealTimeDisplay';
 import { MedicationMealTimeBadges } from '../components/nurse/MedicationMealTimeBadges';
+import { lookupCamperOrStaffByRfid, lookupChildByRfid } from '../lib/rfidUtils';
 
 const GENDER_FILTER_OPTIONS = [
     { value: 'all' as const, label: 'All Genders' },
@@ -180,8 +183,34 @@ export const HealthScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const { companyId, season } = useCompany();
     const { data: campersData, isLoading: campersLoading, isError: campersError } = useCampers(companyId, season);
+    const {
+        data: healthCenterStaffData = [],
+        isLoading: staffLoading,
+        isError: staffError,
+    } = useQuery({
+        queryKey: ['health_center_staff', companyId, season],
+        queryFn: async () => {
+            if (!companyId || !season) return [];
+            const { data, error } = await supabase
+                .from('staff')
+                .select('id, name, role, allergies, status')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .or('status.eq.active,status.is.null')
+                .order('name', { ascending: true });
+            if (error) {
+                console.error('[HEALTH] Failed to fetch staff for health center:', error);
+                throw error;
+            }
+            return filterActiveRoster(data ?? []);
+        },
+        enabled: !!companyId && !!season,
+        refetchOnMount: 'always',
+        staleTime: 30_000,
+    });
     const { data: divisionsData, isError: divisionsError } = useDivisions(companyId);
     const safeCampers = Array.isArray(campersData) ? campersData : [];
+    const safeStaff = Array.isArray(healthCenterStaffData) ? healthCenterStaffData : [];
     const safeDivisions = Array.isArray(divisionsData) ? divisionsData : [];
 
     const [activeView, setActiveView] = useState('list'); // 'list' or 'calendar'
@@ -200,11 +229,12 @@ export const HealthScreen = ({ navigation }: any) => {
     const [rfidInput, setRfidInput] = useState('');
     const [healthCenterRfidInput, setHealthCenterRfidInput] = useState('');
     const [searchChildrenQuery, setSearchChildrenQuery] = useState('');
+    const [admissionEntityType, setAdmissionEntityType] = useState<'camper' | 'staff'>('camper');
     const [selectedChild, setSelectedChild] = useState<string | null>(null);
     const [showAdmitModal, setShowAdmitModal] = useState(false);
     const [admitReason, setAdmitReason] = useState('');
     const [admitNotes, setAdmitNotes] = useState('');
-    const [childToAdmit, setChildToAdmit] = useState<{ id: string; name: string } | null>(null);
+    const [entityToAdmit, setEntityToAdmit] = useState<{ id: string; name: string; type: 'camper' | 'staff' } | null>(null);
     const [isAdmitting, setIsAdmitting] = useState(false);
     const admitLockRef = useRef(false);
     const [selectedMedicationChild, setSelectedMedicationChild] = useState<string>('');
@@ -444,13 +474,28 @@ export const HealthScreen = ({ navigation }: any) => {
     const addAdmissionMutation = useAddHealthCenterAdmission();
     const checkoutMutation = useCheckoutHealthCenterAdmission();
 
+    useFocusEffect(
+        useCallback(() => {
+            if (companyId) {
+                void queryClient.invalidateQueries({ queryKey: ['health_center_admissions', companyId, season] });
+                void queryClient.invalidateQueries({ queryKey: ['health_center_staff', companyId, season] });
+            }
+        }, [companyId, season, queryClient]),
+    );
+
     const currentlyAdmitted = useMemo(() => safeAdmissions.filter((a: any) => !a.checked_out_at), [safeAdmissions]);
     const admissionHistory = useMemo(() => safeAdmissions.filter((a: any) => a.checked_out_at), [safeAdmissions]);
     const groupedHistory = useMemo(() => {
-        const acc: Record<string, { child: any; admissions: any[] }> = {};
+        const acc: Record<string, { entity: any; entityType: 'Camper' | 'Staff'; admissions: any[] }> = {};
         admissionHistory.forEach((a: any) => {
-            const key = a.child_id || a.id;
-            if (!acc[key]) acc[key] = { child: a.children, admissions: [] };
+            const key = a.child_id || a.staff_id || a.id;
+            if (!acc[key]) {
+                acc[key] = {
+                    entity: a.children || a.staff,
+                    entityType: getAdmissionEntityLabel(a),
+                    admissions: [],
+                };
+            }
             acc[key].admissions.push(a);
         });
         return acc;
@@ -471,35 +516,45 @@ export const HealthScreen = ({ navigation }: any) => {
             division: child.division?.name || child.group_name || 'N/A'
         }));
     }, [safeCampers, searchChildrenQuery, selectedDivision]);
+
+    const filteredStaff = useMemo(() => {
+        return safeStaff
+            .filter((member: any) =>
+                String(member.name ?? '').toLowerCase().includes(searchChildrenQuery.toLowerCase())
+            )
+            .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)));
+    }, [safeStaff, searchChildrenQuery]);
     
 
-    const handleAdmitChild = async () => {
+    const handleAdmitEntity = async () => {
         if (admitLockRef.current) return;
-        if (!childToAdmit || !companyId) {
-            Alert.alert('Cannot admit child', 'Missing child or company information.');
+        if (!entityToAdmit || !companyId) {
+            Alert.alert('Cannot admit', 'Missing person or company information.');
             return;
         }
 
         admitLockRef.current = true;
         setIsAdmitting(true);
 
-        const childId = childToAdmit.id;
-        const childName = childToAdmit.name;
+        const entityId = entityToAdmit.id;
+        const entityName = entityToAdmit.name;
+        const entityType = entityToAdmit.type;
         const reasonSnapshot = admitReason.trim() || null;
         const notesSnapshot = admitNotes.trim() || null;
 
         setShowAdmitModal(false);
         setAdmitReason('');
         setAdmitNotes('');
-        setChildToAdmit(null);
+        setEntityToAdmit(null);
 
-        console.log('[ADMIT] Starting admit for:', childId, childName);
+        console.log('[ADMIT] Starting admit for:', entityType, entityId, entityName);
 
         try {
+            const checkColumn = entityType === 'staff' ? 'staff_id' : 'child_id';
             const { data: existing, error: checkErr } = await supabase
                 .from('health_center_admissions')
                 .select('id')
-                .eq('child_id', childId)
+                .eq(checkColumn, entityId)
                 .eq('company_id', companyId)
                 .is('checked_out_at', null)
                 .maybeSingle();
@@ -507,20 +562,26 @@ export const HealthScreen = ({ navigation }: any) => {
             console.log('[ADMIT] Duplicate check:', { existing, checkErr });
 
             if (existing) {
-                Alert.alert('Already admitted', `${childName} is already in the health center.`);
+                Alert.alert('Already admitted', `${entityName} is already in the health center.`);
                 return;
             }
 
             const { data: { user } } = await supabase.auth.getUser();
 
-            const insertPayload = {
+            const insertPayload: Record<string, unknown> = {
                 company_id: companyId,
-                child_id: childId,
                 reason: reasonSnapshot,
                 notes: notesSnapshot,
                 season: season || null,
                 admitted_by: user?.id || null,
             };
+
+            if (entityType === 'staff') {
+                insertPayload.staff_id = entityId;
+            } else {
+                insertPayload.child_id = entityId;
+            }
+
             console.log('[ADMIT] Insert payload:', insertPayload);
 
             const insertedRow = await addAdmissionMutation.mutateAsync(insertPayload as any);
@@ -530,10 +591,11 @@ export const HealthScreen = ({ navigation }: any) => {
             await admissionsQuery.refetch();
             console.log('[ADMIT] Refetch complete');
 
-            setTimeout(() => Alert.alert('Success', `${childName} admitted to health center.`), 100);
+            const label = entityType === 'staff' ? 'Staff member' : 'Child';
+            setTimeout(() => Alert.alert('Success', `${label} ${entityName} admitted to health center.`), 100);
         } catch (error: any) {
             console.error('[ADMIT] Error:', error);
-            Alert.alert('Admit failed', error?.message || 'Could not admit child. Check console for details.');
+            Alert.alert('Admit failed', error?.message || 'Could not complete admission.');
         } finally {
             admitLockRef.current = false;
             setIsAdmitting(false);
@@ -562,7 +624,7 @@ export const HealthScreen = ({ navigation }: any) => {
             await queryClient.invalidateQueries({ queryKey: ['health_center_admissions'] });
             await admissionsQuery.refetch();
             console.log('[CHECKOUT] Refetch complete');
-            Alert.alert('Success', 'Child checked out from health center.');
+            Alert.alert('Success', 'Checked out from health center.');
         } catch (error: any) {
             console.error('[CHECKOUT] Error:', error);
             Alert.alert('Checkout failed', error?.message || 'Could not check out child.');
@@ -570,39 +632,21 @@ export const HealthScreen = ({ navigation }: any) => {
     };
 
     const handleHealthCenterRfidScan = async () => {
-        const val = healthCenterRfidInput.trim();
-        if (!val) return;
+        if (!companyId || !season) {
+            Alert.alert('Error', 'Company or season is not available.');
+            return;
+        }
 
         try {
-            const { data: child, error: childError } = await supabase
-                .from('children')
-                .select('id, name')
-                .ilike('rfid', val)
-                .eq('company_id', companyId)
-                .maybeSingle();
-                
-            let entity = child;
-            let isStaff = false;
-            
-            if (!child) {
-                const { data: staff } = await supabase
-                    .from('staff')
-                    .select('id, name')
-                    .ilike('rfid', val)
-                    .eq('company_id', companyId)
-                    .maybeSingle();
-                if (staff) {
-                    entity = staff;
-                    isStaff = true;
-                }
-            }
-            
-            if (!entity) {
+            const match = await lookupCamperOrStaffByRfid(healthCenterRfidInput, companyId, season);
+
+            if (!match) {
                 Alert.alert('Not Found', 'No camper or staff found with this RFID.');
                 setHealthCenterRfidInput('');
                 return;
             }
 
+            const { entity, isStaff } = match;
             const checkCol = isStaff ? 'staff_id' : 'child_id';
             const { data: existing } = await supabase
                 .from('health_center_admissions')
@@ -615,14 +659,10 @@ export const HealthScreen = ({ navigation }: any) => {
             if (existing) {
                 await handleCheckoutChild(existing.id);
             } else {
-                if (isStaff) {
-                    Alert.alert('Staff Admission', 'Use the web portal to admit staff.');
-                } else {
-                    setChildToAdmit({ id: entity.id, name: entity.name });
-                    setAdmitReason('');
-                    setAdmitNotes('');
-                    setShowAdmitModal(true);
-                }
+                setEntityToAdmit({ id: entity.id, name: entity.name, type: isStaff ? 'staff' : 'camper' });
+                setAdmitReason('');
+                setAdmitNotes('');
+                setShowAdmitModal(true);
             }
             setHealthCenterRfidInput('');
         } catch (err: any) {
@@ -631,16 +671,13 @@ export const HealthScreen = ({ navigation }: any) => {
     };
 
     const handleMedicationRfidScan = async () => {
-        const val = rfidInput.trim();
-        if (!val) return;
+        if (!companyId || !season) {
+            Alert.alert('Error', 'Company or season is not available.');
+            return;
+        }
 
         try {
-            const { data: child } = await supabase
-                .from('children')
-                .select('id, name')
-                .ilike('rfid', val)
-                .eq('company_id', companyId)
-                .maybeSingle();
+            const child = await lookupChildByRfid(rfidInput, companyId, season);
             
             if (!child) {
                 Alert.alert('Not Found', 'No camper found with this RFID.');
@@ -851,8 +888,12 @@ export const HealthScreen = ({ navigation }: any) => {
 
     const tabs = ['Daily Log', "Today's Medications", 'Health Center', 'Health Center Log', 'Add Medication'];
 
-    // Build a list of division option ids for the picker
+    // Build division options for the picker (store ids, display names)
     const divisions = ['All Divisions', ...safeDivisions.map((division: any) => division.id)];
+    const getDivisionLabel = (divisionId: string) => {
+        if (divisionId === 'All Divisions') return 'All Divisions';
+        return safeDivisions.find((d: any) => d.id === divisionId)?.name ?? 'Unknown Division';
+    };
 
     const hasError = campersError || divisionsError;
     const isLoadingCompany = !companyId || campersLoading;
@@ -984,7 +1025,7 @@ export const HealthScreen = ({ navigation }: any) => {
                         style={styles.dropdownContainer}
                         onPress={() => setShowDivisionPicker(true)}
                     >
-                        <Text style={styles.dropdownText}>{selectedDivision === 'All Divisions' ? 'All Divisions' : safeDivisions.find((d: any) => d.id === selectedDivision)?.name || 'Select Division'}</Text>
+                        <Text style={styles.dropdownText}>{getDivisionLabel(selectedDivision)}</Text>
                         <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -1139,6 +1180,8 @@ export const HealthScreen = ({ navigation }: any) => {
                                             placeholderTextColor={theme.colors.textSecondary}
                                             value={rfidInput}
                                             onChangeText={setRfidInput}
+                                            onSubmitEditing={handleMedicationRfidScan}
+                                            returnKeyType="done"
                                         />
                                         <TouchableOpacity style={styles.scanButton} onPress={handleMedicationRfidScan}>
                                             <Ionicons name="scan-outline" size={18} color="white" />
@@ -1229,17 +1272,18 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </View>
                                     {currentlyAdmitted.length === 0 ? (
                                         <View style={{ padding: 16, alignItems: 'center' }}>
-                                            <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>No children currently admitted</Text>
+                                            <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>No one currently admitted</Text>
                                         </View>
                                     ) : (
                                         currentlyAdmitted.map((admission: any) => {
-                                            const name = admission.children?.name || 'Unknown';
+                                            const name = getAdmissionDisplayName(admission);
+                                            const entityLabel = getAdmissionEntityLabel(admission);
                                             return (
                                                 <View key={admission.id} style={styles.admittedCard}>
                                                     <View style={styles.admittedCardContent}>
                                                         <View style={styles.admittedCardRow}>
                                                             <Text style={styles.admittedCardName}>{name}</Text>
-                                                            <View style={styles.camperBadge}><Text style={styles.camperBadgeText}>Camper</Text></View>
+                                                            <View style={styles.camperBadge}><Text style={styles.camperBadgeText}>{entityLabel}</Text></View>
                                                         </View>
                                                         <View style={styles.admittedCardTimeRow}>
                                                             <Ionicons name="time-outline" size={14} color={theme.colors.textSecondary} />
@@ -1285,6 +1329,8 @@ export const HealthScreen = ({ navigation }: any) => {
                                             placeholderTextColor={theme.colors.textSecondary}
                                             value={healthCenterRfidInput}
                                             onChangeText={setHealthCenterRfidInput}
+                                            onSubmitEditing={handleHealthCenterRfidScan}
+                                            returnKeyType="done"
                                         />
                                         <TouchableOpacity style={styles.scanButton} onPress={handleHealthCenterRfidScan}>
                                             <Ionicons name="scan-outline" size={18} color="white" />
@@ -1299,9 +1345,47 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </View>
                                 </StyledCard>
 
-                                {/* Search Children Section */}
+                                {/* Campers / Staff Toggle */}
+                                <View style={styles.admissionTypeToggle}>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.admissionTypeButton,
+                                            admissionEntityType === 'camper' && styles.admissionTypeButtonActive,
+                                        ]}
+                                        onPress={() => setAdmissionEntityType('camper')}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.admissionTypeButtonText,
+                                                admissionEntityType === 'camper' && styles.admissionTypeButtonTextActive,
+                                            ]}
+                                        >
+                                            Campers
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.admissionTypeButton,
+                                            admissionEntityType === 'staff' && styles.admissionTypeButtonActive,
+                                        ]}
+                                        onPress={() => setAdmissionEntityType('staff')}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.admissionTypeButtonText,
+                                                admissionEntityType === 'staff' && styles.admissionTypeButtonTextActive,
+                                            ]}
+                                        >
+                                            Staff
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* Search Section */}
                                 <View style={styles.searchChildrenSection}>
-                                    <Text style={styles.searchChildrenTitle}>Search Children</Text>
+                                    <Text style={styles.searchChildrenTitle}>
+                                        Search {admissionEntityType === 'camper' ? 'Children' : 'Staff'}
+                                    </Text>
                                     <View style={styles.searchChildrenInputContainer}>
                                         <Ionicons name="search" size={18} color={theme.colors.textSecondary} style={styles.searchIcon} />
                                         <TextInput
@@ -1314,72 +1398,114 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </View>
                                 </View>
 
-                                {/* Available Children Section (exclude already admitted) */}
+                                {/* Available Campers / Staff Section */}
                                 <View style={styles.availableChildrenSection}>
                                     <View style={styles.availableChildrenHeader}>
                                         <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                                        <Text style={styles.availableChildrenTitle}>Available Children</Text>
+                                        <Text style={styles.availableChildrenTitle}>
+                                            Available {admissionEntityType === 'camper' ? 'Children' : 'Staff'}
+                                        </Text>
                                     </View>
 
                                     <ScrollView
                                         style={styles.childrenList}
                                         showsVerticalScrollIndicator={true}
                                     >
-                                        {filteredChildren
-                                            .filter((child: any) => !currentlyAdmitted.some((a: any) => a.child_id === child.id))
-                                            .map((child) => {
-                                            const isSelected = selectedChild === child.id;
-                                            return (
-                                                <TouchableOpacity
-                                                    key={child.id}
-                                                    style={[
-                                                        styles.childCard,
-                                                        isSelected && styles.childCardSelected
-                                                    ]}
-                                                    onPress={() => setSelectedChild(isSelected ? null : child.id)}
-                                                >
-                                                    <View style={styles.childCardContent}>
-                                                        <Text style={[
-                                                            styles.childName,
-                                                            isSelected && styles.childNameSelected
-                                                        ]}>
-                                                            {child.name}
-                                                        </Text>
-                                                        <View style={styles.childDivisionTag}>
-                                                            <Text style={[
-                                                                styles.childDivisionText,
-                                                                isSelected && styles.childDivisionTextSelected
-                                                            ]}>
-                                                                {child.division}
-                                                            </Text>
-                                                        </View>
-                                                    </View>
+                                        {admissionEntityType === 'camper' ? (
+                                            filteredChildren
+                                                .filter((child: any) => !currentlyAdmitted.some((a: any) => a.child_id === child.id))
+                                                .map((child) => {
+                                                const isSelected = selectedChild === child.id;
+                                                return (
                                                     <TouchableOpacity
+                                                        key={child.id}
                                                         style={[
-                                                            styles.admitButton,
-                                                            isSelected && styles.admitButtonSelected
+                                                            styles.childCard,
+                                                            isSelected && styles.childCardSelected
                                                         ]}
-                                                        onPress={(e) => {
-                                                            e.stopPropagation();
-                                                            setChildToAdmit({ id: child.id, name: child.name });
-                                                            setShowAdmitModal(true);
-                                                        }}
+                                                        onPress={() => setSelectedChild(isSelected ? null : child.id)}
                                                     >
-                                                        <Ionicons
-                                                            name="person-add-outline"
-                                                            size={16}
-                                                            color={isSelected ? 'white' : theme.colors.text}
-                                                        />
-                                                        <Text style={[
-                                                            styles.admitButtonText,
-                                                            isSelected && styles.admitButtonTextSelected
-                                                        ]}>
-                                                            Admit
-                                                        </Text>
+                                                        <View style={styles.childCardContent}>
+                                                            <Text style={[
+                                                                styles.childName,
+                                                                isSelected && styles.childNameSelected
+                                                            ]}>
+                                                                {child.name}
+                                                            </Text>
+                                                            <View style={styles.childDivisionTag}>
+                                                                <Text style={[
+                                                                    styles.childDivisionText,
+                                                                    isSelected && styles.childDivisionTextSelected
+                                                                ]}>
+                                                                    {child.division}
+                                                                </Text>
+                                                            </View>
+                                                        </View>
+                                                        <TouchableOpacity
+                                                            style={[
+                                                                styles.admitButton,
+                                                                isSelected && styles.admitButtonSelected
+                                                            ]}
+                                                            onPress={(e) => {
+                                                                e.stopPropagation();
+                                                                setEntityToAdmit({ id: child.id, name: child.name, type: 'camper' });
+                                                                setShowAdmitModal(true);
+                                                            }}
+                                                        >
+                                                            <Ionicons
+                                                                name="person-add-outline"
+                                                                size={16}
+                                                                color={isSelected ? 'white' : theme.colors.text}
+                                                            />
+                                                            <Text style={[
+                                                                styles.admitButtonText,
+                                                                isSelected && styles.admitButtonTextSelected
+                                                            ]}>
+                                                                Admit
+                                                            </Text>
+                                                        </TouchableOpacity>
                                                     </TouchableOpacity>
-                                                </TouchableOpacity>
-                                            );
-                                        })}
+                                                );
+                                            })
+                                        ) : staffLoading ? (
+                                            <View style={{ padding: 16, alignItems: 'center' }}>
+                                                <ActivityIndicator size="small" color={theme.colors.secondary} />
+                                                <Text style={{ fontSize: 14, color: theme.colors.textSecondary, marginTop: 8 }}>Loading staff...</Text>
+                                            </View>
+                                        ) : staffError ? (
+                                            <View style={{ padding: 16, alignItems: 'center' }}>
+                                                <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>Could not load staff. Go back and reopen this screen.</Text>
+                                            </View>
+                                        ) : filteredStaff.length === 0 ? (
+                                            <View style={{ padding: 16, alignItems: 'center' }}>
+                                                <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>No staff members found</Text>
+                                            </View>
+                                        ) : (
+                                            filteredStaff
+                                                .filter((member: any) => !currentlyAdmitted.some((a: any) => a.staff_id === member.id))
+                                                .map((member: any) => (
+                                                    <View key={member.id} style={styles.childCard}>
+                                                        <View style={styles.childCardContent}>
+                                                            <Text style={styles.childName}>{member.name}</Text>
+                                                            {member.role ? (
+                                                                <View style={styles.childDivisionTag}>
+                                                                    <Text style={styles.childDivisionText}>{member.role}</Text>
+                                                                </View>
+                                                            ) : null}
+                                                        </View>
+                                                        <TouchableOpacity
+                                                            style={styles.admitButton}
+                                                            onPress={() => {
+                                                                setEntityToAdmit({ id: member.id, name: member.name, type: 'staff' });
+                                                                setShowAdmitModal(true);
+                                                            }}
+                                                        >
+                                                            <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
+                                                            <Text style={styles.admitButtonText}>Admit</Text>
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                ))
+                                        )}
                                     </ScrollView>
                                 </View>
                             </View>
@@ -1398,21 +1524,22 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </View>
                                 ) : (
                                     <ScrollView style={{ marginTop: 16 }} nestedScrollEnabled>
-                                        {Object.entries(groupedHistory).map(([childId, group]: [string, any]) => {
-                                            const entity = group.child;
+                                        {Object.entries(groupedHistory).map(([entityKey, group]: [string, any]) => {
+                                            const entity = group.entity;
                                             const entityAdmissions = group.admissions;
-                                            const isExpanded = expandedHistoryChildId === (entity?.id || childId);
+                                            const entityLabel = group.entityType;
+                                            const isExpanded = expandedHistoryChildId === (entity?.id || entityKey);
                                             return (
-                                                <View key={childId} style={styles.historyGroupCard}>
+                                                <View key={entityKey} style={styles.historyGroupCard}>
                                                     <TouchableOpacity
                                                         style={styles.historyGroupHeader}
-                                                        onPress={() => setExpandedHistoryChildId(isExpanded ? null : (entity?.id || childId))}
+                                                        onPress={() => setExpandedHistoryChildId(isExpanded ? null : (entity?.id || entityKey))}
                                                         activeOpacity={0.7}
                                                     >
                                                         <View style={styles.historyHeaderTopRow}>
                                                             <View style={styles.historyGroupHeaderLeft}>
                                                                 <Text style={styles.historyGroupName} numberOfLines={1}>{entity?.name || 'Unknown'}</Text>
-                                                                <View style={styles.camperBadge}><Text style={styles.camperBadgeText}>Camper</Text></View>
+                                                                <View style={styles.camperBadge}><Text style={styles.camperBadgeText}>{entityLabel}</Text></View>
                                                             </View>
                                                             <View style={styles.historyHeaderRightRow}>
                                                                 <View style={styles.admissionCountBadge}>
@@ -1422,7 +1549,9 @@ export const HealthScreen = ({ navigation }: any) => {
                                                             </View>
                                                         </View>
                                                         <View style={styles.historyHeaderBottomRow}>
-                                                            <Text style={styles.historyGroupDivision} numberOfLines={1}>{entity?.group_name || '—'}</Text>
+                                                            <Text style={styles.historyGroupDivision} numberOfLines={1}>
+                                                                {entityLabel === 'Staff' ? (entity?.role || 'Staff') : (entity?.group_name || '—')}
+                                                            </Text>
                                                             <Text style={styles.historyLastDate}>
                                                                 Last: {entityAdmissions[0]?.admitted_at ? new Date(entityAdmissions[0].admitted_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
                                                             </Text>
@@ -1806,7 +1935,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                         setShowDivisionPicker(false);
                                     }}
                                 >
-                                    <Text style={styles.pickerOptionText}>{division}</Text>
+                                    <Text style={styles.pickerOptionText}>{getDivisionLabel(division)}</Text>
                                     {selectedDivision === division && (
                                         <Ionicons name="checkmark" size={20} color={theme.colors.secondary} />
                                     )}
@@ -1940,7 +2069,7 @@ export const HealthScreen = ({ navigation }: any) => {
                         setShowAdmitModal(false);
                         setAdmitReason('');
                         setAdmitNotes('');
-                        setChildToAdmit(null);
+                        setEntityToAdmit(null);
                     }
                 }}
             >
@@ -1951,14 +2080,14 @@ export const HealthScreen = ({ navigation }: any) => {
                             setShowAdmitModal(false);
                             setAdmitReason('');
                             setAdmitNotes('');
-                            setChildToAdmit(null);
+                            setEntityToAdmit(null);
                         }
                     }}
                 >
                     <Pressable style={styles.admitModal} onPress={(e) => e.stopPropagation()}>
                         <Text style={styles.admitModalTitle}>Admit to Health Center</Text>
-                        {childToAdmit && (
-                            <Text style={styles.admitModalChildName}>{childToAdmit.name}</Text>
+                        {entityToAdmit && (
+                            <Text style={styles.admitModalChildName}>{entityToAdmit.name}</Text>
                         )}
 
                         <Text style={styles.admitModalLabel}>Reason for admission (optional):</Text>
@@ -1988,7 +2117,7 @@ export const HealthScreen = ({ navigation }: any) => {
                         <View style={styles.admitModalActions}>
                             <TouchableOpacity
                                 style={[styles.admitConfirmButton, isAdmitting && { opacity: 0.6 }]}
-                                onPress={handleAdmitChild}
+                                onPress={handleAdmitEntity}
                                 disabled={isAdmitting}
                             >
                                 {isAdmitting ? (
@@ -2003,7 +2132,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     setShowAdmitModal(false);
                                     setAdmitReason('');
                                     setAdmitNotes('');
-                                    setChildToAdmit(null);
+                                    setEntityToAdmit(null);
                                 }}
                                 disabled={isAdmitting}
                             >
@@ -3088,6 +3217,31 @@ const styles = StyleSheet.create({
     },
     currentlyAdmittedSection: {
         marginBottom: theme.spacing.lg,
+    },
+    admissionTypeToggle: {
+        flexDirection: 'row',
+        backgroundColor: theme.colors.surface,
+        borderRadius: 10,
+        padding: 4,
+        marginBottom: theme.spacing.md,
+        maxWidth: 280,
+    },
+    admissionTypeButton: {
+        flex: 1,
+        paddingVertical: 8,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    admissionTypeButtonActive: {
+        backgroundColor: theme.colors.secondary,
+    },
+    admissionTypeButtonText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: theme.colors.textSecondary,
+    },
+    admissionTypeButtonTextActive: {
+        color: '#fff',
     },
     currentlyAdmittedHeader: {
         flexDirection: 'row',

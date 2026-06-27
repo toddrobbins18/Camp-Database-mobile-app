@@ -37,7 +37,7 @@ full_matrix AS (
                            'daily-wolf-printable', 'daily-wolf-management', 'special-meals',
                            'notification-preferences')
            AND r.role IN ('admin'::app_role, 'super_admin'::app_role, 'staff'::app_role) THEN true
-      WHEN m.menu_item IN ('nurse', 'appointments', 'od-management')
+      WHEN m.menu_item IN ('nurse', 'appointments', 'od-management', 'roster', 'dashboard')
            AND r.role = 'health_center'::app_role THEN true
       WHEN m.menu_item IN ('dashboard', 'roster', 'calendar', 'menu', 'athletics',
                            'sports-calendar', 'activities', 'special-events', 'awards',

@@ -90,6 +90,8 @@ const DB_NAME = 'offline_engine.db';
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let netSub: NetInfoSubscription | null = null;
 let syncInProgress = false;
+/** Serializes cache writes to avoid OPFS access-handle conflicts on Expo Web. */
+let cacheWriteChain: Promise<void> = Promise.resolve();
 
 function nowIso(): string {
     return new Date().toISOString();
@@ -131,15 +133,29 @@ export async function initOfflineEngine(): Promise<void> {
 }
 
 export async function setCachedJson<T>(key: string, value: T): Promise<void> {
-    const db = await getDb();
-    const raw = JSON.stringify(value);
-    const ts = nowIso();
-    await db.runAsync(
-        `INSERT INTO offline_cache (key, value, updated_at)
-         VALUES (?, ?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-        [key, raw, ts]
-    );
+    const write = async () => {
+        const db = await getDb();
+        const raw = JSON.stringify(value);
+        const ts = nowIso();
+        await db.runAsync(
+            `INSERT INTO offline_cache (key, value, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+            [key, raw, ts]
+        );
+    };
+
+    const pending = cacheWriteChain.then(write, write);
+    cacheWriteChain = pending.catch(() => {});
+    return pending;
+}
+
+export async function safeSetCachedJson<T>(key: string, value: T): Promise<void> {
+    try {
+        await setCachedJson(key, value);
+    } catch {
+        // Offline cache is optional (e.g. expo-sqlite on web).
+    }
 }
 
 export async function getCachedJson<T>(key: string): Promise<T | null> {
@@ -148,6 +164,14 @@ export async function getCachedJson<T>(key: string): Promise<T | null> {
     if (!row?.value) return null;
     try {
         return JSON.parse(row.value) as T;
+    } catch {
+        return null;
+    }
+}
+
+export async function safeGetCachedJson<T>(key: string): Promise<T | null> {
+    try {
+        return await getCachedJson<T>(key);
     } catch {
         return null;
     }
