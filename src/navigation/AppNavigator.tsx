@@ -72,10 +72,10 @@ const CustomDrawerContent = (props: any) => {
     const [showCampPicker, setShowCampPicker] = useState(false);
     const [showYearPicker, setShowYearPicker] = useState(false);
 
-    // Role flags
-    const roles = roleData?.roles ?? [];
-    const isSuperAdmin = roleData?.isSuperAdmin ?? false;
-    const isAdmin = roleData?.isAdmin ?? false;  // includes super_admin
+    // Role flags — globalRoles match web AuthContext (admin at one camp applies when switching camps).
+    const menuRoles = roleData?.globalRoles ?? roleData?.roles ?? [];
+    const isSuperAdmin = isSuperAdminCompany || (roleData?.isSuperAdmin ?? false);
+    const isAdmin = roleData?.isAdmin ?? false;
     const isRoleLoaded = !!roleData;
 
     const [drawerAuthUserId, setDrawerAuthUserId] = useState<string | null>(null);
@@ -91,18 +91,18 @@ const CustomDrawerContent = (props: any) => {
 
     const { data: inboxUnreadCount = 0 } = useInboxUnreadCount(drawerAuthUserId);
 
-    // Match web: menu visibility is driven by role_permissions per company.
+    // Match web: menu visibility is driven by role_permissions per company + global user roles.
     const hasMenuAccess = (menuItem: string) => {
         if (!isRoleLoaded) return true; // keep menu visible while role is loading
         if (isSuperAdmin) return true;
         if (!companyId) return false;
-        if (roles.length === 0) return false;
+        if (menuRoles.length === 0) return false;
 
         return rolePermissions.some(
             (perm: any) =>
                 perm?.company_id === companyId &&
                 perm?.can_access === true &&
-                roles.includes(String(perm?.role ?? '')) &&
+                menuRoles.includes(String(perm?.role ?? '')) &&
                 String(perm?.menu_item ?? '') === menuItem
         );
     };
@@ -179,7 +179,7 @@ const CustomDrawerContent = (props: any) => {
             { key: 'special-events', label: 'Special Events & Evening Activities', icon: 'calendar-outline', onPress: () => props.navigation.navigate('SpecialEvents') }
         );
     }
-    if (!isTimberLakeWest && hasMenuAccess('sports-academy')) {
+    if (hasMenuAccess('sports-academy')) {
         mainMenuItems.push(
             { key: 'sports-academy', label: 'Sports Academy', icon: 'trophy-outline', onPress: () => props.navigation.navigate('Sports') }
         );
@@ -200,17 +200,15 @@ const CustomDrawerContent = (props: any) => {
         );
     }
 
-    if (companySlug === 'tyler-hill-camp') {
-        if (hasMenuAccess('owl-pay')) {
-            mainMenuItems.push(
-                { key: 'owl-pay', label: 'Owl Pay', icon: 'wallet-outline', onPress: () => props.navigation.navigate('OwlPay') }
-            );
-        }
-        if (hasMenuAccess('special-meals')) {
-            mainMenuItems.push(
-                { key: 'special-meals', label: 'Special Meals', icon: 'restaurant-outline', onPress: () => props.navigation.navigate('SpecialMeals') }
-            );
-        }
+    if (companySlug === 'tyler-hill-camp' && hasMenuAccess('owl-pay')) {
+        mainMenuItems.push(
+            { key: 'owl-pay', label: 'Owl Pay', icon: 'wallet-outline', onPress: () => props.navigation.navigate('OwlPay') }
+        );
+    }
+    if (hasMenuAccess('special-meals')) {
+        mainMenuItems.push(
+            { key: 'special-meals', label: 'Special Meals', icon: 'restaurant-outline', onPress: () => props.navigation.navigate('SpecialMeals') }
+        );
     }
     if (isTimberLakeCamp) {
         if (hasMenuAccess('daily-schedule')) {
@@ -244,10 +242,10 @@ const CustomDrawerContent = (props: any) => {
     if (hasMenuAccess('reports')) {
         mainMenuItems.push({ key: 'reports', label: 'Reports', icon: 'bar-chart-outline', onPress: () => props.navigation.navigate('Reports') });
     }
-    if (!isTimberLakeWest && hasMenuAccess('tutoring-therapy')) {
+    if (hasMenuAccess('tutoring-therapy')) {
         mainMenuItems.push({ key: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', onPress: () => props.navigation.navigate('TutoringTherapy') });
     }
-    if (companySlug === 'tyler-hill-camp' && !isTimberLakeWest && hasMenuAccess('roster-templates')) {
+    if (hasMenuAccess('roster-templates')) {
         mainMenuItems.push({
             key: 'roster-templates',
             label: 'Roster Templates',
@@ -255,7 +253,7 @@ const CustomDrawerContent = (props: any) => {
             onPress: () => props.navigation.navigate('RosterTemplates'),
         });
     }
-    if (companySlug !== 'timber-lake-camp' && hasMenuAccess('notes')) {
+    if (hasMenuAccess('notes')) {
         mainMenuItems.push({
             key: 'daily-news-notes',
             label: companySlug === 'tyler-hill-camp' ? 'Daily News' : 'Daily Notes',

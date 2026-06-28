@@ -15,7 +15,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.thenest.camp.unlisted",
-      "buildNumber": "28",
+      "buildNumber": "29",
       "supportsTablet": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false

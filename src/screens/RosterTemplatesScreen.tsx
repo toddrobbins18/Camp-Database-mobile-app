@@ -18,7 +18,6 @@ import { StyledCard } from '../components/StyledCard';
 import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
-import { isTylerHillCamp } from '../constants/camps';
 import { showAppAlert } from '../utils/showAppAlert';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
@@ -37,9 +36,7 @@ interface Camper {
 
 
 export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps) => {
-    const { companyId, season, companySlug } = useCompany();
-    /** Matches web RosterTemplates.tsx — full UI only for Tyler Hill Camp */
-    const isTylerHill = isTylerHillCamp(companySlug);
+    const { companyId, season } = useCompany();
     const queryClient = useQueryClient();
 
     /** Create vs edit — same form as tyler-hill RosterTemplates.tsx */
@@ -88,7 +85,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                 return (await getCachedJson<any[]>(cacheKey)) || [];
             }
         },
-        enabled: !!companyId && !!season && isTylerHill,
+        enabled: !!companyId && !!season,
     });
 
     // Fetch divisions from Supabase
@@ -105,7 +102,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
             if (error) return [{ id: 'all', name: 'All Divisions' }];
             return [{ id: 'all', name: 'All Divisions' }, ...(data || [])];
         },
-        enabled: !!companyId && isTylerHill,
+        enabled: !!companyId,
     });
 
     // Fetch existing roster templates
@@ -127,7 +124,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                 return (await getCachedJson<any[]>(cacheKey)) || [];
             }
         },
-        enabled: !!companyId && isTylerHill,
+        enabled: !!companyId,
     });
 
     // Create template mutation
@@ -380,27 +377,6 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
 
     const formSubmitPending =
         createTemplateMutation.isPending || updateTemplateMutation.isPending;
-
-    if (!isTylerHill) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <ScrollView contentContainerStyle={styles.scrollContent}>
-                    <View style={styles.header}>
-                        <TouchableOpacity onPress={() => navigation.openDrawer()}>
-                            <Ionicons name="menu" size={28} color={theme.colors.primary} />
-                        </TouchableOpacity>
-                        <View style={styles.headerContent}>
-                            <Text style={styles.headerTitle}>Roster Templates</Text>
-                        </View>
-                        <TouchableOpacity>
-                            <Ionicons name="person-circle-outline" size={28} color={theme.colors.primary} />
-                        </TouchableOpacity>
-                    </View>
-                    <Text style={styles.tylerHillOnlyMessage}>This feature is only available for Tyler Hill Camp.</Text>
-                </ScrollView>
-            </SafeAreaView>
-        );
-    }
 
     return (
         <SafeAreaView style={styles.container}>

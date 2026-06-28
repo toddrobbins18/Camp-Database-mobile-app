@@ -46,28 +46,36 @@ export const useRole = (overrideCompanyId?: string | null) => {
                 targetCompanyId = profile?.company_id ?? null;
             }
 
-            if (!targetCompanyId) return null;
-
-            const { data, error } = await supabase
+            const { data: allRoleRows, error } = await supabase
                 .from('user_roles')
-                .select('role')
-                .eq('user_id', userId)
-                .eq('company_id', targetCompanyId);
+                .select('role, company_id')
+                .eq('user_id', userId);
 
             if (error) {
                 console.error('Error fetching role:', error);
                 return null;
             }
 
-            const roles = (data ?? []).map((r) => r.role);
+            const globalRoles = [...new Set((allRoleRows ?? []).map((r) => r.role))];
+            const roles = targetCompanyId
+                ? (allRoleRows ?? [])
+                      .filter((r) => r.company_id === targetCompanyId)
+                      .map((r) => r.role)
+                : globalRoles;
+
+            // Match web AuthContext: admin/super_admin flags use roles across all companies.
+            const isSuperAdmin = globalRoles.includes('super_admin');
+            const isAdmin = isSuperAdmin || globalRoles.includes('admin');
             const isSpecialist = roles.includes('specialist');
             const isDivisionLeader = roles.includes('division_leader');
+
             return {
                 roles,
-                isSuperAdmin: roles.includes('super_admin'),
-                isAdmin: roles.includes('admin') || roles.includes('super_admin'),
-                isStaff: roles.includes('staff'),
-                isHealthCenter: roles.includes('health_center'),
+                globalRoles,
+                isSuperAdmin,
+                isAdmin,
+                isStaff: globalRoles.includes('staff'),
+                isHealthCenter: globalRoles.includes('health_center'),
                 isSpecialist,
                 isDivisionLeader,
                 isLeaderRole: isDivisionLeader || isSpecialist,

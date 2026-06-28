@@ -56,17 +56,16 @@ const getCompanyMenuItems = (companySlug?: string | null): Permission[] => {
         { id: 'awards', name: 'Awards', icon: 'trophy-outline', iconColor: '#f59e0b' },
         { id: 'incidents', name: 'Incident Reports', icon: 'warning-outline', iconColor: '#f59e0b' },
         { id: 'sports-academy', name: 'Sports Academy', icon: 'football-outline', iconColor: '#1f2937' },
+        { id: 'roster-templates', name: 'Roster Templates', icon: 'list-outline', iconColor: '#64748b' },
+        { id: 'special-meals', name: 'Special Meals', icon: 'restaurant-outline', iconColor: '#64748b' },
     ];
 
-    // Daily Notes/News - all camps EXCEPT timber-lake-camp (matches web)
-    if (companySlug !== 'timber-lake-camp') {
-        baseItems.push({
-            id: 'notes',
-            name: companySlug === 'tyler-hill-camp' ? 'Daily News' : 'Daily Notes',
-            icon: 'document-text-outline',
-            iconColor: '#f97316',
-        });
-    }
+    baseItems.push({
+        id: 'notes',
+        name: companySlug === 'tyler-hill-camp' ? 'Daily News' : 'Daily Notes',
+        icon: 'document-text-outline',
+        iconColor: '#f97316',
+    });
 
     // Daily Wolf - ONLY for timber-lake-west (matches web)
     if (companySlug === 'timber-lake-west') {
@@ -86,7 +85,7 @@ const getCompanyMenuItems = (companySlug?: string | null): Permission[] => {
         );
     }
 
-    // Daily Schedule - ONLY for timber-lake-camp (matches web)
+    // Daily Schedule + Elective Sign-Up — ONLY for timber-lake-camp (matches web)
     if (companySlug === 'timber-lake-camp') {
         baseItems.push({
             id: 'daily-schedule',
@@ -94,20 +93,25 @@ const getCompanyMenuItems = (companySlug?: string | null): Permission[] => {
             icon: 'calendar-outline',
             iconColor: '#ef4444',
         });
-    }
-
-    // Special Meals + Roster Templates — ONLY for tyler-hill-camp (matches web)
-    if (companySlug === 'tyler-hill-camp') {
         baseItems.push({
-            id: 'special-meals',
-            name: 'Special Meals',
-            icon: 'restaurant-outline',
-            iconColor: '#64748b',
+            id: 'daily-wolf-management',
+            name: 'Tiger Times',
+            icon: 'newspaper-outline',
+            iconColor: '#f97316',
         });
         baseItems.push({
-            id: 'roster-templates',
-            name: 'Roster Templates',
-            icon: 'list-outline',
+            id: 'elective-signup',
+            name: 'Elective Sign-Up',
+            icon: 'link-outline',
+            iconColor: '#64748b',
+        });
+    }
+
+    if (companySlug === 'tyler-hill-camp') {
+        baseItems.push({
+            id: 'owl-pay',
+            name: 'Owl Pay',
+            icon: 'wallet-outline',
             iconColor: '#64748b',
         });
     }
