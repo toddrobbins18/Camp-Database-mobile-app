@@ -549,6 +549,31 @@ async function executeAction(action: SyncAction, payload: any): Promise<void> {
         if (error) throw error;
         return;
     }
+    if (action === 'owl_pay.checkout.complete') {
+        const {
+            companyId,
+            childId,
+            staffId,
+            createdBy,
+            pricing,
+            transactions,
+        } = payload ?? {};
+        const chargeTotal = (transactions || []).reduce(
+            (sum: number, row: { amount?: number }) => sum + Number(row?.amount || 0),
+            0,
+        );
+        const { error } = await supabase.rpc('complete_owl_pay_purchase', {
+            _company_id: companyId,
+            _child_id: childId ?? null,
+            _staff_id: staffId ?? null,
+            _created_by: createdBy ?? null,
+            _charge_total: chargeTotal,
+            _record_free_daily_scan: Boolean(pricing?.freeItemApplied && childId),
+            _transactions: transactions ?? [],
+        });
+        if (error) throw error;
+        return;
+    }
     if (action === 'owl_pay_daily_scans.insert') {
         const rows = Array.isArray(payload) ? payload : [payload];
         const { error } = await supabase.from('owl_pay_daily_scans').insert(rows as any);

@@ -349,23 +349,25 @@ export const useOwlPayReports = (
                 if (!matchesAudience(buyer, audience)) return;
 
                 const item = tx.owl_pay_items;
-                if (!item || !tx.item_id) return;
-
                 const amount = Number(tx.amount || 0);
-                const key = tx.item_id;
+                const itemId = tx.item_id || tx.id;
+                const itemName = item?.name || (tx.is_free ? 'Free daily item' : 'Unknown item');
+                const itemCategory = item?.category || 'other';
 
-                if (!itemMap.has(key)) {
-                    itemMap.set(key, {
-                        id: key,
-                        name: item.name || 'Unknown',
-                        category: item.category || 'other',
-                        quantity: 0,
-                        revenue: 0,
-                    });
+                if (itemId) {
+                    if (!itemMap.has(itemId)) {
+                        itemMap.set(itemId, {
+                            id: itemId,
+                            name: itemName,
+                            category: itemCategory,
+                            quantity: 0,
+                            revenue: 0,
+                        });
+                    }
+                    const row = itemMap.get(itemId)!;
+                    row.quantity += 1;
+                    row.revenue += amount;
                 }
-                const row = itemMap.get(key)!;
-                row.quantity += 1;
-                row.revenue += amount;
 
                 const dateKey = new Date(tx.created_at).toLocaleDateString();
                 if (!dateMap.has(dateKey)) dateMap.set(dateKey, { revenue: 0, count: 0 });
@@ -377,8 +379,8 @@ export const useOwlPayReports = (
                     id: tx.id,
                     buyer_type: buyer === 'staff' ? 'staff' : 'camper',
                     camper_name: tx.children?.name || tx.staff?.name || 'Unknown',
-                    item_name: item.name || 'Unknown',
-                    item_category: item.category || 'other',
+                    item_name: itemName,
+                    item_category: itemCategory,
                     amount,
                     is_free: !!tx.is_free,
                     purchased_at: tx.created_at,

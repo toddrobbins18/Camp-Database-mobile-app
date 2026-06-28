@@ -48,6 +48,10 @@ import {
     wouldExceedOwlPayOverdraft,
 } from '../lib/owlPayBalanceUtils';
 import {
+    completeOwlPayCheckout,
+    isFreeDailyItemAvailableToday,
+} from '../lib/owlPayCheckout';
+import {
     findInListByRfid,
     lookupOwlPayCamperByRfid,
     lookupOwlPayStaffByRfid,
@@ -366,15 +370,8 @@ export const OwlPayScreen = ({ navigation }: any) => {
     };
 
     const checkFreeDailyItemAvailable = async (childId: string) => {
-        const today = new Date().toISOString().split('T')[0];
-        const { data, error } = await supabase
-            .from('owl_pay_daily_scans')
-            .select('id')
-            .eq('child_id', childId)
-            .eq('scan_date', today)
-            .maybeSingle();
-        if (error) throw error;
-        return !data;
+        if (!companyId) return false;
+        return isFreeDailyItemAvailableToday(supabase, companyId, childId);
     };
 
     const handleSelectCamper = async (camperId: string) => {
@@ -498,19 +495,38 @@ export const OwlPayScreen = ({ navigation }: any) => {
             const { data: authData } = await supabase.auth.getUser();
             const createdBy = authData.user?.id;
             const online = await isOnlineNow();
-            const pricing = cartPricing;
 
-            if (!selectedIsStaff && pricing.freeItemApplied) {
-                const scanRow = {
-                    child_id: selectedCamperId,
-                    company_id: companyId,
-                };
-                if (online) {
-                    const { error: scanError } = await supabase.from('owl_pay_daily_scans').insert(scanRow);
-                    if (scanError) throw scanError;
-                } else {
-                    await enqueueSync('owl_pay_daily_scans.insert', [scanRow]);
+            let effectivePricing = cartPricing;
+            if (!selectedIsStaff && cartPricing.freeItemApplied && companyId) {
+                const stillFree = await isFreeDailyItemAvailableToday(
+                    supabase,
+                    companyId,
+                    selectedCamperId,
+                );
+                if (!stillFree) {
+                    effectivePricing = calculateOwlPayCartPricing(
+                        cart.map((item) => ({
+                            id: item.id,
+                            name: item.name,
+                            price: Number(item.price),
+                            category: item.category,
+                            quantity: item.quantity,
+                        })),
+                        { hasFreeDailyItemAvailable: false, isStaff: false },
+                    );
                 }
+            }
+
+            const effectiveTotal = effectivePricing.total;
+            const effectiveNewBalance = calculateOwlPayNewBalance(
+                currentBalance,
+                effectiveTotal,
+                selectedIsStaff,
+            );
+
+            if (!selectedIsStaff && wouldExceedOwlPayOverdraft(currentBalance, effectiveTotal)) {
+                Alert.alert('Owl Pay', `Campers can go up to $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} negative.`);
+                return;
             }
 
             const txRows = buildOwlPayPurchaseRows(
@@ -521,7 +537,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     category: item.category,
                     quantity: item.quantity,
                 })),
-                pricing,
+                effectivePricing,
                 {
                     child_id: selectedIsStaff ? null : selectedCamperId,
                     staff_id: selectedIsStaff ? selectedCamperId : null,
@@ -529,27 +545,31 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     created_by: createdBy,
                 }
             );
+
+            const checkoutInput = {
+                companyId,
+                childId: selectedIsStaff ? null : selectedCamperId,
+                staffId: selectedIsStaff ? selectedCamperId : null,
+                createdBy,
+                pricing: effectivePricing,
+                transactions: txRows,
+            };
+
+            let checkoutResult = {
+                charge_total: effectiveTotal,
+                new_balance: selectedIsStaff ? null : effectiveNewBalance,
+                free_item_applied: effectivePricing.freeItemApplied,
+            };
+
             if (online) {
-                const { error: txError } = await supabase.from('owl_pay_transactions').insert(txRows);
-                if (txError) throw txError;
+                checkoutResult = await completeOwlPayCheckout(supabase, checkoutInput);
             } else {
-                await enqueueSync('owl_pay_transactions.insert_many', txRows);
+                await enqueueSync('owl_pay.checkout.complete', checkoutInput);
             }
 
-            if (!selectedIsStaff && selectedCamper && total !== 0) {
-                if (online) {
-                    const { error: balError } = await supabase.rpc('increment_camper_balance', {
-                        _child_id: selectedCamper.id,
-                        _amount: -total,
-                    });
-                    if (balError) throw balError;
-                } else {
-                    await enqueueSync('children.balance.increment', {
-                        childId: selectedCamper.id,
-                        amount: -total,
-                    });
-                }
-            }
+            const finalBalance = selectedIsStaff
+                ? effectiveNewBalance
+                : checkoutResult.new_balance ?? effectiveNewBalance;
 
             if (online && cart.length > 0) {
                 try {
@@ -559,8 +579,8 @@ export const OwlPayScreen = ({ navigation }: any) => {
                             transaction_type: 'purchase',
                             child_id: selectedIsStaff ? null : selectedCamperId,
                             staff_id: selectedIsStaff ? selectedCamperId : null,
-                            amount: total,
-                            new_balance: selectedIsStaff ? null : newBalance,
+                            amount: checkoutResult.charge_total,
+                            new_balance: selectedIsStaff ? null : finalBalance,
                         },
                     });
                 } catch (notifyErr) {
@@ -572,9 +592,9 @@ export const OwlPayScreen = ({ navigation }: any) => {
             setTimeout(() => {
                 setSuccessData({
                     camperName: selectedDisplayName || 'Selection',
-                    chargedAmount: total,
-                    newBalance,
-                    freeItemApplied: pricing.freeItemApplied,
+                    chargedAmount: checkoutResult.charge_total,
+                    newBalance: finalBalance,
+                    freeItemApplied: checkoutResult.free_item_applied,
                     isStaff: selectedIsStaff,
                 });
             }, 150);
