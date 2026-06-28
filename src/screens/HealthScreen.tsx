@@ -21,7 +21,7 @@ import {
     formatMedicationMealTimeForDisplay,
 } from '../constants/medicationBedtimeOptions';
 import { defaultMedicationStartDate } from '../lib/medicationStartDate';
-import { childMatchesGenderFilter } from '../lib/medicationSchedule';
+import { childMatchesGenderFilter, medicationRowKey, sortMedicationsByScheduledTime } from '../lib/medicationSchedule';
 import { filterActiveRoster } from '../lib/rosterStatus';
 import {
     MEDICATION_MEAL_FILTER_OPTIONS,
@@ -158,8 +158,6 @@ function medicationScheduleLabel(med: any): string {
     return typeof st === 'string' ? st : '';
 }
 
-const medicationRowKey = (med: any) => `${med.id}-${med._displayDate ?? med.date}`;
-
 const isPastDate = (date: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -235,6 +233,13 @@ export const HealthScreen = ({ navigation }: any) => {
     const [admitReason, setAdmitReason] = useState('');
     const [admitNotes, setAdmitNotes] = useState('');
     const [entityToAdmit, setEntityToAdmit] = useState<{ id: string; name: string; type: 'camper' | 'staff' } | null>(null);
+    const [admitMedSelection, setAdmitMedSelection] = useState<Set<string>>(new Set());
+    const [medicationPicker, setMedicationPicker] = useState<{
+        child: { id: string; name: string };
+        medications: any[];
+    } | null>(null);
+    const [medicationPickerSelection, setMedicationPickerSelection] = useState<Set<string>>(new Set());
+    const [medicationPickerSubmitting, setMedicationPickerSubmitting] = useState(false);
     const [isAdmitting, setIsAdmitting] = useState(false);
     const admitLockRef = useRef(false);
     const [selectedMedicationChild, setSelectedMedicationChild] = useState<string>('');
@@ -552,11 +557,21 @@ export const HealthScreen = ({ navigation }: any) => {
         const entityType = entityToAdmit.type;
         const reasonSnapshot = admitReason.trim() || null;
         const notesSnapshot = admitNotes.trim() || null;
+        const selectedAdmissionMeds =
+            entityType === 'camper'
+                ? activeListMedications.filter(
+                      (med: any) =>
+                          med.child_id === entityId &&
+                          !med.administered &&
+                          admitMedSelection.has(medicationRowKey(med)),
+                  )
+                : [];
 
         setShowAdmitModal(false);
         setAdmitReason('');
         setAdmitNotes('');
         setEntityToAdmit(null);
+        setAdmitMedSelection(new Set());
 
         console.log('[ADMIT] Starting admit for:', entityType, entityId, entityName);
 
@@ -602,8 +617,27 @@ export const HealthScreen = ({ navigation }: any) => {
             await admissionsQuery.refetch();
             console.log('[ADMIT] Refetch complete');
 
+            if (selectedAdmissionMeds.length > 0) {
+                for (const med of selectedAdmissionMeds) {
+                    await setAdministrationMutation.mutateAsync({
+                        med,
+                        companyId,
+                        season,
+                        dateString: medicationQueryDate,
+                        administered: true,
+                    });
+                }
+            }
+
             const label = entityType === 'staff' ? 'Staff member' : 'Child';
-            setTimeout(() => Alert.alert('Success', `${label} ${entityName} admitted to health center.`), 100);
+            const medSuffix =
+                selectedAdmissionMeds.length > 0
+                    ? ` ${selectedAdmissionMeds.length} medication(s) marked as given.`
+                    : '';
+            setTimeout(
+                () => Alert.alert('Success', `${label} ${entityName} admitted to health center.${medSuffix}`),
+                100,
+            );
         } catch (error: any) {
             console.error('[ADMIT] Error:', error);
             Alert.alert('Admit failed', error?.message || 'Could not complete admission.');
@@ -682,6 +716,7 @@ export const HealthScreen = ({ navigation }: any) => {
                 setEntityToAdmit({ id: entity.id, name: entity.name, type: isStaff ? 'staff' : 'camper' });
                 setAdmitReason('');
                 setAdmitNotes('');
+                setAdmitMedSelection(new Set());
                 setShowAdmitModal(true);
             }
             setHealthCenterRfidInput('');
@@ -731,19 +766,99 @@ export const HealthScreen = ({ navigation }: any) => {
                 return;
             }
 
-            const sortedMeds = [...todayMeds].sort((a, b) => {
-                if (!a.scheduled_time) return 1;
-                if (!b.scheduled_time) return -1;
-                return a.scheduled_time.localeCompare(b.scheduled_time);
-            });
-
-            const nextMed = sortedMeds[0];
-            await handleMedicationAdministration(nextMed, true);
-            Alert.alert('Administered', `${nextMed.medication_name} given to ${child.name}.`);
+            setMedicationPicker({ child, medications: todayMeds });
+            setMedicationPickerSelection(new Set());
             setRfidInput('');
         } catch (err: any) {
             Alert.alert('Error', err.message);
         }
+    };
+
+    const toggleMedicationPickerSelection = (key: string) => {
+        setMedicationPickerSelection((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
+
+    const toggleAdmitMedSelection = (key: string) => {
+        setAdmitMedSelection((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
+
+    const handleMedicationPickerConfirm = async () => {
+        if (!medicationPicker || !companyId || !season) return;
+        const selected = sortMedicationsByScheduledTime(medicationPicker.medications).filter((med) =>
+            medicationPickerSelection.has(medicationRowKey(med)),
+        );
+        if (selected.length === 0) return;
+
+        setMedicationPickerSubmitting(true);
+        try {
+            for (const med of selected) {
+                await setAdministrationMutation.mutateAsync({
+                    med,
+                    companyId,
+                    season,
+                    dateString: medicationQueryDate,
+                    administered: true,
+                });
+            }
+            Alert.alert(
+                'Administered',
+                `${selected.length} medication(s) marked as given for ${medicationPicker.child.name}.`,
+            );
+            setMedicationPicker(null);
+            setMedicationPickerSelection(new Set());
+        } catch (err: any) {
+            Alert.alert('Error', err?.message ?? 'Could not update medications.');
+        } finally {
+            setMedicationPickerSubmitting(false);
+        }
+    };
+
+    const renderMedicationSelectionList = (
+        medications: any[],
+        selectedKeys: Set<string>,
+        onToggle: (key: string) => void,
+        emptyMessage: string,
+    ) => {
+        const pending = sortMedicationsByScheduledTime(
+            medications.filter((med) => !med.administered),
+        );
+        if (pending.length === 0) {
+            return <Text style={styles.medPickerEmpty}>{emptyMessage}</Text>;
+        }
+        return pending.map((med) => {
+            const key = medicationRowKey(med);
+            const selected = selectedKeys.has(key);
+            const mealLabel = formatMedicationMealTimeForDisplay(
+                med.meal_time,
+                med.children?.division?.name ?? med.children?.group_name,
+            );
+            return (
+                <TouchableOpacity
+                    key={key}
+                    style={[styles.medPickerRow, selected && styles.medPickerRowSelected]}
+                    onPress={() => onToggle(key)}
+                >
+                    <View style={[styles.medPickerCheckbox, selected && styles.medPickerCheckboxSelected]}>
+                        {selected ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.medPickerName}>{med.medication_name || 'Medication'}</Text>
+                        {med.dosage ? <Text style={styles.medPickerDetail}>{med.dosage}</Text> : null}
+                        {mealLabel ? <Text style={styles.medPickerDetail}>{mealLabel}</Text> : null}
+                    </View>
+                </TouchableOpacity>
+            );
+        });
     };
 
     const handleAddMedication = async () => {
@@ -1206,7 +1321,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                         <Text style={styles.rfidTitle}>RFID Quick Check-In</Text>
                                     </View>
                                     <Text style={styles.rfidDescription}>
-                                        Scan camper's RFID bracelet to automatically administer their medications.
+                                        Scan camper's RFID bracelet to choose which medications to administer.
                                     </Text>
 
                                     <View style={styles.rfidInputContainer}>
@@ -1485,6 +1600,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                             onPress={(e) => {
                                                                 e.stopPropagation();
                                                                 setEntityToAdmit({ id: child.id, name: child.name, type: 'camper' });
+                                                                setAdmitMedSelection(new Set());
                                                                 setShowAdmitModal(true);
                                                             }}
                                                         >
@@ -1533,6 +1649,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                             style={styles.admitButton}
                                                             onPress={() => {
                                                                 setEntityToAdmit({ id: member.id, name: member.name, type: 'staff' });
+                                                                setAdmitMedSelection(new Set());
                                                                 setShowAdmitModal(true);
                                                             }}
                                                         >
@@ -2105,6 +2222,7 @@ export const HealthScreen = ({ navigation }: any) => {
                         setShowAdmitModal(false);
                         setAdmitReason('');
                         setAdmitNotes('');
+                        setAdmitMedSelection(new Set());
                         setEntityToAdmit(null);
                     }
                 }}
@@ -2150,6 +2268,23 @@ export const HealthScreen = ({ navigation }: any) => {
                             editable={!isAdmitting}
                         />
 
+                        {entityToAdmit?.type === 'camper' ? (
+                            <View style={{ marginTop: 12 }}>
+                                <Text style={styles.admitModalLabel}>Administer medications now (optional)</Text>
+                                <Text style={styles.medPickerHint}>
+                                    Select only the medications you are giving during this visit.
+                                </Text>
+                                {renderMedicationSelectionList(
+                                    activeListMedications.filter(
+                                        (med: any) => med.child_id === entityToAdmit.id,
+                                    ),
+                                    admitMedSelection,
+                                    toggleAdmitMedSelection,
+                                    'No pending medications for today.',
+                                )}
+                            </View>
+                        ) : null}
+
                         <View style={styles.admitModalActions}>
                             <TouchableOpacity
                                 style={[styles.admitConfirmButton, isAdmitting && { opacity: 0.6 }]}
@@ -2168,9 +2303,83 @@ export const HealthScreen = ({ navigation }: any) => {
                                     setShowAdmitModal(false);
                                     setAdmitReason('');
                                     setAdmitNotes('');
+                                    setAdmitMedSelection(new Set());
                                     setEntityToAdmit(null);
                                 }}
                                 disabled={isAdmitting}
+                            >
+                                <Text style={styles.admitCancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            <Modal
+                visible={!!medicationPicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => {
+                    if (!medicationPickerSubmitting) {
+                        setMedicationPicker(null);
+                        setMedicationPickerSelection(new Set());
+                    }
+                }}
+            >
+                <Pressable
+                    style={styles.admitModalOverlay}
+                    onPress={() => {
+                        if (!medicationPickerSubmitting) {
+                            setMedicationPicker(null);
+                            setMedicationPickerSelection(new Set());
+                        }
+                    }}
+                >
+                    <Pressable style={[styles.admitModal, { maxWidth: 440 }]} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.admitModalTitle}>Select medications to administer</Text>
+                        {medicationPicker ? (
+                            <Text style={[styles.medPickerHint, { textAlign: 'center', marginBottom: 12 }]}>
+                                Choose which medication(s) to give to {medicationPicker.child.name}.
+                            </Text>
+                        ) : null}
+                        <ScrollView style={{ maxHeight: 320 }}>
+                            {medicationPicker
+                                ? renderMedicationSelectionList(
+                                      medicationPicker.medications,
+                                      medicationPickerSelection,
+                                      toggleMedicationPickerSelection,
+                                      'No pending medications for today.',
+                                  )
+                                : null}
+                        </ScrollView>
+                        <View style={[styles.admitModalActions, { marginTop: 16 }]}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.admitConfirmButton,
+                                    (medicationPickerSubmitting || medicationPickerSelection.size === 0) && {
+                                        opacity: 0.6,
+                                    },
+                                ]}
+                                onPress={() => void handleMedicationPickerConfirm()}
+                                disabled={
+                                    medicationPickerSubmitting || medicationPickerSelection.size === 0
+                                }
+                            >
+                                {medicationPickerSubmitting ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.admitConfirmButtonText}>
+                                        Mark {medicationPickerSelection.size} selected
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.admitCancelButton}
+                                onPress={() => {
+                                    setMedicationPicker(null);
+                                    setMedicationPickerSelection(new Set());
+                                }}
+                                disabled={medicationPickerSubmitting}
                             >
                                 <Text style={styles.admitCancelButtonText}>Cancel</Text>
                             </TouchableOpacity>
@@ -3904,4 +4113,54 @@ const styles = StyleSheet.create({
     deleteModalCancelText: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
     deleteModalConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#dc2626', alignItems: 'center' },
     deleteModalConfirmText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+    medPickerHint: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        marginBottom: 8,
+        lineHeight: 18,
+    },
+    medPickerEmpty: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        fontStyle: 'italic',
+    },
+    medPickerRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 10,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 8,
+        backgroundColor: '#fff',
+    },
+    medPickerRowSelected: {
+        borderColor: theme.colors.secondary,
+        backgroundColor: '#f0f9ff',
+    },
+    medPickerCheckbox: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#cbd5e1',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 2,
+    },
+    medPickerCheckboxSelected: {
+        backgroundColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+    },
+    medPickerName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    medPickerDetail: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
 });

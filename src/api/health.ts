@@ -4,6 +4,7 @@ import { enqueueSync, getCachedJson, isOnlineNow, listQueued, safeSetCachedJson 
 import {
     dedupeMedicationSlots,
     findDaySpecificMedicationLog,
+    medicationRowKey,
     medicationSlotKey,
     mergeMedicationsForDate,
     type MedicationLogRow,
@@ -69,13 +70,13 @@ async function applyQueuedMedicationOps(base: MedicationLog[]): Promise<Medicati
     const out = [...base];
     const queued = await listQueued('medication_logs.');
 
-    const patchSlot = (
-        med: Pick<MedicationLog, 'child_id' | 'medication_name' | 'meal_time'>,
+    const patchRow = (
+        med: Pick<MedicationLog, 'id' | 'date' | '_displayDate'>,
         update: Partial<MedicationLog>,
     ) => {
-        const slotKey = medicationSlotKey(med);
+        const rowKey = medicationRowKey(med);
         for (let i = 0; i < out.length; i++) {
-            if (medicationSlotKey(out[i]) === slotKey) {
+            if (medicationRowKey(out[i]) === rowKey) {
                 out[i] = { ...out[i], ...update } as MedicationLog;
             }
         }
@@ -92,7 +93,7 @@ async function applyQueuedMedicationOps(base: MedicationLog[]): Promise<Medicati
                 } as MedicationLog;
                 out.push(inserted);
                 if (inserted.administered === true) {
-                    patchSlot(inserted, {
+                    patchRow(inserted, {
                         administered: true,
                         administered_at: inserted.administered_at ?? new Date().toISOString(),
                     });
@@ -105,7 +106,7 @@ async function applyQueuedMedicationOps(base: MedicationLog[]): Promise<Medicati
             if (!id || !update) continue;
             const existing = out.find((m) => m.id === id);
             if (existing) {
-                patchSlot(existing, update);
+                patchRow(existing, update);
             }
         } else if (q.action === 'medication_logs.delete') {
             const id = (q.payload as any)?.id as string | undefined;
@@ -389,7 +390,7 @@ export const useSetMedicationAdministration = () => {
             const queryKey = ['medication_logs', companyId, dateString, seasonKey] as const;
             await queryClient.cancelQueries({ queryKey });
             const previous = queryClient.getQueryData<MedicationLog[]>(queryKey);
-            const slotKey = medicationSlotKey(med);
+            const rowKey = medicationRowKey(med);
             const patch =
                 administered === true
                     ? {
@@ -404,7 +405,7 @@ export const useSetMedicationAdministration = () => {
 
             queryClient.setQueryData<MedicationLog[]>(queryKey, (current) =>
                 (current ?? []).map((row) =>
-                    medicationSlotKey(row) === slotKey ? { ...row, ...patch } : row,
+                    medicationRowKey(row) === rowKey ? { ...row, ...patch } : row,
                 ),
             );
 
