@@ -22,6 +22,7 @@ import {
     useTodayBirthdays,
     useTodayEvents,
     useTodayMeals,
+    useTodaySpecialMeals,
     useTodaySportsCalendar,
     useTodaySpecialEventsActivities,
     useDailyWolfContentRow,
@@ -31,6 +32,7 @@ import {
 import { useInboxUnreadCount } from '../api/messages';
 import { supabase } from '../lib/supabase';
 import { formatTime12Hour } from '../lib/formatTime';
+import { formatDashboardSpecialEventSubtitle } from '../lib/dailyWolfPrintableUtils';
 import { formatMenuMealTypeLabel } from '../api/menu';
 
 const DEFAULT_WEATHER_ZIP = '18469';
@@ -62,6 +64,7 @@ export const DashboardScreen = ({ navigation }: any) => {
             void queryClient.invalidateQueries({ queryKey: ['dashboard_events'] });
             void queryClient.invalidateQueries({ queryKey: ['daily_news_schedule'] });
             void queryClient.invalidateQueries({ queryKey: ['dashboard_birthdays'] });
+            void queryClient.invalidateQueries({ queryKey: ['dashboard_special_meals'] });
         }, [queryClient]),
     );
     const currentDate = new Date();
@@ -101,6 +104,12 @@ export const DashboardScreen = ({ navigation }: any) => {
         isDashboardFocused,
     );
     const { data: todayMenuItems = [] } = useTodayMeals(companyId, todayString, season ?? null);
+    const { data: todaySpecialMeals = [] } = useTodaySpecialMeals(
+        companyId,
+        todayString,
+        season ?? null,
+        isTylerHill,
+    );
 
     const { data: upcomingTrips = [] } = useUpcomingTripsForDashboard(
         companyId,
@@ -481,6 +490,50 @@ export const DashboardScreen = ({ navigation }: any) => {
                     </TouchableOpacity>
                 </StyledCard>
 
+                {isTylerHill && (
+                    <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
+                        <View style={styles.cardHeader}>
+                            <Ionicons name="restaurant" size={20} color="#d97706" />
+                            <Text style={styles.cardTitle}>Special Meals</Text>
+                        </View>
+                        <Text style={styles.cardSubtitle}>Special dietary events for today</Text>
+                        <View style={styles.menuGrid}>
+                            {todaySpecialMeals.length === 0 ? (
+                                <Text style={styles.menuEmptyText}>No special meals scheduled for today</Text>
+                            ) : (
+                                todaySpecialMeals.map((item) => (
+                                    <TouchableOpacity
+                                        key={item.id}
+                                        style={styles.specialMealItem}
+                                        onPress={() => navigation.navigate('SpecialMeals')}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={styles.specialMealType}>
+                                            {formatMenuMealTypeLabel(item.meal_type)}
+                                        </Text>
+                                        {item.items?.trim() ? (
+                                            <Text style={styles.menuMealValue}>{item.items.trim()}</Text>
+                                        ) : null}
+                                        {item.allergens?.trim() ? (
+                                            <Text style={styles.menuAllergenValue}>
+                                                Allergens: {item.allergens.trim()}
+                                            </Text>
+                                        ) : null}
+                                    </TouchableOpacity>
+                                ))
+                            )}
+                        </View>
+                        <TouchableOpacity
+                            style={[styles.viewMenuBtn, hasDashboardHeroBg && styles.glassOutlineBtn]}
+                            onPress={() => navigation.navigate('SpecialMeals')}
+                        >
+                            <Text style={[styles.viewMenuText, hasDashboardHeroBg && styles.outlineBtnTextOnHero]}>
+                                View Schedule
+                            </Text>
+                        </TouchableOpacity>
+                    </StyledCard>
+                )}
+
                 {/* Timber Lake Camp: activities & field trips + upcoming trips */}
                 {isTimberLakeCamp && (
                     <>
@@ -576,7 +629,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                                 <View key={evt.id} style={{ marginBottom: 8 }}>
                                     <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
                                     <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                        {formatTime12Hour(evt.time_slot) || evt.time_slot || 'All day'}
+                                        {formatDashboardSpecialEventSubtitle(evt)}
                                         {evt.location ? ` • ${evt.location}` : ''}
                                     </Text>
                                 </View>
@@ -609,8 +662,8 @@ export const DashboardScreen = ({ navigation }: any) => {
                                 <View key={evt.id} style={{ marginBottom: 8 }}>
                                     <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
                                     <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                        {formatTime12Hour(evt.time_slot) || evt.time_slot || 'All day'}{' '}
-                                        • {evt.location || 'TBD'}
+                                        {formatDashboardSpecialEventSubtitle(evt)}
+                                        {evt.location ? ` • ${evt.location}` : ''}
                                     </Text>
                                 </View>
                             ))
@@ -742,12 +795,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                                 <View key={evt.id} style={{ marginBottom: 8 }}>
                                     <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
                                     <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                        {formatTime12Hour(
-                                            usesSpecialEventsTable ? evt.time_slot : evt.time,
-                                        ) ||
-                                            (usesSpecialEventsTable ? evt.time_slot : evt.time) ||
-                                            (usesSpecialEventsTable ? 'All day' : 'TBD')}{' '}
-                                        • {evt.location || 'TBD'}
+                                        {formatDashboardSpecialEventSubtitle(evt)}
                                     </Text>
                                 </View>
                             ))
@@ -1191,6 +1239,24 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: theme.colors.border,
+    },
+    specialMealItem: {
+        width: '48%',
+        backgroundColor: '#fffbeb',
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#fcd34d',
+    },
+    specialMealType: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#b45309',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 4,
     },
     menuLabel: {
         fontSize: 12,

@@ -22,8 +22,11 @@ import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import {
     filterElectivesForPeriod,
-    TIMBER_LAKE_ELECTIVE_DAYS,
     TIMBER_LAKE_ELECTIVE_PERIODS,
+    getDefaultElectiveCalendarDate,
+    electiveSlotFromCalendarDate,
+    shiftElectiveCalendarDate,
+    normalizeElectiveCalendarDate,
 } from '../constants/timberLakeElectiveSchedule';
 import { supabase } from '../lib/supabase';
 import { MobileUserMenu } from '../components/MobileUserMenu';
@@ -35,15 +38,6 @@ import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offli
 
 /** Matches lovable-web-app ElectiveSignUp.tsx */
 const PERIODS = [...TIMBER_LAKE_ELECTIVE_PERIODS];
-const DAYS = [...TIMBER_LAKE_ELECTIVE_DAYS];
-
-function mondayOfWeekContaining(d: Date): string {
-    const x = new Date(d);
-    const day = x.getDay();
-    const diff = x.getDate() - day + (day === 0 ? -6 : 1);
-    x.setDate(diff);
-    return x.toISOString().split('T')[0];
-}
 
 function parseYmd(ymd: string): Date {
     const [y, m, day] = ymd.split('-').map(Number);
@@ -58,14 +52,17 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
     const tlc = isTimberLakeCamp(companySlug);
     const rosterDivisionFilter = useRosterDivisionFilter(companyId);
 
-    const [weekStart, setWeekStart] = useState(() => mondayOfWeekContaining(new Date()));
-    const [selectedDay, setSelectedDay] = useState('Monday');
+    const [selectedDate, setSelectedDate] = useState(() => getDefaultElectiveCalendarDate());
     const [selectedPeriod, setSelectedPeriod] = useState('period-1');
+    const electiveSlot = useMemo(() => electiveSlotFromCalendarDate(parseYmd(selectedDate)), [selectedDate]);
+    const weekStart = electiveSlot.weekStartDate;
+    const selectedDay = electiveSlot.dayOfWeek;
     const [divisions, setDivisions] = useState<any[]>([]);
     const [selectedDivision, setSelectedDivision] = useState<string | null>(null);
     const [children, setChildren] = useState<any[]>([]);
     const [electives, setElectives] = useState<any[]>([]);
     const [signups, setSignups] = useState<any[]>([]);
+    const [slotCountsByElective, setSlotCountsByElective] = useState<Record<string, number>>({});
     const [allChildren, setAllChildren] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -86,13 +83,12 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
 
     const [assignChildId, setAssignChildId] = useState<string | null>(null);
     const [electivesLoading, setElectivesLoading] = useState(false);
-    const [showDaySheet, setShowDaySheet] = useState(false);
     const [showPeriodSheet, setShowPeriodSheet] = useState(false);
     const [showDivisionSheet, setShowDivisionSheet] = useState(false);
     const [showRosterElectiveSheet, setShowRosterElectiveSheet] = useState(false);
     const [showAnalyticsDivSheet, setShowAnalyticsDivSheet] = useState(false);
     const [showHistoryDivSheet, setShowHistoryDivSheet] = useState(false);
-    const [showWeekDatePicker, setShowWeekDatePicker] = useState(false);
+    const [showDatePicker, setShowDatePicker] = useState(false);
 
     /** Stable dep: roster filter array identity can change without content changing. */
     const rosterDivisionDataKey = useMemo(
@@ -120,7 +116,7 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                 divQ = divQ.in('id', filterIds);
             }
 
-            const [divRes, electivesRes, signupsRes, allChildrenRes] = await Promise.all([
+            const [divRes, electivesRes, signupsRes, allChildrenRes, slotCountsRes] = await Promise.all([
                 divQ,
                 supabase.from('electives').select('*').eq('company_id', companyId).order('name'),
                 supabase
@@ -137,6 +133,12 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                     .eq('season', season)
                     .neq('status', 'inactive')
                     .order('name'),
+                (supabase as any).rpc('get_elective_slot_counts', {
+                    p_company_id: companyId,
+                    p_week_start: weekStart,
+                    p_day_of_week: selectedDay,
+                    p_period: selectedPeriod,
+                }),
             ]);
 
             const rawDivs = divRes.data || [];
@@ -154,7 +156,16 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
             setElectives(filteredElectives);
             if (signupsRes.data) setSignups(signupsRes.data);
             if (allChildrenRes.data) setAllChildren(allChildrenRes.data);
-            await setCachedJson(`elective_signup_bundle:${companyId}:${season}:${weekStart}:${selectedDay}:${selectedPeriod}`, {
+            if (slotCountsRes.data) {
+                const counts: Record<string, number> = {};
+                (slotCountsRes.data as { elective_id: string; signup_count: number }[]).forEach((row) => {
+                    counts[row.elective_id] = Number(row.signup_count);
+                });
+                setSlotCountsByElective(counts);
+            } else {
+                setSlotCountsByElective({});
+            }
+            await setCachedJson(`elective_signup_bundle:${companyId}:${season}:${selectedDate}:${selectedPeriod}`, {
                 divisions: [...rawDivs].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
                 electives: filteredElectives,
                 signups: signupsRes.data || [],
@@ -166,7 +177,7 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                 electives: any[];
                 signups: any[];
                 allChildren: any[];
-            }>(`elective_signup_bundle:${companyId}:${season}:${weekStart}:${selectedDay}:${selectedPeriod}`);
+            }>(`elective_signup_bundle:${companyId}:${season}:${selectedDate}:${selectedPeriod}`);
             if (cached) {
                 setDivisions(cached.divisions || []);
                 setElectives(cached.electives || []);
@@ -183,6 +194,7 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
         season,
         weekStart,
         selectedDay,
+        selectedDate,
         selectedPeriod,
         rosterDivisionFilter.isFetched,
         rosterDivisionDataKey,
@@ -258,12 +270,15 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
     }, [signups]);
 
     const signupCountByElective = useMemo(() => {
+        if (Object.keys(slotCountsByElective).length > 0) {
+            return slotCountsByElective;
+        }
         const c: Record<string, number> = {};
         signups.forEach((s) => {
             if (s.elective_id) c[s.elective_id] = (c[s.elective_id] || 0) + 1;
         });
         return c;
-    }, [signups]);
+    }, [signups, slotCountsByElective]);
 
     const rostersByElective = useMemo(() => {
         const grouped: Record<string, { name: string; campers: any[] }> = {};
@@ -307,10 +322,8 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
 
     const periodLabel = PERIODS.find((p) => p.id === selectedPeriod);
 
-    const shiftWeek = (dir: -1 | 1) => {
-        const d = new Date(weekStart + 'T12:00:00');
-        d.setDate(d.getDate() + dir * 7);
-        setWeekStart(mondayOfWeekContaining(d));
+    const shiftDate = (dir: -1 | 1) => {
+        setSelectedDate(shiftElectiveCalendarDate(selectedDate, dir));
     };
 
     const handleAssign = async (childId: string, electiveId: string | null) => {
@@ -349,7 +362,12 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                         period: selectedPeriod,
                         season,
                     });
-                    if (error) throw error;
+                    if (error) {
+                        const msg = error.message?.includes('capacity')
+                            ? 'This elective is at capacity.'
+                            : (error.message ?? 'Could not update signup');
+                        throw new Error(msg);
+                    }
                 }
             } else {
                 await enqueueSync('elective_signups.replace', {
@@ -512,31 +530,26 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
             ) : (
                 <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <StyledCard style={styles.filterCard}>
-                        <Text style={styles.fieldLabel}>Week starting</Text>
+                        <Text style={styles.fieldLabel}>Date</Text>
                         <View style={styles.weekRow}>
-                            <TouchableOpacity onPress={() => shiftWeek(-1)} style={styles.iconBtn}>
+                            <TouchableOpacity onPress={() => shiftDate(-1)} style={styles.iconBtn}>
                                 <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.datePill} onPress={() => setShowWeekDatePicker(true)}>
+                            <TouchableOpacity style={styles.datePill} onPress={() => setShowDatePicker(true)}>
                                 <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
                                 <Text style={styles.datePillText}>
-                                    {parseYmd(weekStart).toLocaleDateString('en-US', {
+                                    {parseYmd(selectedDate).toLocaleDateString('en-US', {
+                                        weekday: 'short',
                                         month: '2-digit',
                                         day: '2-digit',
                                         year: 'numeric',
                                     })}
                                 </Text>
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={() => shiftWeek(1)} style={styles.iconBtn}>
+                            <TouchableOpacity onPress={() => shiftDate(1)} style={styles.iconBtn}>
                                 <Ionicons name="chevron-forward" size={22} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
-
-                        <Text style={styles.fieldLabel}>Day</Text>
-                        <TouchableOpacity style={styles.selectField} onPress={() => setShowDaySheet(true)}>
-                            <Text style={styles.selectFieldText}>{selectedDay}</Text>
-                            <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                        </TouchableOpacity>
 
                         <Text style={styles.fieldLabel}>Period</Text>
                         <TouchableOpacity style={styles.selectField} onPress={() => setShowPeriodSheet(true)}>
@@ -1034,35 +1047,6 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                 </Pressable>
             </Modal>
 
-            {/* Day sheet */}
-            <Modal visible={showDaySheet} transparent animationType="slide" onRequestClose={() => setShowDaySheet(false)}>
-                <Pressable style={styles.sheetOverlay} onPress={() => setShowDaySheet(false)}>
-                    <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.sheetHeader}>
-                            <Text style={styles.sheetTitle}>Day</Text>
-                            <TouchableOpacity onPress={() => setShowDaySheet(false)}>
-                                <Ionicons name="close" size={24} color={theme.colors.text} />
-                            </TouchableOpacity>
-                        </View>
-                        {DAYS.map((d) => (
-                            <TouchableOpacity
-                                key={d}
-                                style={styles.sheetOption}
-                                onPress={() => {
-                                    setSelectedDay(d);
-                                    setShowDaySheet(false);
-                                }}
-                            >
-                                <Text style={styles.sheetOptionText}>{d}</Text>
-                                {selectedDay === d ? (
-                                    <Ionicons name="checkmark-circle" size={22} color={theme.colors.secondary} />
-                                ) : null}
-                            </TouchableOpacity>
-                        ))}
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
             {/* Period sheet */}
             <Modal visible={showPeriodSheet} transparent animationType="slide" onRequestClose={() => setShowPeriodSheet(false)}>
                 <Pressable style={styles.sheetOverlay} onPress={() => setShowPeriodSheet(false)}>
@@ -1291,31 +1275,37 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                 </Pressable>
             </Modal>
 
-            {showWeekDatePicker && Platform.OS === 'android' && (
+            {showDatePicker && Platform.OS === 'android' && (
                 <DateTimePicker
-                    value={parseYmd(weekStart)}
+                    value={parseYmd(selectedDate)}
                     mode="date"
                     display="default"
                     onChange={(ev, d) => {
-                        setShowWeekDatePicker(false);
+                        setShowDatePicker(false);
                         if (ev.type === 'dismissed' || !d) return;
-                        setWeekStart(d.toISOString().split('T')[0]);
+                        const ymd = d.toISOString().split('T')[0];
+                        setSelectedDate(normalizeElectiveCalendarDate(ymd));
                     }}
                 />
             )}
-            {showWeekDatePicker && Platform.OS === 'ios' && (
-                <Modal transparent visible={showWeekDatePicker} animationType="slide">
+            {showDatePicker && Platform.OS === 'ios' && (
+                <Modal transparent visible={showDatePicker} animationType="slide">
                     <View style={styles.iosDateWrap}>
-                        <Pressable style={{ flex: 1 }} onPress={() => setShowWeekDatePicker(false)} />
+                        <Pressable style={{ flex: 1 }} onPress={() => setShowDatePicker(false)} />
                         <View style={styles.iosDateInner}>
                             <DateTimePicker
-                                value={parseYmd(weekStart)}
+                                value={parseYmd(selectedDate)}
                                 mode="date"
                                 display="spinner"
                                 themeVariant="light"
-                                onChange={(_, d) => d && setWeekStart(d.toISOString().split('T')[0])}
+                                onChange={(_, d) => {
+                                    if (d) {
+                                        const ymd = d.toISOString().split('T')[0];
+                                        setSelectedDate(normalizeElectiveCalendarDate(ymd));
+                                    }
+                                }}
                             />
-                            <TouchableOpacity style={styles.doneBtn} onPress={() => setShowWeekDatePicker(false)}>
+                            <TouchableOpacity style={styles.doneBtn} onPress={() => setShowDatePicker(false)}>
                                 <Text style={styles.doneBtnText}>Done</Text>
                             </TouchableOpacity>
                         </View>

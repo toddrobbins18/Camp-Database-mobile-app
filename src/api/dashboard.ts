@@ -386,6 +386,66 @@ export const useTodayMeals = (
     });
 };
 
+export type TodaySpecialMealItem = {
+    id: string;
+    meal_type: string;
+    items: string;
+    allergens: string | null;
+};
+
+function sortSpecialMeals(items: TodaySpecialMealItem[]): TodaySpecialMealItem[] {
+    const mealOrder: Record<string, number> = {
+        breakfast: 1,
+        lunch: 2,
+        snack: 3,
+        dinner: 4,
+    };
+    return [...items].sort((a, b) => {
+        const orderDiff =
+            (mealOrder[(a.meal_type || '').toLowerCase()] ?? 99) -
+            (mealOrder[(b.meal_type || '').toLowerCase()] ?? 99);
+        if (orderDiff !== 0) return orderDiff;
+        return (a.items || '').localeCompare(b.items || '');
+    });
+}
+
+/** Tyler Hill: today's rows from `special_meals` (matches web dashboard widget). */
+export const useTodaySpecialMeals = (
+    companyId: string | null,
+    todayString: string,
+    season: string | null,
+    enabled: boolean,
+) => {
+    return useQuery({
+        queryKey: ['dashboard_special_meals', companyId, todayString, season ?? ''],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const cacheKey = `dashboard_special_meals:${companyId}:${todayString}:${season ?? ''}`;
+            return readThroughCache<TodaySpecialMealItem[]>(cacheKey, async () => {
+                let q = supabase
+                    .from('special_meals')
+                    .select('id, meal_type, items, allergens')
+                    .eq('company_id', companyId)
+                    .eq('date', todayString);
+                if (season != null && String(season).trim() !== '') {
+                    q = q.or(`season.eq.${season},season.is.null`);
+                }
+                const { data, error } = await q;
+                if (error) throw error;
+                return sortSpecialMeals(
+                    (data || []).map((item) => ({
+                        id: item.id,
+                        meal_type: item.meal_type,
+                        items: item.items ?? '',
+                        allergens: item.allergens,
+                    })),
+                );
+            });
+        },
+        enabled: !!companyId && enabled,
+    });
+};
+
 /** Tyler Hill: sports events for the next 3 days after today (matches web Three Day Outlook). */
 export const useThreeDaySportsOutlook = (
     companyId: string | null,
@@ -533,5 +593,10 @@ export const useDailyWolfContentRow = (
             });
         },
         enabled: !!companyId && !!season && enabled,
+        staleTime: 0,
+        refetchOnMount: 'always',
+        refetchOnWindowFocus: true,
+        refetchInterval: 45_000,
+        refetchIntervalInBackground: false,
     });
 };

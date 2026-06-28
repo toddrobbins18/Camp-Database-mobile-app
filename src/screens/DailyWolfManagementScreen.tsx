@@ -12,6 +12,7 @@ import {
     Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { DatePickerModal } from '../components/DatePickerModal';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,7 +23,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
-import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
+import { enqueueSync, isOnlineNow, setCachedJson } from '../offline/engine';
 
 type WolfForm = {
     officer_of_day: string;
@@ -123,28 +124,35 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
 
     const selectedYmd = useMemo(() => formatDateLocalYmd(selectedDate), [selectedDate]);
 
-    const { data: existingRow, isFetching } = useQuery({
+    const { data: existingRow, isFetching, refetch } = useQuery({
         queryKey: ['daily_wolf_management_row', companyId, season, selectedYmd],
         queryFn: async () => {
             if (!companyId || !season) return null;
             const cacheKey = `daily_wolf_management_row:${companyId}:${season}:${selectedYmd}`;
-            try {
-                const { data, error } = await supabase
-                    .from('daily_wolf_content')
-                    .select('*')
-                    .eq('company_id', companyId)
-                    .eq('season', season)
-                    .eq('date', selectedYmd)
-                    .maybeSingle();
-                if (error) throw error;
-                await setCachedJson(cacheKey, data as DailyWolfRow | null);
-                return data as DailyWolfRow | null;
-            } catch {
-                return await getCachedJson<DailyWolfRow | null>(cacheKey);
-            }
+            const { data, error } = await supabase
+                .from('daily_wolf_content')
+                .select('*')
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .eq('date', selectedYmd)
+                .maybeSingle();
+            if (error) throw error;
+            await setCachedJson(cacheKey, data as DailyWolfRow | null);
+            return data as DailyWolfRow | null;
         },
         enabled: !!companyId && !!season,
+        staleTime: 0,
+        refetchOnMount: 'always',
+        refetchOnWindowFocus: true,
     });
+
+    useFocusEffect(
+        useCallback(() => {
+            if (!companyId || !season) return;
+            void refetch();
+            void queryClient.invalidateQueries({ queryKey: ['daily_wolf_content_dashboard'] });
+        }, [companyId, season, refetch, queryClient]),
+    );
 
     useEffect(() => {
         if (existingRow) {
@@ -162,21 +170,66 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
 
     const saveField = useCallback(
         async (field: keyof WolfForm, value: string) => {
-            const rowId = existingRow?.id;
-            if (!rowId) return;
+            if (!companyId || !season) return;
             setSaving(true);
+            const cacheKey = `daily_wolf_management_row:${companyId}:${season}:${selectedYmd}`;
+            const dashboardCacheKey = `daily_wolf_content_dashboard:${companyId}:${selectedYmd}:${season}`;
             try {
                 if (await isOnlineNow()) {
-                    const { error } = await supabase
-                        .from('daily_wolf_content')
-                        .update({ [field]: value })
-                        .eq('id', rowId);
-                    if (error) throw error;
+                    if (existingRow?.id) {
+                        const { error } = await supabase
+                            .from('daily_wolf_content')
+                            .update({ [field]: value })
+                            .eq('id', existingRow.id);
+                        if (error) throw error;
+                    } else {
+                        const { data, error } = await supabase
+                            .from('daily_wolf_content')
+                            .insert({
+                                company_id: companyId,
+                                date: selectedYmd,
+                                season,
+                                officer_of_day: '',
+                                quote_of_the_day: '',
+                                laundry_info: '',
+                                phone_calls_info: '',
+                                notes: '',
+                                [field]: value,
+                            })
+                            .select('*')
+                            .single();
+                        if (error) throw error;
+                        if (data) {
+                            queryClient.setQueryData(
+                                ['daily_wolf_management_row', companyId, season, selectedYmd],
+                                data as DailyWolfRow,
+                            );
+                            await setCachedJson(cacheKey, data as DailyWolfRow);
+                        }
+                    }
+                } else if (existingRow?.id) {
+                    await enqueueSync('daily_wolf_content.update', {
+                        id: existingRow.id,
+                        update: { [field]: value },
+                    });
                 } else {
-                    await enqueueSync('daily_wolf_content.update', { id: rowId, update: { [field]: value } });
+                    await enqueueSync('daily_wolf_content.insert', [
+                        {
+                            company_id: companyId,
+                            date: selectedYmd,
+                            season,
+                            officer_of_day: '',
+                            quote_of_the_day: '',
+                            laundry_info: '',
+                            phone_calls_info: '',
+                            notes: '',
+                            [field]: value,
+                        },
+                    ]);
                 }
                 await queryClient.invalidateQueries({ queryKey: ['daily_wolf_management_row'] });
                 await queryClient.invalidateQueries({ queryKey: ['daily_wolf_content_dashboard'] });
+                await setCachedJson(dashboardCacheKey, null);
             } catch (e: unknown) {
                 const msg = e instanceof Error ? e.message : 'Failed to save';
                 Alert.alert('Save failed', msg);
@@ -184,7 +237,7 @@ export const DailyWolfManagementScreen = ({ navigation }: any) => {
                 setSaving(false);
             }
         },
-        [existingRow?.id, queryClient],
+        [companyId, season, selectedYmd, existingRow?.id, queryClient],
     );
 
     const blurField = useCallback(

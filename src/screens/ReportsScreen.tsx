@@ -29,6 +29,10 @@ import {
     formatSportsEventMealOptions,
     formatSportsEventReportTime,
 } from '../lib/sportsEventReportUtils';
+import {
+    formatSpecialEventReportTime,
+    formatSpecialEventTypeLabel,
+} from '../lib/specialEventReportUtils';
 
 interface ReportsScreenProps {
     navigation: any;
@@ -47,6 +51,7 @@ type ReportType =
     | 'tshirt_sizes'
     | 'trips'
     | 'activities'
+    | 'special_events_activities'
     | 'appointments';
 
 type ReportOption = { value: ReportType; label: string };
@@ -107,6 +112,7 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
             { value: 'camper_reports', label: 'Camper Reports' },
             { value: 'awards', label: 'Awards' },
             { value: 'sports_events', label: 'Sports Events' },
+            { value: 'special_events_activities', label: 'Special Events & Evening Activities' },
             { value: 'conflicts', label: 'Schedule Conflicts' },
             { value: 'medications', label: 'Medication Schedule' },
             { value: 'allergies', label: 'Allergy Report' },
@@ -400,6 +406,78 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                         Staff: row.chaperone || '-',
                     })).sort((a, b) => compareReportRowsByDateThenTime(a, b));
                     summaryRows = { 'Total Activities': (data || []).length };
+                    break;
+                }
+                case 'special_events_activities': {
+                    const [{ data: events }, { data: divisionLinks }] = await Promise.all([
+                        supabase
+                            .from('special_events_activities')
+                            .select('event_date, title, emoji, event_type, sub_category, start_time, end_time, time_slot, location, chaperone, description, season, division_id, division:divisions(name)')
+                            .eq('company_id', companyId)
+                            .gte('event_date', fromDate)
+                            .lte('event_date', toDate)
+                            .order('event_date', { ascending: true })
+                            .order('start_time', { ascending: true }),
+                        supabase
+                            .from('special_events_divisions')
+                            .select('event_id, division_id, divisions(name)')
+                            .eq('company_id', companyId),
+                    ]);
+
+                    const divisionMap = new Map<string, { ids: string[]; names: string[] }>();
+                    (divisionLinks || []).forEach((link: any) => {
+                        const entry = divisionMap.get(link.event_id) || { ids: [], names: [] };
+                        entry.ids.push(link.division_id);
+                        if (link.divisions?.name) entry.names.push(link.divisions.name);
+                        divisionMap.set(link.event_id, entry);
+                    });
+
+                    const seasonFiltered = (events || []).filter(
+                        (event: any) => event.season === season || event.season === null,
+                    );
+
+                    const rows = seasonFiltered.map((event: any) => {
+                        const linked = divisionMap.get(event.id) || { ids: [], names: [] };
+                        const divisionIds = [event.division_id, ...linked.ids].filter(Boolean);
+                        const divisionNames = Array.from(
+                            new Set([event.division?.name, ...linked.names].filter(Boolean)),
+                        );
+
+                        return {
+                            divisionIds,
+                            Date: event.event_date,
+                            Title: event.emoji ? `${event.emoji} ${event.title}` : event.title,
+                            'Event Type': formatSpecialEventTypeLabel(event.event_type),
+                            'Sub Category': event.sub_category || '-',
+                            Division: divisionNames.length > 0 ? divisionNames.join(', ') : 'All Divisions',
+                            Time: formatSpecialEventReportTime(event),
+                            Location: event.location || '-',
+                            Staff: event.chaperone || '-',
+                            Description: event.description || '',
+                        };
+                    });
+
+                    const permissionFiltered = rows.filter((row: any) => {
+                        if (selectedDivisionId !== 'all') {
+                            if (row.divisionIds.length === 0) return true;
+                            return row.divisionIds.includes(selectedDivisionId);
+                        }
+                        if (allowedDivisionIds !== null) {
+                            if (row.divisionIds.length === 0) return true;
+                            return row.divisionIds.some((id: string) => allowedDivisionIds.includes(id));
+                        }
+                        return true;
+                    });
+
+                    dataRows = permissionFiltered
+                        .map(({ divisionIds, ...row }) => row)
+                        .sort((a, b) => compareReportRowsByDateThenTime(a, b, { timeKey: 'Time' }));
+
+                    summaryRows = {
+                        'Total Events': dataRows.length,
+                        'Evening Activities': dataRows.filter((row) => row['Event Type'] === 'Evening Activity').length,
+                        'Special Events': dataRows.filter((row) => row['Event Type'] === 'Special Event').length,
+                    };
                     break;
                 }
                 case 'conflicts': {
