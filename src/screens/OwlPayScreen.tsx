@@ -41,6 +41,13 @@ import {
     calculateOwlPayCartPricing,
 } from '../lib/owlPayFreeItem';
 import {
+    calculateOwlPayNewBalance,
+    formatOwlPayBalanceHint,
+    getOwlPayBalanceTone,
+    OWL_PAY_MAX_OVERDRAFT,
+    wouldExceedOwlPayOverdraft,
+} from '../lib/owlPayBalanceUtils';
+import {
     findInListByRfid,
     lookupOwlPayCamperByRfid,
     lookupOwlPayStaffByRfid,
@@ -254,8 +261,9 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const total = cartPricing.total;
     const freeDiscount = cartPricing.freeDiscount;
     const currentBalance = Number(selectedCamper?.owl_pay_balance || 0);
-    const newBalance = selectedIsStaff ? currentBalance + total : currentBalance - total;
-    const hasInsufficientFunds = !selectedIsStaff && cart.length > 0 && newBalance < 0;
+    const newBalance = calculateOwlPayNewBalance(currentBalance, total, selectedIsStaff);
+    const exceedsOverdraft = !selectedIsStaff && cart.length > 0 && wouldExceedOwlPayOverdraft(currentBalance, total);
+    const newBalanceTone = getOwlPayBalanceTone(newBalance);
     const scanStatusLabel =
         scanStatus === 'scanning'
             ? 'Reading scanner input...'
@@ -480,8 +488,8 @@ export const OwlPayScreen = ({ navigation }: any) => {
             Alert.alert('Owl Pay', 'Add at least one item');
             return;
         }
-        if (!selectedIsStaff && newBalance < 0) {
-            Alert.alert('Owl Pay', 'Insufficient funds');
+        if (!selectedIsStaff && wouldExceedOwlPayOverdraft(currentBalance, total)) {
+            Alert.alert('Owl Pay', `Campers can go up to $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} negative.`);
             return;
         }
 
@@ -760,11 +768,12 @@ export const OwlPayScreen = ({ navigation }: any) => {
                                 <View
                                     style={[
                                         styles.balancePill,
-                                        Number(camper.owl_pay_balance || 0) < 5
-                                            ? styles.balancePillLow
-                                            : Number(camper.owl_pay_balance || 0) < 15
-                                              ? styles.balancePillMedium
-                                              : styles.balancePillHealthy,
+                                        (() => {
+                                            const tone = getOwlPayBalanceTone(Number(camper.owl_pay_balance || 0));
+                                            if (tone === 'negative' || tone === 'low') return styles.balancePillLow;
+                                            if (tone === 'medium') return styles.balancePillMedium;
+                                            return styles.balancePillHealthy;
+                                        })(),
                                     ]}
                                 >
                                     <Text style={styles.balancePillText}>{currency(Number(camper.owl_pay_balance || 0))}</Text>
@@ -901,20 +910,31 @@ export const OwlPayScreen = ({ navigation }: any) => {
                         <Text
                             style={[
                                 styles.totalsLine,
-                                newBalance < 5 ? styles.balanceTextLow : newBalance < 15 ? styles.balanceTextMedium : styles.balanceTextHealthy,
+                                newBalanceTone === 'negative' || newBalanceTone === 'low'
+                                    ? styles.balanceTextLow
+                                    : newBalanceTone === 'medium'
+                                      ? styles.balanceTextMedium
+                                      : styles.balanceTextHealthy,
                             ]}
                         >
                             New Balance: {currency(newBalance)}
                         </Text>
                     )}
                     {selectedIsStaff && selectedStaff && <Text style={styles.totalsLine}>Staff Running Tab</Text>}
-                    {hasInsufficientFunds && <Text style={styles.insufficientFundsText}>Insufficient funds for this checkout</Text>}
+                    {exceedsOverdraft && (
+                        <Text style={styles.insufficientFundsText}>
+                            Exceeds ${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} credit limit
+                        </Text>
+                    )}
+                    {!exceedsOverdraft && formatOwlPayBalanceHint(newBalance) && (
+                        <Text style={styles.insufficientFundsText}>{formatOwlPayBalanceHint(newBalance)}</Text>
+                    )}
                 </View>
 
                 <TouchableOpacity
-                    style={[styles.primarySaveButton, (!selectedCamperId || isCompletingTransaction || hasInsufficientFunds) && { opacity: 0.6 }]}
+                    style={[styles.primarySaveButton, (!selectedCamperId || isCompletingTransaction || exceedsOverdraft) && { opacity: 0.6 }]}
                     onPress={completeTransaction}
-                    disabled={!selectedCamperId || isCompletingTransaction || hasInsufficientFunds}
+                    disabled={!selectedCamperId || isCompletingTransaction || exceedsOverdraft}
                 >
                     <Text style={styles.primaryButtonText}>
                         {isCompletingTransaction ? 'Processing...' : 'Complete Transaction'}
