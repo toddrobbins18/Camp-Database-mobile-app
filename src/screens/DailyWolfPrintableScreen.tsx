@@ -24,6 +24,10 @@ import {
     useTodayMeals,
 } from '../api/dashboard';
 import { formatMenuMealTypeLabel } from '../api/menu';
+import {
+    divisionNamesLabel,
+    formatPrintableTime,
+} from '../lib/dailyWolfPrintableUtils';
 
 const FOOTER_TAGLINE = 'Have a great day at Timber Lake West!';
 
@@ -144,7 +148,16 @@ export const DailyWolfPrintableScreen = ({ navigation }: any) => {
             'Athletics',
             sportsToday.length
                 ? sportsToday
-                      .map((s: any) => [s.time, s.title, s.location].filter(Boolean).join(' — '))
+                      .map((s: any) => {
+                          const divisionLabel = divisionNamesLabel(s.divisions ?? []);
+                          const parts = [
+                              formatPrintableTime(s.start_time_field || s.time || s.depart_time),
+                              s.title,
+                              divisionLabel || null,
+                              s.location,
+                          ].filter(Boolean);
+                          return parts.join(' — ');
+                      })
                       .join('\n')
                 : 'No athletic events scheduled',
             '',
@@ -154,7 +167,16 @@ export const DailyWolfPrintableScreen = ({ navigation }: any) => {
             'Special Events',
             specialActivitiesToday.length
                 ? specialActivitiesToday
-                      .map((e: any) => [e.time_slot, e.title, e.location].filter(Boolean).join(' — '))
+                      .map((e: any) => {
+                          const divisionLabel = divisionNamesLabel(e.divisions ?? []);
+                          const parts = [
+                              formatPrintableTime(e.time_slot),
+                              e.title,
+                              divisionLabel || null,
+                              e.location,
+                          ].filter(Boolean);
+                          return parts.join(' — ');
+                      })
                       .join('\n')
                 : 'No special events scheduled',
             '',
@@ -245,17 +267,25 @@ export const DailyWolfPrintableScreen = ({ navigation }: any) => {
                 icon={<Ionicons name="trophy-outline" size={18} color={theme.colors.primary} />}
             >
                 {sportsToday.length > 0 ? (
-                    sportsToday.map((s: any) => (
+                    sportsToday.map((s: any) => {
+                        const divisionLabel = divisionNamesLabel(s.divisions ?? []);
+                        return (
                         <View key={s.id} style={styles.listRow}>
-                            <Text style={styles.listTime}>{s.time || '—'}</Text>
+                            <Text style={styles.listTime}>
+                                {formatPrintableTime(s.start_time_field || s.time || s.depart_time)}
+                            </Text>
                             <View style={styles.listBody}>
                                 <Text style={styles.listTitle}>{s.title}</Text>
+                                {divisionLabel ? (
+                                    <Text style={styles.listDivision}>{divisionLabel}</Text>
+                                ) : null}
                                 {s.location ? (
                                     <Text style={styles.listMeta}>{s.location}</Text>
                                 ) : null}
                             </View>
                         </View>
-                    ))
+                        );
+                    })
                 ) : (
                     <EmptyHint>No athletic events scheduled</EmptyHint>
                 )}
@@ -266,17 +296,23 @@ export const DailyWolfPrintableScreen = ({ navigation }: any) => {
                 icon={<Ionicons name="sparkles-outline" size={18} color={theme.colors.primary} />}
             >
                 {specialActivitiesToday.length > 0 ? (
-                    specialActivitiesToday.map((e: any) => (
+                    specialActivitiesToday.map((e: any) => {
+                        const divisionLabel = divisionNamesLabel(e.divisions ?? []);
+                        return (
                         <View key={e.id} style={styles.listRow}>
-                            <Text style={styles.listTime}>{e.time_slot || '—'}</Text>
+                            <Text style={styles.listTime}>{formatPrintableTime(e.time_slot)}</Text>
                             <View style={styles.listBody}>
-                                <Text style={styles.listTitle}>{e.title}</Text>
+                                <Text style={styles.listTitle}>
+                                    {e.title}
+                                    {divisionLabel ? ` (${divisionLabel})` : ''}
+                                </Text>
                                 {e.location ? (
                                     <Text style={styles.listMeta}>{e.location}</Text>
                                 ) : null}
                             </View>
                         </View>
-                    ))
+                        );
+                    })
                 ) : (
                     <EmptyHint>No special events scheduled</EmptyHint>
                 )}
@@ -562,7 +598,7 @@ const styles = StyleSheet.create({
         borderBottomColor: theme.colors.border,
     },
     listTime: {
-        width: 72,
+        width: 84,
         fontSize: 11,
         fontWeight: '700',
         color: theme.colors.primary,
@@ -572,6 +608,12 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: theme.colors.text,
+    },
+    listDivision: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.primary,
+        marginTop: 2,
     },
     listMeta: {
         fontSize: 12,

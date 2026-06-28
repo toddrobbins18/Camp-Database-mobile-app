@@ -11,9 +11,9 @@ export function registerInboxNotificationPresentation(): void {
     handlerRegistered = true;
     Notifications.setNotificationHandler({
         handleNotification: async () => ({
-            shouldShowAlert: false,
-            shouldPlaySound: false,
-            shouldSetBadge: false,
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: true,
             shouldShowBanner: true,
             shouldShowList: true,
         }),

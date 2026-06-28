@@ -72,6 +72,7 @@ export const MessagesScreen = ({ navigation }: any) => {
     const [groupDescription, setGroupDescription] = useState('');
     const [groupSearchUsers, setGroupSearchUsers] = useState('');
     const [selectedGroupMembers, setSelectedGroupMembers] = useState<string[]>([]);
+    const [emailConfig, setEmailConfig] = useState<{ is_configured?: boolean | null; is_active?: boolean | null; email_ready?: boolean | null } | null>(null);
 
     const { companyId, profile } = useCompany();
     /**
@@ -79,10 +80,34 @@ export const MessagesScreen = ({ navigation }: any) => {
      * Use profile.company_id when context has not finished hydrating so inbox rows get real sender names, not "Unknown sender".
      */
     const messageLabelsCompanyId = companyId ?? profile?.company_id ?? undefined;
+    const emailReady =
+        emailConfig?.email_ready != null
+            ? !!emailConfig.email_ready
+            : !!emailConfig?.is_configured && emailConfig?.is_active !== false;
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null));
     }, []);
+
+    useEffect(() => {
+        if (!companyId) return;
+        (async () => {
+            const { data: rpcRows, error: rpcError } = await supabase.rpc(
+                'get_company_email_delivery_status',
+                { _company_id: companyId },
+            );
+            if (!rpcError && rpcRows && rpcRows.length > 0) {
+                setEmailConfig(rpcRows[0]);
+                return;
+            }
+            const { data } = await supabase
+                .from('company_email_config')
+                .select('is_configured, is_active')
+                .eq('company_id', companyId)
+                .maybeSingle();
+            setEmailConfig(data);
+        })();
+    }, [companyId]);
 
     const {
         data: messages = [],
@@ -517,14 +542,24 @@ export const MessagesScreen = ({ navigation }: any) => {
                                 <Text style={styles.sectionTitle}>Multi-Channel Notifications</Text>
                             </View>
                             <Text style={styles.cardDescription}>
-                                Send notifications via In-app push alerts and/or email. In-app notifications are delivered instantly.
+                                Send notifications via in-app alerts and/or email. In-app messages appear in the recipient&apos;s inbox immediately; the mobile app also shows a device alert when open.
                             </Text>
-                            <View style={styles.warningBox}>
-                                <Ionicons name="warning" size={16} color={theme.colors.warning} />
-                                <Text style={styles.warningText}>
-                                    Email integration requires configuration (Microsoft 365 or Resend).
-                                </Text>
-                            </View>
+                            {!emailReady && (
+                                <View style={styles.warningBox}>
+                                    <Ionicons name="warning" size={16} color={theme.colors.warning} />
+                                    <Text style={styles.warningText}>
+                                        Email requires Microsoft 365 setup in Admin Panel → Email Configuration.
+                                    </Text>
+                                </View>
+                            )}
+                            {emailReady && (
+                                <View style={[styles.warningBox, { backgroundColor: '#ecfdf5', borderColor: '#bbf7d0' }]}>
+                                    <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
+                                    <Text style={[styles.warningText, { color: '#166534' }]}>
+                                        Email is configured and ready.
+                                    </Text>
+                                </View>
+                            )}
                         </View>
 
                         {/* Delivery Method Card */}
@@ -544,7 +579,7 @@ export const MessagesScreen = ({ navigation }: any) => {
                                         {deliveryMethod === 'in-app' && <View style={styles.radioInner} />}
                                     </View>
                                     <Ionicons name="notifications-outline" size={20} color={theme.colors.text} style={styles.radioIcon} />
-                                    <Text style={styles.radioText}>In-App Notification (Push)</Text>
+                                    <Text style={styles.radioText}>In-App Notification</Text>
                                     <View style={[styles.tag, styles.tagInstant]}>
                                         <Text style={styles.tagText}>Instant</Text>
                                     </View>
@@ -553,7 +588,8 @@ export const MessagesScreen = ({ navigation }: any) => {
 
                             <TouchableOpacity
                                 style={styles.radioOption}
-                                onPress={() => setDeliveryMethod('email')}
+                                onPress={() => emailReady && setDeliveryMethod('email')}
+                                disabled={!emailReady}
                             >
                                 <View style={styles.radioContainer}>
                                     <View style={[styles.radio, deliveryMethod === 'email' && styles.radioSelected]}>
@@ -561,8 +597,10 @@ export const MessagesScreen = ({ navigation }: any) => {
                                     </View>
                                     <Ionicons name="mail-outline" size={20} color={theme.colors.text} style={styles.radioIcon} />
                                     <Text style={styles.radioText}>Email Notification</Text>
-                                    <View style={[styles.tag, styles.tagNotConfigured]}>
-                                        <Text style={styles.tagTextNotConfigured}>Not Configured</Text>
+                                    <View style={[styles.tag, emailReady ? styles.tagInstant : styles.tagNotConfigured]}>
+                                        <Text style={emailReady ? styles.tagText : styles.tagTextNotConfigured}>
+                                            {emailReady ? 'Ready' : 'Not Configured'}
+                                        </Text>
                                     </View>
                                 </View>
                             </TouchableOpacity>
@@ -718,44 +756,43 @@ export const MessagesScreen = ({ navigation }: any) => {
                                         Alert.alert('Missing message', 'Please enter a message.');
                                         return;
                                     }
-                                    let senderLabel: string | undefined = users.find((u) => u.id === currentUserId)?.name;
-                                    if (!senderLabel) {
-                                        const { data: prof } = await supabase
-                                            .from('profiles')
-                                            .select('full_name, email')
-                                            .eq('id', currentUserId)
-                                            .maybeSingle();
-                                        senderLabel =
-                                            prof?.full_name?.trim() || prof?.email?.split('@')[0] || undefined;
-                                    }
-                                    selectedUsers.forEach((recipientId) => {
-                                        sendMutation.mutate({
-                                            sender_id: currentUserId,
-                                            recipient_id: recipientId,
-                                            subject: subject.trim(),
-                                            content: message.trim(),
-                                            sender_display_name: senderLabel,
+                                    try {
+                                        const { data, error } = await supabase.functions.invoke('send-bulk-email', {
+                                            body: {
+                                                subject: subject.trim(),
+                                                message: message.trim(),
+                                                recipientTags: [],
+                                                recipientIds: selectedUsers,
+                                                deliveryMethods: {
+                                                    inApp: deliveryMethod === 'in-app',
+                                                    email: deliveryMethod === 'email',
+                                                },
+                                            },
                                         });
-                                    });
-                                    Alert.alert('Success', 'Message sent!');
-                                    handleCloseCompose();
+                                        if (error) throw error;
+                                        const methods: string[] = data?.delivery_methods ?? [];
+                                        if (deliveryMethod === 'email' && methods.includes('email_not_configured')) {
+                                            Alert.alert(
+                                                'Email not sent',
+                                                'Email is not configured for this camp. Configure Microsoft 365 in Admin Panel, or send as in-app only.',
+                                            );
+                                            return;
+                                        }
+                                        if (deliveryMethod === 'email' && methods.includes('email_failed')) {
+                                            Alert.alert('Email failed', data?.note || 'Email delivery failed. Check Admin → Email Configuration.');
+                                            return;
+                                        }
+                                        Alert.alert('Success', data?.note || 'Notification sent!');
+                                        handleCloseCompose();
+                                    } catch (err: any) {
+                                        Alert.alert('Error', err?.message || 'Failed to send notification.');
+                                    }
                                 }}>
                                     <Ionicons name="send" size={18} color="white" />
                                     <Text style={styles.sendBtnText}>Send Notification</Text>
                                 </TouchableOpacity>
                             </View>
                         </StyledCard>
-
-                        {/* Email Integration Pending Banner */}
-                        <View style={styles.emailBanner}>
-                            <Ionicons name="mail-outline" size={20} color="white" />
-                            <View style={styles.bannerContent}>
-                                <Text style={styles.bannerTitle}>Email Integration Pending</Text>
-                                <Text style={styles.bannerText}>
-                                    Email sending functionality will be enabled once Microsoft 365 Integration is configured. For now, messages are logged but not sent.
-                                </Text>
-                            </View>
-                        </View>
                     </KeyboardAwareScrollView>
                 </View>
             </Modal>

@@ -236,6 +236,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     const [manageRosterActiveTab, setManageRosterActiveTab] = useState<'campers' | 'staff' | 'templates'>('campers');
     const [rosterSearchTerm, setRosterSearchTerm] = useState('');
     const [selectedRosterEvent, setSelectedRosterEvent] = useState<any>(null);
+    const [rosterModalReadOnly, setRosterModalReadOnly] = useState(false);
     const [selectedCampers, setSelectedCampers] = useState<Set<string>>(new Set());
     const [showRosterSortModal, setShowRosterSortModal] = useState(false);
     const [rosterSortBy, setRosterSortBy] = useState('Name');
@@ -253,6 +254,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
 
     const toggleCamperSelection = (id: string) => {
+        if (rosterModalReadOnly) return;
         const newSelection = new Set(selectedCampers);
         if (newSelection.has(id)) {
             newSelection.delete(id);
@@ -261,6 +263,53 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         }
         setSelectedCampers(newSelection);
     };
+
+    const openRosterModal = (event: any, readOnly: boolean) => {
+        setSelectedRosterEvent(event);
+        setRosterModalReadOnly(readOnly);
+        setManageRosterActiveTab('campers');
+        setRosterSearchTerm('');
+        setShowManageRosterModal(true);
+    };
+
+    useEffect(() => {
+        if (!showManageRosterModal || !selectedRosterEvent?.id || !companyId) return;
+
+        let cancelled = false;
+
+        (async () => {
+            const { data: rosterData } = await supabase
+                .from('sports_event_roster')
+                .select('child_id')
+                .eq('event_id', selectedRosterEvent.id)
+                .eq('company_id', companyId);
+
+            if (cancelled) return;
+            setSelectedCampers(new Set(rosterData?.map((row) => row.child_id) || []));
+
+            const { data: staffAssignments } = await supabase
+                .from('sports_event_staff')
+                .select('*')
+                .eq('event_id', selectedRosterEvent.id)
+                .eq('company_id', companyId);
+
+            if (cancelled) return;
+            setAssignedRefs(staffAssignments?.filter((row) => row.role === 'ref').map((row) => row.staff_id) || []);
+            setDivisionProvidesCoach(!!selectedRosterEvent.divisionProvidesCoach || !!selectedRosterEvent.division_provides_coach);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [showManageRosterModal, selectedRosterEvent?.id, companyId]);
+
+    const rosterCampersToShow = useMemo(() => {
+        const filtered = campers.filter((c) => c.name.toLowerCase().includes(rosterSearchTerm.toLowerCase()));
+        if (rosterModalReadOnly) {
+            return filtered.filter((c) => selectedCampers.has(c.id));
+        }
+        return filtered;
+    }, [campers, rosterSearchTerm, rosterModalReadOnly, selectedCampers]);
 
     /** Shared pickers for Add + Edit sports event forms */
     type FormPickerKind = 'sport' | 'event' | 'home' | 'divisions';
@@ -903,7 +952,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                 <Ionicons name="people" size={20} color={theme.colors.text} />
                                 <Text style={styles.modalTitle}>
-                                    Manage Roster: {selectedRosterEvent?.title || 'Event'}
+                                    {rosterModalReadOnly ? 'View' : 'Manage'} Roster: {selectedRosterEvent?.title || 'Event'}
                                 </Text>
                             </View>
                             <TouchableOpacity onPress={() => setShowManageRosterModal(false)}>
@@ -914,7 +963,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                         {/* Tabs */}
                         <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
                             <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surface, borderRadius: 8, padding: 2, borderWidth: 1, borderColor: theme.colors.border }}>
-                                {['campers', 'staff', 'templates'].map((tab) => (
+                                {(rosterModalReadOnly ? ['campers', 'staff'] : ['campers', 'staff', 'templates']).map((tab) => (
                                     <TouchableOpacity
                                         key={tab}
                                         style={{
@@ -971,24 +1020,34 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     </View>
 
                                     <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>
-                                        {selectedCampers.size} of {campers.length} campers selected
+                                        {rosterModalReadOnly
+                                            ? `${rosterCampersToShow.length} camper${rosterCampersToShow.length === 1 ? '' : 's'} on roster`
+                                            : `${selectedCampers.size} of ${campers.length} campers selected`}
                                     </Text>
 
                                     {/* Campers List */}
                                     <ScrollView style={{ flex: 1 }}>
-                                        {campers.filter(c => c.name.toLowerCase().includes(rosterSearchTerm.toLowerCase())).map((camper) => (
+                                        {rosterCampersToShow.map((camper) => (
                                             <TouchableOpacity
                                                 key={camper.id}
                                                 style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}
                                                 onPress={() => toggleCamperSelection(camper.id)}
+                                                disabled={rosterModalReadOnly}
                                             >
-                                                <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 1, borderColor: selectedCampers.has(camper.id) ? theme.colors.secondary : theme.colors.textSecondary, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                                                    {selectedCampers.has(camper.id) && <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: theme.colors.secondary }} />}
-                                                </View>
+                                                {!rosterModalReadOnly && (
+                                                    <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 1, borderColor: selectedCampers.has(camper.id) ? theme.colors.secondary : theme.colors.textSecondary, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                                        {selectedCampers.has(camper.id) && <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: theme.colors.secondary }} />}
+                                                    </View>
+                                                )}
                                                 <Text style={{ flex: 1, fontSize: 16, fontWeight: '500', color: theme.colors.text }}>{camper.name}</Text>
                                                 <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>Grade: {camper.grade}</Text>
                                             </TouchableOpacity>
                                         ))}
+                                        {rosterCampersToShow.length === 0 && (
+                                            <Text style={{ textAlign: 'center', color: theme.colors.textSecondary, marginTop: 24 }}>
+                                                {rosterModalReadOnly ? 'No campers on this roster' : 'No campers found'}
+                                            </Text>
+                                        )}
                                     </ScrollView>
                                 </>
                             )}
@@ -999,12 +1058,14 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     <View style={{ marginBottom: 20, padding: 16, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12 }}>
                                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                                             <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.text }}>Coaches</Text>
-                                            <TouchableOpacity
-                                                style={{ backgroundColor: divisionProvidesCoach ? '#13B4B2' : theme.colors.surface, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#13B4B2' }}
-                                                onPress={() => setDivisionProvidesCoach(!divisionProvidesCoach)}
-                                            >
-                                                <Text style={{ fontSize: 12, color: divisionProvidesCoach ? 'white' : '#13B4B2', fontWeight: 'bold' }}>Division will provide</Text>
-                                            </TouchableOpacity>
+                                            {!rosterModalReadOnly && (
+                                                <TouchableOpacity
+                                                    style={{ backgroundColor: divisionProvidesCoach ? '#13B4B2' : theme.colors.surface, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#13B4B2' }}
+                                                    onPress={() => setDivisionProvidesCoach(!divisionProvidesCoach)}
+                                                >
+                                                    <Text style={{ fontSize: 12, color: divisionProvidesCoach ? 'white' : '#13B4B2', fontWeight: 'bold' }}>Division will provide</Text>
+                                                </TouchableOpacity>
+                                            )}
                                         </View>
 
                                         {divisionProvidesCoach && (
@@ -1018,18 +1079,20 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                             <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.text }}>Referees</Text>
                                         </View>
 
-                                        <View style={{ position: 'relative', zIndex: 1000, marginBottom: 12 }}>
-                                            <TouchableOpacity
-                                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8 }}
-                                                onPress={() => {
-                                                    setStaffSelectionType('ref');
-                                                    setShowStaffSelectionModal(true);
-                                                }}
-                                            >
-                                                <Text style={{ color: theme.colors.textSecondary }}>Add referee...</Text>
-                                                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                                            </TouchableOpacity>
-                                        </View>
+                                        {!rosterModalReadOnly && (
+                                            <View style={{ position: 'relative', zIndex: 1000, marginBottom: 12 }}>
+                                                <TouchableOpacity
+                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8 }}
+                                                    onPress={() => {
+                                                        setStaffSelectionType('ref');
+                                                        setShowStaffSelectionModal(true);
+                                                    }}
+                                                >
+                                                    <Text style={{ color: theme.colors.textSecondary }}>Add referee...</Text>
+                                                    <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                                                </TouchableOpacity>
+                                            </View>
+                                        )}
 
                                         <View style={{ gap: 8 }}>
                                             {assignedRefs.map(staffId => {
@@ -1040,9 +1103,11 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                                             <Text style={{ fontSize: 14, fontWeight: '500', color: theme.colors.text }}>{ref?.name}</Text>
                                                             <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>{ref?.role}</Text>
                                                         </View>
-                                                        <TouchableOpacity onPress={() => setAssignedRefs(assignedRefs.filter(id => id !== staffId))}>
-                                                            <Ionicons name="close-circle" size={20} color={theme.colors.textSecondary} />
-                                                        </TouchableOpacity>
+                                                        {!rosterModalReadOnly && (
+                                                            <TouchableOpacity onPress={() => setAssignedRefs(assignedRefs.filter(id => id !== staffId))}>
+                                                                <Ionicons name="close-circle" size={20} color={theme.colors.textSecondary} />
+                                                            </TouchableOpacity>
+                                                        )}
                                                     </View>
                                                 );
                                             })}
@@ -1068,10 +1133,12 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
                         {/* Footer */}
                         <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: theme.colors.border, flexDirection: 'row', alignItems: 'center' }}>
-                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <Ionicons name="save-outline" size={18} color={theme.colors.textSecondary} />
-                                <Text style={{ color: theme.colors.textSecondary, fontSize: 14 }}>Save as Template</Text>
-                            </TouchableOpacity>
+                            {!rosterModalReadOnly && (
+                                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Ionicons name="save-outline" size={18} color={theme.colors.textSecondary} />
+                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 14 }}>Save as Template</Text>
+                                </TouchableOpacity>
+                            )}
 
                             <View style={{ flex: 1 }} />
 
@@ -1080,17 +1147,19 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border }}
                                     onPress={() => setShowManageRosterModal(false)}
                                 >
-                                    <Text style={{ fontWeight: '600', color: theme.colors.text }}>Cancel</Text>
+                                    <Text style={{ fontWeight: '600', color: theme.colors.text }}>{rosterModalReadOnly ? 'Close' : 'Cancel'}</Text>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity
-                                    style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: theme.colors.secondary }}
-                                    onPress={() => {
-                                        setShowManageRosterModal(false);
-                                    }}
-                                >
-                                    <Text style={{ fontWeight: '600', color: 'white' }}>Save Roster</Text>
-                                </TouchableOpacity>
+                                {!rosterModalReadOnly && (
+                                    <TouchableOpacity
+                                        style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: theme.colors.secondary }}
+                                        onPress={() => {
+                                            setShowManageRosterModal(false);
+                                        }}
+                                    >
+                                        <Text style={{ fontWeight: '600', color: 'white' }}>Save Roster</Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         </View>
                     </Pressable>
@@ -1550,16 +1619,10 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                                     </Text>
                                                 </View>
                                                 <View style={styles.eventActions}>
-                                                    <TouchableOpacity style={styles.eventActionBtn} onPress={() => {
-                                                        setSelectedEventOptions(event);
-                                                        setShowEventOptionsModal(true);
-                                                    }}>
+                                                    <TouchableOpacity style={styles.eventActionBtn} onPress={() => openRosterModal(event, true)}>
                                                         <Ionicons name="people-outline" size={16} color={theme.colors.text} />
                                                     </TouchableOpacity>
-                                                    <TouchableOpacity style={styles.eventActionBtn} onPress={() => {
-                                                        setSelectedRosterEvent(event);
-                                                        setShowManageRosterModal(true);
-                                                    }}>
+                                                    <TouchableOpacity style={styles.eventActionBtn} onPress={() => openRosterModal(event, false)}>
                                                         <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
                                                     </TouchableOpacity>
                                                     <TouchableOpacity style={styles.eventActionBtn} onPress={() => handleEdit(event)}>
@@ -2044,19 +2107,13 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                         <View style={styles.eventActions}>
                                             <TouchableOpacity
                                                 style={styles.eventActionBtn}
-                                                onPress={() => {
-                                                    setSelectedEventOptions(event);
-                                                    setShowEventOptionsModal(true);
-                                                }}
+                                                onPress={() => openRosterModal(event, true)}
                                             >
                                                 <Ionicons name="people-outline" size={16} color={theme.colors.text} />
                                             </TouchableOpacity>
                                             <TouchableOpacity
                                                 style={styles.eventActionBtn}
-                                                onPress={() => {
-                                                    setSelectedRosterEvent(event);
-                                                    setShowManageRosterModal(true);
-                                                }}
+                                                onPress={() => openRosterModal(event, false)}
                                             >
                                                 <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
                                             </TouchableOpacity>
@@ -3050,7 +3107,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                 </View>
                             </View>
 
-                            {/* Manage Roster Button */}
+                            {/* View Roster Button */}
                             <TouchableOpacity
                                 style={{
                                     backgroundColor: '#2563EB',
@@ -3064,12 +3121,34 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                 }}
                                 onPress={() => {
                                     setShowEventOptionsModal(false);
-                                    setSelectedRosterEvent(selectedEventOptions);
-                                    setShowManageRosterModal(true);
+                                    openRosterModal(selectedEventOptions, true);
                                 }}
                             >
                                 <Ionicons name="people" size={20} color="white" />
-                                <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Manage Roster</Text>
+                                <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>View Roster</Text>
+                            </TouchableOpacity>
+
+                            {/* Manage Roster Button */}
+                            <TouchableOpacity
+                                style={{
+                                    backgroundColor: 'white',
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    paddingVertical: 14,
+                                    borderRadius: 8,
+                                    marginBottom: 12,
+                                    gap: 8,
+                                    borderWidth: 1,
+                                    borderColor: '#2563EB',
+                                }}
+                                onPress={() => {
+                                    setShowEventOptionsModal(false);
+                                    openRosterModal(selectedEventOptions, false);
+                                }}
+                            >
+                                <Ionicons name="person-add" size={20} color="#2563EB" />
+                                <Text style={{ color: '#2563EB', fontWeight: '700', fontSize: 16 }}>Manage Roster</Text>
                             </TouchableOpacity>
 
                             {/* Edit & Delete Row */}

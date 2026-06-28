@@ -3,6 +3,7 @@ import { dedupeMenuItemsForDisplay } from '../lib/csvRosterSync';
 import { supabase } from '../lib/supabase';
 import { ageOnLocalDate, isActiveRosterStatus, parseBirthdayCalendarParts } from '../lib/birthdayDate';
 import { expandDivisionIdsForRosterFilter } from '../lib/divisionFilterUtils';
+import { mergeActivityDivisions, mergeSportsDivisions } from '../lib/dailyWolfPrintableUtils';
 import { getCachedJson, setCachedJson } from '../offline/engine';
 
 /** Same as lovable-web-app usePermissions fullDivisionAccessRoles. */
@@ -438,13 +439,19 @@ export const useTodaySportsCalendar = (
             return readThroughCache<any[]>(cacheKey, async () => {
                 const { data, error } = await supabase
                     .from('sports_calendar')
-                    .select('id, title, time, start_time_field, depart_time, location, sport_type, event_date')
+                    .select(`
+                      id, title, time, start_time_field, depart_time, location, sport_type, event_date,
+                      sports_calendar_divisions(division_id, division:divisions(id, name))
+                    `)
                     .eq('company_id', companyId)
                     .eq('event_date', todayString)
                     .eq('season', season);
                 if (error) throw error;
                 
-                const events = data || [];
+                const events = (data || []).map((event: any) => ({
+                    ...event,
+                    divisions: mergeSportsDivisions(event),
+                }));
                 events.sort((a: any, b: any) => {
                     const timeA = a.start_time_field || a.time || a.depart_time || '23:59';
                     const timeB = b.start_time_field || b.time || b.depart_time || '23:59';
@@ -473,12 +480,19 @@ export const useTodaySpecialEventsActivities = (
             return readThroughCache<any[]>(cacheKey, async () => {
                 const { data, error } = await supabase
                     .from('special_events_activities')
-                    .select('id, title, time_slot, location, description, event_type, season')
+                    .select(`
+                      id, title, time_slot, location, description, event_type, season,
+                      division:divisions(id, name),
+                      special_events_divisions(division_id, division:divisions(id, name))
+                    `)
                     .eq('company_id', companyId)
                     .eq('event_date', todayString)
                     .order('time_slot');
                 if (error) throw error;
-                const rows = data || [];
+                const rows = (data || []).map((event: any) => ({
+                    ...event,
+                    divisions: mergeActivityDivisions(event),
+                }));
                 const matched = rows.filter(
                     (e: { season?: string | null }) => e.season === season || e.season == null,
                 );

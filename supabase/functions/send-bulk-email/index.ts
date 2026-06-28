@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 interface BulkEmailRequest {
@@ -128,28 +128,26 @@ const handler = async (req: Request): Promise<Response> => {
     const companyName = (senderProfile.companies as any)?.name || 'Unknown';
     console.log(`📧 Sending from company: ${companyName}`);
 
-    // Get company's M365 configuration
-    const { data: emailConfig, error: configError } = await supabase
+    // Get company's M365 configuration (is_active defaults true; only skip when explicitly false)
+    const { data: emailConfig } = await supabase
       .from('company_email_config')
       .select('*')
       .eq('company_id', senderProfile.company_id)
-      .eq('is_active', true)
       .maybeSingle();
 
-    if (!emailConfig || !emailConfig.is_configured) {
+    const emailConfigured = !!emailConfig?.is_configured && emailConfig?.is_active !== false;
+
+    if (!emailConfigured) {
       console.warn("⚠️ Email not configured for this company");
       // Continue - will skip email sending but still send in-app
     }
 
-    const companyId = senderProfile.company_id as string;
-
-    // Fetch recipients by tags (scoped to sender's company)
+    // Fetch recipients by tags
     let recipientsByTag: any[] = [];
     if (recipientTags && recipientTags.length > 0) {
       const { data: taggedUsers, error: tagError } = await supabase
         .from("user_tags")
-        .select("user_id, profiles!inner(id, email, full_name, company_id)")
-        .eq("company_id", companyId)
+        .select("user_id, profiles!inner(id, email, full_name)")
         .in("tag", recipientTags);
 
       if (tagError) {
@@ -159,13 +157,12 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Fetch recipients by IDs (scoped to sender's company)
+    // Fetch recipients by IDs
     let recipientsByIds: any[] = [];
     if (recipientIds && recipientIds.length > 0) {
       const { data: directUsers, error: idsError } = await supabase
         .from("profiles")
-        .select("id, email, full_name, company_id")
-        .eq("company_id", companyId)
+        .select("id, email, full_name")
         .in("id", recipientIds);
 
       if (idsError) {
@@ -175,52 +172,47 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Merge and deduplicate recipients.
-    // In-app delivery must not require email (many profiles only have username / no SMTP address yet).
-    const allRecipients = new Map<string, { id: string; email: string; full_name: string }>();
-
-    const addRecipientRow = (profile: { id?: string; email?: string | null; full_name?: string | null; company_id?: string | null }) => {
-      if (!profile?.id || profile.company_id !== companyId) return;
-      const email = typeof profile.email === "string" ? profile.email.trim() : "";
-      const prev = allRecipients.get(profile.id);
-      allRecipients.set(profile.id, {
-        id: profile.id,
-        email: email || prev?.email || "",
-        full_name: (profile.full_name as string) || prev?.full_name || "",
-      });
-    };
+    // Merge and deduplicate recipients
+    const allRecipients = new Map();
 
     recipientsByTag.forEach((item: any) => {
-      if (item?.profiles) addRecipientRow(item.profiles);
+      const profile = item.profiles;
+      if (profile) {
+        allRecipients.set(profile.id, {
+          id: profile.id,
+          email: profile.email || "no-email@example.com",
+          full_name: profile.full_name || "Camp User",
+        });
+      }
     });
 
     recipientsByIds.forEach((profile: any) => {
-      addRecipientRow(profile);
+      if (profile) {
+        allRecipients.set(profile.id, {
+          id: profile.id,
+          email: profile.email || "no-email@example.com",
+          full_name: profile.full_name || "Camp User",
+        });
+      }
     });
 
     const recipients = Array.from(allRecipients.values());
-
-    if (recipients.length === 0) {
-      throw new Error(
-        "No recipients matched. If you used tags, ensure users are tagged for this camp. If you picked individuals, ensure they belong to your company.",
-      );
-    }
-
+    
     // Enforce maximum recipients per request
     if (recipients.length > MAX_RECIPIENTS_PER_REQUEST) {
       throw new Error(`Too many recipients: maximum ${MAX_RECIPIENTS_PER_REQUEST} recipients per request. Please send in batches.`);
     }
 
-    const emailRecipients = recipients.filter((r) => r.email.length > 0 && r.email !== "no-email@example.com");
-    const emails = emailRecipients.map((r) => r.email);
+    const emails = recipients.map((r) => r.email);
 
-    console.log(`Prepared ${recipients.length} unique recipients (${emailRecipients.length} with email)`);
+    console.log(`Prepared ${recipients.length} unique recipients`);
     console.log(`Email addresses: ${emails.join(", ")}`);
 
     const deliveryMethodsUsed: string[] = [];
     const batchAt = new Date().toISOString();
     const recipientIdsForLog = recipients.map((r) => r.id);
 
+    // Log first so email_logs always exists before in-app rows (mobile RPC can repair null sender_id).
     const { data: logRow, error: preLogError } = await supabase
       .from("email_logs")
       .insert({
@@ -244,15 +236,15 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send in-app notifications if selected
     if (deliveryMethods.inApp) {
-      const messages = recipients.map((recipient) => ({
+      const messages = recipients.map(recipient => ({
         recipient_id: recipient.id,
         sender_id: user.id,
         sender_display_name: senderDisplayName,
         subject: subject,
         content: message,
         read: false,
-        notification_type: "notification",
-        created_at: batchAt,
+        notification_type: 'notification',
+        created_at: batchAt
       }));
 
       const { error: messagesError } = await supabase
@@ -270,12 +262,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email notifications if selected
     if (deliveryMethods.email) {
-      if (!emailConfig || !emailConfig.is_configured) {
+      if (!emailConfigured || !emailConfig) {
         console.warn("⚠️ Email sending requested but not configured for this company");
         deliveryMethodsUsed.push("email_not_configured");
-      } else if (emailRecipients.length === 0) {
-        console.warn("⚠️ Email sending requested but no recipients have an email on file");
-        deliveryMethodsUsed.push("email_skipped_no_addresses");
       } else {
         try {
           console.log("📤 Sending emails via Microsoft 365");
@@ -318,7 +307,12 @@ const handler = async (req: Request): Promise<Response> => {
           let failCount = 0;
 
           // Send emails via Microsoft Graph API
-          for (const recipient of emailRecipients) {
+          for (const recipient of recipients) {
+            // Skip sending Microsoft email if user has no email address
+            if (!recipient.email || recipient.email === "no-email@example.com") {
+              console.log(`Skipping external email for ${recipient.full_name} - no email on file`);
+              continue;
+            }
             try {
               const emailPayload = {
                 message: {
@@ -412,8 +406,6 @@ const handler = async (req: Request): Promise<Response> => {
       ? "In-app notifications sent. Email not configured for your company."
       : deliveryMethodsUsed.includes("email_failed")
       ? "In-app notifications sent. Email sending failed - check configuration."
-      : deliveryMethodsUsed.includes("email_skipped_no_addresses")
-      ? "In-app notifications sent. No recipient email addresses on file for email delivery."
       : deliveryMethodsUsed.includes("email")
       ? "Notifications sent via in-app and email."
       : "In-app notifications sent successfully.";
