@@ -560,13 +560,16 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 }
             }
 
-            setSuccessData({
-                camperName: selectedDisplayName || 'Selection',
-                chargedAmount: total,
-                newBalance,
-                freeItemApplied: pricing.freeItemApplied,
-                isStaff: selectedIsStaff,
-            });
+            // Defer so the Complete button press doesn't dismiss the modal on open.
+            setTimeout(() => {
+                setSuccessData({
+                    camperName: selectedDisplayName || 'Selection',
+                    chargedAmount: total,
+                    newBalance,
+                    freeItemApplied: pricing.freeItemApplied,
+                    isStaff: selectedIsStaff,
+                });
+            }, 150);
             setCart([]);
             setSelectedCamperId(null);
             setSelectedIsStaff(false);
@@ -588,11 +591,6 @@ export const OwlPayScreen = ({ navigation }: any) => {
         };
     }, []);
 
-    useEffect(() => {
-        if (!successData) return;
-        const timer = setTimeout(() => setSuccessData(null), 8000);
-        return () => clearTimeout(timer);
-    }, [successData]);
 
     useEffect(() => {
         if (!settings) return;
@@ -1521,7 +1519,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 visible={!!successData}
                 transparent
                 animationType="fade"
-                onRequestClose={() => setSuccessData(null)}
+                onRequestClose={() => {}}
             >
                 <Pressable style={styles.modalOverlay} onPress={() => {}}>
                     <Pressable style={styles.successCard} onPress={(e) => e.stopPropagation()}>

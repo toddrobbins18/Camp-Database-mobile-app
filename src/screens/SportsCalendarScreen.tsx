@@ -27,6 +27,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
+import { syncLinkedTripsFromSportsEvent } from '../lib/syncLinkedTripFromSportsEvent';
 
 /** DB + web use lowercase; labels are for UI only (see migrations sports_calendar_home_away_check). */
 const HOME_AWAY_OPTIONS: { value: string; label: string }[] = [
@@ -824,6 +825,22 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 }));
                 const { error: jErr } = await supabase.from('sports_calendar_divisions').insert(junctionData);
                 if (jErr) console.warn('Junction update:', jErr);
+            }
+
+            const { error: tripSyncError } = await syncLinkedTripsFromSportsEvent(
+                supabase,
+                editFormData.id,
+                {
+                    title: editFormData.title,
+                    event_date: dateStr,
+                    depart_time: editFormData.depart_time,
+                    location: editFormData.location,
+                    sport_type: editFormData.sport_type,
+                    custom_sport_type: editFormData.custom_sport_type,
+                },
+            );
+            if (tripSyncError) {
+                console.warn('Linked trip sync:', tripSyncError);
             }
         } else {
             await enqueueSync('sports_calendar.update', { id: editFormData.id, update: submitData });
