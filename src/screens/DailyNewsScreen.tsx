@@ -18,6 +18,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { uploadDailyWolfDocument, pathFromFileUrl, getSignedUrl } from '../api/storage';
 import { isOnlineNow } from '../offline/engine';
 import { Linking } from 'react-native';
+import { divisionNamesLabel, formatPrintableTime } from '../lib/dailyWolfPrintableUtils';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -347,15 +348,21 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                                 ) : (
                                     specialActivitiesToday
                                         .filter((e: any) => e.event_type === 'evening-activity')
-                                        .map((evt: any) => (
+                                        .map((evt: any) => {
+                                            const divisionLabel = divisionNamesLabel(evt.divisions ?? []);
+                                            return (
                                             <View key={`dw-evening-${evt.id}`} style={styles.scheduleItem}>
-                                                <Text style={styles.menuLabel}>{evt.time_slot || '—'}</Text>
+                                                <Text style={styles.menuLabel}>{formatPrintableTime(evt.time_slot)}</Text>
                                                 <View style={styles.scheduleEventContent}>
                                                     <Text style={styles.menuValue}>{evt.title || 'Untitled event'}</Text>
+                                                    {divisionLabel ? (
+                                                        <Text style={styles.eventType}>{divisionLabel}</Text>
+                                                    ) : null}
                                                     <Text style={styles.eventType}>{evt.location || 'TBD'}</Text>
                                                 </View>
                                             </View>
-                                        ))
+                                            );
+                                        })
                                 )}
                             </View>
 
