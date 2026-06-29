@@ -46,12 +46,12 @@ const TIGER_CARDS: {
     },
     {
         key: 'outside',
-        label: 'Outside Events',
+        label: 'Movie / Entertainment',
         field: 'outside_event',
         accent: '#facc15',
         iconBg: '#fef9c3',
-        emoji: '🌐',
-        ion: 'globe-outline',
+        emoji: '🎬',
+        ion: 'film-outline',
     },
     {
         key: 'staff_off',
@@ -134,7 +134,7 @@ export function TigerTimesCategoryCards({ companyId, season, todayYmd }: Props) 
                     <Ionicons name="newspaper-outline" size={22} color={theme.colors.text} />
                     <View>
                         <Text style={styles.sectionTitle}>Tiger Times</Text>
-                        <Text style={styles.sectionSubtitle}>Laundry, calls, events & OD</Text>
+                        <Text style={styles.sectionSubtitle}>Laundry, calls, movies & OD</Text>
                     </View>
                 </View>
                 <Ionicons

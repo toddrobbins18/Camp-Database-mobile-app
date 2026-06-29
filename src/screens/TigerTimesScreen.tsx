@@ -71,7 +71,7 @@ const TIGER_COLORS_STORAGE_KEY = `calendar-colors-${TIGER_TIMES_CALENDAR_ID}`;
 const DEFAULT_TIGER_EVENT_COLORS = {
     Laundry: '#3b82f6',
     'Phone Calls': '#ef4444',
-    'Outside Events': '#eab308',
+    'Movie / Entertainment': '#eab308',
     'Staff Days Off': '#7dd3fc',
     'OD Notes': '#ff69b4',
 } as const;
@@ -81,7 +81,7 @@ type TigerColorLabel = keyof typeof DEFAULT_TIGER_EVENT_COLORS;
 const TIGER_COLOR_ORDER: TigerColorLabel[] = [
     'Laundry',
     'Phone Calls',
-    'Outside Events',
+    'Movie / Entertainment',
     'Staff Days Off',
     'OD Notes',
 ];
@@ -139,12 +139,12 @@ const TLC_EDITOR_CARDS: {
     },
     {
         key: 'outside',
-        title: 'Outside Event',
-        description: 'External events and activities',
+        title: 'Movie / Entertainment',
+        description: "Tonight's movie, outdoor screening, or other evening entertainment",
         field: 'outside_event',
-        colorLabel: 'Outside Events',
-        emoji: '🌐',
-        placeholder: 'Enter outside event details',
+        colorLabel: 'Movie / Entertainment',
+        emoji: '🎬',
+        placeholder: 'Enter movie or entertainment details for tonight',
         minHeight: 100,
     },
     {
@@ -245,8 +245,11 @@ export const TigerTimesScreen = ({ navigation }: { navigation: any }) => {
                 const raw = await AsyncStorage.getItem(TIGER_COLORS_STORAGE_KEY);
                 if (cancelled) return;
                 if (raw) {
-                    const parsed = JSON.parse(raw) as Partial<Record<TigerColorLabel, string>>;
-                    setTigerColors({ ...DEFAULT_TIGER_EVENT_COLORS, ...parsed });
+                    const parsed = JSON.parse(raw) as Partial<Record<string, string>>;
+                    if (parsed['Outside Events'] && !parsed['Movie / Entertainment']) {
+                        parsed['Movie / Entertainment'] = parsed['Outside Events'];
+                    }
+                    setTigerColors({ ...DEFAULT_TIGER_EVENT_COLORS, ...parsed } as Record<TigerColorLabel, string>);
                 }
             } catch {
                 if (!cancelled) setTigerColors({ ...DEFAULT_TIGER_EVENT_COLORS });
