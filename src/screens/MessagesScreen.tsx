@@ -32,6 +32,8 @@ import { supabase } from '../lib/supabase';
 import { MobileUserMenu } from '../components/MobileUserMenu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { inboxSenderDisplayName, sentRecipientDisplayName } from '../lib/messageProfiles';
+import { messageContentPreview } from '../lib/messageContentUtils';
+import { MessageBody } from '../components/MessageBody';
 
 /** Inbox list second line: latest reply (web parity) or root message body. */
 function inboxThreadListSnippet(msg: {
@@ -42,9 +44,10 @@ function inboxThreadListSnippet(msg: {
     const raw = msg.latest_reply_content;
     if (raw != null && String(raw).trim() !== '') {
         const who = msg.latest_reply_sender_name?.trim();
-        return who ? `${who}: ${String(raw)}` : String(raw);
+        const body = messageContentPreview(String(raw), 80);
+        return who ? `${who}: ${body}` : body;
     }
-    return String(msg.content ?? '').trim();
+    return messageContentPreview(String(msg.content ?? ''), 100);
 }
 
 export const MessagesScreen = ({ navigation }: any) => {
@@ -407,7 +410,12 @@ export const MessagesScreen = ({ navigation }: any) => {
                                             ? `To: ${sentRecipientDisplayName(detailMessage)}`
                                             : `From: ${inboxSenderDisplayName(detailMessage)}`}
                                     </Text>
-                                    <Text style={[styles.selectMessageText, { marginTop: 12, textAlign: 'left' }]}>{detailMessage.content}</Text>
+                                    <MessageBody
+                                        content={detailMessage.content ?? ''}
+                                        senderId={detailMessage.sender_id}
+                                        notificationType={detailMessage.notification_type}
+                                        style={{ marginTop: 12, textAlign: 'left' }}
+                                    />
                                     {threadReplies.length > 0 && (
                                         <View style={{ marginTop: 20 }}>
                                             <Text style={[styles.sectionTitleInline, { marginBottom: theme.spacing.sm }]}>Replies</Text>

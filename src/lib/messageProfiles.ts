@@ -150,11 +150,7 @@ export function inboxSenderDisplayName(msg: {
       if (prefix.length > 0 && prefix.length < 120) return prefix;
     }
   }
-  const nType = (msg.notification_type || '').toLowerCase();
-  if (nType === 'system' || nType === 'automated') {
-    return 'Automated notification';
-  }
-  return 'Unknown sender';
+  return 'Automated notification';
 }
 
 export function sentRecipientDisplayName(msg: {

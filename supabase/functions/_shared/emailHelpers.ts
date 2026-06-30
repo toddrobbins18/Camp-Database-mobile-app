@@ -282,12 +282,7 @@ export async function sendEmailNotifications(
     if (!senderId) {
       message.sender_display_name = 'Camp notification';
     }
-    
-    // Add company_id if provided
-    if (companyId) {
-      message.company_id = companyId;
-    }
-    
+
     return message;
   });
   
