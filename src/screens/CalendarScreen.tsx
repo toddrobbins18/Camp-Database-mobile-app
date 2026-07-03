@@ -9,6 +9,7 @@ import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCalendarEvents, useDivisions, type CalendarEvent, type EventSource } from '../api/calendar_events';
 import { UnifiedCalendar, type CalendarWidgetEvent } from '../components/UnifiedCalendar';
+import { getMasterCalendarAccent } from '../lib/masterCalendarColors';
 
 interface Event {
     id: string;
@@ -191,24 +192,18 @@ export const CalendarScreen = ({ navigation }: any) => {
         }
     };
 
-    const getDayAccent = (source?: EventSource) => {
-        switch (source) {
-            case 'sports_calendar':
-                return { bg: '#dbeafe', text: '#1d4ed8', marker: '#2563eb' };
-            case 'activities_field_trips':
-                return { bg: '#dcfce7', text: '#166534', marker: '#16a34a' };
-            case 'special_events_activities':
-                return { bg: '#f3e8ff', text: '#7e22ce', marker: '#a855f7' };
-            case 'tiger_times':
-                return { bg: '#fef3c7', text: '#92400e', marker: '#f59e0b' };
-            case 'daily_wolf':
-                return { bg: '#e0f2fe', text: '#0369a1', marker: '#0ea5e9' };
-            default:
-                return { bg: '#e5e7eb', text: theme.colors.text, marker: theme.colors.secondary };
+    const getDayAccent = (source?: EventSource, originalData?: Record<string, unknown> | null) => {
+        if (!source) {
+            return { bg: '#e5e7eb', text: theme.colors.text, marker: theme.colors.secondary };
         }
+        return getMasterCalendarAccent(source, originalData);
     };
 
-    const getTagStyle = (tag: string) => {
+    const getTagStyle = (tag: string, source?: EventSource, originalData?: Record<string, unknown> | null) => {
+        if (source && originalData) {
+            const accent = getMasterCalendarAccent(source, originalData);
+            return { backgroundColor: accent.bg, color: accent.text, borderWidth: 0 };
+        }
         if (tag === 'Sports') {
             return { backgroundColor: '#dbeafe', color: '#1e40af' };
         } else if (tag === 'Field Trip') {
@@ -231,7 +226,7 @@ export const CalendarScreen = ({ navigation }: any) => {
         location: e.location || '',
         type: e.type,
         tags: e.tags || [],
-        accent: getDayAccent(e.source),
+        accent: getDayAccent(e.source, e.originalData),
     }));
 
     // Group events by month for list view
@@ -379,6 +374,9 @@ export const CalendarScreen = ({ navigation }: any) => {
                                     <Text style={styles.monthHeader}>{formatMonthHeader(year, month)}</Text>
                                     {monthEvents.map((event) => {
                                         const calEvent = filteredAndSorted.find(e => e.id === event.id);
+                                        const sourceAccent = event.source
+                                            ? getDayAccent(event.source, event.originalData)
+                                            : null;
                                         return (
                                             <TouchableOpacity
                                                 key={event.id}
@@ -400,8 +398,16 @@ export const CalendarScreen = ({ navigation }: any) => {
                                                         </View>
                                                     </View>
                                                     <View style={styles.eventCardBadges}>
-                                                        <View style={[styles.eventTag, styles.eventTagSource]}>
-                                                            <Text style={styles.eventTagSourceText}>{getSourceLabel(event.source!)}</Text>
+                                                        <View style={[
+                                                            styles.eventTag,
+                                                            sourceAccent
+                                                                ? { backgroundColor: sourceAccent.bg, borderWidth: 0 }
+                                                                : styles.eventTagSource,
+                                                        ]}>
+                                                            <Text style={[
+                                                                styles.eventTagSourceText,
+                                                                sourceAccent ? { color: sourceAccent.text } : null,
+                                                            ]}>{getSourceLabel(event.source!)}</Text>
                                                         </View>
                                                         <View style={[styles.eventTag, styles.eventTagOutline]}>
                                                             <Text style={styles.eventTagText}>{event.type}</Text>

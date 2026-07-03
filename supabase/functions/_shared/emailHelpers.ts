@@ -153,38 +153,34 @@ export async function getRecipientsForEmailTypeWithFilters(
         continue;
       }
 
-      // DIVISION-FILTERED: Only leaders with access to specified divisions
+      // DIVISION-FILTERED: users tagged division_leader with access to the child's division
       console.log(`Filtering division_leader tag by divisions:`, filters.divisionIds);
-      
-      const { data: leaders } = await supabase
-        .from('user_roles')
+
+      const { data: taggedLeaders } = await supabase
+        .from('user_tags')
         .select('user_id')
-        .eq('role', 'division_leader')
+        .eq('tag', 'division_leader')
         .eq('company_id', companyId);
-      
-      if (leaders?.length) {
-        for (const leader of leaders) {
-          // Check if leader has permission for any of the event divisions
-          const { data: permissions } = await supabase
-            .from('division_permissions')
-            .select('division_id')
-            .eq('user_id', leader.user_id)
-            .eq('can_access', true)
-            .in('division_id', filters.divisionIds);
-          
-          if (permissions?.length > 0) {
-            // Get profile for this leader
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('id, email, full_name')
-              .eq('id', leader.user_id)
-              .eq('company_id', companyId)
-              .maybeSingle();
-            
-            if (profile) {
-              allRecipients.push(profile);
-            }
-          }
+
+      for (const leader of taggedLeaders || []) {
+        const { data: permissions } = await supabase
+          .from('division_permissions')
+          .select('division_id')
+          .eq('user_id', leader.user_id)
+          .eq('can_access', true)
+          .in('division_id', filters.divisionIds);
+
+        if (!permissions?.length) continue;
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, email, full_name')
+          .eq('id', leader.user_id)
+          .eq('company_id', companyId)
+          .maybeSingle();
+
+        if (profile) {
+          allRecipients.push(profile);
         }
       }
     } 
@@ -285,27 +281,25 @@ export async function sendEmailNotifications(
     return;
   }
   
-  const messages = recipients.map(recipient => {
-    const message: any = {
-      recipient_id: recipient.id,
-      sender_id: senderId || null,
-      subject: subject,
-      content: content,
-      read: false,
-    };
+  const messages = recipients.map(recipient => ({
+    recipient_id: recipient.id,
+    sender_id: senderId || null,
+    subject,
+    content,
+    read: false,
+    notification_type: senderId ? 'notification' : 'automated',
+    sender_display_name: senderId ? null : 'Camp notification',
+  }));
 
-    if (!senderId) {
-      message.sender_display_name = 'Camp notification';
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < messages.length; i += BATCH_SIZE) {
+    const batch = messages.slice(i, i + BATCH_SIZE);
+    const insertResult = await supabase.from('messages').insert(batch);
+    const insertError = insertResult?.error;
+    if (insertError) {
+      console.error('Error sending messages:', insertError);
+      throw new Error(insertError.message || 'Failed to insert in-app messages');
     }
-
-    return message;
-  });
-  
-  const { error } = await supabase.from('messages').insert(messages);
-  
-  if (error) {
-    console.error('Error sending messages:', error);
-    throw error;
   }
   
   console.log(`Successfully sent ${messages.length} in-app messages`);
@@ -327,9 +321,11 @@ export async function sendEmailNotifications(
     return;
   }
 
-  const { data: decryptedSecret, error: decryptError } = await supabase.rpc("decrypt_secret", {
+  const decryptResult = await supabase.rpc('decrypt_secret', {
     encrypted: emailConfig.m365_client_secret_encrypted,
   });
+  const decryptedSecret = decryptResult?.data;
+  const decryptError = decryptResult?.error;
 
   if (decryptError || !decryptedSecret) {
     console.error("Failed to decrypt M365 secret", decryptError);

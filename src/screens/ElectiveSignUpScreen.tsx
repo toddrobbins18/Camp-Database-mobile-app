@@ -389,6 +389,7 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
             await fetchData();
         } catch (e: any) {
             Alert.alert('Error', e?.message ?? 'Could not update signup');
+            await fetchData();
         }
     };
 

@@ -488,10 +488,12 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                                                 <Text style={s.dayEventLocationText}>{evt.location}</Text>
                                             </View>
                                         ) : null}
-                                        {evt.tags && evt.tags.length > 0 && (
+                                                {evt.tags && evt.tags.length > 0 && (
                                             <View style={s.dayEventTags}>
                                                 {evt.tags.map((tag, i) => {
-                                                    const ts = getTagStyleProp(tag);
+                                                    const ts = evt.accent
+                                                        ? { backgroundColor: evt.accent.bg, color: evt.accent.text, borderWidth: 0 }
+                                                        : getTagStyleProp(tag);
                                                     return (
                                                         <View key={i} style={[s.dayEventTag, ts]}>
                                                             <Text style={[s.dayEventTagText, { color: ts.color }]}>{tag}</Text>
