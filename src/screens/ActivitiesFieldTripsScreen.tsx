@@ -9,6 +9,7 @@ import { StyledCard } from '../components/StyledCard';
 import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 import { supabase } from '../lib/supabase';
 import { notifyStaffAssignment } from '../lib/notifyStaffAssignment';
+import { syncLinkedTripsFromFieldTrip } from '../lib/syncLinkedTripFromFieldTrip';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
 import * as DocumentPicker from 'expo-document-picker';
@@ -173,7 +174,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
     const updateActivityMutation = useMutation({
         mutationFn: async (updatedActivity: any) => {
-            const { id, division_ids, divisions: _, ...activityData } = updatedActivity;
+            const {
+                id,
+                division_ids,
+                divisions: _,
+                previous_title,
+                previous_event_date,
+                ...activityData
+            } = updatedActivity;
             const payload = buildSubmitData(activityData);
 
             // 1. Update activity
@@ -211,6 +219,34 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                     .insert(links);
                 if (linksError) throw linksError;
             }
+
+            if (companyId && activityData.home_away !== 'home') {
+                const { error: tripSyncError } = await syncLinkedTripsFromFieldTrip(
+                    supabase,
+                    {
+                        field_trip_id: id,
+                        company_id: companyId,
+                        season: selectedYear,
+                        previous_title: previous_title ?? activityData.title,
+                        previous_date: previous_event_date ?? activityData.event_date,
+                    },
+                    {
+                        title: activityData.title,
+                        event_date: activityData.event_date,
+                        end_date: activityData.end_date,
+                        is_multi_day: activityData.is_multi_day,
+                        depart_from_camp: activityData.depart_from_camp,
+                        location: activityData.location,
+                        activity_type: activityData.activity_type,
+                        capacity: activityData.capacity ? parseInt(String(activityData.capacity), 10) : null,
+                        chaperone: activityData.chaperone,
+                    },
+                );
+                if (tripSyncError) {
+                    console.warn('Linked trip sync:', tripSyncError);
+                }
+            }
+
             const staffNames = (activityData.chaperone || '')
                 .split(',')
                 .map((s: string) => s.trim())
@@ -2203,7 +2239,13 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                         }
                                         if (editingActivity) {
                                             const selectedNames = selectedStaff.map((s: any) => s.name).join(', ');
-                                            updateActivityMutation.mutate({ ...formData, chaperone: selectedNames, id: editingActivity.id });
+                                            updateActivityMutation.mutate({
+                                                ...formData,
+                                                chaperone: selectedNames,
+                                                id: editingActivity.id,
+                                                previous_title: editingActivity.title,
+                                                previous_event_date: editingActivity.event_date,
+                                            });
                                         }
                                     }}
                                 >

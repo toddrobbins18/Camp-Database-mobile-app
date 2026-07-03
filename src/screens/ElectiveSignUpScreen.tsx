@@ -330,15 +330,8 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
         if (!companyId || !season) return;
         try {
             if (await isOnlineNow()) {
-                await supabase
-                    .from('elective_signups')
-                    .delete()
-                    .eq('company_id', companyId)
-                    .eq('child_id', childId)
-                    .eq('week_start_date', weekStart)
-                    .eq('day_of_week', selectedDay)
-                    .eq('period', selectedPeriod);
-
+                // Validate capacity BEFORE deleting the current signup, otherwise a
+                // blocked assignment would erase the camper's existing elective.
                 if (electiveId) {
                     const rawCap = electives.find((e) => e.id === electiveId)?.capacity;
                     const capNum =
@@ -353,6 +346,18 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                         Alert.alert('Full', 'This elective is at capacity.');
                         return;
                     }
+                }
+
+                await supabase
+                    .from('elective_signups')
+                    .delete()
+                    .eq('company_id', companyId)
+                    .eq('child_id', childId)
+                    .eq('week_start_date', weekStart)
+                    .eq('day_of_week', selectedDay)
+                    .eq('period', selectedPeriod);
+
+                if (electiveId) {
                     const { error } = await supabase.from('elective_signups').insert({
                         company_id: companyId,
                         child_id: childId,

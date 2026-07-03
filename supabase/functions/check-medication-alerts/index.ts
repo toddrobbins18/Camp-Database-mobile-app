@@ -33,11 +33,15 @@ function scheduledTimeToMinutes(scheduled: string | null | undefined): number | 
   return h * 60 + m;
 }
 
+// Grace period (minutes) after the scheduled time before a med counts as "missed".
+// Gives nurses time to administer/check off first. Adjust to change the delay.
+const MISSED_MED_GRACE_MINUTES = 30;
+
 function medicationAlertIsDue(now: Date, scheduledTime: string | null | undefined): boolean {
   const slotMin = scheduledTimeToMinutes(scheduledTime);
   if (slotMin === null) return true;
   const nowMin = minutesSinceMidnightInTimezone(now, MISSED_MED_TIMEZONE);
-  return nowMin >= slotMin;
+  return nowMin >= slotMin + MISSED_MED_GRACE_MINUTES;
 }
 
 serve(async (req) => {
