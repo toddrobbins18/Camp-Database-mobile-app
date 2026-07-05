@@ -247,6 +247,7 @@ export const HealthScreen = ({ navigation }: any) => {
     const [dosage, setDosage] = useState('');
     const [mealTimesSelected, setMealTimesSelected] = useState<string[]>([]);
     const [notes, setNotes] = useState('');
+    const [isAsNeeded, setIsAsNeeded] = useState(false);
     const [isRecurring, setIsRecurring] = useState(false);
     const [recurringFrequency, setRecurringFrequency] = useState<'daily' | 'weekly' | 'custom'>('daily');
     const [recurringDays, setRecurringDays] = useState<string[]>([]);
@@ -867,6 +868,39 @@ export const HealthScreen = ({ navigation }: any) => {
         const child = safeCampers.find((c: any) => getChildDisplayName(c) === selectedMedicationChild);
         if (!child) return;
 
+        if (isAsNeeded) {
+            try {
+                await addMedicationMutation.mutateAsync({
+                    company_id: companyId,
+                    child_id: child.id as string,
+                    medication_name: medicationName,
+                    dosage: dosage || null,
+                    date: medicationStartDate,
+                    notes: notes || null,
+                    alert_sent: false,
+                    meal_time: null,
+                    scheduled_time: null,
+                    is_recurring: false,
+                    frequency: null,
+                    days_of_week: [],
+                    end_date: null,
+                });
+                setMedicationName('');
+                setDosage('');
+                setNotes('');
+                setMealTimesSelected([]);
+                setIsAsNeeded(false);
+                setSelectedMedicationChild('');
+                setIsRecurring(false);
+                setRecurringFrequency('daily');
+                setRecurringDays([]);
+                setRecurringEndDate('');
+            } catch (error: any) {
+                Alert.alert('Error', error?.message ?? 'Could not add medication.');
+            }
+            return;
+        }
+
         const standardSlots = mealTimesSelected
             .filter((m) => m !== 'Bedtime')
             .map((m) => {
@@ -935,6 +969,7 @@ export const HealthScreen = ({ navigation }: any) => {
             setDosage('');
             setNotes('');
             setMealTimesSelected([]);
+            setIsAsNeeded(false);
             setSelectedMedicationChild('');
             setIsRecurring(false);
             setRecurringFrequency('daily');
@@ -1740,7 +1775,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     <Text style={styles.addMedicationTitle}>Add Medication</Text>
                                 </View>
                                 <Text style={styles.addMedicationSubtitle}>
-                                    Schedule medication for a child
+                                    Schedule medication for a child, or add as-needed (PRN) meds to the camper profile
                                 </Text>
 
                                 {/* Form Fields */}
@@ -1786,8 +1821,36 @@ export const HealthScreen = ({ navigation }: any) => {
                                         />
                                     </View>
 
+                                    {/* As Needed */}
+                                    <TouchableOpacity
+                                        style={styles.checkboxContainer}
+                                        onPress={() => {
+                                            const next = !isAsNeeded;
+                                            setIsAsNeeded(next);
+                                            if (next) {
+                                                setMealTimesSelected([]);
+                                                setIsRecurring(false);
+                                                setRecurringFrequency('daily');
+                                                setRecurringDays([]);
+                                                setRecurringEndDate('');
+                                                setShowFrequencyPicker(false);
+                                            }
+                                        }}
+                                    >
+                                        <View style={[
+                                            styles.checkbox,
+                                            isAsNeeded && styles.checkboxSelected
+                                        ]}>
+                                            {isAsNeeded && <Ionicons name="checkmark" size={16} color="white" />}
+                                        </View>
+                                        <Text style={styles.checkboxLabel}>As needed (PRN)</Text>
+                                    </TouchableOpacity>
+                                    <Text style={styles.asNeededHint}>
+                                        Profile only — not on the daily medication log or missed-dose alerts.
+                                    </Text>
+
                                     {/* Meal Time */}
-                                    <View style={styles.formField}>
+                                    <View style={[styles.formField, isAsNeeded && styles.formFieldDisabled]}>
                                         <Text style={styles.formLabel}>Meal Time</Text>
                                         <View style={styles.mealChipsWrap}>
                                             {STANDARD_MEAL_LABEL_ORDER.map((label) => {
@@ -1797,6 +1860,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                         key={label}
                                                         style={[styles.mealChip, selected && styles.mealChipSelected]}
                                                         onPress={() => {
+                                                            if (isAsNeeded) return;
                                                             setMealTimesSelected((prev) =>
                                                                 prev.includes(label)
                                                                     ? prev.filter((x) => x !== label)
@@ -1816,6 +1880,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                     mealTimesSelected.includes('Bedtime') && styles.mealChipSelected,
                                                 ]}
                                                 onPress={() => {
+                                                    if (isAsNeeded) return;
                                                     setMealTimesSelected((prev) => {
                                                         if (prev.includes('Bedtime')) {
                                                             return prev.filter((x) => x !== 'Bedtime');
@@ -1834,7 +1899,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                 </Text>
                                             </TouchableOpacity>
                                         </View>
-                                        {mealTimesSelected.includes('Bedtime') ? (
+                                        {mealTimesSelected.includes('Bedtime') && !isAsNeeded ? (
                                             <View style={[styles.bedtimeInfoBox, { marginTop: theme.spacing.md }]}>
                                                 {!selectedMedicationChild ? (
                                                     <Text style={styles.bedtimeInfoMuted}>
@@ -1896,8 +1961,9 @@ export const HealthScreen = ({ navigation }: any) => {
 
                                     {/* Recurring Medication Checkbox */}
                                     <TouchableOpacity
-                                        style={styles.checkboxContainer}
+                                        style={[styles.checkboxContainer, isAsNeeded && styles.formFieldDisabled]}
                                         onPress={() => {
+                                            if (isAsNeeded) return;
                                             const next = !isRecurring;
                                             setIsRecurring(next);
                                             if (!next) {
@@ -1917,7 +1983,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                         <Text style={styles.checkboxLabel}>Recurring medication</Text>
                                     </TouchableOpacity>
 
-                                    {isRecurring && (
+                                    {isRecurring && !isAsNeeded && (
                                         <View style={styles.recurringSection}>
                                             <View style={styles.formField}>
                                                 <Text style={styles.formLabel}>Frequency</Text>
@@ -3997,6 +4063,16 @@ const styles = StyleSheet.create({
         ...theme.typography.body,
         fontSize: 14,
         color: theme.colors.text,
+    },
+    asNeededHint: {
+        ...theme.typography.body,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: -theme.spacing.sm,
+        marginBottom: theme.spacing.md,
+    },
+    formFieldDisabled: {
+        opacity: 0.5,
     },
     recurringSection: {
         marginTop: -theme.spacing.sm,

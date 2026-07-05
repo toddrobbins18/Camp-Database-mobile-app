@@ -569,7 +569,7 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                             <View style={styles.summaryRow}>
                                 <Ionicons name="time-outline" size={16} color={theme.colors.textSecondary} />
                                 <Text style={styles.summaryText}>
-                                    {selectedDay} — {periodLabel.label} ({periodLabel.time})
+                                    {parseYmd(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })} — {periodLabel.label} ({periodLabel.time})
                                 </Text>
                             </View>
                         ) : null}
@@ -796,17 +796,19 @@ export const ElectiveSignUpScreen = ({ navigation }: { navigation: any }) => {
                                 ) : (
                                     <View>
                                         <View style={styles.historyTableHead}>
-                                            <Text style={styles.historyTh}>Week</Text>
-                                            <Text style={styles.historyTh}>Day</Text>
+                                            <Text style={styles.historyTh}>Date</Text>
                                             <Text style={styles.historyTh}>Period</Text>
                                             <Text style={[styles.historyTh, { flex: 1.2 }]}>Elective</Text>
                                         </View>
                                         {historyResults.map((r) => {
                                             const pInfo = PERIODS.find((p) => p.id === r.period);
+                                            const daysMap: Record<string, number> = { Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3, Friday: 4, Saturday: 5, Sunday: 6 };
+                                            const exactDate = new Date(r.week_start_date + 'T00:00:00');
+                                            exactDate.setDate(exactDate.getDate() + (daysMap[r.day_of_week] || 0));
+                                            const dateStr = exactDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                                             return (
                                                 <View key={r.id} style={styles.historyTableRow}>
-                                                    <Text style={styles.historyTd}>{r.week_start_date}</Text>
-                                                    <Text style={styles.historyTd}>{r.day_of_week}</Text>
+                                                    <Text style={styles.historyTd}>{r.day_of_week.slice(0, 3)}, {dateStr}</Text>
                                                     <Text style={styles.historyTd} numberOfLines={1}>
                                                         {pInfo?.label || r.period}
                                                     </Text>
