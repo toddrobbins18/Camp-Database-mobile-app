@@ -31,10 +31,16 @@ async function applyQueuedIncidentOps(base: IncidentReport[]): Promise<IncidentR
         if (q.action === 'incident_reports.insert') {
             const payload = q.payload as any;
             const reportData = payload?.reportData;
+            const childIds = payload?.childIds || [];
             if (!reportData) continue;
+            
+            // Mock the children array for offline display
+            const mockChildren = childIds.map((id: string) => ({ id, name: 'Pending Sync...' }));
+            
             out.push({
                 ...(reportData as IncidentReport),
                 id: (reportData.id as string) || `offline-${q.id}`,
+                children: mockChildren,
             });
         } else if (q.action === 'incident_reports.update') {
             const payload = q.payload as any;
