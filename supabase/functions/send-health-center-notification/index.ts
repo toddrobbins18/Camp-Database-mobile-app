@@ -7,6 +7,25 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const EASTERN_TIMEZONE = "America/New_York";
+
+function formatEasternDateTime(iso: string | null | undefined, fallback = "N/A"): string {
+  if (!iso) return fallback;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return fallback;
+  return d.toLocaleString("en-US", {
+    timeZone: EASTERN_TIMEZONE,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  });
+}
+
 async function profileNameForUserId(
   supabase: ReturnType<typeof createClient>,
   userId: string | null | undefined,
@@ -88,11 +107,11 @@ serve(async (req) => {
 **${personLabel}:** ${personName}
 **Division:** ${divisionName}
 
-**Checked Out:** ${new Date(admission.checked_out_at).toLocaleString()}
+**Checked Out:** ${formatEasternDateTime(admission.checked_out_at)}
 **Checked Out By:** ${checkedOutByName}
 
 **Original Admission:**
-- **Admitted:** ${new Date(admission.admitted_at).toLocaleString()}
+- **Admitted:** ${formatEasternDateTime(admission.admitted_at)}
 - **Reason:** ${admission.reason || 'N/A'}
 
 ${admission.notes ? `**Notes:** ${admission.notes}` : ''}
@@ -100,7 +119,7 @@ ${admission.notes ? `**Notes:** ${admission.notes}` : ''}
 **${personLabel}:** ${personName}
 **Division:** ${divisionName}
 
-**Admitted:** ${new Date(admission.admitted_at).toLocaleString()}
+**Admitted:** ${formatEasternDateTime(admission.admitted_at)}
 **Admitted By:** ${admittedByName}
 
 **Reason:** ${admission.reason || 'N/A'}
