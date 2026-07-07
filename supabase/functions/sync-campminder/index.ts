@@ -2117,8 +2117,8 @@ async function performFullSync(
           }
 
           // Reconciliation guard:
-          // If historical transactions were inserted earlier without balance application,
-          // rebuild balances from the transaction ledger so UI never stays stale at $0.
+          // Expected balance = CampMinder deposit ledger minus Owl Pay purchases (floor -$25).
+          const OWL_PAY_MIN_BALANCE = -25;
           const { data: ledgerSums, error: ledgerErr } = await supabase
             .from('campminder_transactions')
             .select('person_id, amount')
@@ -2135,6 +2135,19 @@ async function performFullSync(
               sumByPerson.set(pid, prev + Number(row.amount || 0));
             });
 
+            const spendByChild = new Map<string, number>();
+            const { data: spendTotals, error: spendErr } = await supabase.rpc(
+              'get_owl_pay_purchase_totals',
+              { _company_id: companyId },
+            );
+            if (spendErr) {
+              console.error('[Financials] Error loading Owl Pay purchase totals for reconciliation:', spendErr);
+            } else {
+              for (const row of spendTotals || []) {
+                spendByChild.set(String(row.child_id), Number(row.total_spent || 0));
+              }
+            }
+
             const { data: seasonCampers, error: campersErr } = await supabase
               .from('children')
               .select('id, person_id, owl_pay_balance')
@@ -2146,7 +2159,9 @@ async function performFullSync(
             } else {
               const updates = (seasonCampers || [])
                 .map((c: any) => {
-                  const expected = Number(sumByPerson.get(String(c.person_id || '')) || 0);
+                  const cmDeposits = Number(sumByPerson.get(String(c.person_id || '')) || 0);
+                  const spent = spendByChild.get(String(c.id)) || 0;
+                  const expected = Math.max(cmDeposits - spent, OWL_PAY_MIN_BALANCE);
                   const current = Number(c.owl_pay_balance || 0);
                   return { id: c.id, expected, current };
                 })
@@ -2163,7 +2178,7 @@ async function performFullSync(
               }
 
               if (updates.length > 0) {
-                console.log(`[Financials] Reconciled ${updates.length} camper balances from ledger net totals`);
+                console.log(`[Financials] Reconciled ${updates.length} camper balances (CM deposits minus Owl Pay purchases)`);
               }
             }
           }
