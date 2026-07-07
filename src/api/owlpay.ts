@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
+import {
+    aggregateOwlPayReports,
+    fetchAllOwlPayPurchaseTransactions,
+    getOwlPayReportFetchBounds,
+} from '../lib/owlPayReports';
 
 export type OwlPayCamper = {
     id: string;
@@ -273,21 +278,10 @@ export const useSaveOwlPayEmailConfig = () => {
     });
 };
 
-function classifyPurchaseBuyer(tx: any): 'camper' | 'staff' | 'unknown' {
-    if (tx.staff_id) return 'staff';
-    if (tx.child_id) return 'camper';
-    return 'unknown';
-}
-
-function matchesAudience(buyer: 'camper' | 'staff' | 'unknown', audience: ReportAudience): boolean {
-    if (audience === 'all') return buyer === 'camper' || buyer === 'staff';
-    if (audience === 'campers') return buyer === 'camper';
-    return buyer === 'staff';
-}
-
 export type OwlPayReportsResult = {
     totalRevenue: number;
     totalItems: number;
+    freeItems: number;
     mostPopular: string;
     avgTransaction: number;
     salesByItem: { id: string; name: string; category: string; quantity: number; revenue: number }[];
@@ -298,17 +292,20 @@ export type OwlPayReportsResult = {
 
 export const useOwlPayReports = (
     companyId: string | null,
-    fromISO: string,
-    toISO: string,
+    fromYmd: string,
+    toYmd: string,
     audience: ReportAudience,
     search = ''
 ) => {
+    const { startISO, endInclusiveISO } = getOwlPayReportFetchBounds(fromYmd, toYmd);
+
     return useQuery({
-        queryKey: ['owlpay_reports', companyId, fromISO, toISO, audience, search],
+        queryKey: ['owlpay_reports', companyId, fromYmd, toYmd, audience, search],
         queryFn: async (): Promise<OwlPayReportsResult> => {
             const empty: OwlPayReportsResult = {
                 totalRevenue: 0,
                 totalItems: 0,
+                freeItems: 0,
                 mostPopular: 'N/A',
                 avgTransaction: 0,
                 salesByItem: [],
@@ -319,97 +316,28 @@ export const useOwlPayReports = (
 
             if (!companyId) return empty;
 
-            const data = await readThroughCache<any[]>(
-                `owlpay_reports_tx:${companyId}:${fromISO}:${toISO}:${audience}:${search.trim()}`,
-                async () => {
-                    const { data, error } = await supabase
-                        .from('owl_pay_transactions')
-                        .select(
-                            'id, amount, is_free, created_at, item_id, child_id, staff_id, owl_pay_items(name, category), children(name), staff(name)'
-                        )
-                        .eq('company_id', companyId)
-                        .eq('transaction_type', 'purchase')
-                        .gte('created_at', fromISO)
-                        .lte('created_at', toISO)
-                        .order('created_at', { ascending: false });
-
-                    if (error) throw error;
-                    return data || [];
-                },
+            const transactions = await readThroughCache(
+                `owlpay_reports_tx:${companyId}:${fromYmd}:${toYmd}`,
+                async () => fetchAllOwlPayPurchaseTransactions(supabase, companyId, startISO, endInclusiveISO),
             );
 
-            const itemMap = new Map<string, { id: string; name: string; category: string; quantity: number; revenue: number }>();
-            const dateMap = new Map<string, { revenue: number; count: number }>();
-            const purchasesAll: any[] = [];
-            let totalRevenue = 0;
-            let totalItems = 0;
-
-            (data || []).forEach((tx: any) => {
-                const buyer = classifyPurchaseBuyer(tx);
-                if (!matchesAudience(buyer, audience)) return;
-
-                const item = tx.owl_pay_items;
-                const amount = Number(tx.amount || 0);
-                const itemId = tx.item_id || tx.id;
-                const itemName = item?.name || (tx.is_free ? 'Free daily item' : 'Unknown item');
-                const itemCategory = item?.category || 'other';
-
-                if (itemId) {
-                    if (!itemMap.has(itemId)) {
-                        itemMap.set(itemId, {
-                            id: itemId,
-                            name: itemName,
-                            category: itemCategory,
-                            quantity: 0,
-                            revenue: 0,
-                        });
-                    }
-                    const row = itemMap.get(itemId)!;
-                    row.quantity += 1;
-                    row.revenue += amount;
-                }
-
-                const dateKey = new Date(tx.created_at).toLocaleDateString();
-                if (!dateMap.has(dateKey)) dateMap.set(dateKey, { revenue: 0, count: 0 });
-                const dd = dateMap.get(dateKey)!;
-                dd.revenue += amount;
-                dd.count += 1;
-
-                purchasesAll.push({
-                    id: tx.id,
-                    buyer_type: buyer === 'staff' ? 'staff' : 'camper',
-                    camper_name: tx.children?.name || tx.staff?.name || 'Unknown',
-                    item_name: itemName,
-                    item_category: itemCategory,
-                    amount,
-                    is_free: !!tx.is_free,
-                    purchased_at: tx.created_at,
-                });
-
-                totalRevenue += amount;
-                totalItems += 1;
-            });
-
-            const salesByItem = Array.from(itemMap.values()).sort((a, b) => b.quantity - a.quantity);
-            const salesOverTime = Array.from(dateMap.entries())
-                .map(([date, d]) => ({ date, revenue: d.revenue, count: d.count }))
-                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
+            const aggregated = aggregateOwlPayReports(transactions, audience, fromYmd, toYmd);
             const q = search.trim().toLowerCase();
-            const purchases = purchasesAll.filter((p) => {
+            const purchases = aggregated.purchases.filter((p) => {
                 if (!q) return true;
                 return p.camper_name.toLowerCase().includes(q) || p.item_name.toLowerCase().includes(q);
             });
 
             return {
-                totalRevenue,
-                totalItems,
-                mostPopular: salesByItem[0]?.name || 'N/A',
-                avgTransaction: totalItems ? totalRevenue / totalItems : 0,
-                salesByItem,
-                salesOverTime,
+                totalRevenue: aggregated.stats.totalRevenue,
+                totalItems: aggregated.stats.totalItems,
+                freeItems: aggregated.stats.freeItems,
+                mostPopular: aggregated.stats.mostPopular,
+                avgTransaction: aggregated.stats.avgTransaction,
+                salesByItem: aggregated.salesByItem,
+                salesOverTime: aggregated.salesOverTime,
                 purchases,
-                purchasesAll,
+                purchasesAll: aggregated.purchases,
             };
         },
         enabled: !!companyId,

@@ -48,6 +48,10 @@ import {
     wouldExceedOwlPayOverdraft,
 } from '../lib/owlPayBalanceUtils';
 import {
+    formatCampReportDateTime,
+    getOwlPayQuickRangeYmd,
+} from '../lib/owlPayReports';
+import {
     completeOwlPayCheckout,
     isFreeDailyItemAvailableToday,
 } from '../lib/owlPayCheckout';
@@ -89,7 +93,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const [showAddItemModal, setShowAddItemModal] = useState(false);
     const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
     const [itemForm, setItemForm] = useState({ name: '', price: '', category: 'Snacks' as ItemCategory });
-    const [reportsRange, setReportsRange] = useState<'Today' | 'This Week' | 'This Month' | 'All Time'>('All Time');
+    const [reportsRange, setReportsRange] = useState<'Today' | 'This Week' | 'This Month' | 'All Time'>('Today');
     const [lowBalanceAlertsEnabled, setLowBalanceAlertsEnabled] = useState(false);
     const [staffReportsEnabled, setStaffReportsEnabled] = useState(false);
     const [staffReportFrequency, setStaffReportFrequency] = useState('daily');
@@ -205,31 +209,22 @@ export const OwlPayScreen = ({ navigation }: any) => {
         queryClient.invalidateQueries({ queryKey: ['owlpay_items', companyId] });
     }, [activeTab, companyId, queryClient]);
 
-    const reportRange = useMemo(() => {
-        const now = new Date();
-        const end = new Date(now);
-        end.setHours(23, 59, 59, 999);
-        const start = new Date(now);
-        if (reportsRange === 'Today') {
-            start.setHours(0, 0, 0, 0);
-        } else if (reportsRange === 'This Week') {
-            const day = start.getDay();
-            start.setDate(start.getDate() - day);
-            start.setHours(0, 0, 0, 0);
-        } else if (reportsRange === 'This Month') {
-            start.setDate(1);
-            start.setHours(0, 0, 0, 0);
-        } else {
-            start.setFullYear(2020, 0, 1);
-            start.setHours(0, 0, 0, 0);
-        }
-        return { start, end };
+    const reportRangeYmd = useMemo(() => {
+        const key =
+            reportsRange === 'Today'
+                ? 'today'
+                : reportsRange === 'This Week'
+                  ? 'week'
+                  : reportsRange === 'This Month'
+                    ? 'month'
+                    : 'all';
+        return getOwlPayQuickRangeYmd(key);
     }, [reportsRange]);
 
     const { data: reportsData, isLoading: reportsLoading } = useOwlPayReports(
         companyId,
-        reportRange.start.toISOString(),
-        reportRange.end.toISOString(),
+        reportRangeYmd.fromYmd,
+        reportRangeYmd.toYmd,
         reportAudience,
         reportSearch
     );
@@ -282,27 +277,28 @@ export const OwlPayScreen = ({ navigation }: any) => {
             Alert.alert('Nothing to export', 'Load reports first.');
             return;
         }
-        const fromLabel = reportRange.start.toISOString().slice(0, 10);
-        const toLabel = reportRange.end.toISOString().slice(0, 10);
+        const fromLabel = reportRangeYmd.fromYmd;
+        const toLabel = reportRangeYmd.toYmd;
         const aud = reportAudience === 'all' ? 'all-buyers' : reportAudience;
         const slug = companySlug || 'camp';
 
         const lines: (string | number | boolean)[][] = [
             ['Report', 'Owl Pay'],
             ['Camp slug', slug],
-            ['Date range', `${fromLabel} to ${toLabel}`],
+            ['Date range (camp time)', `${fromLabel} to ${toLabel}`],
             ['Audience', reportAudience],
-            ['Total revenue', reportsData.totalRevenue.toFixed(2)],
-            ['Items sold', reportsData.totalItems],
-            ['Avg transaction', reportsData.avgTransaction.toFixed(2)],
+            ['Total revenue (paid items)', reportsData.totalRevenue.toFixed(2)],
+            ['Items sold (paid)', reportsData.totalItems],
+            ['Free daily items', reportsData.freeItems],
+            ['Avg paid transaction', reportsData.avgTransaction.toFixed(2)],
             ['Most popular item', reportsData.mostPopular],
             [],
             ['Sales by item — Item', 'Category', 'Qty sold', 'Revenue'],
             ...reportsData.salesByItem.map((i) => [i.name, i.category, i.quantity, i.revenue.toFixed(2)]),
             [],
-            ['Purchases — Date/time (UTC)', 'Buyer type', 'Name', 'Item', 'Category', 'Amount', 'Free'],
+            ['Purchases — Date/time (camp)', 'Buyer type', 'Name', 'Item', 'Category', 'Amount', 'Free'],
             ...reportsData.purchasesAll.map((p: any) => [
-                new Date(p.purchased_at).toISOString().replace('T', ' ').slice(0, 19),
+                formatCampReportDateTime(p.purchased_at),
                 p.buyer_type,
                 p.camper_name,
                 p.item_name,
@@ -1155,7 +1151,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 </View>
                 <View style={styles.reportDateRow}>
                     <Text style={styles.dateChip}>
-                        {reportRange.start.toLocaleDateString()} - {reportRange.end.toLocaleDateString()}
+                        {reportRangeYmd.fromYmd} - {reportRangeYmd.toYmd} (camp time)
                     </Text>
                 </View>
                 <View style={[styles.reportFilterRow, { marginTop: 12 }]}>
@@ -1186,6 +1182,9 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 <StyledCard style={styles.statCard}>
                     <Text style={styles.statLabel}>Items sold</Text>
                     <Text style={styles.statValue}>{reportsData?.totalItems || 0}</Text>
+                    {(reportsData?.freeItems || 0) > 0 && (
+                        <Text style={styles.statHint}>{reportsData?.freeItems} free daily</Text>
+                    )}
                 </StyledCard>
                 <StyledCard style={styles.statCard}>
                     <Text style={styles.statLabel}>Most popular</Text>
@@ -1299,7 +1298,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                                     {reportsData!.purchases.map((p: any) => (
                                         <View key={p.id} style={styles.tableRow}>
                                             <Text style={[styles.tableText, { flex: 1.1, fontSize: 11 }]}>
-                                                {new Date(p.purchased_at).toLocaleString()}
+                                                {formatCampReportDateTime(p.purchased_at)}
                                             </Text>
                                             {reportAudience === 'all' && (
                                                 <Text style={[styles.tableText, { flex: 0.6, fontSize: 11 }]}>
@@ -1868,6 +1867,7 @@ const styles = StyleSheet.create({
     statsGrid: { gap: 10 },
     statCard: { marginBottom: 0 },
     statLabel: { color: theme.colors.textSecondary, fontSize: 14, marginBottom: 6 },
+    statHint: { color: theme.colors.textSecondary, fontSize: 11, marginTop: 4 },
     statValue: { color: theme.colors.text, fontSize: 34, fontWeight: '700' },
     tableHeader: {
         flexDirection: 'row',
