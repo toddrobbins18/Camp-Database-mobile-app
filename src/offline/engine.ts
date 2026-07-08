@@ -366,9 +366,13 @@ async function executeAction(action: SyncAction, payload: any): Promise<void> {
     }
     if (action === 'incident_reports.insert') {
         const { reportData, childIds } = payload ?? {};
+        const primaryChildId = Array.isArray(childIds) ? childIds[0] : undefined;
         const { data: report, error: insErr } = await supabase
             .from('incident_reports')
-            .insert([reportData] as any)
+            .insert([{
+                ...(reportData as Record<string, unknown>),
+                ...(primaryChildId ? { child_id: primaryChildId } : {}),
+            }] as any)
             .select('id')
             .single();
         if (insErr) throw insErr;

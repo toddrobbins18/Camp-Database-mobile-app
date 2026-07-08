@@ -106,10 +106,14 @@ export const useAddIncidentReport = () => {
     return useMutation({
         mutationFn: async ({ childIds, ...reportData }: Omit<IncidentReport, 'id' | 'created_at' | 'children'> & { childIds?: string[] }) => {
             if (await isOnlineNow()) {
+                const primaryChildId = childIds?.[0];
                 // Insert incident report
                 const { data: report, error: reportError } = await supabase
                     .from('incident_reports')
-                    .insert([reportData])
+                    .insert([{
+                        ...reportData,
+                        ...(primaryChildId ? { child_id: primaryChildId } : {}),
+                    }])
                     .select()
                     .single();
 
