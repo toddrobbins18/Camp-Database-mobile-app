@@ -114,12 +114,21 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
             try {
                 const { data, error } = await supabase
                     .from('roster_templates')
-                    .select('*, roster_template_children(child_id)')
+                    .select('*, roster_template_children(child_id, sort_order)')
                     .eq('company_id', companyId)
                     .order('created_at', { ascending: false });
                 if (error) throw error;
-                await setCachedJson(cacheKey, data || []);
-                return data || [];
+                
+                // Sort children by sort_order
+                const processedData = (data || []).map(template => ({
+                    ...template,
+                    roster_template_children: (template.roster_template_children || []).sort((a: any, b: any) => 
+                        (a.sort_order ?? 999) - (b.sort_order ?? 999)
+                    )
+                }));
+                
+                await setCachedJson(cacheKey, processedData);
+                return processedData;
             } catch {
                 return (await getCachedJson<any[]>(cacheKey)) || [];
             }
@@ -146,10 +155,17 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
 
                 // 2. Add children to the template
                 if (templateData.camperIds.length > 0) {
-                    const childrenRecords = templateData.camperIds.map((childId: string) => ({
+                    const sortedCamperIds = [...templateData.camperIds].sort((a, b) => {
+                        const camperA = campers.find(c => c.id === a);
+                        const camperB = campers.find(c => c.id === b);
+                        return (camperA?.name || "").localeCompare(camperB?.name || "");
+                    });
+
+                    const childrenRecords = sortedCamperIds.map((childId: string, index: number) => ({
                         template_id: template.id,
                         company_id: companyId,
                         child_id: childId,
+                        sort_order: index
                     }));
                     const { error: childrenError } = await supabase
                         .from('roster_template_children')
@@ -195,10 +211,17 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                 if (delErr) throw delErr;
 
                 if (payload.camperIds.length > 0) {
-                    const rows = payload.camperIds.map((childId) => ({
+                    const sortedCamperIds = [...payload.camperIds].sort((a, b) => {
+                        const camperA = campers.find(c => c.id === a);
+                        const camperB = campers.find(c => c.id === b);
+                        return (camperA?.name || "").localeCompare(camperB?.name || "");
+                    });
+
+                    const rows = sortedCamperIds.map((childId, index) => ({
                         template_id: payload.templateId,
                         company_id: companyId,
                         child_id: childId,
+                        sort_order: index
                     }));
                     const { error: insErr } = await supabase.from('roster_template_children').insert(rows);
                     if (insErr) throw insErr;
@@ -241,10 +264,11 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                     .single();
                 if (error) throw error;
                 if (children.length > 0 && newTemplate) {
-                    const rows = children.map((c: any) => ({
+                    const rows = children.map((c: any, index: number) => ({
                         template_id: newTemplate.id,
                         company_id: companyId,
                         child_id: c.child_id,
+                        sort_order: index
                     }));
                     const { error: chErr } = await supabase.from('roster_template_children').insert(rows);
                     if (chErr) throw chErr;
@@ -289,7 +313,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
         const matchesDivision =
             selectedDivision === 'all' || camper.divisionId === selectedDivision;
         return matchesSearch && matchesDivision;
-    });
+    }).sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
 
     const camperNameById = useMemo(() => {
         const map = new Map<string, string>();

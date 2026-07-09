@@ -289,9 +289,9 @@ export const CamperScreen = ({ navigation }: any) => {
             return true;
         }).sort((a, b) => {
             if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
-            const divA = normalizeDivisionNameForFilter((a as any).division?.name || '');
-            const divB = normalizeDivisionNameForFilter((b as any).division?.name || '');
-            if (divA !== divB) return divA.localeCompare(divB);
+            const orderA = (a as any).division?.sort_order ?? 999;
+            const orderB = (b as any).division?.sort_order ?? 999;
+            if (orderA !== orderB) return orderA - orderB;
             return (a.name || '').localeCompare(b.name || '');
         });
     }, [campersData, selectedDivisionId, sortBy, searchQuery, divisionsData]);
