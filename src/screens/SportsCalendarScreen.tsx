@@ -28,6 +28,7 @@ import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 import { syncLinkedTripsFromSportsEvent } from '../lib/syncLinkedTripFromSportsEvent';
+import { compareByLastName } from '../lib/nameSortUtils';
 
 /** DB + web use lowercase; labels are for UI only (see migrations sports_calendar_home_away_check). */
 const HOME_AWAY_OPTIONS: { value: string; label: string }[] = [
@@ -305,10 +306,10 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
     const rosterCampersToShow = useMemo(() => {
         const filtered = campers.filter((c) => c.name.toLowerCase().includes(rosterSearchTerm.toLowerCase()));
-        if (rosterModalReadOnly) {
-            return filtered.filter((c) => selectedCampers.has(c.id));
-        }
-        return filtered;
+        const list = rosterModalReadOnly
+            ? filtered.filter((c) => selectedCampers.has(c.id))
+            : filtered;
+        return [...list].sort(compareByLastName);
     }, [campers, rosterSearchTerm, rosterModalReadOnly, selectedCampers]);
 
     /** Shared pickers for Add + Edit sports event forms */

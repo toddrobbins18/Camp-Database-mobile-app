@@ -21,6 +21,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { showAppAlert } from '../utils/showAppAlert';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
+import { compareByLastName } from '../lib/nameSortUtils';
 
 interface RosterTemplatesScreenProps {
     navigation: any;
@@ -158,7 +159,10 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                     const sortedCamperIds = [...templateData.camperIds].sort((a, b) => {
                         const camperA = campers.find(c => c.id === a);
                         const camperB = campers.find(c => c.id === b);
-                        return (camperA?.name || "").localeCompare(camperB?.name || "");
+                        return compareByLastName(
+                            { name: camperA?.name },
+                            { name: camperB?.name },
+                        );
                     });
 
                     const childrenRecords = sortedCamperIds.map((childId: string, index: number) => ({
@@ -214,7 +218,10 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
                     const sortedCamperIds = [...payload.camperIds].sort((a, b) => {
                         const camperA = campers.find(c => c.id === a);
                         const camperB = campers.find(c => c.id === b);
-                        return (camperA?.name || "").localeCompare(camperB?.name || "");
+                        return compareByLastName(
+                            { name: camperA?.name },
+                            { name: camperB?.name },
+                        );
                     });
 
                     const rows = sortedCamperIds.map((childId, index) => ({
@@ -313,7 +320,7 @@ export const RosterTemplatesScreen = ({ navigation }: RosterTemplatesScreenProps
         const matchesDivision =
             selectedDivision === 'all' || camper.divisionId === selectedDivision;
         return matchesSearch && matchesDivision;
-    }).sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
+    }).sort(compareByLastName);
 
     const camperNameById = useMemo(() => {
         const map = new Map<string, string>();
