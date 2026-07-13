@@ -331,8 +331,21 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
             if (!companyId) return [];
             const cacheKey = `sports_calendar_screen:${companyId}:${season}`;
             try {
-                const [eventsRes, divisionLinksRes, rosterRes] = await Promise.all([
+                const [divisionLinksRes] = await Promise.all([
                     supabase
+                        .from('sports_calendar_divisions')
+                        .select('sports_event_id, division_id, division:divisions(id, name, gender)')
+                        .eq('company_id', companyId),
+                ]);
+                
+                if (divisionLinksRes.error) throw divisionLinksRes.error;
+
+                // Fetch all events with pagination
+                let allEvents: any[] = [];
+                let eventFrom = 0;
+                const eventPageSize = 1000;
+                while (true) {
+                    const { data, error } = await supabase
                         .from('sports_calendar')
                         .select(`
                             *,
@@ -341,19 +354,39 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                         `)
                         .eq('company_id', companyId)
                         .eq('season', season)
-                        .order('event_date', { ascending: true }),
-                    supabase
-                        .from('sports_calendar_divisions')
-                        .select('sports_event_id, division_id, division:divisions(id, name, gender)')
-                        .eq('company_id', companyId),
-                    supabase
+                        .order('event_date', { ascending: true })
+                        .range(eventFrom, eventFrom + eventPageSize - 1);
+                    
+                    if (error) {
+                        console.error('Error fetching events:', error);
+                        throw error;
+                    }
+                    const batch = data || [];
+                    allEvents.push(...batch);
+                    if (batch.length < eventPageSize) break;
+                    eventFrom += eventPageSize;
+                }
+
+                // Fetch all roster rows with pagination
+                let allRosterRows: any[] = [];
+                let from = 0;
+                const pageSize = 1000;
+                while (true) {
+                    const { data, error } = await supabase
                         .from('sports_event_roster')
-                        .select('event_id')
-                        .eq('company_id', companyId),
-                ]);
-                if (eventsRes.error) throw eventsRes.error;
-                if (divisionLinksRes.error) throw divisionLinksRes.error;
-                if (rosterRes.error) throw rosterRes.error;
+                        .select('event_id, child_id')
+                        .eq('company_id', companyId)
+                        .range(from, from + pageSize - 1);
+                    
+                    if (error) {
+                        console.error('Error fetching roster:', error);
+                        break;
+                    }
+                    const batch = data || [];
+                    allRosterRows.push(...batch);
+                    if (batch.length < pageSize) break;
+                    from += pageSize;
+                }
 
                 const divisionMap = new Map<string, Array<{ id: string; name: string; gender?: string }>>();
                 (divisionLinksRes.data || []).forEach((row: any) => {
@@ -367,12 +400,17 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     }
                 });
 
-                const rosterCounts = new Map<string, number>();
-                (rosterRes.data || []).forEach((row: any) => {
-                    rosterCounts.set(row.event_id, (rosterCounts.get(row.event_id) || 0) + 1);
+                const rosterCounts = new Map<string, Set<string>>();
+                allRosterRows.forEach((row: any) => {
+                    if (!rosterCounts.has(row.event_id)) {
+                        rosterCounts.set(row.event_id, new Set());
+                    }
+                    if (row.child_id) {
+                        rosterCounts.get(row.event_id)!.add(row.child_id);
+                    }
                 });
 
-                const rows = (eventsRes.data || []).map((event: any) => {
+                const rows = allEvents.map((event: any) => {
                     const joinedDivisions = divisionMap.get(event.id) || [];
                     const fallbackDivision = event.division
                         ? [{ id: event.division.id, name: event.division.name, gender: event.division.gender }]
@@ -380,7 +418,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     return {
                         ...event,
                         _divisions: joinedDivisions.length > 0 ? joinedDivisions : fallbackDivision,
-                        _rosterCount: rosterCounts.get(event.id) || 0,
+                        _rosterCount: rosterCounts.get(event.id)?.size || 0,
                     };
                 });
                 await setCachedJson(cacheKey, rows);
