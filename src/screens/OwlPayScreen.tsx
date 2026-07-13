@@ -54,6 +54,7 @@ import {
 import {
     completeOwlPayCheckout,
     isFreeDailyItemAvailableToday,
+    recordOwlPayFirstDailyScan,
 } from '../lib/owlPayCheckout';
 import {
     findInListByRfid,
@@ -110,6 +111,8 @@ export const OwlPayScreen = ({ navigation }: any) => {
         freeItemApplied: boolean;
         isStaff: boolean;
     } | null>(null);
+    const [firstScanCamper, setFirstScanCamper] = useState<{ id: string; name: string; photo_url?: string | null } | null>(null);
+    const [processingFirstScan, setProcessingFirstScan] = useState(false);
     const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
     const [scanBuffer, setScanBuffer] = useState('');
     const [lastScanInputAt, setLastScanInputAt] = useState(0);
@@ -400,6 +403,82 @@ export const OwlPayScreen = ({ navigation }: any) => {
         }, delayMs);
     };
 
+    const closeFirstScanModal = () => {
+        setFirstScanCamper(null);
+        setCamperQuery('');
+        setScanStatus('idle');
+        if (companyId) {
+            queryClient.invalidateQueries({ queryKey: ['owlpay_campers'] });
+        }
+    };
+
+    useEffect(() => {
+        if (!firstScanCamper) return;
+        const timer = setTimeout(closeFirstScanModal, 3000);
+        return () => clearTimeout(timer);
+    }, [firstScanCamper]);
+
+    const tryClaimFirstDailyScan = async (camper: { id: string; name: string; photo_url?: string | null }) => {
+        if (!companyId || processingFirstScan) return false;
+
+        try {
+            const hasFreeItem = await checkFreeDailyItemAvailable(camper.id);
+            if (!hasFreeItem) return false;
+        } catch (err: any) {
+            Alert.alert('Owl Pay', err?.message || 'Unable to check free item status');
+            return false;
+        }
+
+        setProcessingFirstScan(true);
+        try {
+            const { data: authData } = await supabase.auth.getUser();
+            const createdBy = authData.user?.id;
+            const online = await isOnlineNow();
+
+            if (online) {
+                await recordOwlPayFirstDailyScan(supabase, {
+                    companyId,
+                    childId: camper.id,
+                    createdBy,
+                });
+            } else {
+                await enqueueSync('owl_pay.checkout.complete', {
+                    companyId,
+                    childId: camper.id,
+                    staffId: null,
+                    createdBy,
+                    pricing: {
+                        subtotal: 0,
+                        freeDiscount: 0,
+                        total: 0,
+                        freeItemApplied: true,
+                        freeItemLineId: null,
+                        freeItemName: null,
+                    },
+                    transactions: [],
+                });
+            }
+
+            setSelectedCamperId(null);
+            setSelectedIsStaff(false);
+            setHasFreeDailyItemAvailable(false);
+            setCart([]);
+            setScanStatus('success');
+            setFirstScanCamper(camper);
+            setCamperQuery('');
+            return true;
+        } catch (err: any) {
+            const message = String(err?.message || '');
+            if (message.toLowerCase().includes('already used')) {
+                return false;
+            }
+            Alert.alert('Owl Pay', message || 'Unable to record free daily item');
+            return false;
+        } finally {
+            setProcessingFirstScan(false);
+        }
+    };
+
     const selectByRFID = async (rfidRaw: string) => {
         const rfid = normalizeRfidInput(rfidRaw);
         if (!rfid) return false;
@@ -409,6 +488,12 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 ? await lookupOwlPayCamperByRfid(rfid, companyId, season)
                 : null) ?? findInListByRfid(campers, rfid);
         if (camperMatch) {
+            const claimedFirstScan = await tryClaimFirstDailyScan(camperMatch);
+            if (claimedFirstScan) {
+                resetScanStatus(1000);
+                return true;
+            }
+
             setScanStatus('success');
             await handleSelectCamper(camperMatch.id);
             setCamperQuery('');
@@ -1555,6 +1640,27 @@ export const OwlPayScreen = ({ navigation }: any) => {
             </Modal>
 
             <Modal
+                visible={!!firstScanCamper}
+                transparent
+                animationType="fade"
+                onRequestClose={() => {}}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => {}}>
+                    <Pressable style={styles.successCard} onPress={(e) => e.stopPropagation()}>
+                        {(firstScanCamper?.photo_url && (
+                            <Image source={{ uri: firstScanCamper.photo_url }} style={styles.avatarImageLarge} />
+                        )) || (
+                            <View style={styles.avatarCircleLarge}>
+                                <Text style={styles.avatarInitialsLarge}>{getInitials(firstScanCamper?.name)}</Text>
+                            </View>
+                        )}
+                        <Text style={styles.successTitle}>{firstScanCamper?.name}</Text>
+                        <Text style={styles.successSubtext}>Free daily canteen item</Text>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            <Modal
                 visible={!!successData}
                 transparent
                 animationType="fade"
@@ -1750,6 +1856,22 @@ const styles = StyleSheet.create({
         marginRight: 10,
     },
     avatarInitials: { color: theme.colors.secondary, fontWeight: '700', fontSize: 12 },
+    avatarCircleLarge: {
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        backgroundColor: '#e5e7eb',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 12,
+    },
+    avatarImageLarge: {
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        marginBottom: 12,
+    },
+    avatarInitialsLarge: { color: theme.colors.secondary, fontWeight: '700', fontSize: 28 },
     camperCardText: { flex: 1 },
     camperName: { fontSize: 16, color: theme.colors.text, fontWeight: '600' },
     camperMetaText: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 },
