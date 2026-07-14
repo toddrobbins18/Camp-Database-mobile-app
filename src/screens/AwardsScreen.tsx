@@ -34,6 +34,7 @@ const WEEKLY_CAMPER_AWARDS = [
     "Camper of the Week",
     "Kindness Award",
     "Leadership Award",
+    "MVP",
     "Team Player"
 ];
 
