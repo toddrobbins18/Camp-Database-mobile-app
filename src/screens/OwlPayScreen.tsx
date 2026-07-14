@@ -113,6 +113,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
     } | null>(null);
     const [firstScanCamper, setFirstScanCamper] = useState<{ id: string; name: string; photo_url?: string | null } | null>(null);
     const [processingFirstScan, setProcessingFirstScan] = useState(false);
+    const [selectedCamperSnapshot, setSelectedCamperSnapshot] = useState<OwlPayCamper | null>(null);
     const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
     const [scanBuffer, setScanBuffer] = useState('');
     const [lastScanInputAt, setLastScanInputAt] = useState(0);
@@ -136,13 +137,13 @@ export const OwlPayScreen = ({ navigation }: any) => {
 
     const camperListSearch =
         activeTab === 'pos'
-            ? camperQuery
+            ? ''
             : activeTab === 'balances' && balanceAudience === 'campers'
               ? balanceSearch
               : '';
     const staffListSearch =
         activeTab === 'pos'
-            ? camperQuery
+            ? ''
             : activeTab === 'balances' && balanceAudience === 'staff'
               ? balanceSearch
               : '';
@@ -234,7 +235,9 @@ export const OwlPayScreen = ({ navigation }: any) => {
 
     const { data: staffSpendRows = [], isLoading: staffSpendLoading } = useOwlPayStaffSpendRows(companyId, season);
 
-    const selectedCamper = campers.find((c) => c.id === selectedCamperId) || null;
+    const selectedCamper =
+        campers.find((c) => c.id === selectedCamperId) ||
+        (selectedCamperSnapshot?.id === selectedCamperId ? selectedCamperSnapshot : null);
     const selectedStaff = selectedIsStaff ? staffMembers.find((s) => s.id === selectedCamperId) || null : null;
     const selectedDisplayName = selectedIsStaff ? selectedStaff?.name : selectedCamper?.name;
     const totalBalance = campers.reduce((sum, camper) => sum + Number(camper.owl_pay_balance || 0), 0);
@@ -373,10 +376,17 @@ export const OwlPayScreen = ({ navigation }: any) => {
         return isFreeDailyItemAvailableToday(supabase, companyId, childId);
     };
 
-    const handleSelectCamper = async (camperId: string) => {
+    const handleSelectCamper = async (camperId: string, snapshot?: OwlPayCamper) => {
+        setFirstScanCamper(null);
         setSelectedCamperId(camperId);
         setSelectedIsStaff(false);
         setCart([]);
+        if (snapshot) {
+            setSelectedCamperSnapshot(snapshot);
+        } else {
+            const fromList = campers.find((c) => c.id === camperId);
+            if (fromList) setSelectedCamperSnapshot(fromList);
+        }
         try {
             const hasFreeItem = await checkFreeDailyItemAvailable(camperId);
             setHasFreeDailyItemAvailable(hasFreeItem);
@@ -386,7 +396,30 @@ export const OwlPayScreen = ({ navigation }: any) => {
         }
     };
 
+    const openCamperCheckout = async (camper: {
+        id: string;
+        name: string;
+        rfid?: string | null;
+        photo_url?: string | null;
+        owl_pay_balance?: number | null;
+        person_id?: string | null;
+    }) => {
+        const snapshot: OwlPayCamper = {
+            id: camper.id,
+            name: camper.name,
+            rfid: camper.rfid ?? null,
+            photo_url: camper.photo_url ?? null,
+            owl_pay_balance: Number(camper.owl_pay_balance ?? 0),
+            person_id: camper.person_id ?? null,
+        };
+        setScanStatus('success');
+        await handleSelectCamper(snapshot.id, snapshot);
+        setCamperQuery('');
+    };
+
     const handleSelectStaff = (staffId: string) => {
+        setFirstScanCamper(null);
+        setSelectedCamperSnapshot(null);
         setSelectedCamperId(staffId);
         setSelectedIsStaff(true);
         setHasFreeDailyItemAvailable(false);
@@ -424,8 +457,8 @@ export const OwlPayScreen = ({ navigation }: any) => {
         try {
             const hasFreeItem = await checkFreeDailyItemAvailable(camper.id);
             if (!hasFreeItem) return false;
-        } catch (err: any) {
-            Alert.alert('Owl Pay', err?.message || 'Unable to check free item status');
+        } catch {
+            // If we cannot verify, open normal checkout instead of blocking the scan.
             return false;
         }
 
@@ -460,6 +493,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
             }
 
             setSelectedCamperId(null);
+            setSelectedCamperSnapshot(null);
             setSelectedIsStaff(false);
             setHasFreeDailyItemAvailable(false);
             setCart([]);
@@ -494,9 +528,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 return true;
             }
 
-            setScanStatus('success');
-            await handleSelectCamper(camperMatch.id);
-            setCamperQuery('');
+            await openCamperCheckout(camperMatch);
             resetScanStatus(1000);
             return true;
         }
@@ -681,6 +713,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
             }, 150);
             setCart([]);
             setSelectedCamperId(null);
+            setSelectedCamperSnapshot(null);
             setSelectedIsStaff(false);
             setHasFreeDailyItemAvailable(false);
             queryClient.invalidateQueries({ queryKey: ['owlpay_campers'] });
