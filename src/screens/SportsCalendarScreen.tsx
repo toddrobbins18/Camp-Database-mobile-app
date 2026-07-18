@@ -133,6 +133,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         id: c.id,
         name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim(),
         grade: c.grade || '',
+        age: c.age || 0,
         divisionId: c.division_id,
         divisionName: c.division?.name || 'No Division',
     }));
@@ -342,8 +343,17 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                 return false;
               })
             : filtered;
-        return [...list].sort(compareByLastName);
-    }, [campers, rosterSearchTerm, rosterModalReadOnly, selectedCampers, selectedRosterEvent]);
+            
+        return [...list].sort((a, b) => {
+            if (rosterSortBy === 'Grade') {
+                return (a.grade || '').localeCompare(b.grade || '') || compareByLastName(a, b);
+            }
+            if (rosterSortBy === 'Age') {
+                return (a.age || 0) - (b.age || 0) || compareByLastName(a, b);
+            }
+            return compareByLastName(a, b);
+        });
+    }, [campers, rosterSearchTerm, rosterModalReadOnly, selectedCampers, selectedRosterEvent, rosterSortBy]);
 
     /** Shared pickers for Add + Edit sports event forms */
     type FormPickerKind = 'sport' | 'event' | 'home' | 'divisions';
@@ -1146,7 +1156,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                                             const otherCampers = rosterCampersToShow.filter(
                                                                 (c) => !eventDivIds.has(c.divisionId)
                                                             );
-                                                            if (otherCampers.length === 0) return null;
+                                                            if (otherCampers.length === 0 && (rosterModalReadOnly || selectedCampers.size > 0)) return null;
 
                                                             return (
                                                                 <View style={{ marginBottom: 16 }}>
