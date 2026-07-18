@@ -312,11 +312,38 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
     const rosterCampersToShow = useMemo(() => {
         const filtered = campers.filter((c) => c.name.toLowerCase().includes(rosterSearchTerm.toLowerCase()));
+        
+        // Match RLS normalization: collapse suffixes like "A", "B", "1"
+        const normalize = (name: string) => 
+            name.toLowerCase()
+                .replace(/\bteens\b/gi, "teen")
+                .replace(/\btn\d+\b/gi, "teen")
+                .replace(/\s+[a-z0-9]$/i, '')
+                .trim();
+
+        const leaderDivisionNames = new Set(
+            campers
+                .filter(c => selectedCampers.has(c.id))
+                .map(c => normalize(c.divisionName))
+        );
+
         const list = rosterModalReadOnly
-            ? filtered.filter((c) => selectedCampers.has(c.id))
+            ? filtered.filter((c) => {
+                // If on roster, show it
+                if (selectedCampers.has(c.id)) return true;
+                
+                // If it's a cross-division event (Freshman A & B), and I'm a leader for one,
+                // I should see the other's kids on the roster too.
+                const eventDivs = selectedRosterEvent?.divisions || [];
+                if (eventDivs.length > 1) {
+                    return leaderDivisionNames.has(normalize(c.divisionName));
+                }
+                
+                return false;
+              })
             : filtered;
         return [...list].sort(compareByLastName);
-    }, [campers, rosterSearchTerm, rosterModalReadOnly, selectedCampers]);
+    }, [campers, rosterSearchTerm, rosterModalReadOnly, selectedCampers, selectedRosterEvent]);
 
     /** Shared pickers for Add + Edit sports event forms */
     type FormPickerKind = 'sport' | 'event' | 'home' | 'divisions';
