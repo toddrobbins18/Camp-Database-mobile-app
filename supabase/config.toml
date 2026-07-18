@@ -3,6 +3,9 @@ project_id = "qjbkvnzeejbqxbcbskdu"
 [functions.check-medication-alerts]
 verify_jwt = false
 
+[functions.send-tomorrow-rosters]
+verify_jwt = false
+
 [functions.create-user]
 verify_jwt = true
 
@@ -60,14 +63,38 @@ verify_jwt = false
 [functions.populate-guardian-emails]
 verify_jwt = false
 
+[functions.cleanup-campminder]
+verify_jwt = false
+
 [functions.send-sports-academy-notification]
 verify_jwt = false
 
 [functions.send-tutoring-notification]
 verify_jwt = false
 
+[functions.notify-staff-assignment]
+verify_jwt = true
+
 [functions.send-owlpay-notifications]
+verify_jwt = false
+
+[functions.send-appointment-notification]
 verify_jwt = false
 
 [functions.send-daily-dashboard]
 verify_jwt = false
+
+[functions.send-daily-health-center-log]
+verify_jwt = false
+
+
+[functions.debug-staff]
+enabled = true
+verify_jwt = false
+import_map = "./functions/debug-staff/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/debug-staff/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/debug-staff/*.html" ]
