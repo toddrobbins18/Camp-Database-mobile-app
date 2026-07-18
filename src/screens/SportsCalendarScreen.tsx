@@ -129,7 +129,13 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const { data: camperData = [] } = useCampers(companyId, season);
     const { data: staffData = [] } = useStaff(companyId, season);
-    const campers = camperData.map((c: any) => ({ id: c.id, name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim(), grade: c.grade || '' }));
+    const campers = camperData.map((c: any) => ({
+        id: c.id,
+        name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim(),
+        grade: c.grade || '',
+        divisionId: c.division_id,
+        divisionName: c.division?.name || 'No Division',
+    }));
     const staffMembers = staffData.map((s: any) => ({ id: s.id, name: s.name, role: s.role || s.staff_type || 'Staff' }));
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(new Date());
@@ -319,8 +325,8 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     // Options from Tyler-Hill Web Code
     const sportTypeOptions = ['Baseball', 'Basketball', 'Dance', 'Football', 'Golf', 'Gymnastics', 'Hockey', 'Lacrosse', 'Soccer', 'Softball', 'Tennis', 'Volleyball', 'Waterfront', 'Other'];
     const eventTypeOptions = useMemo(() => {
-        const base = ['WC One Day Tournament', 'WC Knock Out Tournament', 'Exhibition/Friendly', 'Invitational', 'Other'];
-        if (!isTimberLakeCamp) return base;
+        const base = ['WC One Day Tournament', 'WC Knock Out Tournament', 'Tournament', 'Exhibition/Friendly', 'Invitational', 'Other'];
+        if (!isTimberLakeCamp) return ['Away', 'Home', ...base];
         return ['Away', 'Home', 'Gordon', 'Jacobs', 'Bocian/Melter Bowl', ...base];
     }, [isTimberLakeCamp]);
     const mealOptions = ['Breakfast', 'Snack', 'Lunch', 'Dinner', 'Other'];
@@ -1066,22 +1072,107 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
                                     {/* Campers List */}
                                     <ScrollView style={{ flex: 1 }}>
-                                        {rosterCampersToShow.map((camper) => (
-                                            <TouchableOpacity
-                                                key={camper.id}
-                                                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}
-                                                onPress={() => toggleCamperSelection(camper.id)}
-                                                disabled={rosterModalReadOnly}
-                                            >
-                                                {!rosterModalReadOnly && (
-                                                    <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 1, borderColor: selectedCampers.has(camper.id) ? theme.colors.secondary : theme.colors.textSecondary, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                                                        {selectedCampers.has(camper.id) && <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: theme.colors.secondary }} />}
+                                        {(() => {
+                                            const eventDivisions = selectedRosterEvent?.divisions || [];
+                                            const eventDivIds = new Set(eventDivisions.map((d: any) => d.id));
+
+                                            if (eventDivisions.length > 1) {
+                                                // Grouped view for multi-division events
+                                                return (
+                                                    <>
+                                                        {eventDivisions.map((division: any) => {
+                                                            const divisionCampers = rosterCampersToShow.filter(
+                                                                (c) => c.divisionId === division.id
+                                                            );
+                                                            if (divisionCampers.length === 0 && rosterModalReadOnly) return null;
+
+                                                            return (
+                                                                <View key={division.id} style={{ marginBottom: 16 }}>
+                                                                    <View style={{ backgroundColor: theme.colors.surface, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginBottom: 4 }}>
+                                                                        <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.secondary }}>{division.name.toUpperCase()}</Text>
+                                                                    </View>
+                                                                    {divisionCampers.map((camper) => (
+                                                                        <TouchableOpacity
+                                                                            key={camper.id}
+                                                                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}
+                                                                            onPress={() => toggleCamperSelection(camper.id)}
+                                                                            disabled={rosterModalReadOnly}
+                                                                        >
+                                                                            {!rosterModalReadOnly && (
+                                                                                <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: selectedCampers.has(camper.id) ? theme.colors.secondary : theme.colors.textSecondary, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                                                                                    {selectedCampers.has(camper.id) && <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: theme.colors.secondary }} />}
+                                                                                </View>
+                                                                            )}
+                                                                            <Text style={{ flex: 1, fontSize: 15, fontWeight: '500', color: theme.colors.text }}>{camper.name}</Text>
+                                                                            <Text style={{ fontSize: 13, color: theme.colors.textSecondary }}>Grade: {camper.grade}</Text>
+                                                                        </TouchableOpacity>
+                                                                    ))}
+                                                                    {divisionCampers.length === 0 && !rosterModalReadOnly && (
+                                                                        <Text style={{ fontSize: 12, color: theme.colors.textSecondary, fontStyle: 'italic', paddingLeft: 8, paddingVertical: 4 }}>No campers found in this division</Text>
+                                                                    )}
+                                                                </View>
+                                                            );
+                                                        })}
+
+                                                        {/* Other campers not in any of the event's divisions */}
+                                                        {(() => {
+                                                            const otherCampers = rosterCampersToShow.filter(
+                                                                (c) => !eventDivIds.has(c.divisionId)
+                                                            );
+                                                            if (otherCampers.length === 0) return null;
+
+                                                            return (
+                                                                <View style={{ marginBottom: 16 }}>
+                                                                    <View style={{ backgroundColor: theme.colors.surface, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginBottom: 4 }}>
+                                                                        <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textSecondary }}>OTHER DIVISIONS</Text>
+                                                                    </View>
+                                                                    {otherCampers.map((camper) => (
+                                                                        <TouchableOpacity
+                                                                            key={camper.id}
+                                                                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}
+                                                                            onPress={() => toggleCamperSelection(camper.id)}
+                                                                            disabled={rosterModalReadOnly}
+                                                                        >
+                                                                            {!rosterModalReadOnly && (
+                                                                                <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: selectedCampers.has(camper.id) ? theme.colors.secondary : theme.colors.textSecondary, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                                                                                    {selectedCampers.has(camper.id) && <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: theme.colors.secondary }} />}
+                                                                                </View>
+                                                                            )}
+                                                                            <View style={{ flex: 1 }}>
+                                                                                <Text style={{ fontSize: 15, fontWeight: '500', color: theme.colors.text }}>{camper.name}</Text>
+                                                                                <Text style={{ fontSize: 11, color: theme.colors.textSecondary }}>{camper.divisionName}</Text>
+                                                                            </View>
+                                                                            <Text style={{ fontSize: 13, color: theme.colors.textSecondary }}>Grade: {camper.grade}</Text>
+                                                                        </TouchableOpacity>
+                                                                    ))}
+                                                                </View>
+                                                            );
+                                                        })()}
+                                                    </>
+                                                );
+                                            }
+
+                                            // Default single list for single-division or no-division events
+                                            return rosterCampersToShow.map((camper) => (
+                                                <TouchableOpacity
+                                                    key={camper.id}
+                                                    style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}
+                                                    onPress={() => toggleCamperSelection(camper.id)}
+                                                    disabled={rosterModalReadOnly}
+                                                >
+                                                    {!rosterModalReadOnly && (
+                                                        <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 1, borderColor: selectedCampers.has(camper.id) ? theme.colors.secondary : theme.colors.textSecondary, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                                            {selectedCampers.has(camper.id) && <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: theme.colors.secondary }} />}
+                                                        </View>
+                                                    )}
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={{ fontSize: 16, fontWeight: '500', color: theme.colors.text }}>{camper.name}</Text>
+                                                        {eventDivisions.length === 0 && <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>{camper.divisionName}</Text>}
                                                     </View>
-                                                )}
-                                                <Text style={{ flex: 1, fontSize: 16, fontWeight: '500', color: theme.colors.text }}>{camper.name}</Text>
-                                                <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>Grade: {camper.grade}</Text>
-                                            </TouchableOpacity>
-                                        ))}
+                                                    <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>Grade: {camper.grade}</Text>
+                                                </TouchableOpacity>
+                                            ));
+                                        })()}
                                         {rosterCampersToShow.length === 0 && (
                                             <Text style={{ textAlign: 'center', color: theme.colors.textSecondary, marginTop: 24 }}>
                                                 {rosterModalReadOnly ? 'No campers on this roster' : 'No campers found'}
