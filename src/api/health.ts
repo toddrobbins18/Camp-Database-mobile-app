@@ -354,19 +354,26 @@ export const useAddMedicationLog = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (newLog: Partial<MedicationLog> & { company_id: string; child_id: string }) => {
+        mutationFn: async (
+            newLog: Partial<MedicationLog> & { company_id: string; child_id: string; season?: string | null },
+        ) => {
+            const payload = {
+                ...newLog,
+                season: newLog.season || String(new Date().getFullYear()),
+            };
+
             if (await isOnlineNow()) {
                 const { data, error } = await supabase
                     .from('medication_logs')
-                    .insert([newLog])
+                    .insert([payload])
                     .select()
                     .single();
                 if (error) throw error;
                 return data;
             }
-            await enqueueSync('medication_logs.insert', [newLog]);
+            await enqueueSync('medication_logs.insert', [payload]);
             return {
-                ...newLog,
+                ...payload,
                 id: `offline-${Date.now()}`,
                 created_at: new Date().toISOString(),
             };

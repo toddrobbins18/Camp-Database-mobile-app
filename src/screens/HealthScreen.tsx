@@ -21,7 +21,7 @@ import {
     formatMedicationMealTimeForDisplay,
 } from '../constants/medicationBedtimeOptions';
 import { defaultMedicationStartDate } from '../lib/medicationStartDate';
-import { childMatchesGenderFilter, medicationRowKey, sortMedicationsByScheduledTime } from '../lib/medicationSchedule';
+import { childMatchesGenderFilter, campProgramEndDate, medicationRowKey, sortMedicationsByScheduledTime } from '../lib/medicationSchedule';
 import { filterActiveRoster } from '../lib/rosterStatus';
 import {
     MEDICATION_MEAL_FILTER_OPTIONS,
@@ -677,6 +677,23 @@ export const HealthScreen = ({ navigation }: any) => {
         }
     };
 
+    const confirmCheckout = (admissionId: string, name?: string) => {
+        Alert.alert(
+            'Discharge from Health Center?',
+            name
+                ? `Are you sure you want to check out ${name}?`
+                : 'Are you sure you want to check this person out of the health center?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Yes, check out',
+                    style: 'destructive',
+                    onPress: () => handleCheckoutChild(admissionId),
+                },
+            ],
+        );
+    };
+
     const handleHealthCenterRfidScan = async () => {
         if (!companyId || !season) {
             Alert.alert('Error', 'Company or season is not available.');
@@ -712,7 +729,7 @@ export const HealthScreen = ({ navigation }: any) => {
                 .maybeSingle();
 
             if (existing) {
-                await handleCheckoutChild(existing.id);
+                confirmCheckout(existing.id, entity.name);
             } else {
                 setEntityToAdmit({ id: entity.id, name: entity.name, type: isStaff ? 'staff' : 'camper' });
                 setAdmitReason('');
@@ -873,6 +890,7 @@ export const HealthScreen = ({ navigation }: any) => {
                 await addMedicationMutation.mutateAsync({
                     company_id: companyId,
                     child_id: child.id as string,
+                    season,
                     medication_name: medicationName,
                     dosage: dosage || null,
                     date: medicationStartDate,
@@ -885,6 +903,10 @@ export const HealthScreen = ({ navigation }: any) => {
                     days_of_week: [],
                     end_date: null,
                 });
+                Alert.alert(
+                    'Medication saved',
+                    'As-needed medication was added to this camper profile. It will not appear on the daily schedule list.',
+                );
                 setMedicationName('');
                 setDosage('');
                 setNotes('');
@@ -946,6 +968,7 @@ export const HealthScreen = ({ navigation }: any) => {
         const basePayload = {
             company_id: companyId,
             child_id: child.id as string,
+            season,
             medication_name: medicationName,
             dosage: dosage || null,
             date: medicationStartDate,
@@ -954,7 +977,9 @@ export const HealthScreen = ({ navigation }: any) => {
             is_recurring: isRecurring,
             frequency: isRecurring ? recurringFrequency : null,
             days_of_week: isRecurring && recurringFrequency === 'custom' ? recurringDays : [],
-            end_date: isRecurring && recurringEndDate ? recurringEndDate : null,
+            end_date: isRecurring
+                ? recurringEndDate || campProgramEndDate(season || String(new Date().getFullYear()))
+                : null,
         };
 
         try {
@@ -965,6 +990,10 @@ export const HealthScreen = ({ navigation }: any) => {
                     meal_time: slot.meal_time,
                 });
             }
+            Alert.alert(
+                'Medication saved',
+                `Added ${slots.length} medication schedule slot${slots.length === 1 ? '' : 's'}.`,
+            );
             setMedicationName('');
             setDosage('');
             setNotes('');
@@ -1487,7 +1516,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                     </View>
                                                     <TouchableOpacity
                                                         style={styles.checkOutButton}
-                                                        onPress={() => admission.id && handleCheckoutChild(admission.id)}
+                                                        onPress={() => admission.id && confirmCheckout(admission.id, entity?.name)}
                                                     >
                                                         <Ionicons name="person-remove-outline" size={16} color="white" />
                                                         <Text style={styles.checkOutButtonText}>Check Out</Text>

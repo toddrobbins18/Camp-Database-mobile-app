@@ -19,6 +19,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
+import { getAwardCategoryChips } from '../lib/awardCategory';
+import { StyledCard } from '../components/StyledCard';
 
 const TABS = [
     'Overview',
@@ -64,6 +66,7 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
     });
 
     const [staff, setStaff] = useState<any>(route?.params?.staff ?? {});
+    const [activeTab, setActiveTab] = useState('Overview');
     const [cannotEvalVisible, setCannotEvalVisible] = useState(false);
     const [editVisible, setEditVisible] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -78,6 +81,49 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
 
     const displayStaff = loadedStaff ?? staff;
     const assignedLeaders = (displayStaff as any)?.assignedLeaders || [];
+
+    const { data: achievements = [], isLoading: achievementsLoading } = useQuery({
+        queryKey: ['staff_awards', displayStaff?.id, (displayStaff as any)?.person_id, companyId],
+        queryFn: async () => {
+            if (!displayStaff?.id || !companyId) return [];
+
+            let staffIds: string[] = [displayStaff.id];
+            const personId = (displayStaff as any)?.person_id;
+            if (personId) {
+                const { data: siblingRows } = await supabase
+                    .from('staff')
+                    .select('id')
+                    .eq('person_id', personId)
+                    .eq('company_id', companyId);
+                if (siblingRows?.length) {
+                    staffIds = [...new Set(siblingRows.map((member: { id: string }) => member.id))];
+                }
+            }
+
+            const { data, error } = await supabase
+                .from('awards')
+                .select('*')
+                .eq('company_id', companyId)
+                .in('staff_id', staffIds)
+                .order('date', { ascending: false });
+            if (error) throw error;
+
+            return (data || []).map((award: any) => ({
+                id: award.id,
+                title: award.title || 'Award',
+                description: (award.description || '').trim(),
+                category: award.category ?? null,
+                date: award.date
+                    ? new Date(String(award.date).includes('T') ? award.date : `${award.date}T12:00:00`).toLocaleDateString('en-US', {
+                          month: '2-digit',
+                          day: '2-digit',
+                          year: 'numeric',
+                      })
+                    : '',
+            }));
+        },
+        enabled: !!displayStaff?.id && !!companyId,
+    });
 
     const initials = (displayStaff?.name || 'NA')
         .split(' ')
@@ -202,13 +248,53 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                 </View>
 
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll}>
-                    {TABS.map((tab, index) => (
-                        <View key={tab} style={[styles.tab, index === 0 && styles.activeTab]}>
-                            <Text style={[styles.tabText, index === 0 && styles.activeTabText]}>{tab}</Text>
-                        </View>
+                    {TABS.map((tab) => (
+                        <TouchableOpacity
+                            key={tab}
+                            style={[styles.tab, activeTab === tab && styles.activeTab]}
+                            onPress={() => setActiveTab(tab)}
+                        >
+                            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab}</Text>
+                        </TouchableOpacity>
                     ))}
                 </ScrollView>
 
+                {activeTab === 'Achievements' ? (
+                    <View>
+                        <Text style={styles.achievementsCountText}>
+                            {achievementsLoading ? 'Loading...' : `${achievements.length} total achievements`}
+                        </Text>
+                        {achievementsLoading ? (
+                            <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginTop: 16 }} />
+                        ) : achievements.length === 0 ? (
+                            <StyledCard style={styles.infoCard}>
+                                <Text style={styles.emptyText}>No awards recorded yet</Text>
+                            </StyledCard>
+                        ) : (
+                            achievements.map((achievement) => {
+                                const categoryChips = getAwardCategoryChips(achievement.category);
+                                return (
+                                    <StyledCard key={achievement.id} style={styles.infoCard}>
+                                        <Text style={styles.cardTitle}>{achievement.title}</Text>
+                                        {achievement.description ? (
+                                            <Text style={styles.cardSubtitle}>{achievement.description}</Text>
+                                        ) : null}
+                                        {categoryChips.length > 0 ? (
+                                            <View style={styles.chipRow}>
+                                                {categoryChips.map((chip) => (
+                                                    <View key={chip} style={styles.chip}>
+                                                        <Text style={styles.chipText}>{chip}</Text>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        ) : null}
+                                        <Text style={styles.fieldValue}>{achievement.date}</Text>
+                                    </StyledCard>
+                                );
+                            })
+                        )}
+                    </View>
+                ) : (
                 <View style={styles.cardsRow}>
                     <View style={styles.infoCard}>
                         <Text style={styles.cardTitle}>Contact Information</Text>
@@ -281,6 +367,7 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                         </View>
                     </View>
                 </View>
+                )}
             </ScrollView>
 
             <Modal
@@ -470,6 +557,34 @@ const styles = StyleSheet.create({
     activeTab: { backgroundColor: '#f3f4f6' },
     tabText: { color: theme.colors.textSecondary, fontWeight: '600', fontSize: 12 },
     activeTabText: { color: theme.colors.text },
+    achievementsCountText: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.md,
+    },
+    emptyText: {
+        textAlign: 'center',
+        color: theme.colors.textSecondary,
+        fontSize: 16,
+    },
+    chipRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginTop: 8,
+        marginBottom: 8,
+    },
+    chip: {
+        backgroundColor: '#dbeafe',
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+    },
+    chipText: {
+        color: '#1d4ed8',
+        fontSize: 12,
+        fontWeight: '600',
+    },
     cardsRow: { gap: theme.spacing.md },
     infoCard: {
         backgroundColor: theme.colors.surface,
