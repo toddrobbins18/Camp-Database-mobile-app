@@ -30,7 +30,15 @@ import {
 } from '../api/sports';
 import { useCampers, useDivisions } from '../api/campers';
 import { useSpecialistSportScope } from '../hooks/useSpecialistSportScope';
-import { sportsAcademyCamperName } from '../lib/sportsAcademyUtils';
+import { eachDayOfInterval, format, parseISO, startOfDay } from 'date-fns';
+import {
+    buildSportsAcademySessionDates,
+    enrollmentOccursOnDate,
+    formatSportsAcademySessionDate,
+    isLegacySportsAcademyRange,
+    normalizeSessionDateYmd,
+    sportsAcademyCamperName,
+} from '../lib/sportsAcademyUtils';
 
 interface SportsScreenProps {
     navigation: any;
@@ -157,33 +165,28 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         const out: CalendarWidgetEvent[] = [];
         for (const enroll of filteredEnrollments) {
             if (!enroll.id || !enroll.start_date) continue;
-            const startRaw = enroll.start_date.split('T')[0];
-            const endRaw = (enroll.end_date || enroll.start_date).split('T')[0];
-            const [sy, sm, sd] = startRaw.split('-').map(Number);
-            const [ey, em, ed] = endRaw.split('-').map(Number);
-            if (!Number.isFinite(sy) || !Number.isFinite(sm) || !Number.isFinite(sd)) continue;
-            let cur = new Date(sy, sm - 1, sd);
-            const end = new Date(
-                Number.isFinite(ey) ? ey : sy,
-                Number.isFinite(em) ? em - 1 : sm - 1,
-                Number.isFinite(ed) ? ed : sd,
-            );
-            if (cur > end) continue;
-            while (cur.getTime() <= end.getTime()) {
-                const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+            const startYmd = normalizeSessionDateYmd(enroll.start_date);
+            if (!startYmd) continue;
+
+            const days = isLegacySportsAcademyRange(enroll)
+                ? eachDayOfInterval({
+                      start: startOfDay(parseISO(startYmd)),
+                      end: startOfDay(parseISO(normalizeSessionDateYmd(enroll.end_date)!)),
+                  }).filter((day) => enrollmentOccursOnDate(enroll, day))
+                : [startOfDay(parseISO(startYmd))];
+
+            for (const day of days) {
+                const iso = format(day, 'yyyy-MM-dd');
                 out.push({
                     id: `${enroll.id}__${iso}`,
                     title: enroll.sport_name || 'Sports Event',
-                    date: new Date(cur.getFullYear(), cur.getMonth(), cur.getDate()),
+                    date: new Date(day.getFullYear(), day.getMonth(), day.getDate()),
                     time: enroll.schedule_periods?.filter(Boolean).join(', ') || undefined,
                     location: enroll.instructor || undefined,
                     type: 'sports',
                     tags: sportsAcademyCamperName(enroll) !== 'Unknown Camper' ? [sportsAcademyCamperName(enroll)] : undefined,
                     accent: SPORTS_CALENDAR_ACCENT,
                 });
-                const next = new Date(cur);
-                next.setDate(next.getDate() + 1);
-                cur = next;
             }
         }
         return out;
@@ -202,16 +205,12 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     const [sportName, setSportName] = useState('');
     const [instructor, setInstructor] = useState('');
     const [schedulePeriod, setSchedulePeriod] = useState('');
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
+    const [sessionDate, setSessionDate] = useState('');
     const [notes, setNotes] = useState('');
     const [showSportNameDropdown, setShowSportNameDropdown] = useState(false);
-    const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-    const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-    const [startDatePickerMonth, setStartDatePickerMonth] = useState(new Date().getMonth());
-    const [startDatePickerYear, setStartDatePickerYear] = useState(new Date().getFullYear());
-    const [endDatePickerMonth, setEndDatePickerMonth] = useState(new Date().getMonth());
-    const [endDatePickerYear, setEndDatePickerYear] = useState(new Date().getFullYear());
+    const [showSessionDatePicker, setShowSessionDatePicker] = useState(false);
+    const [sessionDatePickerMonth, setSessionDatePickerMonth] = useState(new Date().getMonth());
+    const [sessionDatePickerYear, setSessionDatePickerYear] = useState(new Date().getFullYear());
 
     // Help modal state
     const [showHelpModal, setShowHelpModal] = useState(false);
@@ -243,30 +242,19 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
     };
 
-    const handleEnrollmentDateSelect = (date: Date, type: 'start' | 'end') => {
+    const handleEnrollmentDateSelect = (date: Date) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
-        const formatted = `${year}-${month}-${day}`; // Format for DB: YYYY-MM-DD
-        if (type === 'start') {
-            setStartDate(formatted);
-            setShowStartDatePicker(false);
-        } else {
-            setEndDate(formatted);
-            setShowEndDatePicker(false);
-        }
+        setSessionDate(`${year}-${month}-${day}`);
+        setShowSessionDatePicker(false);
     };
 
-    // Reuse date picker render function for enrollment modal
-    const renderEnrollmentDatePicker = (
-        type: 'start' | 'end',
-        visible: boolean,
-        onClose: () => void
-    ) => {
-        const currentMonth = type === 'start' ? startDatePickerMonth : endDatePickerMonth;
-        const currentYear = type === 'start' ? startDatePickerYear : endDatePickerYear;
+    const renderEnrollmentDatePicker = (visible: boolean, onClose: () => void) => {
+        const currentMonth = sessionDatePickerMonth;
+        const currentYear = sessionDatePickerYear;
         const today = new Date();
-        const selectedDateValue = type === 'start' ? startDate : endDate;
+        const selectedDateValue = sessionDate;
 
         const monthNames = [
             'January',
@@ -312,20 +300,11 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         <View style={styles.datePickerHeader}>
                             <TouchableOpacity
                                 onPress={() => {
-                                    if (type === 'start') {
-                                        if (startDatePickerMonth === 0) {
-                                            setStartDatePickerMonth(11);
-                                            setStartDatePickerYear(startDatePickerYear - 1);
-                                        } else {
-                                            setStartDatePickerMonth(startDatePickerMonth - 1);
-                                        }
+                                    if (sessionDatePickerMonth === 0) {
+                                        setSessionDatePickerMonth(11);
+                                        setSessionDatePickerYear(sessionDatePickerYear - 1);
                                     } else {
-                                        if (endDatePickerMonth === 0) {
-                                            setEndDatePickerMonth(11);
-                                            setEndDatePickerYear(endDatePickerYear - 1);
-                                        } else {
-                                            setEndDatePickerMonth(endDatePickerMonth - 1);
-                                        }
+                                        setSessionDatePickerMonth(sessionDatePickerMonth - 1);
                                     }
                                 }}
                             >
@@ -336,20 +315,11 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                             </Text>
                             <TouchableOpacity
                                 onPress={() => {
-                                    if (type === 'start') {
-                                        if (startDatePickerMonth === 11) {
-                                            setStartDatePickerMonth(0);
-                                            setStartDatePickerYear(startDatePickerYear + 1);
-                                        } else {
-                                            setStartDatePickerMonth(startDatePickerMonth + 1);
-                                        }
+                                    if (sessionDatePickerMonth === 11) {
+                                        setSessionDatePickerMonth(0);
+                                        setSessionDatePickerYear(sessionDatePickerYear + 1);
                                     } else {
-                                        if (endDatePickerMonth === 11) {
-                                            setEndDatePickerMonth(0);
-                                            setEndDatePickerYear(endDatePickerYear + 1);
-                                        } else {
-                                            setEndDatePickerMonth(endDatePickerMonth + 1);
-                                        }
+                                        setSessionDatePickerMonth(sessionDatePickerMonth + 1);
                                     }
                                 }}
                             >
@@ -379,7 +349,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                             isToday && styles.todayCell,
                                             isSelected && styles.selectedDateCell,
                                         ]}
-                                        onPress={() => handleEnrollmentDateSelect(date, type)}
+                                        onPress={() => handleEnrollmentDateSelect(date)}
                                     >
                                         <Text
                                             style={[
@@ -396,8 +366,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         <View style={styles.datePickerActions}>
                             <TouchableOpacity
                                 onPress={() => {
-                                    if (type === 'start') setStartDate('');
-                                    else setEndDate('');
+                                    setSessionDate('');
                                     onClose();
                                 }}
                             >
@@ -405,7 +374,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                             </TouchableOpacity>
                             <TouchableOpacity
                                 onPress={() => {
-                                    handleEnrollmentDateSelect(today, type);
+                                    handleEnrollmentDateSelect(today);
                                 }}
                             >
                                 <Text style={styles.datePickerActionText}>Today</Text>
@@ -417,7 +386,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         );
     };
 
-    const handleAddEnrollment = () => {
+    const handleAddEnrollment = (addAnother = false) => {
         if (!companyId || !season) {
             Alert.alert('Context missing', 'Company or season is not loaded yet.');
             return;
@@ -426,34 +395,43 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
             Alert.alert('Validation', 'Please select camper and sport.');
             return;
         }
+        if (!sessionDate) {
+            Alert.alert('Validation', 'Please select a session date.');
+            return;
+        }
 
+        const sessionDates = buildSportsAcademySessionDates(sessionDate);
         const payload = {
             child_id: selectedChildId,
             sport_name: sportName,
             instructor,
             schedule_periods: schedulePeriod ? [schedulePeriod] : [],
-            start_date: startDate || null,
-            end_date: endDate || null,
+            start_date: sessionDates.start_date,
+            end_date: sessionDates.end_date,
             notes,
             company_id: companyId,
             season,
         };
 
-        const onSuccess = () => {
-            // Reset form
+        const resetForm = (keepCamperAndSport = false) => {
+            if (keepCamperAndSport) {
+                setSessionDate('');
+                setNotes('');
+                setEditingEnrollment(null);
+                return;
+            }
             setSelectedChildId('');
             setSportName('');
             setInstructor('');
             setSchedulePeriod('');
-            setStartDate('');
-            setEndDate('');
+            setSessionDate('');
             setNotes('');
             setEditingEnrollment(null);
             setShowAddEnrollmentModal(false);
         };
 
         const onError = (error: any) => {
-            Alert.alert('Error', error?.message || (editingEnrollment ? 'Failed to update enrollment' : 'Failed to add enrollment'));
+            Alert.alert('Error', error?.message || (editingEnrollment ? 'Failed to update session' : 'Failed to add session'));
         };
 
         if (editingEnrollment?.id) {
@@ -461,7 +439,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                 id: editingEnrollment.id,
                 updates: payload,
             }, {
-                onSuccess,
+                onSuccess: () => resetForm(),
                 onError,
             });
             return;
@@ -469,7 +447,12 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
 
         addEnrollmentMutation.mutate(payload, {
             onSuccess: () => {
-                onSuccess();
+                if (addAnother) {
+                    resetForm(true);
+                    Alert.alert('Success', 'Session added. Add another date for this camper.');
+                    return;
+                }
+                resetForm();
             },
             onError,
         });
@@ -480,8 +463,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         setSportName('');
         setInstructor('');
         setSchedulePeriod('');
-        setStartDate('');
-        setEndDate('');
+        setSessionDate('');
         setNotes('');
         setEditingEnrollment(null);
         setShowAddEnrollmentModal(false);
@@ -494,8 +476,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
         setInstructor(enroll.instructor || '');
         const periods = Array.isArray(enroll.schedule_periods) ? enroll.schedule_periods : [];
         setSchedulePeriod(periods[0] || '');
-        setStartDate(enroll.start_date || '');
-        setEndDate(enroll.end_date || '');
+        setSessionDate(normalizeSessionDateYmd(enroll.start_date) || '');
         setNotes(enroll.notes || '');
         setShowAddEnrollmentModal(true);
     };
@@ -534,18 +515,9 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
     };
 
     const renderCalendarView = () => {
-        const selectedDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
-
-        const todaysEnrollments = filteredEnrollments.filter(e => {
-            if (!selectedDateStr) return false;
-            if (e.start_date && e.end_date) {
-                return selectedDateStr >= e.start_date.split('T')[0] && selectedDateStr <= e.end_date.split('T')[0];
-            }
-            if (e.start_date) {
-                return e.start_date.split('T')[0] === selectedDateStr;
-            }
-            return false;
-        });
+        const todaysEnrollments = filteredEnrollments.filter((e) =>
+            enrollmentOccursOnDate(e, selectedDate),
+        );
 
         return (
             <View style={styles.calendarViewContainer}>
@@ -713,7 +685,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                         onPress={() => setShowAddEnrollmentModal(true)}
                     >
                         <Ionicons name="add" size={20} color={theme.colors.surface} />
-                        <Text style={styles.addEnrollmentButtonText}>Add Enrollment</Text>
+                        <Text style={styles.addEnrollmentButtonText}>Add Session</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -832,7 +804,9 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                         <Text style={{ ...theme.typography.body }}>Sport: <Text style={{ fontWeight: '600' }}>{enroll.sport_name}</Text></Text>
                                         <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>Instructor: {enroll.instructor || 'N/A'}</Text>
                                         <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>Period: {enroll.schedule_periods?.join(', ') || 'N/A'}</Text>
-                                        <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>Dates: {enroll.start_date || 'N/A'} to {enroll.end_date || 'N/A'}</Text>
+                                        <Text style={{ ...theme.typography.bodySmall, color: theme.colors.textSecondary }}>
+                                            Session: {formatSportsAcademySessionDate(enroll)}
+                                        </Text>
                                     </View>
                                 </StyledCard>
                             ))
@@ -1045,7 +1019,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                     <View style={styles.addEnrollmentModalContainer}>
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>{editingEnrollment ? 'Edit Enrollment' : 'Add Enrollment'}</Text>
+                            <Text style={styles.modalTitle}>{editingEnrollment ? 'Edit Session' : 'Add Session'}</Text>
                             <TouchableOpacity
                                 onPress={handleCloseAddEnrollmentModal}
                                 style={styles.closeButton}
@@ -1053,6 +1027,9 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 <Ionicons name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
+                        <Text style={styles.modalHelpText}>
+                            Each session is one date. Add another session when the camper has academy on a different day.
+                        </Text>
 
                         <ScrollView
                             style={styles.modalContent}
@@ -1156,50 +1133,29 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 </View>
                             </View>
 
-                            {/* Start Date and End Date */}
-                            <View style={styles.dateRow}>
-                                <View style={styles.dateField}>
-                                    <Text style={styles.label}>Start Date</Text>
-                                    <TouchableOpacity
-                                        style={styles.dateInput}
-                                        onPress={() => setShowStartDatePicker(true)}
+                            {/* Session Date */}
+                            <View style={styles.formSection}>
+                                <Text style={styles.label}>
+                                    Session Date <Text style={styles.required}>*</Text>
+                                </Text>
+                                <TouchableOpacity
+                                    style={styles.dateInput}
+                                    onPress={() => setShowSessionDatePicker(true)}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.dateInputText,
+                                            !sessionDate && styles.placeholder,
+                                        ]}
                                     >
-                                        <Text
-                                            style={[
-                                                styles.dateInputText,
-                                                !startDate && styles.placeholder,
-                                            ]}
-                                        >
-                                            {startDate || 'mm/dd/yyyy'}
-                                        </Text>
-                                        <Ionicons
-                                            name="calendar-outline"
-                                            size={20}
-                                            color={theme.colors.textSecondary}
-                                        />
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.dateField}>
-                                    <Text style={styles.label}>End Date</Text>
-                                    <TouchableOpacity
-                                        style={styles.dateInput}
-                                        onPress={() => setShowEndDatePicker(true)}
-                                    >
-                                        <Text
-                                            style={[
-                                                styles.dateInputText,
-                                                !endDate && styles.placeholder,
-                                            ]}
-                                        >
-                                            {endDate || 'mm/dd/yyyy'}
-                                        </Text>
-                                        <Ionicons
-                                            name="calendar-outline"
-                                            size={20}
-                                            color={theme.colors.textSecondary}
-                                        />
-                                    </TouchableOpacity>
-                                </View>
+                                        {sessionDate || 'mm/dd/yyyy'}
+                                    </Text>
+                                    <Ionicons
+                                        name="calendar-outline"
+                                        size={20}
+                                        color={theme.colors.textSecondary}
+                                    />
+                                </TouchableOpacity>
                             </View>
 
                             {/* Notes */}
@@ -1207,7 +1163,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                 <Text style={styles.label}>Notes</Text>
                                 <TextInput
                                     style={styles.textArea}
-                                    placeholder="Additional notes about the enrollment"
+                                    placeholder="Additional notes about the session"
                                     placeholderTextColor={theme.colors.textSecondary}
                                     value={notes}
                                     onChangeText={setNotes}
@@ -1226,28 +1182,35 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                             >
                                 <Text style={styles.cancelButtonText}>Cancel</Text>
                             </TouchableOpacity>
+                            {!editingEnrollment && (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.submitButton,
+                                        styles.secondarySubmitButton,
+                                        (!selectedChildId || !sportName || !sessionDate) && styles.submitButtonDisabled,
+                                    ]}
+                                    onPress={() => handleAddEnrollment(true)}
+                                    disabled={!selectedChildId || !sportName || !sessionDate}
+                                >
+                                    <Text style={styles.submitButtonText}>Save & add another</Text>
+                                </TouchableOpacity>
+                            )}
                             <TouchableOpacity
                                 style={[
                                     styles.submitButton,
-                                    (!selectedChildId || !sportName) && styles.submitButtonDisabled,
+                                    (!selectedChildId || !sportName || !sessionDate) && styles.submitButtonDisabled,
                                 ]}
-                                onPress={handleAddEnrollment}
-                                disabled={!selectedChildId || !sportName}
+                                onPress={() => handleAddEnrollment(false)}
+                                disabled={!selectedChildId || !sportName || !sessionDate}
                             >
-                                <Text style={styles.submitButtonText}>{editingEnrollment ? 'Update Enrollment' : 'Add Enrollment'}</Text>
+                                <Text style={styles.submitButtonText}>{editingEnrollment ? 'Update Session' : 'Add Session'}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
                 {renderEnrollmentDatePicker(
-                    'start',
-                    showStartDatePicker,
-                    () => setShowStartDatePicker(false)
-                )}
-                {renderEnrollmentDatePicker(
-                    'end',
-                    showEndDatePicker,
-                    () => setShowEndDatePicker(false)
+                    showSessionDatePicker,
+                    () => setShowSessionDatePicker(false)
                 )}
                 {showCamperDropdown ? (
                     <View
@@ -1942,7 +1905,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                         <Text style={styles.helpLabel}>Example Data Row:</Text>
                                         <View style={styles.codeBlock}>
                                             <Text style={styles.codeText}>
-                                                John Doe, Basketball, Coach Johnson, Period 1, 2026-06-15, 2026-08-15, Advanced group
+                                                John Doe, Basketball, Coach Johnson, Period 1, 2026-06-15, , Advanced group
                                             </Text>
                                         </View>
                                     </View>
@@ -1951,7 +1914,7 @@ export const SportsScreen = ({ navigation }: SportsScreenProps) => {
                                         <Text style={styles.helpLabel}>Important Notes:</Text>
                                         <View style={styles.noteBoxBlue}>
                                             <Text style={styles.noteTextBlue}>
-                                                camper_name must match existing camper. Date format: YYYY-MM-DD
+                                                Each row is one session day. Use start_date for the session date; end_date is optional (defaults to start_date). camper_name must match existing camper. Date format: YYYY-MM-DD
                                             </Text>
                                         </View>
                                     </View>
@@ -2270,6 +2233,12 @@ const styles = StyleSheet.create({
     modalTitle: {
         ...theme.typography.h3,
     },
+    modalHelpText: {
+        ...theme.typography.bodySmall,
+        color: theme.colors.textSecondary,
+        paddingHorizontal: theme.spacing.lg,
+        paddingBottom: theme.spacing.sm,
+    },
     closeButton: {
         padding: theme.spacing.xs,
     },
@@ -2493,6 +2462,9 @@ const styles = StyleSheet.create({
         paddingVertical: theme.spacing.md,
         borderRadius: theme.borderRadius.md,
         backgroundColor: theme.colors.secondary,
+    },
+    secondarySubmitButton: {
+        backgroundColor: theme.colors.primary,
     },
     submitButtonDisabled: {
         backgroundColor: theme.colors.textSecondary,

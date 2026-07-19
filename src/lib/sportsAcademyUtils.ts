@@ -1,16 +1,87 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { format, parseISO, startOfDay } from 'date-fns';
 import { Camper } from '../api/campers';
 
 export type SportsAcademyEnrollment = {
     id?: string;
     child_id: string;
     sport_name: string;
+    instructor?: string | null;
+    schedule_periods?: string[] | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    weekdays?: string[] | null;
+    notes?: string | null;
     child?: Camper | null;
     children?: Camper | null;
     [key: string]: unknown;
 };
 
 const CHILD_BATCH_SIZE = 500;
+
+export function normalizeSessionDateYmd(date: string | null | undefined): string | null {
+    if (!date) return null;
+    const trimmed = String(date).trim();
+    if (!trimmed) return null;
+    return trimmed.split('T')[0];
+}
+
+export function isLegacySportsAcademyRange(
+    enrollment: Pick<SportsAcademyEnrollment, 'start_date' | 'end_date'>,
+): boolean {
+    const start = normalizeSessionDateYmd(enrollment.start_date);
+    const end = normalizeSessionDateYmd(enrollment.end_date);
+    if (!start || !end) return false;
+    return end !== start;
+}
+
+export function formatSportsAcademySessionDate(
+    enrollment: Pick<SportsAcademyEnrollment, 'start_date' | 'end_date'>,
+): string {
+    const start = normalizeSessionDateYmd(enrollment.start_date);
+    const end = normalizeSessionDateYmd(enrollment.end_date);
+    if (!start && !end) return 'No session date';
+
+    const fmt = (ymd: string) => new Date(`${ymd}T00:00:00`).toLocaleDateString('en-US');
+
+    if (start && isLegacySportsAcademyRange(enrollment) && end) {
+        return `${fmt(start)} - ${fmt(end)}`;
+    }
+
+    return fmt(start || end!);
+}
+
+export function buildSportsAcademySessionDates(sessionDate: string | null | undefined): {
+    start_date: string | null;
+    end_date: string | null;
+} {
+    const normalized = normalizeSessionDateYmd(sessionDate);
+    return {
+        start_date: normalized,
+        end_date: normalized,
+    };
+}
+
+function matchesWeekdayFilter(enrollment: SportsAcademyEnrollment, day: Date): boolean {
+    const weekdays = (enrollment.weekdays || []).filter(Boolean);
+    if (weekdays.length === 0) return true;
+    return weekdays.includes(format(day, 'EEEE'));
+}
+
+export function enrollmentOccursOnDate(enrollment: SportsAcademyEnrollment, date: Date): boolean {
+    if (!enrollment.start_date) return false;
+
+    const day = startOfDay(date);
+    const start = startOfDay(parseISO(normalizeSessionDateYmd(enrollment.start_date)!));
+
+    if (!isLegacySportsAcademyRange(enrollment)) {
+        return day.getTime() === start.getTime() && matchesWeekdayFilter(enrollment, day);
+    }
+
+    const end = startOfDay(parseISO(normalizeSessionDateYmd(enrollment.end_date)!));
+    if (day < start || day > end) return false;
+    return matchesWeekdayFilter(enrollment, day);
+}
 
 export function sportsAcademyCamperName(enrollment: SportsAcademyEnrollment): string {
     const child = enrollment.child ?? enrollment.children;

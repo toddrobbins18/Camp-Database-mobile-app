@@ -583,7 +583,11 @@ async function continueUploadAfterValidation(
                 sport_name: row.sport_name,
                 instructor: row.instructor ?? null,
                 start_date: row.start_date ? normalizeFlexibleDate(row.start_date) : null,
-                end_date: row.end_date ? normalizeFlexibleDate(row.end_date) : null,
+                end_date: row.end_date
+                    ? normalizeFlexibleDate(row.end_date)
+                    : row.start_date
+                      ? normalizeFlexibleDate(row.start_date)
+                      : null,
                 notes: row.notes ?? null,
                 schedule_periods: row.schedule_periods ?? null,
             });

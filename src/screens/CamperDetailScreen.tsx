@@ -13,6 +13,7 @@ import { supabase } from '../lib/supabase';
 import { getAwardCategoryChips } from '../lib/awardCategory';
 import { formatMedicationMealTimeForDisplay } from '../constants/medicationBedtimeOptions';
 import { formatBirthdayDisplay } from '../lib/birthdayDate';
+import { formatSportsAcademySessionDate } from '../lib/sportsAcademyUtils';
 import { formatIsoDateToUs, toIsoDateOrNull } from '../api/staffPayload';
 
 const { width } = Dimensions.get('window');
@@ -1151,16 +1152,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                     const periods: string[] = Array.isArray(enrollment.schedule_periods)
                                         ? enrollment.schedule_periods
                                         : [];
-                                    const start = enrollment.start_date;
-                                    const end = enrollment.end_date;
-                                    const dateLine = (() => {
-                                        const fmt = (d: string) =>
-                                            new Date(`${d}T00:00:00`).toLocaleDateString('en-US');
-                                        if (start && end) return `${fmt(start)} - ${fmt(end)}`;
-                                        if (start) return fmt(start);
-                                        if (end) return fmt(end);
-                                        return '';
-                                    })();
+                                    const dateLine = formatSportsAcademySessionDate(enrollment);
 
                                     return (
                                         <StyledCard key={enrollment.id} style={styles.achievementCard}>
