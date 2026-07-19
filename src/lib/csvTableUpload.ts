@@ -471,16 +471,25 @@ async function continueUploadAfterValidation(
             includeInactive,
         );
 
+        if (tableName === 'awards') {
+            const unresolvedForStaff = Array.from(personIds).filter(
+                (pid) => pid && !childPersonIdMap.has(pid),
+            );
+            if (unresolvedForStaff.length > 0) {
+                staffPersonIdMap = await resolveStaffPersonIds(client, companyId, unresolvedForStaff);
+            }
+        }
+
         const missingIds: string[] = [];
         validatedRows.forEach((row) => {
             const pid = normalizeCsvPersonId(row.person_id);
-            if (pid && !childPersonIdMap.has(pid)) {
+            if (pid && !childPersonIdMap.has(pid) && !staffPersonIdMap.has(pid)) {
                 missingIds.push(pid);
             }
             if (row.person_ids) {
                 (row.person_ids as string[]).forEach((id: string) => {
                     const personId = normalizeCsvPersonId(id);
-                    if (personId && !childPersonIdMap.has(personId)) {
+                    if (personId && !childPersonIdMap.has(personId) && !staffPersonIdMap.has(personId)) {
                         missingIds.push(personId);
                     }
                 });
@@ -606,7 +615,14 @@ async function continueUploadAfterValidation(
 
         if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
             if (row.person_id) {
-                baseRow.child_id = childPersonIdMap.get(normalizeCsvPersonId(row.person_id));
+                const pid = normalizeCsvPersonId(row.person_id);
+                const childId = childPersonIdMap.get(pid);
+                const staffId = staffPersonIdMap.get(pid);
+                if (childId) {
+                    baseRow.child_id = childId;
+                } else if (staffId) {
+                    baseRow.staff_id = staffId;
+                }
                 delete baseRow.person_id;
             }
             if (row.person_ids) {

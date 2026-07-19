@@ -18,7 +18,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useDivisionsLookup } from '../api/permissions';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
-import { fetchAwardsForSeason } from '../lib/awardsQueries';
+import { fetchAwardsForReporting } from '../lib/awardsQueries';
 import { fetchExpandedMedicationSchedule } from '../lib/medicationReportSchedule';
 import { parseMedicationMealTimeLabels } from '../lib/medicationMealTimeDisplay';
 import {
@@ -298,12 +298,13 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                     const divisionNameById = new Map(
                         (divisions as any[]).map((d: any) => [d.id, d.name]),
                     );
-                    const awardsList = await fetchAwardsForSeason(
+                    const awardsList = await fetchAwardsForReporting(
                         supabase,
                         companyId,
                         season,
                         allowedDivisionIds,
                         (divisions as any[]).map((d: any) => ({ id: d.id, name: d.name })),
+                        divisionNameById,
                     );
                     const dateFiltered = awardsList.filter(
                         (a) => a.date >= fromDate && a.date <= toDate,
@@ -311,21 +312,24 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                     const filtered =
                         selectedDivisionId === 'all'
                             ? dateFiltered
-                            : dateFiltered.filter(
-                                  (a) => a.children?.division_id === selectedDivisionId,
+                            : dateFiltered.filter((a) =>
+                                  a.divisionIds.some((divisionId) => divisionId === selectedDivisionId),
                               );
-                    dataRows = filtered.map((row: any) => ({
+                    dataRows = filtered.map((row) => ({
                         Date: row.date,
-                        Child: row.children?.name || 'Unknown',
-                        Division:
-                            (row.children?.division_id &&
-                                divisionNameById.get(row.children.division_id)) ||
-                            'N/A',
-                        Title: row.title || 'N/A',
+                        'Recipient Type': row.recipientType,
+                        Name: row.name,
+                        Division: row.division,
+                        Department: row.department,
+                        Title: row.title,
                         Category: row.category || 'N/A',
                         Description: row.description || '',
                     }));
-                    summaryRows = { 'Total Awards': filtered.length };
+                    summaryRows = {
+                        'Total Awards': filtered.length,
+                        'Camper Awards': filtered.filter((row) => row.recipientType === 'Camper').length,
+                        'Staff Awards': filtered.filter((row) => row.recipientType === 'Staff').length,
+                    };
                     break;
                 }
                 case 'sports_events': {

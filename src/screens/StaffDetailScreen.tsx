@@ -21,6 +21,7 @@ import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { getAwardCategoryChips } from '../lib/awardCategory';
 import { PersonThreeDayOutlook } from '../components/PersonThreeDayOutlook';
+import { ProfileQuickSearch } from '../components/ProfileQuickSearch';
 import { StyledCard } from '../components/StyledCard';
 
 const TABS = [
@@ -212,10 +213,14 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
-                <View style={styles.headerRow}>
+                <View style={styles.profileSearchRow}>
                     <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={12}>
                         <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
                     </TouchableOpacity>
+                    <ProfileQuickSearch type="staff" currentId={displayStaff?.id} navigation={navigation} />
+                </View>
+
+                <View style={styles.headerRow}>
                     <View style={styles.headerActions}>
                         <TouchableOpacity style={styles.primaryBtn} onPress={handleEvaluatePress}>
                             <Ionicons name="clipboard-outline" size={16} color="#fff" />
@@ -489,10 +494,17 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.background },
     scrollContent: { padding: theme.spacing.md, paddingTop: theme.spacing.lg, paddingBottom: 40 },
+    profileSearchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: theme.spacing.md,
+        zIndex: 30,
+    },
     headerRow: {
         flexDirection: 'row',
         alignItems: 'flex-start',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-end',
         gap: theme.spacing.sm,
         marginBottom: theme.spacing.lg,
     },

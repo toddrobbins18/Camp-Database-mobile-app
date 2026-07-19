@@ -9,7 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { uploadCsvFromText } from '../lib/csvTableUpload';
-import { fetchAwardsForSeason } from '../lib/awardsQueries';
+import { fetchAwardsForSeason, fetchStaffAwardsForSeason } from '../lib/awardsQueries';
 import { useRosterDivisionFilter } from '../api/campers';
 import { useDivisionsLookup } from '../api/permissions';
 
@@ -91,6 +91,20 @@ export const AwardsScreen = ({ navigation }: any) => {
             }));
         },
         enabled: !!companyId && !divisionFilterLoading,
+    });
+
+    const { data: staffAwards = [], isLoading: isLoadingStaffAwards } = useQuery({
+        queryKey: ['staff_awards', companyId, activeSeason],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const rows = await fetchStaffAwardsForSeason(supabase, companyId, activeSeason);
+            return rows.map((award) => ({
+                ...award,
+                staffId: award.staff_id,
+                staffName: award.staff?.name?.trim() || 'Unknown',
+            }));
+        },
+        enabled: !!companyId,
     });
 
     // Fetch children for Add Award dropdown (children table has "name", filter by season)
@@ -246,9 +260,10 @@ export const AwardsScreen = ({ navigation }: any) => {
     const [isDeleting, setIsDeleting] = useState(false);
 
     // Calculate statistics - all will be 0 with empty data
-    const totalAchievements = awards.length;
-    const childrenWithAwards = new Set(awards.map(award => award.childId)).size;
-    const thisMonth = awards.filter(award => {
+    const totalAchievements = awards.length + staffAwards.length;
+    const childrenWithAwards = new Set(awards.map((award) => award.childId)).size;
+    const staffWithAwards = new Set(staffAwards.map((award) => award.staffId)).size;
+    const thisMonth = [...awards, ...staffAwards].filter((award) => {
         const awardDate = new Date(award.date);
         const now = new Date();
         return awardDate.getMonth() === now.getMonth() && awardDate.getFullYear() === now.getFullYear();
@@ -441,6 +456,20 @@ export const AwardsScreen = ({ navigation }: any) => {
         }));
     }, [awards]);
 
+    const awardsByStaff = React.useMemo(() => {
+        const map: Record<string, { staffName: string; awards: any[] }> = {};
+        staffAwards.forEach((a: any) => {
+            const key = a.staffId || 'unknown';
+            if (!map[key]) map[key] = { staffName: a.staffName, awards: [] };
+            map[key].awards.push(a);
+        });
+        return Object.entries(map).map(([staffId, { staffName, awards: list }]) => ({
+            staffId,
+            staffName,
+            awards: list.sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime()),
+        }));
+    }, [staffAwards]);
+
     const handleUploadCSV = async () => {
         if (!companyId || !season) {
             Alert.alert('Missing context', 'Company or season is not available yet.');
@@ -486,7 +515,7 @@ export const AwardsScreen = ({ navigation }: any) => {
                             Awards & Achievements
                         </Text>
                         <Text style={styles.headerSubtitle}>
-                            Celebrating success across all children
+                            Celebrating success across campers and staff
                         </Text>
                     </View>
 
@@ -527,22 +556,25 @@ export const AwardsScreen = ({ navigation }: any) => {
                         <Text style={styles.summaryCardValue}>{childrenWithAwards}</Text>
                     </StyledCard>
                     <StyledCard style={styles.summaryCard}>
-                        <Text style={styles.summaryCardLabel}>This Month</Text>
-                        <Text style={styles.summaryCardValue}>{thisMonth}</Text>
+                        <Text style={styles.summaryCardLabel}>Staff with Awards</Text>
+                        <Text style={styles.summaryCardValue}>{staffWithAwards}</Text>
                     </StyledCard>
                 </View>
 
                 {/* Awards list grouped by child - engaging UI, no raw JSON */}
-                {awards.length === 0 ? (
+                {/* Camper awards */}
+                {awards.length === 0 && staffAwards.length === 0 ? (
                     <View style={styles.emptyStateContainer}>
                         <Text style={styles.emptyStateText}>No awards found. Add your first achievement!</Text>
                     </View>
                 ) : (
                     <View style={styles.awardsListSection}>
-                        <Text style={styles.awardsListSectionTitle}>
-                            {awards.length} {awards.length === 1 ? 'achievement' : 'achievements'} found
-                        </Text>
-                        {awardsByChild.map(({ childId, childName, awards: childAwards }) => (
+                        {awards.length > 0 ? (
+                            <>
+                                <Text style={styles.awardsListSectionTitle}>
+                                    {awards.length} camper {awards.length === 1 ? 'achievement' : 'achievements'}
+                                </Text>
+                                {awardsByChild.map(({ childId, childName, awards: childAwards }) => (
                             <StyledCard key={childId} style={styles.childAwardCard}>
                                 <View style={styles.childAwardHeader}>
                                     <View style={styles.childAwardHeaderIcon}>
@@ -597,7 +629,71 @@ export const AwardsScreen = ({ navigation }: any) => {
                                     </View>
                                 ))}
                             </StyledCard>
-                        ))}
+                                ))}
+                            </>
+                        ) : null}
+
+                        {staffAwards.length > 0 ? (
+                            <>
+                                <Text style={[styles.awardsListSectionTitle, { marginTop: theme.spacing.lg }]}>
+                                    {staffAwards.length} staff {staffAwards.length === 1 ? 'achievement' : 'achievements'}
+                                </Text>
+                                {awardsByStaff.map(({ staffId, staffName, awards: memberAwards }) => (
+                                    <StyledCard key={staffId} style={styles.childAwardCard}>
+                                        <View style={styles.childAwardHeader}>
+                                            <View style={styles.childAwardHeaderIcon}>
+                                                <Ionicons name="briefcase" size={20} color={theme.colors.secondary} />
+                                            </View>
+                                            <View style={styles.childAwardHeaderText}>
+                                                <Text style={styles.childAwardName}>{staffName}</Text>
+                                                <Text style={styles.childAwardCount}>
+                                                    {memberAwards.length}{' '}
+                                                    {memberAwards.length === 1 ? 'achievement' : 'achievements'}
+                                                </Text>
+                                            </View>
+                                            <TouchableOpacity
+                                                style={styles.viewProfileButton}
+                                                onPress={() =>
+                                                    navigation.navigate('Staff', {
+                                                        screen: 'StaffDetail',
+                                                        params: { staff: { id: staffId, name: staffName } },
+                                                    })
+                                                }
+                                            >
+                                                <Text style={styles.viewProfileButtonText}>View Profile</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                        {memberAwards.map((award) => (
+                                            <View key={award.id} style={styles.awardRow}>
+                                                <View style={styles.awardRowIcon}>
+                                                    <Ionicons name="ribbon" size={18} color={theme.colors.secondary} />
+                                                </View>
+                                                <View style={styles.awardRowContent}>
+                                                    <Text style={styles.awardRowTitle}>{award.title || 'Award'}</Text>
+                                                    <Text style={styles.awardRowDescription}>
+                                                        {award.description?.trim() || 'None'}
+                                                    </Text>
+                                                    <View style={styles.awardRowDate}>
+                                                        <Ionicons
+                                                            name="calendar-outline"
+                                                            size={14}
+                                                            color={theme.colors.textSecondary}
+                                                        />
+                                                        <Text style={styles.awardRowDateText}>
+                                                            {new Date(award.date).toLocaleDateString('en-US', {
+                                                                month: 'numeric',
+                                                                day: 'numeric',
+                                                                year: 'numeric',
+                                                            })}
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </StyledCard>
+                                ))}
+                            </>
+                        ) : null}
                     </View>
                 )}
             </ScrollView>

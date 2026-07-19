@@ -15,6 +15,7 @@ import { formatMedicationMealTimeForDisplay } from '../constants/medicationBedti
 import { formatBirthdayDisplay } from '../lib/birthdayDate';
 import { formatSportsAcademySessionDate } from '../lib/sportsAcademyUtils';
 import { PersonThreeDayOutlook } from '../components/PersonThreeDayOutlook';
+import { ProfileQuickSearch } from '../components/ProfileQuickSearch';
 import { formatIsoDateToUs, toIsoDateOrNull } from '../api/staffPayload';
 
 const { width } = Dimensions.get('window');
@@ -428,11 +429,15 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()}>
+            <View style={styles.profileSearchRow}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.profileSearchBack}>
                     <Ionicons name="chevron-back" size={24} color="#374151" />
                 </TouchableOpacity>
+                <ProfileQuickSearch type="child" currentId={camper?.id} navigation={navigation} />
+            </View>
+
+            {/* Header */}
+            <View style={styles.header}>
                 {showProfileLoading ? (
                     <View style={styles.headerContent}>
                         <Text style={styles.headerTitle}>{camperParam.name}</Text>
@@ -2827,6 +2832,19 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f8fafc',
+    },
+    profileSearchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: theme.spacing.lg,
+        paddingTop: theme.spacing.sm,
+        paddingBottom: theme.spacing.sm,
+        backgroundColor: '#f8fafc',
+        zIndex: 30,
+    },
+    profileSearchBack: {
+        padding: 4,
     },
     header: {
         flexDirection: 'row',
