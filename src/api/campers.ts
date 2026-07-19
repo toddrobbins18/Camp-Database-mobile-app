@@ -117,7 +117,7 @@ const CAMPERS_SELECT = `
   *,
   division:division_id(id, name, gender, sort_order),
   leader:leader_id(id, name),
-  bunk:bunk_id(id, bunk_number, bunk_name)
+  bunk:bunk_id(id, bunk_number, bunk_name, division_id, divisions:division_id(id, name, gender, sort_order))
 `;
 
 async function safeSetCachedJson<T>(key: string, value: T): Promise<void> {

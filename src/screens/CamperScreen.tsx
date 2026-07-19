@@ -10,9 +10,11 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useAddCamper, useEditCamper, useDeleteCamper, useDivisions } from '../api/campers';
 import {
     camperMatchesDivisionFilter,
+    getCamperEffectiveDivision,
     getDivisionDropdownLabel,
     normalizeDivisionNameForFilter,
 } from '../lib/divisionFilterUtils';
+import { compareByLastName } from '../lib/nameSortUtils';
 import { useRole } from '../hooks/useRole';
 import { useStaff } from '../api/staff';
 import { supabase } from '../lib/supabase';
@@ -83,7 +85,7 @@ export const CamperScreen = ({ navigation }: any) => {
     const [selectedDivisionId, setSelectedDivisionId] = useState<string>('all');
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
     const [divisionButtonLayout, setDivisionButtonLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
-    const [sortBy, setSortBy] = useState<'division' | 'name'>('division');
+    const [sortBy, setSortBy] = useState<'division' | 'name'>('name');
     const [scannerMode, setScannerMode] = useState(false);
     const [rfidInput, setRfidInput] = useState('');
     const [isScanning, setIsScanning] = useState(false);
@@ -269,11 +271,11 @@ export const CamperScreen = ({ navigation }: any) => {
         const q = (searchQuery || '').trim().toLowerCase();
         const selectedDivision = divisionsData.find((d: any) => String(d?.id) === String(selectedDivisionId));
         return campersData.filter(camper => {
+            const effectiveDivision = getCamperEffectiveDivision(camper as any);
             if (selectedDivisionId !== 'all') {
-                const camperDivisionId = String((camper as any).division_id ?? (camper as any).division?.id ?? '');
                 if (!camperMatchesDivisionFilter(
-                    camperDivisionId || null,
-                    (camper as any).division?.name ?? null,
+                    effectiveDivision.id,
+                    effectiveDivision.name,
                     String(selectedDivisionId),
                     selectedDivision?.name,
                 )) {
@@ -283,16 +285,24 @@ export const CamperScreen = ({ navigation }: any) => {
             if (q) {
                 const name = (camper.name || '').toLowerCase();
                 const grade = ((camper as any).grade ?? '').toString().toLowerCase();
-                const divName = (((camper as any).division?.name ?? '') as string).toLowerCase();
+                const divName = (effectiveDivision.name ?? '').toLowerCase();
                 if (!name.includes(q) && !grade.includes(q) && !divName.includes(q)) return false;
             }
             return true;
         }).sort((a, b) => {
-            if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
-            const orderA = (a as any).division?.sort_order ?? 999;
-            const orderB = (b as any).division?.sort_order ?? 999;
+            if (sortBy === 'name') return compareByLastName(a, b);
+
+            const divA = getCamperEffectiveDivision(a as any);
+            const divB = getCamperEffectiveDivision(b as any);
+            const orderA = divA.sort_order ?? 999;
+            const orderB = divB.sort_order ?? 999;
             if (orderA !== orderB) return orderA - orderB;
-            return (a.name || '').localeCompare(b.name || '');
+
+            const nameA = normalizeDivisionNameForFilter(divA.name);
+            const nameB = normalizeDivisionNameForFilter(divB.name);
+            if (nameA !== nameB) return nameA.localeCompare(nameB);
+
+            return compareByLastName(a, b);
         });
     }, [campersData, selectedDivisionId, sortBy, searchQuery, divisionsData]);
 
@@ -2831,7 +2841,9 @@ export const CamperScreen = ({ navigation }: any) => {
 
                 {/* Camper Grid */}
                 <View style={styles.grid}>
-                    {currentCampers.map((camper, index) => (
+                    {currentCampers.map((camper, index) => {
+                        const effectiveDivision = getCamperEffectiveDivision(camper as any);
+                        return (
                         <TouchableOpacity
                             key={startIndex + index}
                             activeOpacity={0.7}
@@ -2843,7 +2855,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 <View style={styles.cardTop}>
                                     <View style={styles.cardTopLeft}>
                                         <Text style={styles.camperName} numberOfLines={1} ellipsizeMode="tail">{camper.name}</Text>
-                                        <Text style={styles.camperGrade}>{(camper as any).division?.name || "N/A"}</Text>
+                                        <Text style={styles.camperGrade}>{(camper as any).grade || 'N/A'}</Text>
                                     </View>
                                     <View style={styles.cardTopRight}>
                                         <TouchableOpacity
@@ -2905,7 +2917,9 @@ export const CamperScreen = ({ navigation }: any) => {
                                 </View>
 
                                 <View style={styles.cardFooter}>
-                                    <Text style={styles.divisionText}>Division: {(camper as any).division?.name || "N/A"}</Text>
+                                    <Text style={styles.divisionText}>
+                                        Division: {getDivisionDropdownLabel(effectiveDivision.name) || 'N/A'}
+                                    </Text>
                                     {(camper as any).bunk ? (
                                         <Text style={styles.divisionText}>Bunk: {(camper as any).bunk.bunk_name || `Bunk ${(camper as any).bunk.bunk_number}`}</Text>
                                     ) : null}
@@ -2944,7 +2958,8 @@ export const CamperScreen = ({ navigation }: any) => {
                                 </View>
                             </StyledCard>
                         </TouchableOpacity>
-                    ))}
+                        );
+                    })}
                 </View>
 
                 {/* Pagination */}

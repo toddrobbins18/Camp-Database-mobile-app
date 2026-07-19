@@ -11,6 +11,7 @@ export function normalizeDivisionNameForFilter(name?: string | null): string {
         .replace(/\bTeens\b/gi, 'Teen')
         .replace(/\bTN\d+\b/gi, 'Teen')
         .replace(/\bTeen\s+Teen\b/gi, 'Teen')
+        .replace(/\s+[A-Z0-9]\b/gi, '')
         .replace(/\s+/g, ' ')
         .trim()
         .toLowerCase();
@@ -95,4 +96,43 @@ export function camperMatchesDivisionFilter(
     if (selectedDivisionId === 'all') return true;
     if (camperDivisionId && camperDivisionId === selectedDivisionId) return true;
     return divisionsMatchForFilter(camperDivisionName, selectedDivisionName);
+}
+
+type CamperDivisionSource = {
+    division_id?: string | null;
+    division?: { id?: string; name?: string | null; sort_order?: number | null } | null;
+    bunk?: {
+        division_id?: string | null;
+        divisions?:
+            | { id?: string; name?: string | null; sort_order?: number | null }
+            | { id?: string; name?: string | null; sort_order?: number | null }[]
+            | null;
+    } | null;
+};
+
+/** Prefer child division; fall back to bunk division when division_id is unset. */
+export function getCamperEffectiveDivision(camper: CamperDivisionSource): {
+    id: string | null;
+    name: string | null;
+    sort_order: number | null;
+} {
+    if (camper.division_id || camper.division?.id) {
+        return {
+            id: camper.division_id ?? camper.division?.id ?? null,
+            name: camper.division?.name ?? null,
+            sort_order: camper.division?.sort_order ?? null,
+        };
+    }
+
+    const bunkDivisionRaw = camper.bunk?.divisions;
+    const bunkDivision = Array.isArray(bunkDivisionRaw) ? bunkDivisionRaw[0] : bunkDivisionRaw;
+    if (bunkDivision?.id || bunkDivision?.name || camper.bunk?.division_id) {
+        return {
+            id: bunkDivision?.id ?? camper.bunk?.division_id ?? null,
+            name: bunkDivision?.name ?? null,
+            sort_order: bunkDivision?.sort_order ?? null,
+        };
+    }
+
+    return { id: null, name: null, sort_order: null };
 }
