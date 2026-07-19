@@ -14,6 +14,7 @@ import { getAwardCategoryChips } from '../lib/awardCategory';
 import { formatMedicationMealTimeForDisplay } from '../constants/medicationBedtimeOptions';
 import { formatBirthdayDisplay } from '../lib/birthdayDate';
 import { formatSportsAcademySessionDate } from '../lib/sportsAcademyUtils';
+import { PersonThreeDayOutlook } from '../components/PersonThreeDayOutlook';
 import { formatIsoDateToUs, toIsoDateOrNull } from '../api/staffPayload';
 
 const { width } = Dimensions.get('window');
@@ -518,6 +519,15 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                 {/* Tab Content */}
                 {activeTab === 'overview' && (
                     <View style={styles.tabContent}>
+                        {camper?.id && companyId ? (
+                            <PersonThreeDayOutlook
+                                personType="child"
+                                personId={camper.id}
+                                companyId={companyId}
+                                season={season}
+                                divisionId={(camper as any).division_id}
+                            />
+                        ) : null}
                         <View style={styles.cardsRow}>
                             {/* Personal Information Card */}
                             <StyledCard style={styles.infoCard}>

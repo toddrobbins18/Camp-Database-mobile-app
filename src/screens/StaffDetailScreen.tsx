@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { getAwardCategoryChips } from '../lib/awardCategory';
+import { PersonThreeDayOutlook } from '../components/PersonThreeDayOutlook';
 import { StyledCard } from '../components/StyledCard';
 
 const TABS = [
@@ -296,6 +297,15 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                     </View>
                 ) : (
                 <View style={styles.cardsRow}>
+                    {displayStaff?.id && companyId ? (
+                        <PersonThreeDayOutlook
+                            personType="staff"
+                            personId={displayStaff.id}
+                            companyId={companyId}
+                            season={season}
+                            staffName={displayStaff.name}
+                        />
+                    ) : null}
                     <View style={styles.infoCard}>
                         <Text style={styles.cardTitle}>Contact Information</Text>
                         <Text style={styles.cardSubtitle}>Professional details</Text>
