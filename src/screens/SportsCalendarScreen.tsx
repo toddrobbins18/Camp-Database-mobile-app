@@ -29,6 +29,7 @@ import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 import { syncLinkedTripsFromSportsEvent } from '../lib/syncLinkedTripFromSportsEvent';
 import { compareByLastName } from '../lib/nameSortUtils';
+import { isUpcomingSportsCalendarDate, sportsCalendarTodayYmd } from '../lib/sportsCalendarDates';
 
 /** DB + web use lowercase; labels are for UI only (see migrations sports_calendar_home_away_check). */
 const HOME_AWAY_OPTIONS: { value: string; label: string }[] = [
@@ -530,9 +531,12 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
     useEffect(() => {
         if (events.length === 0) return;
-        const firstEventDate = events[0].date;
-        setCurrentDate(new Date(firstEventDate));
-        setSelectedDate(new Date(firstEventDate));
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const upcoming = events.filter((e) => e.date.getTime() >= today.getTime());
+        const anchor = upcoming[0]?.date || today;
+        setCurrentDate(new Date(anchor));
+        setSelectedDate(new Date(anchor));
     }, [sportsCalendarData.length]);
 
     /** Web: girls-first + sort_order (see sortDivisionsGirlsFirst on web). */
@@ -594,8 +598,11 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     };
 
     const filteredAndSortedEvents = useMemo(() => {
+        const todayYmd = sportsCalendarTodayYmd();
         const q = eventSearch.trim().toLowerCase();
         let list = events.filter((event) => {
+            const eventYmd = `${event.date.getFullYear()}-${String(event.date.getMonth() + 1).padStart(2, '0')}-${String(event.date.getDate()).padStart(2, '0')}`;
+            if (!isUpcomingSportsCalendarDate(eventYmd, todayYmd)) return false;
             if (q) {
                 const haystack = [
                     event.title,
@@ -1026,7 +1033,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                     onPress={() => setShowManageRosterModal(false)}
                 >
                     <Pressable
-                        style={[styles.addEventModal, { height: '90%', maxHeight: '90%' }]}
+                        style={[styles.addEventModal, { height: '90%', maxHeight: '90%', flexDirection: 'column' }]}
                         onPress={(e) => e.stopPropagation()}
                     >
                         {/* Header */}
@@ -1076,7 +1083,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                         </View>
 
                         {/* Content */}
-                        <View style={{ flex: 1, paddingHorizontal: 16 }}>
+                        <View style={{ flex: 1, minHeight: 0, paddingHorizontal: 16 }}>
                             {manageRosterActiveTab === 'campers' && (
                                 <>
                                     {/* Search and Filter */}
@@ -1108,7 +1115,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                     </Text>
 
                                     {/* Campers List */}
-                                    <ScrollView style={{ flex: 1 }}>
+                                    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }} nestedScrollEnabled>
                                         {(() => {
                                             const eventDivisions = selectedRosterEvent?.divisions || [];
                                             const eventDivIds = new Set(eventDivisions.map((d: any) => d.id));
