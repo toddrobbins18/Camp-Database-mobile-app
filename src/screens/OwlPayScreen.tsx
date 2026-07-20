@@ -4,6 +4,7 @@ import {
     Alert,
     Image,
     Modal,
+    Platform,
     Pressable,
     SafeAreaView,
     ScrollView,
@@ -13,6 +14,7 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    useWindowDimensions,
 } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +23,7 @@ import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
 import {
     OwlPayEmailConfig,
+    OwlPayCamper,
     OwlPayStaff,
     OwlPayItem,
     ReportAudience,
@@ -83,6 +86,11 @@ const getInitials = (name?: string | null) =>
         .slice(0, 2)
         .toUpperCase();
 
+/** RFID wedge scanners send characters faster than manual typing. */
+const RFID_WEDGE_CHAR_MS = 100;
+const RFID_WEDGE_SUBMIT_MS = 180;
+const RFID_MIN_LENGTH = 4;
+
 export const OwlPayScreen = ({ navigation }: any) => {
     const [activeTab, setActiveTab] = useState<OwlPayTab>('pos');
     const [camperQuery, setCamperQuery] = useState('');
@@ -117,11 +125,17 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
     const [scanBuffer, setScanBuffer] = useState('');
     const [lastScanInputAt, setLastScanInputAt] = useState(0);
+    const [isWedgeScanning, setIsWedgeScanning] = useState(false);
     const scanResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const scanSubmitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const scanInputRef = useRef<TextInput>(null);
+    const isWedgeScanRef = useRef(false);
+    const { width: windowWidth } = useWindowDimensions();
+    const isWidePos = windowWidth >= 768;
     const [balanceAudience, setBalanceAudience] = useState<'campers' | 'staff'>('campers');
     const [balanceSearch, setBalanceSearch] = useState('');
     const [reportAudience, setReportAudience] = useState<ReportAudience>('all');
-    const [reportsSubTab, setReportsSubTab] = useState<'by-item' | 'over-time' | 'purchases'>('by-item');
+    const [reportsSubTab, setReportsSubTab] = useState<'by-item' | 'by-person' | 'over-time' | 'purchases'>('by-item');
     const [reportSearch, setReportSearch] = useState('');
     const [settingsAudience, setSettingsAudience] = useState<'campers' | 'staff'>('campers');
     const { companyId, season, companySlug } = useCompany();
@@ -150,6 +164,28 @@ export const OwlPayScreen = ({ navigation }: any) => {
 
     const { data: campers = [], isLoading: campersLoading } = useOwlPayCampers(companyId, season, camperListSearch);
     const { data: staffMembers = [], isLoading: staffLoading } = useOwlPayStaff(companyId, season, staffListSearch);
+    const posCampers = useMemo(() => {
+        const q = camperQuery.trim();
+        if (!q || isWedgeScanning || scanStatus === 'scanning') return campers;
+        const lower = q.toLowerCase();
+        return campers.filter(
+            (camper) => camper.name.toLowerCase().includes(lower) || rfidsMatch(camper.rfid, q),
+        );
+    }, [campers, camperQuery, isWedgeScanning, scanStatus]);
+
+    const posStaff = useMemo(() => {
+        const q = camperQuery.trim();
+        if (!q || isWedgeScanning || scanStatus === 'scanning') return staffMembers;
+        const lower = q.toLowerCase();
+        return staffMembers.filter(
+            (staff) => staff.name.toLowerCase().includes(lower) || rfidsMatch(staff.rfid, q),
+        );
+    }, [staffMembers, camperQuery, isWedgeScanning, scanStatus]);
+
+    const focusScanInput = () => {
+        if (activeTab !== 'pos') return;
+        setTimeout(() => scanInputRef.current?.focus(), Platform.OS === 'ios' ? 250 : 100);
+    };
     const { data: allItems = [], isLoading: itemsLoading } = useOwlPayItems(companyId, true);
     const { data: settings, isLoading: settingsLoading } = useOwlPayEmailConfig(companyId);
     const saveItemMutation = useSaveOwlPayItem();
@@ -227,6 +263,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
 
     const { data: reportsData, isLoading: reportsLoading } = useOwlPayReports(
         companyId,
+        season,
         reportRangeYmd.fromYmd,
         reportRangeYmd.toYmd,
         reportAudience,
@@ -291,6 +328,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
         const lines: (string | number | boolean)[][] = [
             ['Report', 'Owl Pay'],
             ['Camp slug', slug],
+            ['Season', season ?? ''],
             ['Date range (camp time)', `${fromLabel} to ${toLabel}`],
             ['Audience', reportAudience],
             ['Total revenue (paid items)', reportsData.totalRevenue.toFixed(2)],
@@ -298,6 +336,27 @@ export const OwlPayScreen = ({ navigation }: any) => {
             ['Free daily items', reportsData.freeItems],
             ['Avg paid transaction', reportsData.avgTransaction.toFixed(2)],
             ['Most popular item', reportsData.mostPopular],
+            [],
+            [
+                'By person — Name',
+                'Type',
+                'Season',
+                'Person ID',
+                'Period spent',
+                'Items bought',
+                'CM deposits',
+                'Current balance',
+            ],
+            ...reportsData.buyerSummaries.map((s) => [
+                s.name,
+                s.buyer_type,
+                s.season ?? '',
+                s.person_id ?? '',
+                s.period_spent.toFixed(2),
+                s.period_items,
+                s.cm_deposits != null ? s.cm_deposits.toFixed(2) : '',
+                s.current_balance != null ? s.current_balance.toFixed(2) : '',
+            ]),
             [],
             ['Sales by item — Item', 'Category', 'Qty sold', 'Revenue'],
             ...reportsData.salesByItem.map((i) => [i.name, i.category, i.quantity, i.revenue.toFixed(2)]),
@@ -443,6 +502,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
         if (companyId) {
             queryClient.invalidateQueries({ queryKey: ['owlpay_campers'] });
         }
+        focusScanInput();
     };
 
     useEffect(() => {
@@ -551,8 +611,36 @@ export const OwlPayScreen = ({ navigation }: any) => {
         return false;
     };
 
+    const clearScanField = () => {
+        setCamperQuery('');
+        setScanBuffer('');
+    };
+
+    const processRfidScan = async (raw: string) => {
+        const rfid = normalizeRfidInput(raw);
+        if (!rfid) return;
+
+        if (scanSubmitTimeoutRef.current) {
+            clearTimeout(scanSubmitTimeoutRef.current);
+            scanSubmitTimeoutRef.current = null;
+        }
+
+        setIsWedgeScanning(false);
+        isWedgeScanRef.current = false;
+        const ok = await selectByRFID(rfid);
+        if (ok) clearScanField();
+    };
+
     const handleCamperQueryChange = (value: string) => {
-        setCamperQuery(value);
+        if (/[\r\n]/.test(value)) {
+            const rfid = normalizeRfidInput(value);
+            clearScanField();
+            setIsWedgeScanning(false);
+            isWedgeScanRef.current = false;
+            if (rfid) void processRfidScan(rfid);
+            return;
+        }
+
         const now = Date.now();
         const timeDiff = now - lastScanInputAt;
         setLastScanInputAt(now);
@@ -560,13 +648,37 @@ export const OwlPayScreen = ({ navigation }: any) => {
         if (!value) {
             setScanStatus('idle');
             setScanBuffer('');
+            setCamperQuery('');
+            setIsWedgeScanning(false);
+            isWedgeScanRef.current = false;
+            if (scanSubmitTimeoutRef.current) {
+                clearTimeout(scanSubmitTimeoutRef.current);
+                scanSubmitTimeoutRef.current = null;
+            }
             return;
         }
 
-        if (timeDiff < 100 && value.length > 1) {
+        const wedgeInput = value.length > 1 && timeDiff > 0 && timeDiff < RFID_WEDGE_CHAR_MS;
+        if (wedgeInput) {
+            isWedgeScanRef.current = true;
+            setIsWedgeScanning(true);
             setScanStatus('scanning');
+        } else if (value.length === 1) {
+            isWedgeScanRef.current = false;
+            setIsWedgeScanning(false);
         }
+
+        setCamperQuery(value);
         setScanBuffer(value);
+
+        if (isWedgeScanRef.current && value.length >= RFID_MIN_LENGTH) {
+            if (scanSubmitTimeoutRef.current) clearTimeout(scanSubmitTimeoutRef.current);
+            if (value.length >= RFID_MIN_LENGTH) {
+                scanSubmitTimeoutRef.current = setTimeout(() => {
+                    void processRfidScan(value);
+                }, RFID_WEDGE_SUBMIT_MS);
+            }
+        }
     };
 
     const addToCart = (item: OwlPayItem) => {
@@ -718,6 +830,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
             setHasFreeDailyItemAvailable(false);
             queryClient.invalidateQueries({ queryKey: ['owlpay_campers'] });
             queryClient.invalidateQueries({ queryKey: ['owlpay_reports'] });
+            focusScanInput();
         } catch (err: any) {
             Alert.alert('Owl Pay', err?.message || 'Transaction failed');
         } finally {
@@ -730,8 +843,16 @@ export const OwlPayScreen = ({ navigation }: any) => {
             if (scanResetTimeoutRef.current) {
                 clearTimeout(scanResetTimeoutRef.current);
             }
+            if (scanSubmitTimeoutRef.current) {
+                clearTimeout(scanSubmitTimeoutRef.current);
+            }
         };
     }, []);
+
+    useEffect(() => {
+        if (activeTab !== 'pos') return;
+        focusScanInput();
+    }, [activeTab]);
 
 
     useEffect(() => {
@@ -818,26 +939,36 @@ export const OwlPayScreen = ({ navigation }: any) => {
     );
 
     const renderPOS = () => (
-        <View style={styles.posLayout}>
+        <View style={[styles.posLayout, isWidePos && styles.posLayoutWide]}>
+            <View style={isWidePos ? styles.posLeftColumn : undefined}>
             <StyledCard style={styles.posListContainer}>
                 <View style={styles.searchInputWrap}>
                     <Ionicons name="search-outline" size={18} color={theme.colors.textSecondary} />
                     <TextInput
+                        ref={scanInputRef}
                         value={camperQuery}
                         onChangeText={handleCamperQueryChange}
                         onSubmitEditing={() => {
-                            if (scanBuffer.trim()) {
-                                void selectByRFID(scanBuffer);
+                            if (camperQuery.trim()) {
+                                void processRfidScan(camperQuery);
                             }
                         }}
-                        placeholder="Scan RFID or search..."
+                        placeholder="Scan RFID or search name..."
                         placeholderTextColor={theme.colors.textSecondary}
                         style={styles.searchInput}
+                        showSoftInputOnFocus={false}
+                        autoCorrect={false}
+                        autoCapitalize="none"
+                        blurOnSubmit={false}
+                        returnKeyType="done"
+                        caretHidden={isWedgeScanning}
                     />
                     <TouchableOpacity
                         onPress={() => {
                             if (camperQuery.trim()) {
-                                void selectByRFID(camperQuery);
+                                void processRfidScan(camperQuery);
+                            } else {
+                                focusScanInput();
                             }
                         }}
                         accessibilityLabel="Process RFID scan"
@@ -873,14 +1004,19 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 >
                     {scanStatusLabel}
                 </Text>
+                {!isWedgeScanning && camperQuery.trim().length > 0 && (
+                    <Text style={styles.scanHintText}>Type a name to filter the list, or scan a wristband.</Text>
+                )}
 
                 <Text style={styles.posSectionLabel}>Campers</Text>
-                <ScrollView style={styles.camperList} contentContainerStyle={styles.camperListContent}>
+                <ScrollView style={[styles.camperList, isWidePos && styles.camperListWide]} contentContainerStyle={styles.camperListContent}>
                     {campersLoading ? (
                         <View style={styles.loaderWrap}>
                             <ActivityIndicator size="small" color={theme.colors.secondary} />
                         </View>
-                    ) : campers.map((camper) => {
+                    ) : posCampers.length === 0 ? (
+                        <Text style={styles.emptyStateText}>No campers match your search.</Text>
+                    ) : posCampers.map((camper) => {
                         const isSelected = !selectedIsStaff && camper.id === selectedCamperId;
                         return (
                             <TouchableOpacity
@@ -918,12 +1054,14 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 </ScrollView>
 
                 <Text style={styles.posSectionLabel}>Staff (Running Tab)</Text>
-                <ScrollView style={styles.camperList} contentContainerStyle={styles.camperListContent}>
+                <ScrollView style={[styles.camperList, isWidePos && styles.camperListWide]} contentContainerStyle={styles.camperListContent}>
                     {staffLoading ? (
                         <View style={styles.loaderWrap}>
                             <ActivityIndicator size="small" color={theme.colors.secondary} />
                         </View>
-                    ) : staffMembers.map((staff: OwlPayStaff) => {
+                    ) : posStaff.length === 0 ? (
+                        <Text style={styles.emptyStateText}>No staff match your search.</Text>
+                    ) : posStaff.map((staff: OwlPayStaff) => {
                         const isSelected = selectedIsStaff && staff.id === selectedCamperId;
                         return (
                             <TouchableOpacity
@@ -946,8 +1084,10 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     })}
                 </ScrollView>
             </StyledCard>
+            </View>
 
-            <StyledCard style={styles.selectionCard}>
+            <View style={isWidePos ? styles.posRightColumn : undefined}>
+            <StyledCard style={[styles.selectionCard, isWidePos && styles.selectionCardWide]}>
                 <Ionicons name="wallet-outline" size={42} color={theme.colors.textSecondary} />
                 <Text style={styles.selectionText}>
                     {selectedDisplayName ? `Selected: ${selectedDisplayName}` : 'Select a camper/staff to begin'}
@@ -1075,6 +1215,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     </Text>
                 </TouchableOpacity>
             </StyledCard>
+            </View>
         </View>
     );
 
@@ -1321,6 +1462,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     {(
                         [
                             { key: 'by-item' as const, label: 'By Item' },
+                            { key: 'by-person' as const, label: 'By Person' },
                             { key: 'over-time' as const, label: 'Over Time' },
                             { key: 'purchases' as const, label: 'Purchases' },
                         ] as const
@@ -1359,6 +1501,67 @@ export const OwlPayScreen = ({ navigation }: any) => {
                                         <Text style={[styles.tableText, { flex: 1, textAlign: 'right' }]}>
                                             {currency(item.revenue)}
                                         </Text>
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        </>
+                    )
+                ) : reportsSubTab === 'by-person' ? (
+                    (reportsData?.buyerSummaries?.length || 0) === 0 ? (
+                        <Text style={styles.emptyStateText}>No paid purchases for this period.</Text>
+                    ) : (
+                        <>
+                            <Text style={styles.settingHintText}>
+                                Period spent is for the selected range. Deposits and balance are current for {season}.
+                            </Text>
+                            <View style={styles.tableHeader}>
+                                <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>Name</Text>
+                                {reportAudience === 'all' && (
+                                    <Text style={[styles.tableHeaderText, { flex: 0.7 }]}>Type</Text>
+                                )}
+                                <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Spent</Text>
+                                {reportAudience !== 'staff' && (
+                                    <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Dep.</Text>
+                                )}
+                                {reportAudience !== 'staff' && (
+                                    <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Bal.</Text>
+                                )}
+                            </View>
+                            <ScrollView style={{ maxHeight: 400 }}>
+                                {reportsData!.buyerSummaries.map((s) => (
+                                    <View key={s.buyer_key} style={styles.tableRow}>
+                                        <Text style={[styles.tableText, { flex: 1.4 }]} numberOfLines={1}>
+                                            {s.name}
+                                        </Text>
+                                        {reportAudience === 'all' && (
+                                            <Text style={[styles.tableText, { flex: 0.7, fontSize: 11 }]}>{s.buyer_type}</Text>
+                                        )}
+                                        <Text style={[styles.tableText, { flex: 1, textAlign: 'right' }]}>
+                                            {currency(s.period_spent)}
+                                        </Text>
+                                        {reportAudience !== 'staff' && (
+                                            <Text style={[styles.tableText, { flex: 1, textAlign: 'right', fontSize: 11 }]}>
+                                                {s.cm_deposits != null ? currency(s.cm_deposits) : '—'}
+                                            </Text>
+                                        )}
+                                        {reportAudience !== 'staff' && (
+                                            <Text
+                                                style={[
+                                                    styles.tableText,
+                                                    {
+                                                        flex: 1,
+                                                        textAlign: 'right',
+                                                        fontSize: 11,
+                                                        color:
+                                                            s.current_balance != null && s.current_balance < 0
+                                                                ? theme.colors.danger
+                                                                : theme.colors.text,
+                                                    },
+                                                ]}
+                                            >
+                                                {s.current_balance != null ? currency(s.current_balance) : '—'}
+                                            </Text>
+                                        )}
                                     </View>
                                 ))}
                             </ScrollView>
@@ -1716,7 +1919,13 @@ export const OwlPayScreen = ({ navigation }: any) => {
                                 New Balance: {currency(successData?.newBalance || 0)}
                             </Text>
                         )}
-                        <TouchableOpacity style={styles.primaryButton} onPress={() => setSuccessData(null)}>
+                        <TouchableOpacity
+                            style={styles.primaryButton}
+                            onPress={() => {
+                                setSuccessData(null);
+                                focusScanInput();
+                            }}
+                        >
                             <Text style={styles.primaryButtonText}>Done</Text>
                         </TouchableOpacity>
                     </Pressable>
@@ -1822,6 +2031,13 @@ const styles = StyleSheet.create({
     tabText: { fontSize: 14, color: theme.colors.textSecondary, fontWeight: '600' },
     tabTextActive: { color: theme.colors.secondary },
     posLayout: { gap: theme.spacing.md },
+    posLayoutWide: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: theme.spacing.md,
+    },
+    posLeftColumn: { flex: 1, minWidth: 0 },
+    posRightColumn: { flex: 1.15, minWidth: 0, gap: theme.spacing.md },
     posListContainer: { marginBottom: 0 },
     posSectionLabel: {
         marginTop: 12,
@@ -1850,6 +2066,9 @@ const styles = StyleSheet.create({
     camperList: {
         maxHeight: 360,
         marginTop: 10,
+    },
+    camperListWide: {
+        maxHeight: 520,
     },
     camperListContent: {
         paddingBottom: 4,
@@ -1921,6 +2140,7 @@ const styles = StyleSheet.create({
     balancePillHealthy: { backgroundColor: '#dcfce7', borderColor: '#22c55e' },
     balancePillText: { color: '#111827', fontWeight: '700', fontSize: 13 },
     scanStatusText: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 8 },
+    scanHintText: { color: theme.colors.textSecondary, fontSize: 11, marginTop: 4 },
     scanStatusSuccess: { color: '#16a34a' },
     scanStatusError: { color: '#dc2626' },
     selectionCard: {
@@ -1928,6 +2148,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         minHeight: 200,
         gap: 10,
+    },
+    selectionCardWide: {
+        minHeight: 120,
     },
     selectionText: { color: theme.colors.textSecondary, fontSize: 20, textAlign: 'center' },
     firstScanBadge: {

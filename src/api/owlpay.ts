@@ -2,9 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 import {
-    aggregateOwlPayReports,
-    fetchAllOwlPayPurchaseTransactions,
-    getOwlPayReportFetchBounds,
+    fetchOwlPayReportBundle,
+    type OwlPayBuyerSummary,
 } from '../lib/owlPayReports';
 
 export type OwlPayCamper = {
@@ -288,19 +287,19 @@ export type OwlPayReportsResult = {
     salesOverTime: { date: string; revenue: number; count: number }[];
     purchases: any[];
     purchasesAll: any[];
+    buyerSummaries: OwlPayBuyerSummary[];
 };
 
 export const useOwlPayReports = (
     companyId: string | null,
+    season: string | null,
     fromYmd: string,
     toYmd: string,
     audience: ReportAudience,
     search = ''
 ) => {
-    const { startISO, endInclusiveISO } = getOwlPayReportFetchBounds(fromYmd, toYmd);
-
     return useQuery({
-        queryKey: ['owlpay_reports', companyId, fromYmd, toYmd, audience, search],
+        queryKey: ['owlpay_reports', companyId, season, fromYmd, toYmd, audience, search],
         queryFn: async (): Promise<OwlPayReportsResult> => {
             const empty: OwlPayReportsResult = {
                 totalRevenue: 0,
@@ -312,35 +311,47 @@ export const useOwlPayReports = (
                 salesOverTime: [],
                 purchases: [],
                 purchasesAll: [],
+                buyerSummaries: [],
             };
 
-            if (!companyId) return empty;
+            if (!companyId || !season) return empty;
 
-            const transactions = await readThroughCache(
-                `owlpay_reports_tx:${companyId}:${fromYmd}:${toYmd}`,
-                async () => fetchAllOwlPayPurchaseTransactions(supabase, companyId, startISO, endInclusiveISO),
+            const bundle = await readThroughCache(
+                `owlpay_reports:${companyId}:${season}:${fromYmd}:${toYmd}:${audience}`,
+                async () =>
+                    fetchOwlPayReportBundle(supabase, {
+                        companyId,
+                        season,
+                        fromYmd,
+                        toYmd,
+                        audience,
+                    }),
             );
 
-            const aggregated = aggregateOwlPayReports(transactions, audience, fromYmd, toYmd);
             const q = search.trim().toLowerCase();
-            const purchases = aggregated.purchases.filter((p) => {
+            const purchases = bundle.purchases.filter((p) => {
                 if (!q) return true;
                 return p.camper_name.toLowerCase().includes(q) || p.item_name.toLowerCase().includes(q);
             });
+            const buyerSummaries = bundle.buyerSummaries.filter((s) => {
+                if (!q) return true;
+                return s.name.toLowerCase().includes(q);
+            });
 
             return {
-                totalRevenue: aggregated.stats.totalRevenue,
-                totalItems: aggregated.stats.totalItems,
-                freeItems: aggregated.stats.freeItems,
-                mostPopular: aggregated.stats.mostPopular,
-                avgTransaction: aggregated.stats.avgTransaction,
-                salesByItem: aggregated.salesByItem,
-                salesOverTime: aggregated.salesOverTime,
+                totalRevenue: bundle.stats.totalRevenue,
+                totalItems: bundle.stats.totalItems,
+                freeItems: bundle.stats.freeItems,
+                mostPopular: bundle.stats.mostPopular,
+                avgTransaction: bundle.stats.avgTransaction,
+                salesByItem: bundle.salesByItem,
+                salesOverTime: bundle.salesOverTime,
                 purchases,
-                purchasesAll: aggregated.purchases,
+                purchasesAll: bundle.purchases,
+                buyerSummaries,
             };
         },
-        enabled: !!companyId,
+        enabled: !!companyId && !!season,
     });
 };
 
