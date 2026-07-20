@@ -1,6 +1,6 @@
 import { addDays, format, parseISO } from "date-fns";
-import { normalizeSpreadsheetDate } from "@/lib/spreadsheetDates";
-import { pickCell } from "@/lib/spreadsheetRowUtils";
+import { normalizeSpreadsheetDate } from "./spreadsheetDates";
+import { pickCell } from "./spreadsheetRowUtils";
 
 /** JS Date.getDay(): 0 = Sunday … 6 = Saturday */
 const WEEKDAY_TOKEN_TO_DOW: Record<string, number> = {

@@ -64,6 +64,7 @@ interface BunkStaffRow {
         id: string;
         name: string;
     } | null;
+    bunk?: BunkRow | null;
 }
 
 type CsvUploadResult = {
@@ -128,7 +129,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const { data: staffList = [] } = useStaff(companyId, season);
 
     // Fetch staff_days_off for the selected date (same schema as web)
-    const { data: staffDaysOff = [], isLoading: isLoadingStaff } = useQuery({
+    const { data: staffDaysOff = [], isLoading: isLoadingStaffDaysOff } = useQuery({
         queryKey: ['staff_days_off', companyId, season, dateString],
         queryFn: async () => {
             if (!companyId) return [];
@@ -145,7 +146,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
     });
 
     // Fetch bunks (web schema: bunk_number, bunk_name; no "name" column)
-    const { data: bunksList = [] } = useQuery({
+    const { data: bunksList = [], isLoading: isLoadingBunks } = useQuery({
         queryKey: ['bunks', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
@@ -154,8 +155,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 .select('id, bunk_number, bunk_name, division_id, divisions:division_id(id, name, gender)')
                 .eq('company_id', companyId)
                 .eq('season', season)
-                // Keep parity with web list behavior and include legacy rows where is_active may be null.
-                .or('is_active.eq.true,is_active.is.null')
+                .eq('is_active', true)
                 .order('bunk_number', { ascending: true });
             if (error) throw error;
             return (data || []) as BunkRow[];
@@ -163,13 +163,17 @@ export const ODManagementScreen = ({ navigation }: any) => {
         enabled: !!companyId && !!season,
     });
 
-    const { data: bunkStaffList = [] } = useQuery({
+    const { data: bunkStaffList = [], isLoading: isLoadingBunkStaff } = useQuery({
         queryKey: ['bunk_staff', companyId, season],
         queryFn: async () => {
             if (!companyId) return [];
             const { data, error } = await supabase
                 .from('bunk_staff')
-                .select('id, bunk_id, staff_id, staff:staff_id(id, name)')
+                .select(`
+                    id, bunk_id, staff_id,
+                    staff:staff_id(id, name),
+                    bunk:bunk_id(id, bunk_number, bunk_name, division_id, divisions:division_id(id, name, gender))
+                `)
                 .eq('company_id', companyId)
                 .eq('season', season);
             if (error) throw error;
@@ -364,20 +368,29 @@ export const ODManagementScreen = ({ navigation }: any) => {
 
     const staffById = new Map((staffList || []).map((s: any) => [s.id, s]));
     const bunkById = new Map((bunksList || []).map((b: BunkRow) => [b.id, b]));
+    const resolveJoinedBunk = (raw: BunkRow | BunkRow[] | null | undefined): BunkRow | undefined => {
+        if (!raw) return undefined;
+        const bunk = Array.isArray(raw) ? raw[0] : raw;
+        return bunk?.id ? bunk : undefined;
+    };
+    for (const bs of bunkStaffList || []) {
+        const bunk = resolveJoinedBunk(bs.bunk);
+        if (bunk) bunkById.set(bunk.id, bunk);
+    }
     const dayOffByStaffId = new Map((staffDaysOff || []).map((row: any) => [row.staff_id, row]));
 
     const staffMembers: StaffMember[] = sortOdRowsByGenderThenBunkNumber(
         (bunkStaffList || [])
             .map((bs: BunkStaffRow) => {
                 const staff = bs.staff || staffById.get(bs.staff_id);
-                const bunk = bunkById.get(bs.bunk_id);
+                const bunk = resolveJoinedBunk(bs.bunk) || bunkById.get(bs.bunk_id);
                 const dayOff = dayOffByStaffId.get(bs.staff_id);
                 if (!staff || !bunk) return null;
                 return {
                     id: bs.id,
                     staffId: bs.staff_id,
                     name: staff.name || 'Unknown',
-                    bunk: bunk.bunk_name || `Bunk ${bunk.bunk_number}`,
+                    bunk: bunk.bunk_name || bunk.bunk_number || `Bunk ${bs.bunk_id}`,
                     bunkId: bunk.id,
                     dayOffId: dayOff?.id,
                     isOut: !!dayOff?.checked_out,
@@ -398,7 +411,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 !staff.bunk.toLowerCase().includes(searchQuery.toLowerCase())) return false;
             const bunk = bunkById.get(staff.bunkId);
             if (!bunkMatchesOdGenderFilter(bunk, genderFilter)) return false;
-            if (activeTab === 'OD') return !staff.isDayOff;
+            if (activeTab === 'OD') return !staff.isDayOff && !staff.isNightOff;
             if (activeTab === 'OFF') return staff.isDayOff || staff.isNightOff;
             if (activeTab === 'FREE_PLAY') return staff.isSleepingOut;
             return true;
@@ -1067,7 +1080,12 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         />
                     </View>
 
-                    {bunksList.length === 0 ? (
+                    {isLoadingBunks || isLoadingBunkStaff || isLoadingStaffDaysOff ? (
+                        <View style={styles.emptyState}>
+                            <ActivityIndicator size="large" color={theme.colors.primary} />
+                            <Text style={[styles.emptyText, { marginTop: 12 }]}>Loading OD roster...</Text>
+                        </View>
+                    ) : staffMembers.length === 0 && bunksList.length === 0 && bunkStaffList.length === 0 ? (
                         <View style={styles.emptyState}>
                             <Text style={styles.emptyText}>
                                 No bunks configured. Use Manage Bunks to set up bunks and assign staff.
