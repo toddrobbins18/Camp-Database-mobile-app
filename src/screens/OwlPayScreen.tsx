@@ -343,9 +343,11 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 'Season',
                 'Person ID',
                 'Period spent',
+                'Season spent',
                 'Items bought',
                 'CM deposits',
-                'Current balance',
+                'Full balance',
+                'Beyond $75 credit cap',
             ],
             ...reportsData.buyerSummaries.map((s) => [
                 s.name,
@@ -353,9 +355,11 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 s.season ?? '',
                 s.person_id ?? '',
                 s.period_spent.toFixed(2),
+                s.season_spent != null ? s.season_spent.toFixed(2) : '',
                 s.period_items,
                 s.cm_deposits != null ? s.cm_deposits.toFixed(2) : '',
-                s.current_balance != null ? s.current_balance.toFixed(2) : '',
+                s.full_balance != null ? s.full_balance.toFixed(2) : s.current_balance != null ? s.current_balance.toFixed(2) : '',
+                s.beyond_credit_cap != null ? s.beyond_credit_cap.toFixed(2) : '',
             ]),
             [],
             ['Sales by item — Item', 'Category', 'Qty sold', 'Revenue'],
@@ -1512,7 +1516,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     ) : (
                         <>
                             <Text style={styles.settingHintText}>
-                                Period spent is for the selected range. Deposits and balance are current for {season}.
+                                Full balance = deposits minus season spend. New purchases stop at −$75 credit limit.
                             </Text>
                             <View style={styles.tableHeader}>
                                 <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>Name</Text>
@@ -1553,13 +1557,19 @@ export const OwlPayScreen = ({ navigation }: any) => {
                                                         textAlign: 'right',
                                                         fontSize: 11,
                                                         color:
-                                                            s.current_balance != null && s.current_balance < 0
+                                                            s.full_balance != null && s.full_balance < 0
                                                                 ? theme.colors.danger
-                                                                : theme.colors.text,
+                                                                : s.current_balance != null && s.current_balance < 0
+                                                                  ? theme.colors.danger
+                                                                  : theme.colors.text,
                                                     },
                                                 ]}
                                             >
-                                                {s.current_balance != null ? currency(s.current_balance) : '—'}
+                                                {s.full_balance != null
+                                                    ? currency(s.full_balance)
+                                                    : s.current_balance != null
+                                                      ? currency(s.current_balance)
+                                                      : '—'}
                                             </Text>
                                         )}
                                     </View>

@@ -2118,7 +2118,8 @@ async function performFullSync(
 
           // Reconciliation guard:
           // Expected balance = CampMinder deposit ledger minus Owl Pay purchases (floor -$25).
-          const OWL_PAY_MIN_BALANCE = -25;
+          // Full accounting balance = CM deposits minus Owl Pay purchases (no cap on stored balance).
+          // Checkout RPC still blocks new purchases below -$75 credit limit.
           const { data: ledgerSums, error: ledgerErr } = await supabase
             .from('campminder_transactions')
             .select('person_id, amount')
@@ -2161,7 +2162,7 @@ async function performFullSync(
                 .map((c: any) => {
                   const cmDeposits = Number(sumByPerson.get(String(c.person_id || '')) || 0);
                   const spent = spendByChild.get(String(c.id)) || 0;
-                  const expected = Math.max(cmDeposits - spent, OWL_PAY_MIN_BALANCE);
+                  const expected = cmDeposits - spent;
                   const current = Number(c.owl_pay_balance || 0);
                   return { id: c.id, expected, current };
                 })

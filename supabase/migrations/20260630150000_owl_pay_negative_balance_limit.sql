@@ -11,7 +11,7 @@ SET search_path = public
 AS $$
 DECLARE
   new_balance numeric;
-  min_balance constant numeric := -25;
+  min_balance constant numeric := -75;
 BEGIN
   UPDATE public.children
   SET owl_pay_balance = owl_pay_balance + _amount,

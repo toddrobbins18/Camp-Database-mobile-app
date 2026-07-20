@@ -16,7 +16,7 @@ SET search_path = public
 AS $$
 DECLARE
   new_balance numeric;
-  min_balance constant numeric := -25;
+  min_balance constant numeric := -75;
   tx jsonb;
   applied_free boolean := false;
   camp_today date := (now() AT TIME ZONE 'America/New_York')::date;
