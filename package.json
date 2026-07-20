@@ -10,7 +10,10 @@
     "web": "expo start --web",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "update:production": "eas update --channel production",
+    "update:preview": "eas update --channel preview",
+    "build:production": "eas build --profile production --platform all"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -35,7 +38,7 @@
     "expo-secure-store": "~15.0.8",
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
-    "expo-updates": "^55.0.21",
+    "expo-updates": "~29.0.19",
     "jest": "~29.7.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
