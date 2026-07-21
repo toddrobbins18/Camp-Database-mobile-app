@@ -150,7 +150,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
     // Search and filter states
     const [eventSearch, setEventSearch] = useState('');
-    const [showPastEvents, setShowPastEvents] = useState(false);
+    const [showPastEvents, setShowPastEvents] = useState(true);
     const [showDivisionFilter, setShowDivisionFilter] = useState(false);
     const [showGenderFilter, setShowGenderFilter] = useState(false);
     const [showSportFilter, setShowSportFilter] = useState(false);

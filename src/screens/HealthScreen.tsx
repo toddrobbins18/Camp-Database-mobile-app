@@ -306,6 +306,7 @@ export const HealthScreen = ({ navigation }: any) => {
     );
 
     const activeListMedications = useMemo(() => {
+        const showCompleted = isPastDate(selectedDate);
         return visibleMedications.filter((med: any) => {
             const child = safeCampers.find((c: any) => c.id === med.child_id);
             const divisionName = child?.division?.name ?? med.children?.division?.name ?? null;
@@ -315,9 +316,10 @@ export const HealthScreen = ({ navigation }: any) => {
                 mealFilter: medMealFilter,
                 divisionName,
                 childName,
+                showCompleted,
             });
         });
-    }, [visibleMedications, safeCampers, searchQuery, medMealFilter]);
+    }, [visibleMedications, safeCampers, searchQuery, medMealFilter, selectedDate]);
 
     const sortedActiveListMedications = useMemo(() => {
         const meds = [...activeListMedications];

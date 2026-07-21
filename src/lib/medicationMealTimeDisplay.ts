@@ -119,6 +119,7 @@ export function medicationMatchesMealFilter(
 export function medicationMatchesListVisibility(
     med: {
         administered?: boolean;
+        refused?: boolean | null;
         is_recurring?: boolean | null;
         frequency?: string | null;
         meal_time?: string[] | string | null;
@@ -129,6 +130,7 @@ export function medicationMatchesListVisibility(
         mealFilter: string;
         divisionName?: string | null;
         childName?: string | null;
+        showCompleted?: boolean;
     },
 ): boolean {
     if (isAsNeededMedication(med)) return false;
@@ -140,7 +142,10 @@ export function medicationMatchesListVisibility(
     const matchesSearch =
         isSearching && (childName.includes(searchLower) || medName.includes(searchLower));
 
-    if (med.administered === true) return matchesSearch;
+    if (!options.showCompleted) {
+        if (med.administered === true) return matchesSearch;
+        if (med.refused === true) return matchesSearch;
+    }
 
     const hasMeal = medicationHasMealTime(med.meal_time, options.divisionName);
     if (!hasMeal) return matchesSearch;
