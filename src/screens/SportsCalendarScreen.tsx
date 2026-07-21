@@ -29,6 +29,7 @@ import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 import { syncLinkedTripsFromSportsEvent } from '../lib/syncLinkedTripFromSportsEvent';
 import { compareByLastName } from '../lib/nameSortUtils';
+import { isUpcomingSportsCalendarDate, sportsCalendarTodayYmd } from '../lib/sportsCalendarDates';
 /** DB + web use lowercase; labels are for UI only (see migrations sports_calendar_home_away_check). */
 const HOME_AWAY_OPTIONS: { value: string; label: string }[] = [
     { value: 'home', label: 'Home' },
@@ -149,6 +150,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
 
     // Search and filter states
     const [eventSearch, setEventSearch] = useState('');
+    const [showPastEvents, setShowPastEvents] = useState(false);
     const [showDivisionFilter, setShowDivisionFilter] = useState(false);
     const [showGenderFilter, setShowGenderFilter] = useState(false);
     const [showSportFilter, setShowSportFilter] = useState(false);
@@ -594,8 +596,11 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     };
 
     const filteredAndSortedEvents = useMemo(() => {
+        const todayYmd = sportsCalendarTodayYmd();
         const q = eventSearch.trim().toLowerCase();
         let list = events.filter((event) => {
+            const eventYmd = `${event.date.getFullYear()}-${String(event.date.getMonth() + 1).padStart(2, '0')}-${String(event.date.getDate()).padStart(2, '0')}`;
+            if (!showPastEvents && !isUpcomingSportsCalendarDate(eventYmd, todayYmd)) return false;
             if (q) {
                 const haystack = [
                     event.title,
@@ -675,6 +680,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     }, [
         events,
         eventSearch,
+        showPastEvents,
         selectedDivisions,
         selectedGender,
         selectedSport,
@@ -1619,7 +1625,11 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             <Ionicons name="trophy-outline" size={32} color={theme.colors.text} />
                             <Text style={styles.title}>Sports Calendar</Text>
                         </View>
-                        <Text style={styles.subtitle}>Track sports events and games</Text>
+                        <Text style={styles.subtitle}>
+                            {showPastEvents
+                                ? 'Track sports events and games'
+                                : 'Showing today and upcoming'}
+                        </Text>
                     </View>
 
                     {/* Action Buttons */}
@@ -1722,6 +1732,17 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                             <Ionicons name="chevron-down" size={12} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
+                    <TouchableOpacity
+                        style={styles.pastEventsToggle}
+                        onPress={() => setShowPastEvents((prev) => !prev)}
+                    >
+                        <Ionicons
+                            name={showPastEvents ? 'checkbox' : 'square-outline'}
+                            size={20}
+                            color={showPastEvents ? theme.colors.primary : theme.colors.textSecondary}
+                        />
+                        <Text style={styles.pastEventsToggleText}>Show past events</Text>
+                    </TouchableOpacity>
                 </StyledCard>
 
                 {/* Calendar Widget */}
@@ -3570,6 +3591,16 @@ const styles = StyleSheet.create({
         gap: theme.spacing.sm,
         marginBottom: theme.spacing.sm,
         flexWrap: 'wrap',
+    },
+    pastEventsToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        paddingVertical: theme.spacing.xs,
+    },
+    pastEventsToggleText: {
+        fontSize: 14,
+        color: theme.colors.text,
     },
     filterChip: {
         flexDirection: 'row',
