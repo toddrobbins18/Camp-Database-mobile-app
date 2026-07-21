@@ -29,8 +29,6 @@ import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 import { syncLinkedTripsFromSportsEvent } from '../lib/syncLinkedTripFromSportsEvent';
 import { compareByLastName } from '../lib/nameSortUtils';
-import { isUpcomingSportsCalendarDate, sportsCalendarTodayYmd } from '../lib/sportsCalendarDates';
-
 /** DB + web use lowercase; labels are for UI only (see migrations sports_calendar_home_away_check). */
 const HOME_AWAY_OPTIONS: { value: string; label: string }[] = [
     { value: 'home', label: 'Home' },
@@ -533,10 +531,8 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         if (events.length === 0) return;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const upcoming = events.filter((e) => e.date.getTime() >= today.getTime());
-        const anchor = upcoming[0]?.date || today;
-        setCurrentDate(new Date(anchor));
-        setSelectedDate(new Date(anchor));
+        setCurrentDate(new Date(today));
+        setSelectedDate(new Date(today));
     }, [sportsCalendarData.length]);
 
     /** Web: girls-first + sort_order (see sortDivisionsGirlsFirst on web). */
@@ -598,11 +594,8 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
     };
 
     const filteredAndSortedEvents = useMemo(() => {
-        const todayYmd = sportsCalendarTodayYmd();
         const q = eventSearch.trim().toLowerCase();
         let list = events.filter((event) => {
-            const eventYmd = `${event.date.getFullYear()}-${String(event.date.getMonth() + 1).padStart(2, '0')}-${String(event.date.getDate()).padStart(2, '0')}`;
-            if (!isUpcomingSportsCalendarDate(eventYmd, todayYmd)) return false;
             if (q) {
                 const haystack = [
                     event.title,
