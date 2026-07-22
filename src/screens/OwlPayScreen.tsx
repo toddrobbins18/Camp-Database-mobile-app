@@ -47,8 +47,6 @@ import {
     calculateOwlPayNewBalance,
     formatOwlPayBalanceHint,
     getOwlPayBalanceTone,
-    OWL_PAY_MAX_OVERDRAFT,
-    wouldExceedOwlPayOverdraft,
 } from '../lib/owlPayBalanceUtils';
 import {
     formatCampReportDateTime,
@@ -304,7 +302,6 @@ export const OwlPayScreen = ({ navigation }: any) => {
     const freeDiscount = cartPricing.freeDiscount;
     const currentBalance = Number(selectedCamper?.owl_pay_balance || 0);
     const newBalance = calculateOwlPayNewBalance(currentBalance, total, selectedIsStaff);
-    const exceedsOverdraft = !selectedIsStaff && cart.length > 0 && wouldExceedOwlPayOverdraft(currentBalance, total);
     const newBalanceTone = getOwlPayBalanceTone(newBalance);
     const scanStatusLabel =
         scanStatus === 'scanning'
@@ -712,10 +709,6 @@ export const OwlPayScreen = ({ navigation }: any) => {
             Alert.alert('Owl Pay', 'Add at least one item');
             return;
         }
-        if (!selectedIsStaff && wouldExceedOwlPayOverdraft(currentBalance, total)) {
-            Alert.alert('Owl Pay', `Campers can go up to $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} negative.`);
-            return;
-        }
 
         setIsCompletingTransaction(true);
         try {
@@ -750,11 +743,6 @@ export const OwlPayScreen = ({ navigation }: any) => {
                 effectiveTotal,
                 selectedIsStaff,
             );
-
-            if (!selectedIsStaff && wouldExceedOwlPayOverdraft(currentBalance, effectiveTotal)) {
-                Alert.alert('Owl Pay', `Campers can go up to $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} negative.`);
-                return;
-            }
 
             const txRows = buildOwlPayPurchaseRows(
                 cart.map((item) => ({
@@ -1197,20 +1185,15 @@ export const OwlPayScreen = ({ navigation }: any) => {
                         </Text>
                     )}
                     {selectedIsStaff && selectedStaff && <Text style={styles.totalsLine}>Staff Running Tab</Text>}
-                    {exceedsOverdraft && (
-                        <Text style={styles.insufficientFundsText}>
-                            Exceeds ${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} credit limit
-                        </Text>
-                    )}
-                    {!exceedsOverdraft && formatOwlPayBalanceHint(newBalance) && (
+                    {formatOwlPayBalanceHint(newBalance) && (
                         <Text style={styles.insufficientFundsText}>{formatOwlPayBalanceHint(newBalance)}</Text>
                     )}
                 </View>
 
                 <TouchableOpacity
-                    style={[styles.primarySaveButton, (!selectedCamperId || isCompletingTransaction || exceedsOverdraft) && { opacity: 0.6 }]}
+                    style={[styles.primarySaveButton, (!selectedCamperId || isCompletingTransaction) && { opacity: 0.6 }]}
                     onPress={completeTransaction}
-                    disabled={!selectedCamperId || isCompletingTransaction || exceedsOverdraft}
+                    disabled={!selectedCamperId || isCompletingTransaction}
                 >
                     <Text style={styles.primaryButtonText}>
                         {isCompletingTransaction ? 'Processing...' : 'Complete Transaction'}
@@ -1514,7 +1497,7 @@ export const OwlPayScreen = ({ navigation }: any) => {
                     ) : (
                         <>
                             <Text style={styles.settingHintText}>
-                                Full balance = deposits minus season spend. New purchases stop at −$75 credit limit.
+                                Full balance = deposits minus season spend. No negative balance cap.
                             </Text>
                             <View style={styles.tableHeader}>
                                 <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>Name</Text>
