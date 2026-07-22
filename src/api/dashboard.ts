@@ -446,7 +446,71 @@ export const useTodaySpecialMeals = (
     });
 };
 
-/** Tyler Hill: sports events for the next 3 days after today (matches web Three Day Outlook). */
+/** Personalized 3-day outlook for leaders (trips, sports, activities scoped to supervised campers). */
+export const useSupervisorThreeDayOutlook = (
+    companyId: string | null,
+    season: string | null,
+    enabled: boolean,
+) => {
+    return useQuery({
+        queryKey: ['dashboard_supervisor_outlook', companyId, season],
+        queryFn: async () => {
+            if (!companyId) {
+                return { items: [], scopeLabel: '' };
+            }
+
+            const cacheKey = `dashboard_supervisor_outlook:${companyId}:${season ?? ''}`;
+            return readThroughCache(cacheKey, async () => {
+                const {
+                    data: { user },
+                } = await supabase.auth.getUser();
+                if (!user?.id) {
+                    return { items: [], scopeLabel: '' };
+                }
+
+                const { data: roleRows } = await supabase
+                    .from('user_roles')
+                    .select('role')
+                    .eq('user_id', user.id)
+                    .eq('company_id', companyId);
+
+                const roles = (roleRows ?? []).map((r) => r.role as string);
+                const userRole =
+                    roles.find((r) => r === 'division_leader') ??
+                    roles.find((r) => r === 'viewer') ??
+                    roles.find((r) => r === 'specialist') ??
+                    roles[0] ??
+                    null;
+
+                const divisionFilter = await resolveDashboardDivisionFilter(companyId);
+
+                const {
+                    fetchSupervisorScheduleOutlook,
+                    resolveSupervisorOutlookScope,
+                } = await import('../lib/personScheduleOutlook');
+
+                const scope = await resolveSupervisorOutlookScope(supabase, {
+                    userId: user.id,
+                    userRole,
+                    companyId,
+                    divisionFilter,
+                });
+
+                const items = await fetchSupervisorScheduleOutlook(supabase, {
+                    companyId,
+                    season,
+                    divisionIds: scope.divisionIds,
+                    sportTypes: scope.sportTypes,
+                });
+
+                return { items, scopeLabel: scope.scopeLabel };
+            });
+        },
+        enabled: !!companyId && enabled,
+    });
+};
+
+/** Tyler Hill: sports events for the next 3 days after today (legacy — prefer useSupervisorThreeDayOutlook). */
 export const useThreeDaySportsOutlook = (
     companyId: string | null,
     todayString: string,

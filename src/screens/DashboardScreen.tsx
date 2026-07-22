@@ -27,8 +27,9 @@ import {
     useTodaySpecialEventsActivities,
     useDailyWolfContentRow,
     useUpcomingTripsForDashboard,
-    useThreeDaySportsOutlook,
+    useSupervisorThreeDayOutlook,
 } from '../api/dashboard';
+import { groupOutlookItemsByDate, outlookDayHeading } from '../lib/personScheduleOutlook';
 import { useInboxUnreadCount } from '../api/messages';
 import { supabase } from '../lib/supabase';
 import { formatTime12Hour } from '../lib/formatTime';
@@ -127,11 +128,14 @@ export const DashboardScreen = ({ navigation }: any) => {
         season ?? null,
         usesSportsCalendar,
     );
-    const { data: threeDaySportsOutlook = [] } = useThreeDaySportsOutlook(
+    const { data: supervisorOutlook = { items: [], scopeLabel: '' } } = useSupervisorThreeDayOutlook(
         companyId,
-        todayString,
         season ?? null,
-        isTylerHill,
+        !!companyId,
+    );
+    const groupedSupervisorOutlook = useMemo(
+        () => groupOutlookItemsByDate(supervisorOutlook.items),
+        [supervisorOutlook.items],
     );
     const { data: specialActivitiesToday = [] } = useTodaySpecialEventsActivities(
         companyId,
@@ -685,8 +689,8 @@ export const DashboardScreen = ({ navigation }: any) => {
                         <Ionicons name="trophy-outline" size={20} color="#fbbf24" />
                         <Text style={styles.cardTitle}>Athletics Schedule</Text>
                     </View>
-                    <Text style={styles.cardSubtitle}>Today & upcoming events</Text>
-                    {athleticsEvents.length === 0 && (!isTylerHill || threeDaySportsOutlook.length === 0) ? (
+                    <Text style={styles.cardSubtitle}>Today&apos;s schedule</Text>
+                    {athleticsEvents.length === 0 ? (
                         <View style={styles.emptyState}>
                             <Text style={styles.emptyText}>No sports events today</Text>
                         </View>
@@ -705,27 +709,6 @@ export const DashboardScreen = ({ navigation }: any) => {
                                     </Text>
                                 </View>
                             ))}
-                            {isTylerHill && threeDaySportsOutlook.length > 0 && (
-                                <>
-                                    <Text style={[styles.athleticsSectionLabel, styles.threeDayOutlookLabel]}>
-                                        Three Day Outlook
-                                    </Text>
-                                    {threeDaySportsOutlook.map((evt: any) => (
-                                        <View key={evt.id} style={{ marginBottom: 8 }}>
-                                            <Text style={{ color: theme.colors.text, fontWeight: '500' }}>{evt.title}</Text>
-                                            <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                                                {new Date(evt.event_date + 'T12:00:00').toLocaleDateString(undefined, {
-                                                    weekday: 'short',
-                                                    month: 'short',
-                                                    day: 'numeric',
-                                                })}{' '}
-                                                • {formatTime12Hour(evt.start_time_field || evt.time || evt.depart_time) || evt.start_time_field || evt.time || evt.depart_time || 'TBD'}
-                                                {evt.sport_type ? ` • ${evt.sport_type}` : ''}
-                                            </Text>
-                                        </View>
-                                    ))}
-                                </>
-                            )}
                         </>
                     )}
                     <TouchableOpacity
@@ -736,6 +719,53 @@ export const DashboardScreen = ({ navigation }: any) => {
                             View Full Schedule
                         </Text>
                     </TouchableOpacity>
+                </StyledCard>
+
+                <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
+                    <View style={styles.cardHeader}>
+                        <Ionicons name="calendar" size={20} color={theme.colors.primary} />
+                        <Text style={styles.cardTitle}>Three Day Outlook</Text>
+                    </View>
+                    {supervisorOutlook.scopeLabel ? (
+                        <Text style={styles.cardSubtitle}>{supervisorOutlook.scopeLabel}</Text>
+                    ) : null}
+                    {supervisorOutlook.items.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>Nothing scheduled in the next 3 days.</Text>
+                        </View>
+                    ) : (
+                        <ScrollView style={styles.outlookScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                            {groupedSupervisorOutlook.map((dayItems) => {
+                                const dateKey = dayItems[0]?.date;
+                                if (!dateKey) return null;
+                                return (
+                                    <View key={dateKey} style={{ marginBottom: 10 }}>
+                                        <Text style={styles.athleticsSectionLabel}>{outlookDayHeading(dateKey)}</Text>
+                                        {dayItems.map((item) => (
+                                            <View key={item.id} style={styles.outlookRow}>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.outlookRowTitle} numberOfLines={1}>
+                                                        {item.title}
+                                                    </Text>
+                                                    <Text style={styles.outlookRowMeta} numberOfLines={1}>
+                                                        {[
+                                                            item.time ? formatTime12Hour(item.time) || item.time : null,
+                                                            item.location,
+                                                        ]
+                                                            .filter(Boolean)
+                                                            .join(' · ')}
+                                                    </Text>
+                                                </View>
+                                                <Text style={styles.outlookKindBadge}>
+                                                    {item.kind === 'trip' ? 'Trip' : item.kind === 'sport' ? 'Sport' : 'Activity'}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                );
+                            })}
+                        </ScrollView>
+                    )}
                 </StyledCard>
 
                 {/* Today's Birthdays */}
@@ -1129,6 +1159,40 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
         letterSpacing: 0.5,
         marginBottom: 6,
+    },
+    outlookScroll: {
+        maxHeight: 260,
+    },
+    outlookRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: theme.colors.background,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        marginBottom: 6,
+    },
+    outlookRowTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    outlookRowMeta: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
+    outlookKindBadge: {
+        fontSize: 10,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 6,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        overflow: 'hidden',
     },
     threeDayOutlookLabel: {
         color: '#d97706',
