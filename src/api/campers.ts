@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { filterActiveRoster } from '../lib/rosterStatus';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
+import { resolvePermissionDivisionIds } from '../lib/divisionFilterUtils';
 
 /** Matches web Roster / usePermissions: these roles see all divisions for roster queries. */
 const ROSTER_FULL_DIVISION_ACCESS_ROLES = [
@@ -47,8 +48,21 @@ export const useRosterDivisionFilter = (companyId: string | null) => {
                 .eq('can_access', true);
 
             if (divError) throw divError;
-            const ids = [...new Set((divPerms || []).map((d) => d.division_id))];
-            return ids.length > 0 ? ids : [];
+            const rawIds = [...new Set((divPerms || []).map((d) => d.division_id))];
+            if (rawIds.length === 0) return [];
+
+            const { data: allDivisions, error: divisionsError } = await supabase
+                .from('divisions')
+                .select('id, name, is_active')
+                .eq('company_id', companyId);
+
+            if (divisionsError) throw divisionsError;
+
+            const resolved = resolvePermissionDivisionIds(
+                rawIds,
+                allDivisions || [],
+            );
+            return resolved.length > 0 ? resolved : [];
         },
     });
 };
