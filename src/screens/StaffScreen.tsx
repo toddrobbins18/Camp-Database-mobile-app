@@ -56,27 +56,36 @@ export const StaffScreen = ({ navigation }: any) => {
                 return;
             }
 
-            if (isSpecialistRole && userId) {
-                const { data: sportAssignmentData } = await supabase
+            let assignedSports = new Set<string>();
+
+            if (userId) {
+                const { data: sportAssignmentData, error: sportAssignmentError } = await supabase
                     .from('specialist_sport_assignments')
                     .select('sport')
                     .eq('user_id', userId)
                     .eq('company_id', companyId);
-                setMyAssignedSports(new Set((sportAssignmentData || []).map((a: { sport: string }) => a.sport)));
-            } else {
-                setMyAssignedSports(new Set());
+
+                if (sportAssignmentError) {
+                    console.warn('[Staff] Failed to fetch specialist sport assignments:', sportAssignmentError);
+                }
+
+                for (const row of sportAssignmentData || []) {
+                    if (row.sport) assignedSports.add(row.sport);
+                }
             }
 
-            const { data } = await supabase
+            const { data: myStaffRecord } = await supabase
                 .from('staff')
-                .select('id')
+                .select('id, specialty_sports')
                 .eq('company_id', companyId)
                 .eq('season', season)
                 .ilike('email', userEmail)
                 .maybeSingle();
 
-            const staffId = data?.id || null;
+            const staffId = myStaffRecord?.id || null;
             setMyStaffId(staffId);
+
+            setMyAssignedSports(assignedSports);
 
             if (staffId) {
                 const { data: assignmentData } = await supabase
@@ -104,15 +113,18 @@ export const StaffScreen = ({ navigation }: any) => {
     const filteredStaff = useMemo(() => {
         const q = searchQuery.toLowerCase();
         return staffData.filter((member) => {
-            if (isLeaderRole && (myStaffId || isSpecialistRole)) {
+            if (isLeaderRole && myStaffId) {
                 const isSelf = myStaffId === member.id;
-                const isManuallyAssigned = myStaffId ? myAssignedStaffIds.has(member.id!) : false;
+                const isManuallyAssigned = myAssignedStaffIds.has(member.id!);
+                const isDirectReport = (member as any).leader_id === myStaffId;
                 const memberSports = Array.isArray((member as any).specialty_sports)
                     ? (member as any).specialty_sports
                     : [];
                 const isSportAssigned =
-                    isSpecialistRole && memberSports.some((sport: string) => myAssignedSports.has(sport));
-                if (!isSelf && !isManuallyAssigned && !isSportAssigned) {
+                    isSpecialistRole &&
+                    myAssignedSports.size > 0 &&
+                    memberSports.some((sport: string) => myAssignedSports.has(sport));
+                if (!isSelf && !isManuallyAssigned && !isDirectReport && !isSportAssigned) {
                     return false;
                 }
             }
