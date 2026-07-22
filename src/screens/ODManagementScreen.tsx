@@ -20,6 +20,10 @@ import {
     type NightOffScheduleEntry,
     staffIsScheduledOff,
     shouldRemoveDayOffRecord,
+    resolveOdCheckInOut,
+    resolveOdRfidScan,
+    type OdCheckInOutContext,
+    type OdCheckInOutResult,
 } from '../lib/odNightOffSchedule';
 import { lookupStaffByRfid, normalizeRfidInput } from '../lib/rfidUtils';
 import {
@@ -586,6 +590,74 @@ export const ODManagementScreen = ({ navigation }: any) => {
         }
     };
 
+    const applyCheckInOutResult = async (
+        staffId: string,
+        result: OdCheckInOutResult,
+    ): Promise<boolean> => {
+        if (!companyId || !season) return false;
+
+        switch (result.kind) {
+            case 'noop':
+                Alert.alert('Notice', result.message);
+                return false;
+            case 'error':
+                Alert.alert('Error', result.message);
+                return false;
+            case 'late_override':
+                setLateOverrideStaffId(staffId);
+                setShowLateOverrideModal(true);
+                return false;
+            case 'insert': {
+                const row = {
+                    company_id: companyId,
+                    staff_id: staffId,
+                    date: dateString,
+                    season,
+                    ...result.record,
+                };
+                if (await isOnlineNow()) {
+                    const { error } = await supabase.from('staff_days_off').insert(row);
+                    if (error) throw error;
+                } else {
+                    await enqueueSync('staff_days_off.insert', [row]);
+                }
+                return true;
+            }
+            case 'update': {
+                if (await isOnlineNow()) {
+                    const { error } = await supabase
+                        .from('staff_days_off')
+                        .update(result.updates)
+                        .eq('id', result.recordId);
+                    if (error) throw error;
+                } else {
+                    await enqueueSync('staff_days_off.update', { id: result.recordId, update: result.updates });
+                }
+                return true;
+            }
+        }
+    };
+
+    const handleCheckInOut = async (
+        staffId: string,
+        type: 'in' | 'out',
+        context: OdCheckInOutContext,
+    ) => {
+        if (!companyId || !season) return;
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const userId = user?.id ?? '';
+            const existing = (staffDaysOff as any[]).find((d) => d.staff_id === staffId);
+            const result = resolveOdCheckInOut(context, type, existing, userId);
+            const applied = await applyCheckInOutResult(staffId, result);
+            if (!applied) return;
+            await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+            Alert.alert('Success', type === 'out' ? 'Signed out successfully' : 'Signed in successfully');
+        } catch (e: any) {
+            Alert.alert('Error', e?.message ?? 'Could not update');
+        }
+    };
+
     const handleRfidScan = async () => {
         const value = normalizeRfidInput(rfidInput);
         if (!value || !companyId || !season) return;
@@ -610,31 +682,21 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 .eq('company_id', companyId)
                 .eq('date', dateString)
                 .maybeSingle();
-            if (!row || !staffIsScheduledOff(row)) {
-                setLateOverrideStaffId(staffMember.id);
-                setShowLateOverrideModal(true);
+
+            const { data: { user } } = await supabase.auth.getUser();
+            const rfidResult = resolveOdRfidScan(row, user?.id ?? '');
+            const applied = await applyCheckInOutResult(staffMember.id, rfidResult);
+            if (!applied) {
                 setRfidInput('');
                 return;
             }
-            if (!row.checked_out) {
-                const update = { checked_out: true, checked_out_at: new Date().toISOString() };
-                if (await isOnlineNow()) {
-                    await supabase.from('staff_days_off').update(update).eq('id', row.id);
-                } else {
-                    await enqueueSync('staff_days_off.update', { id: row.id, update });
-                }
-                Alert.alert('Checked out', `${staffMember.name} signed out.`);
-            } else if (!row.checked_in) {
-                const update = { checked_in: true, checked_in_at: new Date().toISOString() };
-                if (await isOnlineNow()) {
-                    await supabase.from('staff_days_off').update(update).eq('id', row.id);
-                } else {
-                    await enqueueSync('staff_days_off.update', { id: row.id, update });
-                }
-                Alert.alert('Checked in', `${staffMember.name} signed in.`);
-            } else {
-                Alert.alert('Done', `${staffMember.name} has already checked out and back in today.`);
+
+            if (rfidResult.kind === 'update' || rfidResult.kind === 'insert') {
+                const signedOut =
+                    rfidResult.kind === 'update' && rfidResult.updates.checked_out === true;
+                Alert.alert(signedOut ? 'Checked out' : 'Checked in', staffMember.name);
             }
+
             queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
             setRfidInput('');
         } catch (e: any) {
@@ -1152,6 +1214,32 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                         </View>
                                     </View>
                                     <View style={styles.offStaffActions}>
+                                        <View style={styles.signInOutRow}>
+                                            {staff.isOut ? (
+                                                <View style={styles.signedBadge}>
+                                                    <Text style={styles.signedBadgeText}>Signed Out</Text>
+                                                </View>
+                                            ) : (
+                                                <TouchableOpacity
+                                                    style={styles.signActionBtn}
+                                                    onPress={() => handleCheckInOut(staff.staffId, 'out', 'off_duty')}
+                                                >
+                                                    <Text style={styles.signActionBtnText}>Sign Out</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                            {staff.isIn ? (
+                                                <View style={[styles.signedBadge, styles.signedInBadge]}>
+                                                    <Text style={styles.signedBadgeText}>Signed In</Text>
+                                                </View>
+                                            ) : (
+                                                <TouchableOpacity
+                                                    style={styles.signActionBtn}
+                                                    onPress={() => handleCheckInOut(staff.staffId, 'in', 'off_duty')}
+                                                >
+                                                    <Text style={styles.signActionBtnText}>Sign In</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
                                         <TouchableOpacity
                                             style={styles.manageNightsBtn}
                                             onPress={() => openManageNights(staff.staffId, staff.name)}
@@ -1184,26 +1272,25 @@ export const ODManagementScreen = ({ navigation }: any) => {
                             <View style={styles.tableHeaders}>
                                 <Text style={[styles.tableHeader, { flex: 1.5 }]}>Bunk</Text>
                                 <Text style={[styles.tableHeader, { flex: 2 }]}>Name</Text>
-                                <Text style={[styles.tableHeader, { flex: 1 }]}>Out</Text>
-                                <Text style={[styles.tableHeader, { flex: 1 }]}>In</Text>
+                                <Text style={[styles.tableHeader, { flex: 1.2 }]}>Sign In</Text>
                                 <Text style={[styles.tableHeader, { flex: 1 }]}>Actions</Text>
                             </View>
                             {filteredStaff.map((staff) => (
                                 <View key={staff.id} style={styles.staffRow}>
                                     <Text style={[styles.staffCell, { flex: 1.5 }]}>{staff.bunk}</Text>
                                     <Text style={[styles.staffCell, { flex: 2 }]}>{staff.name}</Text>
-                                    <View style={{ flex: 1, alignItems: 'center' }}>
-                                        {staff.isOut ? (
-                                            <Ionicons name="checkmark-circle" size={20} color={theme.colors.success} />
-                                        ) : (
-                                            <Ionicons name="close-circle-outline" size={20} color={theme.colors.textSecondary} />
-                                        )}
-                                    </View>
-                                    <View style={{ flex: 1, alignItems: 'center' }}>
+                                    <View style={{ flex: 1.2, alignItems: 'center' }}>
                                         {staff.isIn ? (
-                                            <Ionicons name="checkmark-circle" size={20} color={theme.colors.success} />
+                                            <View style={[styles.signedBadge, styles.signedInBadge]}>
+                                                <Text style={styles.signedBadgeText}>In</Text>
+                                            </View>
                                         ) : (
-                                            <Ionicons name="close-circle-outline" size={20} color={theme.colors.textSecondary} />
+                                            <TouchableOpacity
+                                                style={styles.signActionBtn}
+                                                onPress={() => handleCheckInOut(staff.staffId, 'in', 'on_duty')}
+                                            >
+                                                <Text style={styles.signActionBtnText}>Sign In</Text>
+                                            </TouchableOpacity>
                                         )}
                                     </View>
                                     <View style={{ flex: 1.4, alignItems: 'flex-end', gap: 6 }}>
@@ -2189,6 +2276,44 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
         alignItems: 'center',
         gap: 12,
+    },
+    signInOutRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 8,
+        width: '100%',
+        marginBottom: 4,
+    },
+    signActionBtn: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        backgroundColor: theme.colors.surface,
+    },
+    signActionBtnText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
+    signedBadge: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        backgroundColor: theme.colors.background,
+    },
+    signedInBadge: {
+        backgroundColor: '#dcfce7',
+        borderColor: '#86efac',
+    },
+    signedBadgeText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.text,
     },
     manageNightsBtn: {
         flexDirection: 'row',
