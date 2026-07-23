@@ -635,12 +635,24 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 }
                 return true;
             }
+            case 'delete': {
+                if (await isOnlineNow()) {
+                    const { error } = await supabase
+                        .from('staff_days_off')
+                        .delete()
+                        .eq('id', result.recordId);
+                    if (error) throw error;
+                } else {
+                    await enqueueSync('staff_days_off.delete', { id: result.recordId });
+                }
+                return true;
+            }
         }
     };
 
     const handleCheckInOut = async (
         staffId: string,
-        type: 'in' | 'out',
+        type: 'in' | 'out' | 'undo_in',
         context: OdCheckInOutContext,
     ) => {
         if (!companyId || !season) return;
@@ -652,7 +664,14 @@ export const ODManagementScreen = ({ navigation }: any) => {
             const applied = await applyCheckInOutResult(staffId, result);
             if (!applied) return;
             await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
-            Alert.alert('Success', type === 'out' ? 'Signed out successfully' : 'Signed in successfully');
+            Alert.alert(
+                'Success',
+                type === 'out'
+                    ? 'Signed out successfully'
+                    : type === 'undo_in'
+                      ? 'Sign in cleared'
+                      : 'Signed in successfully',
+            );
         } catch (e: any) {
             Alert.alert('Error', e?.message ?? 'Could not update');
         }
@@ -1281,9 +1300,12 @@ export const ODManagementScreen = ({ navigation }: any) => {
                                     <Text style={[styles.staffCell, { flex: 2 }]}>{staff.name}</Text>
                                     <View style={{ flex: 1.2, alignItems: 'center' }}>
                                         {staff.isIn ? (
-                                            <View style={[styles.signedBadge, styles.signedInBadge]}>
-                                                <Text style={styles.signedBadgeText}>In</Text>
-                                            </View>
+                                            <TouchableOpacity
+                                                style={styles.signActionBtn}
+                                                onPress={() => handleCheckInOut(staff.staffId, 'undo_in', 'on_duty')}
+                                            >
+                                                <Text style={styles.signActionBtnText}>Undo Sign In</Text>
+                                            </TouchableOpacity>
                                         ) : (
                                             <TouchableOpacity
                                                 style={styles.signActionBtn}
