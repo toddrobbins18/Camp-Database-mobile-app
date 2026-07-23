@@ -33,6 +33,16 @@ import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { UnifiedCalendar, CalendarWidgetEvent } from '../components/UnifiedCalendar';
 import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
 import { isOnlineNow } from '../offline/engine';
+import { hasDocumentedAllergy } from '../lib/allergyUtils';
+import { compareByLastName } from '../lib/nameSortUtils';
+
+function AllergyBadge() {
+    return (
+        <View style={{ backgroundColor: '#fee2e2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+            <Text style={{ fontSize: 10, color: '#b91c1c', fontWeight: '600' }}>⚠️ Allergies</Text>
+        </View>
+    );
+}
 
 // Trip Interfaces
 interface Trip {
@@ -186,7 +196,13 @@ function multiDayLabel(dateStr: string, endStr?: string): string | null {
     return `${days}-Day Trip`;
 }
 
-const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDelete: () => void, onEdit: () => void, onManageRoster: () => void }) => {
+const TripCard = ({ trip, onDelete, onEdit, onManageRoster, onViewSportsRoster }: {
+    trip: Trip;
+    onDelete: () => void;
+    onEdit: () => void;
+    onManageRoster: () => void;
+    onViewSportsRoster?: () => void;
+}) => {
     const formatDate = (dateString: string, endDateString?: string) => {
         const start = new Date(dateString);
         const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
@@ -317,7 +333,10 @@ const TripCard = ({ trip, onDelete, onEdit, onManageRoster }: { trip: Trip, onDe
                         <Text style={styles.rosterLabel}>Sports Event Roster</Text>
                         <Text style={styles.rosterCount}>{trip.attendingCount} people total</Text>
                     </View>
-                    <TouchableOpacity style={styles.viewRosterBtn} onPress={onManageRoster}>
+                    <TouchableOpacity
+                        style={styles.viewRosterBtn}
+                        onPress={onViewSportsRoster || onManageRoster}
+                    >
                         <Text style={styles.viewRosterBtnText}>View Roster</Text>
                     </TouchableOpacity>
                 </View>
@@ -477,6 +496,14 @@ export const TransportScreen = ({ navigation }: any) => {
     const [rosterFilterDivision, setRosterFilterDivision] = useState<string>('all');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [selectedCamperIds, setSelectedCamperIds] = useState<Set<string>>(new Set());
+    const [sportsRosterModalVisible, setSportsRosterModalVisible] = useState(false);
+    const [sportsRosterTrip, setSportsRosterTrip] = useState<Trip | null>(null);
+    const [sportsRosterLoading, setSportsRosterLoading] = useState(false);
+    const [sportsRosterData, setSportsRosterData] = useState<{
+        children: any[];
+        coaches: any[];
+        refs: any[];
+    } | null>(null);
 
     const rosterTripIdForAttendees = rosterModalVisible && rosterTrip?.id ? rosterTrip.id : null;
     const { data: existingAttendeeChildIds = [] } = useTripAttendees(rosterTripIdForAttendees);
@@ -503,6 +530,42 @@ export const TransportScreen = ({ navigation }: any) => {
     const handleManageRoster = (trip: Trip) => {
         setRosterTrip(trip);
         setRosterModalVisible(true);
+    };
+
+    const handleViewSportsRoster = async (trip: Trip) => {
+        if (!trip.sports_event_id || !companyId) {
+            Alert.alert('Roster', 'No linked sports event for this trip.');
+            return;
+        }
+        setSportsRosterTrip(trip);
+        setSportsRosterModalVisible(true);
+        setSportsRosterLoading(true);
+        setSportsRosterData(null);
+        try {
+            const [{ data: roster }, { data: staff }] = await Promise.all([
+                supabase
+                    .from('sports_event_roster')
+                    .select('child:children(id, name, age, grade, group_name, allergies)')
+                    .eq('event_id', trip.sports_event_id)
+                    .eq('company_id', companyId),
+                supabase
+                    .from('sports_event_staff')
+                    .select('role, staff:staff(id, name, role, allergies)')
+                    .eq('event_id', trip.sports_event_id)
+                    .eq('company_id', companyId),
+            ]);
+            const children = (roster?.map((row: any) => row.child).filter(Boolean) || []).sort(compareByLastName);
+            setSportsRosterData({
+                children,
+                coaches: staff?.filter((row: any) => row.role === 'coach').map((row: any) => row.staff).filter(Boolean) || [],
+                refs: staff?.filter((row: any) => row.role === 'ref').map((row: any) => row.staff).filter(Boolean) || [],
+            });
+        } catch {
+            Alert.alert('Roster', 'Failed to load sports event roster.');
+            setSportsRosterModalVisible(false);
+        } finally {
+            setSportsRosterLoading(false);
+        }
     };
 
     const toggleCamperSelection = (camperId: string) => {
@@ -884,6 +947,7 @@ export const TransportScreen = ({ navigation }: any) => {
                             onDelete={() => openDeleteTripModal(trip.id)}
                             onEdit={() => handleEditTrip(trip)}
                             onManageRoster={() => handleManageRoster(trip)}
+                            onViewSportsRoster={() => handleViewSportsRoster(trip)}
                         />
                     ))}
                 </View>
@@ -1516,9 +1580,8 @@ export const TransportScreen = ({ navigation }: any) => {
     );
 
     const renderRosterModal = () => {
-        // Calculate allergy counts
         const selectedCampersList = rawCampers.filter(c => selectedCamperIds.has(c.id));
-        const allergyCount = selectedCampersList.filter(c => c.allergies).length;
+        const allergyCampers = selectedCampersList.filter(c => hasDocumentedAllergy(c.allergies));
 
         return (
             <Modal
@@ -1551,6 +1614,19 @@ export const TransportScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
 
+                        {allergyCampers.length > 0 && (
+                            <View style={{ marginHorizontal: 16, marginBottom: 12, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, padding: 12 }}>
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: '#b91c1c', marginBottom: 4 }}>
+                                    ⚠️ ALLERGY ALERT: {allergyCampers.length} camper{allergyCampers.length === 1 ? '' : 's'}
+                                </Text>
+                                {allergyCampers.slice(0, 5).map((camper) => (
+                                    <Text key={camper.id} style={{ fontSize: 12, color: '#991b1b', marginTop: 2 }}>
+                                        {camper.name}: {camper.allergies}
+                                    </Text>
+                                ))}
+                            </View>
+                        )}
+
                         <ScrollView style={styles.helpModalBody} showsVerticalScrollIndicator={false}>
                             {activeRosterTab === 'division' ? (
                                 divisionsWithCounts.map(division => {
@@ -1576,7 +1652,10 @@ export const TransportScreen = ({ navigation }: any) => {
                                                         <View style={[styles.radioCircle, selectedCamperIds.has(camper.id) && styles.radioCircleSelected]}>
                                                             {selectedCamperIds.has(camper.id) && <View style={styles.radioInnerCircle} />}
                                                         </View>
-                                                        <Text style={styles.camperName}>{camper.name}</Text>
+                                                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                            <Text style={styles.camperName}>{camper.name}</Text>
+                                                            {hasDocumentedAllergy(camper.allergies) ? <AllergyBadge /> : null}
+                                                        </View>
                                                     </TouchableOpacity>
                                                 ))}
                                             </View>
@@ -1621,9 +1700,12 @@ export const TransportScreen = ({ navigation }: any) => {
                                                         <View style={[styles.radioCircle, selectedCamperIds.has(camper.id) && styles.radioCircleSelected]}>
                                                             {selectedCamperIds.has(camper.id) && <View style={styles.radioInnerCircle} />}
                                                         </View>
-                                                        <Text style={styles.camperName}>
-                                                            {camper.name} <Text style={{ color: theme.colors.textSecondary }}>- {divisionName}</Text>
-                                                        </Text>
+                                                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                            <Text style={styles.camperName}>
+                                                                {camper.name} <Text style={{ color: theme.colors.textSecondary }}>- {divisionName}</Text>
+                                                            </Text>
+                                                            {hasDocumentedAllergy(camper.allergies) ? <AllergyBadge /> : null}
+                                                        </View>
                                                     </TouchableOpacity>
                                                 );
                                             })}
@@ -1668,6 +1750,114 @@ export const TransportScreen = ({ navigation }: any) => {
                             </View>
                         </View>
 
+                    </View>
+                </View>
+            </Modal>
+        );
+    };
+
+    const renderSportsRosterViewModal = () => {
+        const children = sportsRosterData?.children || [];
+        const coaches = sportsRosterData?.coaches || [];
+        const refs = sportsRosterData?.refs || [];
+        const allergyChildren = children.filter((c) => hasDocumentedAllergy(c.allergies));
+        const allergyStaff = [...coaches, ...refs].filter((s) => hasDocumentedAllergy(s.allergies));
+        const totalAllergies = allergyChildren.length + allergyStaff.length;
+
+        return (
+            <Modal
+                transparent
+                animationType="slide"
+                visible={sportsRosterModalVisible}
+                onRequestClose={() => setSportsRosterModalVisible(false)}
+            >
+                <View style={styles.rosterModalOverlay}>
+                    <View style={styles.rosterModalContent}>
+                        <View style={styles.rosterModalHeader}>
+                            <Text style={styles.rosterModalTitle} numberOfLines={2}>
+                                Sports Event Roster: {sportsRosterTrip?.name}
+                            </Text>
+                            <TouchableOpacity onPress={() => setSportsRosterModalVisible(false)} style={styles.closeButton}>
+                                <Ionicons name="close" size={24} color={theme.colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {sportsRosterLoading ? (
+                            <View style={{ padding: 32, alignItems: 'center' }}>
+                                <ActivityIndicator size="large" color={theme.colors.secondary} />
+                            </View>
+                        ) : (
+                            <ScrollView style={styles.helpModalBody} contentContainerStyle={{ paddingBottom: 24 }}>
+                                {totalAllergies > 0 && (
+                                    <View style={{ backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+                                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#b91c1c', marginBottom: 4 }}>
+                                            ⚠️ ALLERGY ALERT: {totalAllergies} individual{totalAllergies === 1 ? '' : 's'}
+                                        </Text>
+                                        {allergyChildren.map((child) => (
+                                            <Text key={child.id} style={{ fontSize: 12, color: '#991b1b', marginTop: 2 }}>
+                                                {child.name} (Camper): {child.allergies}
+                                            </Text>
+                                        ))}
+                                        {allergyStaff.map((member) => (
+                                            <Text key={member.id} style={{ fontSize: 12, color: '#991b1b', marginTop: 2 }}>
+                                                {member.name} (Staff): {member.allergies}
+                                            </Text>
+                                        ))}
+                                    </View>
+                                )}
+
+                                <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>Campers ({children.length})</Text>
+                                {children.length === 0 ? (
+                                    <Text style={{ color: theme.colors.textSecondary, marginBottom: 16 }}>No campers in roster</Text>
+                                ) : (
+                                    children.map((child) => (
+                                        <View key={child.id} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                <Text style={{ fontSize: 15, fontWeight: '600', color: theme.colors.text }}>{child.name}</Text>
+                                                {hasDocumentedAllergy(child.allergies) ? <AllergyBadge /> : null}
+                                            </View>
+                                            <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 }}>
+                                                {[child.grade ? `Grade ${child.grade}` : null, child.age ? `Age ${child.age}` : null, child.allergies].filter(Boolean).join(' · ')}
+                                            </Text>
+                                        </View>
+                                    ))
+                                )}
+
+                                {coaches.length > 0 && (
+                                    <>
+                                        <Text style={{ fontSize: 16, fontWeight: '700', marginTop: 16, marginBottom: 8 }}>Coaches ({coaches.length})</Text>
+                                        {coaches.map((coach) => (
+                                            <View key={coach.id} style={{ paddingVertical: 8 }}>
+                                                <Text style={{ fontSize: 15, fontWeight: '600' }}>{coach.name}</Text>
+                                                {hasDocumentedAllergy(coach.allergies) ? (
+                                                    <Text style={{ fontSize: 12, color: '#b91c1c' }}>{coach.allergies}</Text>
+                                                ) : null}
+                                            </View>
+                                        ))}
+                                    </>
+                                )}
+
+                                {refs.length > 0 && (
+                                    <>
+                                        <Text style={{ fontSize: 16, fontWeight: '700', marginTop: 16, marginBottom: 8 }}>Referees ({refs.length})</Text>
+                                        {refs.map((ref) => (
+                                            <View key={ref.id} style={{ paddingVertical: 8 }}>
+                                                <Text style={{ fontSize: 15, fontWeight: '600' }}>{ref.name}</Text>
+                                                {hasDocumentedAllergy(ref.allergies) ? (
+                                                    <Text style={{ fontSize: 12, color: '#b91c1c' }}>{ref.allergies}</Text>
+                                                ) : null}
+                                            </View>
+                                        ))}
+                                    </>
+                                )}
+                            </ScrollView>
+                        )}
+
+                        <View style={styles.rosterFooter}>
+                            <TouchableOpacity style={styles.submitButton} onPress={() => setSportsRosterModalVisible(false)}>
+                                <Text style={styles.submitButtonText}>Close</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -1728,6 +1918,7 @@ export const TransportScreen = ({ navigation }: any) => {
             {renderHelpModal()}
             {renderTripFormModal()}
             {renderRosterModal()}
+            {renderSportsRosterViewModal()}
             {renderDivisionFilterModal()}
             {renderHeader()}
             {isLoading && companyId ? (
@@ -1745,6 +1936,7 @@ export const TransportScreen = ({ navigation }: any) => {
                             onDelete={() => openDeleteTripModal(item.id)}
                             onEdit={() => handleEditTrip(item)}
                             onManageRoster={() => handleManageRoster(item)}
+                            onViewSportsRoster={() => handleViewSportsRoster(item)}
                         />
                     )}
                     ItemSeparatorComponent={() => <View style={{ height: theme.spacing.md }} />}

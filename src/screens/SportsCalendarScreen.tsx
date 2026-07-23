@@ -29,6 +29,7 @@ import { uploadCsvFromText } from '../lib/csvTableUpload';
 import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 import { syncLinkedTripsFromSportsEvent } from '../lib/syncLinkedTripFromSportsEvent';
 import { compareByLastName } from '../lib/nameSortUtils';
+import { hasDocumentedAllergy } from '../lib/allergyUtils';
 import { isUpcomingSportsCalendarDate, sportsCalendarTodayYmd } from '../lib/sportsCalendarDates';
 /** DB + web use lowercase; labels are for UI only (see migrations sports_calendar_home_away_check). */
 const HOME_AWAY_OPTIONS: { value: string; label: string }[] = [
@@ -136,6 +137,7 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
         age: c.age || 0,
         divisionId: c.division_id,
         divisionName: c.division?.name || 'No Division',
+        allergies: c.allergies || null,
     }));
     const staffMembers = staffData.map((s: any) => ({ id: s.id, name: s.name, role: s.role || s.staff_type || 'Staff' }));
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -355,6 +357,13 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
             return compareByLastName(a, b);
         });
     }, [campers, rosterSearchTerm, rosterModalReadOnly, selectedCampers, selectedRosterEvent, rosterSortBy]);
+
+    const rosterAllergyCampers = useMemo(() => {
+        const onRoster = rosterModalReadOnly
+            ? rosterCampersToShow
+            : rosterCampersToShow.filter((c) => selectedCampers.has(c.id));
+        return onRoster.filter((c) => hasDocumentedAllergy(c.allergies));
+    }, [rosterCampersToShow, rosterModalReadOnly, selectedCampers]);
 
     /** Shared pickers for Add + Edit sports event forms */
     type FormPickerKind = 'sport' | 'event' | 'home' | 'divisions';
@@ -1113,6 +1122,24 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                             : `${selectedCampers.size} of ${campers.length} campers selected`}
                                     </Text>
 
+                                    {rosterAllergyCampers.length > 0 && (
+                                        <View style={{ backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#b91c1c', marginBottom: 4 }}>
+                                                ⚠️ ALLERGY ALERT: {rosterAllergyCampers.length} camper{rosterAllergyCampers.length === 1 ? '' : 's'} with documented allergies
+                                            </Text>
+                                            {rosterAllergyCampers.slice(0, 5).map((camper) => (
+                                                <Text key={camper.id} style={{ fontSize: 12, color: '#991b1b', marginTop: 2 }}>
+                                                    {camper.name}: {camper.allergies}
+                                                </Text>
+                                            ))}
+                                            {rosterAllergyCampers.length > 5 && (
+                                                <Text style={{ fontSize: 12, color: '#991b1b', marginTop: 4, fontStyle: 'italic' }}>
+                                                    +{rosterAllergyCampers.length - 5} more — check camper profiles
+                                                </Text>
+                                            )}
+                                        </View>
+                                    )}
+
                                     {/* Campers List */}
                                     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }} nestedScrollEnabled>
                                         {(() => {
@@ -1146,7 +1173,14 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                                                                     {selectedCampers.has(camper.id) && <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: theme.colors.secondary }} />}
                                                                                 </View>
                                                                             )}
-                                                                            <Text style={{ flex: 1, fontSize: 15, fontWeight: '500', color: theme.colors.text }}>{camper.name}</Text>
+                                                                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                                                <Text style={{ fontSize: 15, fontWeight: '500', color: theme.colors.text }}>{camper.name}</Text>
+                                                                                {hasDocumentedAllergy(camper.allergies) ? (
+                                                                                    <View style={{ backgroundColor: '#fee2e2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                                                                        <Text style={{ fontSize: 10, color: '#b91c1c', fontWeight: '600' }}>⚠️ Allergies</Text>
+                                                                                    </View>
+                                                                                ) : null}
+                                                                            </View>
                                                                             <Text style={{ fontSize: 13, color: theme.colors.textSecondary }}>Grade: {camper.grade}</Text>
                                                                         </TouchableOpacity>
                                                                     ))}
@@ -1182,7 +1216,14 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                                                                 </View>
                                                                             )}
                                                                             <View style={{ flex: 1 }}>
-                                                                                <Text style={{ fontSize: 15, fontWeight: '500', color: theme.colors.text }}>{camper.name}</Text>
+                                                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                                                    <Text style={{ fontSize: 15, fontWeight: '500', color: theme.colors.text }}>{camper.name}</Text>
+                                                                                    {hasDocumentedAllergy(camper.allergies) ? (
+                                                                                        <View style={{ backgroundColor: '#fee2e2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                                                                            <Text style={{ fontSize: 10, color: '#b91c1c', fontWeight: '600' }}>⚠️ Allergies</Text>
+                                                                                        </View>
+                                                                                    ) : null}
+                                                                                </View>
                                                                                 <Text style={{ fontSize: 11, color: theme.colors.textSecondary }}>{camper.divisionName}</Text>
                                                                             </View>
                                                                             <Text style={{ fontSize: 13, color: theme.colors.textSecondary }}>Grade: {camper.grade}</Text>
@@ -1209,7 +1250,14 @@ export const SportsCalendarScreen = ({ navigation }: any) => {
                                                         </View>
                                                     )}
                                                     <View style={{ flex: 1 }}>
-                                                        <Text style={{ fontSize: 16, fontWeight: '500', color: theme.colors.text }}>{camper.name}</Text>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                            <Text style={{ fontSize: 16, fontWeight: '500', color: theme.colors.text }}>{camper.name}</Text>
+                                                            {hasDocumentedAllergy(camper.allergies) ? (
+                                                                <View style={{ backgroundColor: '#fee2e2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                                                    <Text style={{ fontSize: 10, color: '#b91c1c', fontWeight: '600' }}>⚠️ Allergies</Text>
+                                                                </View>
+                                                            ) : null}
+                                                        </View>
                                                         {eventDivisions.length === 0 && <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>{camper.divisionName}</Text>}
                                                     </View>
                                                     <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>Grade: {camper.grade}</Text>
