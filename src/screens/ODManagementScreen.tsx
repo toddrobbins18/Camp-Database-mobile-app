@@ -149,6 +149,12 @@ export const ODManagementScreen = ({ navigation }: any) => {
         enabled: !!companyId && !!season,
     });
 
+    const refreshStaffDaysOff = () =>
+        queryClient.refetchQueries({
+            queryKey: ['staff_days_off', companyId, season, dateString],
+            exact: true,
+        });
+
     // Fetch bunks (web schema: bunk_number, bunk_name; no "name" column)
     const { data: bunksList = [], isLoading: isLoadingBunks } = useQuery({
         queryKey: ['bunks', companyId, season],
@@ -663,7 +669,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
             const result = resolveOdCheckInOut(context, type, existing, userId);
             const applied = await applyCheckInOutResult(staffId, result);
             if (!applied) return;
-            await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+            await refreshStaffDaysOff();
             Alert.alert(
                 'Success',
                 type === 'out'
@@ -716,7 +722,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 Alert.alert(signedOut ? 'Checked out' : 'Checked in', staffMember.name);
             }
 
-            queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+            await refreshStaffDaysOff();
             setRfidInput('');
         } catch (e: any) {
             Alert.alert('Error', e?.message || 'Scan failed');
@@ -764,7 +770,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     await enqueueSync('staff_days_off.insert', [newRecord]);
                 }
             }
-            await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
+            await refreshStaffDaysOff();
         } catch (e: any) {
             Alert.alert('Error', e?.message ?? 'Could not update');
         }
