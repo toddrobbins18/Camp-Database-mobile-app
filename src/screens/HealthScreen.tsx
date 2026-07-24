@@ -497,7 +497,12 @@ export const HealthScreen = ({ navigation }: any) => {
     );
 
     const currentlyAdmitted = useMemo(
-        () => admissionsWithEntities.filter((a: any) => !a.checked_out_at),
+        () =>
+            admissionsWithEntities.filter(
+                (a: any) =>
+                    !a.checked_out_at &&
+                    (a.visit_type === 'admission' || a.visit_type == null || a.visit_type === ''),
+            ),
         [admissionsWithEntities],
     );
     const admissionHistory = useMemo(
@@ -545,10 +550,13 @@ export const HealthScreen = ({ navigation }: any) => {
     }, [safeStaff, searchChildrenQuery]);
     
 
-    const handleAdmitEntity = async () => {
+    const handleHealthCenterVisit = async (visitType: 'admission' | 'observation') => {
         if (admitLockRef.current) return;
         if (!entityToAdmit || !companyId) {
-            Alert.alert('Cannot admit', 'Missing person or company information.');
+            Alert.alert(
+                visitType === 'observation' ? 'Cannot log observation' : 'Cannot admit',
+                'Missing person or company information.',
+            );
             return;
         }
 
@@ -561,7 +569,7 @@ export const HealthScreen = ({ navigation }: any) => {
         const reasonSnapshot = admitReason.trim() || null;
         const notesSnapshot = admitNotes.trim() || null;
         const selectedAdmissionMeds =
-            entityType === 'camper'
+            visitType === 'admission' && entityType === 'camper'
                 ? activeListMedications.filter(
                       (med: any) =>
                           med.child_id === entityId &&
@@ -576,8 +584,6 @@ export const HealthScreen = ({ navigation }: any) => {
         setEntityToAdmit(null);
         setAdmitMedSelection(new Set());
 
-        console.log('[ADMIT] Starting admit for:', entityType, entityId, entityName);
-
         try {
             const checkColumn = entityType === 'staff' ? 'staff_id' : 'child_id';
             const { data: existing, error: checkErr } = await supabase
@@ -585,17 +591,24 @@ export const HealthScreen = ({ navigation }: any) => {
                 .select('id')
                 .eq(checkColumn, entityId)
                 .eq('company_id', companyId)
+                .eq('visit_type', 'admission')
                 .is('checked_out_at', null)
                 .maybeSingle();
 
-            console.log('[ADMIT] Duplicate check:', { existing, checkErr });
+            if (checkErr) throw checkErr;
 
             if (existing) {
-                Alert.alert('Already admitted', `${entityName} is already in the health center.`);
+                Alert.alert(
+                    'Already admitted',
+                    visitType === 'observation'
+                        ? `${entityName} is already in the health center. Check them out first, or add notes to the current visit.`
+                        : `${entityName} is already in the health center.`,
+                );
                 return;
             }
 
             const { data: { user } } = await supabase.auth.getUser();
+            const now = new Date().toISOString();
 
             const insertPayload: Record<string, unknown> = {
                 company_id: companyId,
@@ -603,7 +616,13 @@ export const HealthScreen = ({ navigation }: any) => {
                 notes: notesSnapshot,
                 season: season || null,
                 admitted_by: user?.id || null,
+                visit_type: visitType,
             };
+
+            if (visitType === 'observation') {
+                insertPayload.checked_out_at = now;
+                insertPayload.checked_out_by = user?.id || null;
+            }
 
             if (entityType === 'staff') {
                 insertPayload.staff_id = entityId;
@@ -611,16 +630,12 @@ export const HealthScreen = ({ navigation }: any) => {
                 insertPayload.child_id = entityId;
             }
 
-            console.log('[ADMIT] Insert payload:', insertPayload);
-
-            const insertedRow = await addAdmissionMutation.mutateAsync(insertPayload as any);
-            console.log('[ADMIT] Insert response:', { insertedRow });
+            await addAdmissionMutation.mutateAsync(insertPayload as any);
 
             await queryClient.invalidateQueries({ queryKey: ['health_center_admissions'] });
             await admissionsQuery.refetch();
-            console.log('[ADMIT] Refetch complete');
 
-            if (selectedAdmissionMeds.length > 0) {
+            if (visitType === 'admission' && selectedAdmissionMeds.length > 0) {
                 for (const med of selectedAdmissionMeds) {
                     await setAdministrationMutation.mutateAsync({
                         med,
@@ -633,22 +648,43 @@ export const HealthScreen = ({ navigation }: any) => {
             }
 
             const label = entityType === 'staff' ? 'Staff member' : 'Child';
-            const medSuffix =
-                selectedAdmissionMeds.length > 0
-                    ? ` ${selectedAdmissionMeds.length} medication(s) marked as given.`
-                    : '';
-            setTimeout(
-                () => Alert.alert('Success', `${label} ${entityName} admitted to health center.${medSuffix}`),
-                100,
-            );
+            if (visitType === 'observation') {
+                setTimeout(
+                    () =>
+                        Alert.alert(
+                            'Success',
+                            `${label} ${entityName} — observation logged (not admitted).`,
+                        ),
+                    100,
+                );
+            } else {
+                const medSuffix =
+                    selectedAdmissionMeds.length > 0
+                        ? ` ${selectedAdmissionMeds.length} medication(s) marked as given.`
+                        : '';
+                setTimeout(
+                    () =>
+                        Alert.alert(
+                            'Success',
+                            `${label} ${entityName} admitted to health center.${medSuffix}`,
+                        ),
+                    100,
+                );
+            }
         } catch (error: any) {
-            console.error('[ADMIT] Error:', error);
-            Alert.alert('Admit failed', error?.message || 'Could not complete admission.');
+            console.error('[HEALTH VISIT] Error:', error);
+            Alert.alert(
+                visitType === 'observation' ? 'Observation failed' : 'Admit failed',
+                error?.message || 'Could not complete health center visit.',
+            );
         } finally {
             admitLockRef.current = false;
             setIsAdmitting(false);
         }
     };
+
+    const handleAdmitEntity = () => handleHealthCenterVisit('admission');
+    const handleObservationEntity = () => handleHealthCenterVisit('observation');
 
     const getAdmissionDuration = (admittedAt: string, checkedOutAt?: string | null) => {
         const start = new Date(admittedAt);
@@ -727,6 +763,7 @@ export const HealthScreen = ({ navigation }: any) => {
                 .select('id')
                 .eq('company_id', companyId)
                 .eq(checkCol, entity.id)
+                .eq('visit_type', 'admission')
                 .is('checked_out_at', null)
                 .maybeSingle();
 
@@ -1658,30 +1695,44 @@ export const HealthScreen = ({ navigation }: any) => {
                                                                 </Text>
                                                             </View>
                                                         </View>
-                                                        <TouchableOpacity
-                                                            style={[
-                                                                styles.admitButton,
-                                                                isSelected && styles.admitButtonSelected
-                                                            ]}
-                                                            onPress={(e) => {
-                                                                e.stopPropagation();
-                                                                setEntityToAdmit({ id: child.id, name: child.name, type: 'camper' });
-                                                                setAdmitMedSelection(new Set());
-                                                                setShowAdmitModal(true);
-                                                            }}
-                                                        >
-                                                            <Ionicons
-                                                                name="person-add-outline"
-                                                                size={16}
-                                                                color={isSelected ? 'white' : theme.colors.text}
-                                                            />
-                                                            <Text style={[
-                                                                styles.admitButtonText,
-                                                                isSelected && styles.admitButtonTextSelected
-                                                            ]}>
-                                                                Admit
-                                                            </Text>
-                                                        </TouchableOpacity>
+                                                        <View style={styles.admitButtonRow}>
+                                                            <TouchableOpacity
+                                                                style={styles.observationButton}
+                                                                onPress={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setEntityToAdmit({ id: child.id, name: child.name, type: 'camper' });
+                                                                    setAdmitMedSelection(new Set());
+                                                                    setShowAdmitModal(true);
+                                                                }}
+                                                            >
+                                                                <Ionicons name="eye-outline" size={16} color={theme.colors.text} />
+                                                                <Text style={styles.observationButtonText}>Observation</Text>
+                                                            </TouchableOpacity>
+                                                            <TouchableOpacity
+                                                                style={[
+                                                                    styles.admitButton,
+                                                                    isSelected && styles.admitButtonSelected
+                                                                ]}
+                                                                onPress={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setEntityToAdmit({ id: child.id, name: child.name, type: 'camper' });
+                                                                    setAdmitMedSelection(new Set());
+                                                                    setShowAdmitModal(true);
+                                                                }}
+                                                            >
+                                                                <Ionicons
+                                                                    name="person-add-outline"
+                                                                    size={16}
+                                                                    color={isSelected ? 'white' : theme.colors.text}
+                                                                />
+                                                                <Text style={[
+                                                                    styles.admitButtonText,
+                                                                    isSelected && styles.admitButtonTextSelected
+                                                                ]}>
+                                                                    Admit
+                                                                </Text>
+                                                            </TouchableOpacity>
+                                                        </View>
                                                     </TouchableOpacity>
                                                 );
                                             })
@@ -1711,17 +1762,30 @@ export const HealthScreen = ({ navigation }: any) => {
                                                                 </View>
                                                             ) : null}
                                                         </View>
-                                                        <TouchableOpacity
-                                                            style={styles.admitButton}
-                                                            onPress={() => {
-                                                                setEntityToAdmit({ id: member.id, name: member.name, type: 'staff' });
-                                                                setAdmitMedSelection(new Set());
-                                                                setShowAdmitModal(true);
-                                                            }}
-                                                        >
-                                                            <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
-                                                            <Text style={styles.admitButtonText}>Admit</Text>
-                                                        </TouchableOpacity>
+                                                        <View style={styles.admitButtonRow}>
+                                                            <TouchableOpacity
+                                                                style={styles.observationButton}
+                                                                onPress={() => {
+                                                                    setEntityToAdmit({ id: member.id, name: member.name, type: 'staff' });
+                                                                    setAdmitMedSelection(new Set());
+                                                                    setShowAdmitModal(true);
+                                                                }}
+                                                            >
+                                                                <Ionicons name="eye-outline" size={16} color={theme.colors.text} />
+                                                                <Text style={styles.observationButtonText}>Observation</Text>
+                                                            </TouchableOpacity>
+                                                            <TouchableOpacity
+                                                                style={styles.admitButton}
+                                                                onPress={() => {
+                                                                    setEntityToAdmit({ id: member.id, name: member.name, type: 'staff' });
+                                                                    setAdmitMedSelection(new Set());
+                                                                    setShowAdmitModal(true);
+                                                                }}
+                                                            >
+                                                                <Ionicons name="person-add-outline" size={16} color={theme.colors.text} />
+                                                                <Text style={styles.admitButtonText}>Admit</Text>
+                                                            </TouchableOpacity>
+                                                        </View>
                                                     </View>
                                                 ))
                                         )}
@@ -1762,7 +1826,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                                             </View>
                                                             <View style={styles.historyHeaderRightRow}>
                                                                 <View style={styles.admissionCountBadge}>
-                                                                    <Text style={styles.admissionCountText}>{entityAdmissions.length} {entityAdmissions.length === 1 ? 'admission' : 'admissions'}</Text>
+                                                                    <Text style={styles.admissionCountText}>{entityAdmissions.length} {entityAdmissions.length === 1 ? 'visit' : 'visits'}</Text>
                                                                 </View>
                                                                 <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={theme.colors.textSecondary} />
                                                             </View>
@@ -1780,12 +1844,33 @@ export const HealthScreen = ({ navigation }: any) => {
                                                         <View style={styles.historyGroupDetails}>
                                                             {entityAdmissions.map((admission: any, index: number) => (
                                                                 <View key={admission.id} style={styles.historyDetailBlock}>
-                                                                    <Text style={styles.historyDetailTitle}>Admission #{entityAdmissions.length - index}</Text>
+                                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                                                        <Text style={styles.historyDetailTitle}>
+                                                                            {admission.visit_type === 'observation'
+                                                                                ? `Observation #${entityAdmissions.length - index}`
+                                                                                : `Admission #${entityAdmissions.length - index}`}
+                                                                        </Text>
+                                                                        <View style={[
+                                                                            styles.visitTypeBadge,
+                                                                            admission.visit_type === 'observation' && styles.visitTypeBadgeObservation,
+                                                                        ]}>
+                                                                            <Text style={[
+                                                                                styles.visitTypeBadgeText,
+                                                                                admission.visit_type === 'observation' && { color: theme.colors.text },
+                                                                            ]}>
+                                                                                {admission.visit_type === 'observation' ? 'Observation' : 'Admission'}
+                                                                            </Text>
+                                                                        </View>
+                                                                    </View>
                                                                     <Text style={styles.historyDetailTime}>
                                                                         {admission.admitted_at ? new Date(admission.admitted_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : ''} • {admission.admitted_at ? new Date(admission.admitted_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''} - {admission.checked_out_at ? new Date(admission.checked_out_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}
                                                                     </Text>
                                                                     <View style={styles.durationBadge}>
-                                                                        <Text style={styles.durationBadgeText}>{getAdmissionDuration(admission.admitted_at, admission.checked_out_at)}</Text>
+                                                                        <Text style={styles.durationBadgeText}>
+                                                                            {admission.visit_type === 'observation'
+                                                                                ? 'Brief visit'
+                                                                                : getAdmissionDuration(admission.admitted_at, admission.checked_out_at)}
+                                                                        </Text>
                                                                     </View>
                                                                     {admission.reason ? <Text style={styles.historyDetailReason}><Text style={styles.admittedReasonLabel}>Reason: </Text>{admission.reason}</Text> : null}
                                                                     {admission.notes ? <Text style={styles.historyDetailNotes}><Text style={styles.admittedReasonLabel}>Notes: </Text>{admission.notes}</Text> : null}
@@ -2336,12 +2421,12 @@ export const HealthScreen = ({ navigation }: any) => {
                     }}
                 >
                     <Pressable style={styles.admitModal} onPress={(e) => e.stopPropagation()}>
-                        <Text style={styles.admitModalTitle}>Admit to Health Center</Text>
+                        <Text style={styles.admitModalTitle}>Health Center Visit</Text>
                         {entityToAdmit && (
                             <Text style={styles.admitModalChildName}>{entityToAdmit.name}</Text>
                         )}
 
-                        <Text style={styles.admitModalLabel}>Reason for admission (optional):</Text>
+                        <Text style={styles.admitModalLabel}>Reason (optional):</Text>
                         <TextInput
                             style={styles.admitReasonInput}
                             placeholder="Enter reason..."
@@ -2383,6 +2468,17 @@ export const HealthScreen = ({ navigation }: any) => {
                         ) : null}
 
                         <View style={styles.admitModalActions}>
+                            <TouchableOpacity
+                                style={[styles.observationConfirmButton, isAdmitting && { opacity: 0.6 }]}
+                                onPress={handleObservationEntity}
+                                disabled={isAdmitting}
+                            >
+                                {isAdmitting ? (
+                                    <ActivityIndicator size="small" color={theme.colors.text} />
+                                ) : (
+                                    <Text style={styles.observationConfirmButtonText}>Log Observation</Text>
+                                )}
+                            </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.admitConfirmButton, isAdmitting && { opacity: 0.6 }]}
                                 onPress={handleAdmitEntity}
@@ -3440,6 +3536,29 @@ const styles = StyleSheet.create({
         paddingHorizontal: theme.spacing.md,
         gap: theme.spacing.xs,
     },
+    admitButtonRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.xs,
+        flexShrink: 0,
+    },
+    observationButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.sm,
+        gap: 4,
+    },
+    observationButtonText: {
+        ...theme.typography.body,
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.text,
+    },
     admitButtonSelected: {
         backgroundColor: '#FFA500',
         borderColor: '#FFA500',
@@ -3502,12 +3621,26 @@ const styles = StyleSheet.create({
         outlineColor: 'transparent',
     },
     admitModalActions: {
-        flexDirection: 'row',
-        gap: 8,
+        flexDirection: 'column',
+        gap: 10,
         marginTop: 4,
     },
+    observationConfirmButton: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    observationConfirmButtonText: {
+        color: theme.colors.text,
+        fontWeight: '600',
+        fontSize: 16,
+    },
     admitConfirmButton: {
-        flex: 1,
+        flex: undefined,
+        width: '100%',
         backgroundColor: theme.colors.secondary,
         borderRadius: 8,
         paddingVertical: 12,
@@ -3519,7 +3652,7 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     admitCancelButton: {
-        flex: 1,
+        width: '100%',
         borderRadius: 8,
         paddingVertical: 12,
         alignItems: 'center',
@@ -3767,6 +3900,22 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         fontSize: 14,
         color: theme.colors.text,
+    },
+    visitTypeBadge: {
+        backgroundColor: theme.colors.secondary,
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+    },
+    visitTypeBadgeObservation: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    visitTypeBadgeText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#fff',
     },
     historyDetailTime: {
         fontSize: 12,

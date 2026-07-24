@@ -132,6 +132,7 @@ export interface HealthCenterAdmission {
     notes?: string | null;
     season?: string;
     created_at?: string;
+    visit_type?: 'admission' | 'observation' | string | null;
     children?: {
         id: string;
         name: string;
