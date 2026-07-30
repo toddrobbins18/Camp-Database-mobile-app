@@ -111,7 +111,6 @@ const CustomDrawerContent = (props: any) => {
 
     // Role flags — globalRoles match web AuthContext (admin at one camp applies when switching camps).
     const isSuperAdmin = isSuperAdminCompany || (roleData?.isSuperAdmin ?? false);
-    const isAdmin = roleData?.isAdmin ?? false;
 
     const [drawerAuthUserId, setDrawerAuthUserId] = useState<string | null>(null);
     useEffect(() => {
@@ -126,8 +125,14 @@ const CustomDrawerContent = (props: any) => {
 
     const { data: inboxUnreadCount = 0 } = useInboxUnreadCount(drawerAuthUserId);
 
-    // Administration section is admin/super_admin only (matches web).
-    const canSeeAdminScreens = isAdmin;
+    // Administration section — match web AppSidebar (role_permissions per company).
+    const showAdministration =
+        hasMenuAccess('admin') ||
+        hasMenuAccess('evaluation-questions') ||
+        hasMenuAccess('role-permissions') ||
+        hasMenuAccess('division-permissions') ||
+        hasMenuAccess('specialist-sport-assignments') ||
+        hasMenuAccess('user-approvals');
 
     const menuTheme = getMenuDrawerThemeFromCompany({
         companySlug,
@@ -467,52 +472,57 @@ const CustomDrawerContent = (props: any) => {
                     </>
                 )}
 
-                {/* ── Administration Section (Admin+) ── */}
-                {canSeeAdminScreens && (
+                {showAdministration && (
                     <>
                         <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Administration</Text>
+                        {hasMenuAccess('admin') && (
                         <DrawerItem
                             label="Admin Panel"
                             icon={({ color }) => <Ionicons name="shield-outline" size={22} color={color} />}
                             onPress={() => props.navigation.navigate('AdminPanel')}
                             {...drawerItemProps}
                         />
+                        )}
+                        {hasMenuAccess('evaluation-questions') && (
                         <DrawerItem
                             label="Evaluation Questions"
                             icon={({ color }) => <Ionicons name="clipboard-outline" size={22} color={color} />}
                             onPress={() => props.navigation.navigate('EvaluationQuestions')}
                             {...drawerItemProps}
                         />
+                        )}
+                        {hasMenuAccess('specialist-sport-assignments') && (
                         <DrawerItem
                             label="Specialist Sport Assignments"
                             icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
                             onPress={() => props.navigation.navigate('SpecialistSportAssignments')}
                             {...drawerItemProps}
                         />
-                    </>
-                )}
-
-                {/* ── Admin+ (Admin + Super Admin) ── */}
-                {canSeeAdminScreens && (
-                    <>
+                        )}
+                        {hasMenuAccess('role-permissions') && (
                         <DrawerItem
                             label="Role Permissions"
                             icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
                             onPress={() => props.navigation.navigate('RolePermissions')}
                             {...drawerItemProps}
                         />
+                        )}
+                        {hasMenuAccess('division-permissions') && (
                         <DrawerItem
                             label="Division Permissions"
                             icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
                             onPress={() => props.navigation.navigate('DivisionPermissions')}
                             {...drawerItemProps}
                         />
+                        )}
+                        {hasMenuAccess('user-approvals') && (
                         <DrawerItem
                             label="User Approvals"
                             icon={({ color }) => <Ionicons name="checkmark-circle-outline" size={22} color={color} />}
                             onPress={() => props.navigation.navigate('UserApprovals')}
                             {...drawerItemProps}
                         />
+                        )}
                     </>
                 )}
 
@@ -550,6 +560,12 @@ const GuardedRainyDayScheduleScreen = withMenuPermission('rainy-day', RainyDaySc
 const GuardedAppointmentsScreen = withMenuPermission('appointments', AppointmentsScreen);
 const GuardedIncidentReportsScreen = withMenuPermission('incidents', IncidentReportsScreen);
 const GuardedReportsScreen = withMenuPermission('reports', ReportsScreen);
+const GuardedAdminPanelScreen = withMenuPermission('admin', AdminPanelScreen);
+const GuardedEvaluationQuestionsScreen = withMenuPermission('evaluation-questions', EvaluationQuestionsScreen);
+const GuardedRolePermissionsScreen = withMenuPermission('role-permissions', RolePermissionsScreen);
+const GuardedDivisionPermissionsScreen = withMenuPermission('division-permissions', DivisionPermissionsScreen);
+const GuardedUserApprovalsScreen = withMenuPermission('user-approvals', UserApprovalsScreen);
+const GuardedSpecialistSportAssignmentsScreen = withMenuPermission('specialist-sport-assignments', SpecialistSportAssignmentsScreen);
 
 // Camper Stack Navigator
 const CamperStackNavigator = () => {
@@ -650,21 +666,21 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="IncidentReports" component={GuardedIncidentReportsScreen} />
             <Drawer.Screen name="Menu" component={MenuStackNavigator} />
             <Drawer.Screen name="Messages" component={GuardedMessagesScreen} />
-            <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} />
-            <Drawer.Screen name="EvaluationQuestions" component={EvaluationQuestionsScreen} />
+            <Drawer.Screen name="AdminPanel" component={GuardedAdminPanelScreen} />
+            <Drawer.Screen name="EvaluationQuestions" component={GuardedEvaluationQuestionsScreen} />
             <Drawer.Screen name="QuestionText" component={QuestionTextScreen} />
-            <Drawer.Screen name="RolePermissions" component={RolePermissionsScreen} />
-            <Drawer.Screen name="DivisionPermissions" component={DivisionPermissionsScreen} />
+            <Drawer.Screen name="RolePermissions" component={GuardedRolePermissionsScreen} />
+            <Drawer.Screen name="DivisionPermissions" component={GuardedDivisionPermissionsScreen} />
             <Drawer.Screen name="ActivitiesFieldTrips" component={GuardedActivitiesFieldTripsScreen} />
             <Drawer.Screen name="Appointments" component={GuardedAppointmentsScreen} />
             <Drawer.Screen name="Awards" component={AwardsScreen} />
             <Drawer.Screen name="DailyNews" component={GuardedDailyNewsScreen} />
             <Drawer.Screen name="DailyWolfManagement" component={DailyWolfManagementScreen} />
             <Drawer.Screen name="DailyWolfPrintable" component={DailyWolfPrintableScreen} />
-            <Drawer.Screen name="UserApprovals" component={UserApprovalsScreen} />
+            <Drawer.Screen name="UserApprovals" component={GuardedUserApprovalsScreen} />
             <Drawer.Screen name="NotificationPreferences" component={NotificationPreferencesScreen} />
             <Drawer.Screen name="AccessDenied" component={AccessDeniedScreen} />
-            <Drawer.Screen name="SpecialistSportAssignments" component={SpecialistSportAssignmentsScreen} />
+            <Drawer.Screen name="SpecialistSportAssignments" component={GuardedSpecialistSportAssignmentsScreen} />
             <Drawer.Screen name="ODManagement" component={ODManagementScreen} />
             <Drawer.Screen name="OwlPay" component={OwlPayGateScreen} />
             <Drawer.Screen name="DailySchedule" component={DailyScheduleScreen} />
