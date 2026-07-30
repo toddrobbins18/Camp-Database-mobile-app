@@ -38,6 +38,20 @@ export function isDayCampCompany(company: CampLike): boolean {
   return isNorthShoreDayCamp(company.slug);
 }
 
+const APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS = [
+  CAMP_SLUG.TYLER_HILL_CAMP,
+  CAMP_SLUG.TIMBER_LAKE_CAMP,
+  CAMP_SLUG.TIMBER_LAKE_WEST,
+  'trails-end-camp',
+] as const;
+
+export function appointmentsEnabledForCompany(company: CampLike): boolean {
+  if (!company) return false;
+  if (isDayCampCompany(company)) return true;
+  const slug = company.slug ?? '';
+  return APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS.includes(slug as (typeof APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS)[number]);
+}
+
 /** Timber Lake West — slug first, then company name fallback if slug was misconfigured. */
 export function isTimberLakeWestCompany(company: CampLike): boolean {
   if (!company) return false;

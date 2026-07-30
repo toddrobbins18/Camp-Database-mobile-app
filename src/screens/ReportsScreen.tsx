@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
+import { appointmentsEnabledForCompany } from '../constants/camps';
 import { useDivisionsLookup } from '../api/permissions';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
@@ -125,8 +126,7 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
             base.push({ value: 'activities', label: 'Activities & Field Trips' });
         }
 
-        const appointmentCamps = ['tyler-hill-camp', 'timber-lake-camp', 'timber-lake-west', 'trails-end-camp'];
-        if (companySlug && appointmentCamps.includes(companySlug)) {
+        if (appointmentsEnabledForCompany({ slug: companySlug })) {
             base.push({ value: 'appointments', label: 'Appointments Report' });
         }
 

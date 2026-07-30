@@ -547,6 +547,9 @@ const GuardedDailyNewsScreen = withMenuPermission('notes', DailyNewsScreen);
 const GuardedActivitiesFieldTripsScreen = withMenuPermission('activities', ActivitiesFieldTripsScreen);
 const GuardedSpecialEventsScreen = withMenuPermission('special-events', SpecialEventsScreen);
 const GuardedRainyDayScheduleScreen = withMenuPermission('rainy-day', RainyDayScheduleScreen);
+const GuardedAppointmentsScreen = withMenuPermission('appointments', AppointmentsScreen);
+const GuardedIncidentReportsScreen = withMenuPermission('incidents', IncidentReportsScreen);
+const GuardedReportsScreen = withMenuPermission('reports', ReportsScreen);
 
 // Camper Stack Navigator
 const CamperStackNavigator = () => {
@@ -640,11 +643,11 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="SportsCalendar" component={SportsCalendarScreen} />
             <Drawer.Screen name="RainyDaySchedule" component={GuardedRainyDayScheduleScreen} />
             <Drawer.Screen name="TutoringTherapy" component={TutoringTherapyScreen} />
-            <Drawer.Screen name="Reports" component={ReportsScreen} />
+            <Drawer.Screen name="Reports" component={GuardedReportsScreen} />
             <Drawer.Screen name="RosterTemplates" component={RosterTemplatesScreen} />
             <Drawer.Screen name="SpecialEvents" component={GuardedSpecialEventsScreen} />
             <Drawer.Screen name="SpecialMeals" component={SpecialMealsScreen} />
-            <Drawer.Screen name="IncidentReports" component={IncidentReportsScreen} />
+            <Drawer.Screen name="IncidentReports" component={GuardedIncidentReportsScreen} />
             <Drawer.Screen name="Menu" component={MenuStackNavigator} />
             <Drawer.Screen name="Messages" component={GuardedMessagesScreen} />
             <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} />
@@ -653,7 +656,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="RolePermissions" component={RolePermissionsScreen} />
             <Drawer.Screen name="DivisionPermissions" component={DivisionPermissionsScreen} />
             <Drawer.Screen name="ActivitiesFieldTrips" component={GuardedActivitiesFieldTripsScreen} />
-            <Drawer.Screen name="Appointments" component={AppointmentsScreen} />
+            <Drawer.Screen name="Appointments" component={GuardedAppointmentsScreen} />
             <Drawer.Screen name="Awards" component={AwardsScreen} />
             <Drawer.Screen name="DailyNews" component={GuardedDailyNewsScreen} />
             <Drawer.Screen name="DailyWolfManagement" component={DailyWolfManagementScreen} />
