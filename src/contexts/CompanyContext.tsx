@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
-import { isTimberLakeCamp, isTimberLakeWest, isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from '../constants/camps';
+import { isTimberLakeWestCompany, isTylerHillCamp, isDayCampCompany, shouldShowTigerTimes } from '../constants/camps';
 
 /** Super-admins can switch camps in-app; profile.company_id alone would reset to "home" camp on every auth refetch. */
 const SUPER_ADMIN_COMPANY_PREFERENCE_KEY = '@the_nest_active_company_id';
@@ -12,6 +12,7 @@ interface Company {
     slug: string;
     theme_color?: string | null;
     owl_pay_enabled?: boolean | null;
+    camp_type?: string | null;
 }
 
 interface CompanyContextType {
@@ -24,14 +25,13 @@ interface CompanyContextType {
     isTylerHill: boolean;
     isTimberLakeCamp: boolean;
     isTimberLakeWest: boolean;
-    /** True when this company's row has Owl Pay enabled (or legacy fallback: Tyler Hill slug). */
+    isDayCamp: boolean;
     owlPayEnabled: boolean;
     isLoading: boolean;
     profile: any | null;
     availableCompanies: Company[];
     switchCompany: (companyId: string) => void;
     isSuperAdmin: boolean;
-    /** Set when profile/company fetch fails; clear on retry */
     loadError: string | null;
     retryLoad: () => void;
 }
@@ -48,6 +48,7 @@ const CompanyContext = createContext<CompanyContextType>({
     isTylerHill: false,
     isTimberLakeCamp: false,
     isTimberLakeWest: false,
+    isDayCamp: false,
     owlPayEnabled: false,
     isLoading: true,
     profile: null,
@@ -64,11 +65,15 @@ interface CompanyProviderProps {
     children: ReactNode;
 }
 
-const ALLOWED_COMPANY_SLUGS = new Set([
-    'timber-lake-camp',
-    'timber-lake-west',
-    'tyler-hill-camp',
-]);
+function applyCompanyFlags(company: Pick<Company, 'slug' | 'camp_type'> | null | undefined) {
+    const slug = company?.slug ?? null;
+    return {
+        isTylerHill: isTylerHillCamp(slug),
+        isTimberLakeCamp: shouldShowTigerTimes(company ?? undefined),
+        isTimberLakeWest: isTimberLakeWestCompany(company ?? undefined),
+        isDayCamp: isDayCampCompany(company ?? undefined),
+    };
+}
 
 function computeOwlPayEnabled(
     row: { owl_pay_enabled?: boolean | null } | undefined,
@@ -80,8 +85,9 @@ function computeOwlPayEnabled(
     return isTylerHillCamp(slug);
 }
 
+const COMPANY_SELECT = 'id, name, slug, theme_color, owl_pay_enabled, camp_type';
+
 export const CompanyProvider = ({ children }: CompanyProviderProps) => {
-    /** Bumps on each fetch start so stale async completions cannot overwrite newer session/company. */
     const fetchGenerationRef = useRef(0);
     const fetchCompanyDataRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -93,12 +99,34 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
     const [isTylerHill, setIsTylerHill] = useState(false);
     const [isTimberLakeCampState, setIsTimberLakeCampState] = useState(false);
     const [isTimberLakeWestState, setIsTimberLakeWestState] = useState(false);
+    const [isDayCampState, setIsDayCampState] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [profile, setProfile] = useState<any | null>(null);
     const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [owlPayEnabled, setOwlPayEnabled] = useState(false);
+
+    const applyCompanyState = useCallback((company: Company | null) => {
+        if (!company) {
+            setCompanySlug(null);
+            setCompanyThemeColor(null);
+            setIsTylerHill(false);
+            setIsTimberLakeCampState(false);
+            setIsTimberLakeWestState(false);
+            setIsDayCampState(false);
+            setOwlPayEnabled(false);
+            return;
+        }
+        const flags = applyCompanyFlags(company);
+        setCompanySlug(company.slug);
+        setCompanyThemeColor(company.theme_color ?? null);
+        setIsTylerHill(flags.isTylerHill);
+        setIsTimberLakeCampState(flags.isTimberLakeCamp);
+        setIsTimberLakeWestState(flags.isTimberLakeWest);
+        setIsDayCampState(flags.isDayCamp);
+        setOwlPayEnabled(computeOwlPayEnabled(company, company.slug));
+    }, []);
 
     const switchCompany = useCallback(async (newCompanyId: string) => {
         const company = availableCompanies.find((c) => c.id === newCompanyId);
@@ -117,43 +145,11 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
         }
 
         setCompanyId(newCompanyId);
-        setCompanySlug(company.slug);
-        setCompanyThemeColor(company.theme_color ?? null);
-        setIsTylerHill(isTylerHillCamp(company.slug));
-        setIsTimberLakeCampState(shouldShowTigerTimes(company));
-        setIsTimberLakeWestState(isTimberLakeWestCompany(company));
-        setOwlPayEnabled(computeOwlPayEnabled(company, company.slug));
+        applyCompanyState(company);
         await AsyncStorage.setItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY, newCompanyId);
-    }, [availableCompanies, isSuperAdmin, profile?.id]);
+    }, [availableCompanies, isSuperAdmin, profile?.id, applyCompanyState]);
 
     useEffect(() => {
-        const applyCompanyMeta = (
-            effectiveId: string | null,
-            allowedList: Company[],
-            seq: number
-        ) => {
-            if (seq !== fetchGenerationRef.current) return;
-            setCompanyId(effectiveId);
-            if (!effectiveId) {
-                setCompanySlug(null);
-                setCompanyThemeColor(null);
-                setIsTylerHill(false);
-                setIsTimberLakeCampState(false);
-                setIsTimberLakeWestState(false);
-                setOwlPayEnabled(false);
-                return;
-            }
-            const fromList = allowedList.find((c) => c.id === effectiveId);
-            if (fromList) {
-                setCompanySlug(fromList.slug);
-                setCompanyThemeColor(fromList.theme_color ?? null);
-                setIsTylerHill(isTylerHillCamp(fromList.slug));
-                setIsTimberLakeCampState(shouldShowTigerTimes(fromList));
-                setIsTimberLakeWestState(isTimberLakeWestCompany(fromList));
-                setOwlPayEnabled(computeOwlPayEnabled(fromList, fromList.slug));
-            }
-        };
-
         const fetchCompanyData = async () => {
             const seq = ++fetchGenerationRef.current;
             try {
@@ -177,23 +173,16 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
 
                 const { data: roleData } = await supabase
                     .from('user_roles')
-                    .select('role')
+                    .select('role, company_id')
                     .eq('user_id', user.id);
 
                 if (seq !== fetchGenerationRef.current) return;
 
-                const superAdmin = roleData?.some(r => r.role === 'super_admin') || false;
+                const superAdmin = roleData?.some((r) => r.role === 'super_admin') || false;
                 setIsSuperAdmin(superAdmin);
 
-                const { data: roleCompanyRows } = await supabase
-                    .from('user_roles')
-                    .select('company_id')
-                    .eq('user_id', user.id);
-
-                if (seq !== fetchGenerationRef.current) return;
-
                 const allowedCompanyIds = new Set<string>();
-                for (const row of roleCompanyRows || []) {
+                for (const row of roleData || []) {
                     if (row.company_id) allowedCompanyIds.add(row.company_id);
                 }
                 if (profileData.company_id) {
@@ -204,28 +193,24 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 if (superAdmin) {
                     const { data: allCompanies } = await supabase
                         .from('companies')
-                        .select('id, name, slug, theme_color, owl_pay_enabled')
+                        .select(COMPANY_SELECT)
+                        .eq('is_active', true)
                         .order('name');
 
                     if (seq !== fetchGenerationRef.current) return;
-
-                    allowedCompanies = (allCompanies || []).filter((company) =>
-                        ALLOWED_COMPANY_SLUGS.has(company.slug)
-                    );
+                    allowedCompanies = allCompanies || [];
                 } else if (allowedCompanyIds.size > 0) {
                     const { data: roleCompanies } = await supabase
                         .from('companies')
-                        .select('id, name, slug, theme_color, owl_pay_enabled')
+                        .select(COMPANY_SELECT)
                         .eq('is_active', true)
                         .in('id', Array.from(allowedCompanyIds))
                         .order('name');
 
                     if (seq !== fetchGenerationRef.current) return;
-
-                    allowedCompanies = (roleCompanies || []).filter((company) =>
-                        ALLOWED_COMPANY_SLUGS.has(company.slug)
-                    );
+                    allowedCompanies = roleCompanies || [];
                 }
+
                 setAvailableCompanies(allowedCompanies);
 
                 const { data: seasonRows } = await supabase
@@ -237,7 +222,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
 
                 if (seasonRows) {
                     const dbSeasons = [...new Set(
-                        seasonRows.map((r: any) => r.season).filter(Boolean) as string[]
+                        seasonRows.map((r: any) => r.season).filter(Boolean) as string[],
                     )];
                     const merged = [...new Set([...DEFAULT_SEASONS, ...dbSeasons])].sort().reverse();
                     setAvailableSeasons(merged);
@@ -253,26 +238,23 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                     }
                 }
 
-                applyCompanyMeta(effectiveCompanyId, allowedCompanies, seq);
+                setCompanyId(effectiveCompanyId);
+                const activeCompany = allowedCompanies.find((c) => c.id === effectiveCompanyId) ?? null;
+                applyCompanyState(activeCompany);
 
                 if (seq !== fetchGenerationRef.current) return;
 
-                if (effectiveCompanyId && !allowedCompanies.find((c) => c.id === effectiveCompanyId)) {
+                if (effectiveCompanyId && !activeCompany) {
                     const { data: companyData, error: companyError } = await supabase
                         .from('companies')
-                        .select('slug, name, theme_color, owl_pay_enabled')
+                        .select(COMPANY_SELECT)
                         .eq('id', effectiveCompanyId)
                         .single();
 
                     if (seq !== fetchGenerationRef.current) return;
 
                     if (!companyError && companyData) {
-                        setCompanySlug(companyData.slug);
-                        setCompanyThemeColor(companyData.theme_color ?? null);
-                        setIsTylerHill(isTylerHillCamp(companyData.slug));
-                        setIsTimberLakeCampState(shouldShowTigerTimes(companyData));
-                        setIsTimberLakeWestState(isTimberLakeWestCompany(companyData));
-                        setOwlPayEnabled(computeOwlPayEnabled(companyData, companyData.slug));
+                        applyCompanyState(companyData);
                     }
                 }
             } catch (error: any) {
@@ -290,35 +272,32 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
         fetchCompanyDataRef.current = fetchCompanyData;
         fetchCompanyData();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            (event) => {
-                // Extra refetch after sign-in (e.g. some clients emit this after refresh). Super-admin camp
-                // selection survives refetch via AsyncStorage. Avoid TOKEN_REFRESHED — too noisy.
-                if (event === 'SIGNED_IN') {
-                    fetchCompanyData();
-                } else if (event === 'SIGNED_OUT') {
-                    fetchGenerationRef.current += 1;
-                    void AsyncStorage.removeItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY);
-                    setCompanyId(null);
-                    setCompanySlug(null);
-                    setCompanyThemeColor(null);
-                    setIsTylerHill(false);
-                    setIsTimberLakeCampState(false);
-                    setIsTimberLakeWestState(false);
-                    setProfile(null);
-                    setAvailableCompanies([]);
-                    setIsSuperAdmin(false);
-                    setOwlPayEnabled(false);
-                    setIsLoading(false);
-                    setLoadError(null);
-                }
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+            if (event === 'SIGNED_IN') {
+                fetchCompanyData();
+            } else if (event === 'SIGNED_OUT') {
+                fetchGenerationRef.current += 1;
+                void AsyncStorage.removeItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY);
+                setCompanyId(null);
+                setCompanySlug(null);
+                setCompanyThemeColor(null);
+                setIsTylerHill(false);
+                setIsTimberLakeCampState(false);
+                setIsTimberLakeWestState(false);
+                setIsDayCampState(false);
+                setProfile(null);
+                setAvailableCompanies([]);
+                setIsSuperAdmin(false);
+                setOwlPayEnabled(false);
+                setIsLoading(false);
+                setLoadError(null);
             }
-        );
+        });
 
         return () => {
             subscription.unsubscribe();
         };
-    }, []);
+    }, [applyCompanyState]);
 
     const retryLoad = useCallback(() => {
         setLoadError(null);
@@ -337,6 +316,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
             isTylerHill,
             isTimberLakeCamp: isTimberLakeCampState,
             isTimberLakeWest: isTimberLakeWestState,
+            isDayCamp: isDayCampState,
             owlPayEnabled,
             isLoading,
             profile,
@@ -351,11 +331,11 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
             companySlug,
             companyThemeColor,
             season,
-            setSeason,
             availableSeasons,
             isTylerHill,
             isTimberLakeCampState,
             isTimberLakeWestState,
+            isDayCampState,
             owlPayEnabled,
             isLoading,
             profile,
@@ -364,7 +344,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
             isSuperAdmin,
             loadError,
             retryLoad,
-        ]
+        ],
     );
 
     return (

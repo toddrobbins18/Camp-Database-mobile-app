@@ -46,6 +46,12 @@ import { OwlPayGateScreen } from '../screens/OwlPayGateScreen';
 import { DailyScheduleScreen } from '../screens/DailyScheduleScreen';
 import { TigerTimesScreen } from '../screens/TigerTimesScreen';
 import { ElectiveSignUpScreen } from '../screens/ElectiveSignUpScreen';
+import { DayCampPlaceholderScreen } from '../screens/DayCampPlaceholderScreen';
+import {
+    getDayCampNestCarryoverMenuItems,
+    getDayCampPocMenuItems,
+    MobileDrawerMenuItem,
+} from '../constants/dayCampMenu';
 
 import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { useRole } from '../hooks/useRole';
@@ -63,11 +69,41 @@ import { getMenuDrawerThemeFromCompany } from '../theme/menuDrawerTheme';
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
 
+function toDrawerMenuItem(
+    item: MobileDrawerMenuItem,
+    navigation: any,
+): {
+    key: string;
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    onPress: () => void;
+} {
+    return {
+        key: item.key,
+        label: item.label,
+        icon: item.icon,
+        onPress: () => {
+            if (item.params) {
+                navigation.navigate(item.screen, item.params);
+            } else {
+                navigation.navigate(item.screen);
+            }
+        },
+    };
+}
+
+function filterDayCampMenu(
+    items: MobileDrawerMenuItem[],
+    hasMenuAccess: (menuItem: string) => boolean,
+): MobileDrawerMenuItem[] {
+    return items.filter((item) => hasMenuAccess(item.menuId));
+}
+
 // Custom Drawer Content with Role-Based Visibility
 const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const { data: roleData } = useRole();
-    const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp, isTimberLakeWest } = useCompany();
+    const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp, isTimberLakeWest, isDayCamp } = useCompany();
     const { data: rolePermissions = [] } = useRolePermissions(companyId);
     const [showCampPicker, setShowCampPicker] = useState(false);
     const [showYearPicker, setShowYearPicker] = useState(false);
@@ -137,9 +173,24 @@ const CustomDrawerContent = (props: any) => {
         label: string;
         icon: keyof typeof Ionicons.glyphMap;
         onPress: () => void;
-    }> = [
+    }> = [];
+
+    const dayCampMenuItems: Array<{
+        key: string;
+        label: string;
+        icon: keyof typeof Ionicons.glyphMap;
+        onPress: () => void;
+    }> = [];
+
+    if (isDayCamp) {
+        const carryover = filterDayCampMenu(getDayCampNestCarryoverMenuItems(), hasMenuAccess);
+        const poc = filterDayCampMenu(getDayCampPocMenuItems(), hasMenuAccess);
+        mainMenuItems.push(...carryover.map((item) => toDrawerMenuItem(item, props.navigation)));
+        dayCampMenuItems.push(...poc.map((item) => toDrawerMenuItem(item, props.navigation)));
+    } else {
+    mainMenuItems.push(
         { key: 'dashboard', label: 'Dashboard', icon: 'home-outline', onPress: () => props.navigation.navigate('Dashboard') },
-    ];
+    );
 
     if (hasMenuAccess('roster')) {
         mainMenuItems.push(
@@ -273,6 +324,28 @@ const CustomDrawerContent = (props: any) => {
             );
         }
     }
+    }
+
+    const renderDrawerItems = (
+        items: Array<{ key: string; label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void }>,
+    ) =>
+        [...items]
+            .sort((a, b) => a.label.localeCompare(b.label))
+            .map((item) => {
+                const label =
+                    item.key === 'messages' && inboxUnreadCount > 0
+                        ? `Messages (${inboxUnreadCount > 99 ? '99+' : inboxUnreadCount})`
+                        : item.label;
+                return (
+                    <DrawerItem
+                        key={item.key}
+                        label={label}
+                        icon={({ color }) => <Ionicons name={item.icon} size={22} color={color} />}
+                        onPress={item.onPress}
+                        {...drawerItemProps}
+                    />
+                );
+            });
 
     return (
         <View style={{ flex: 1, backgroundColor: menuTheme.drawerBackground }}>
@@ -402,23 +475,14 @@ const CustomDrawerContent = (props: any) => {
                 )}
 
                 <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Main Menu</Text>
-                {[...mainMenuItems]
-                    .sort((a, b) => a.label.localeCompare(b.label))
-                    .map((item) => {
-                        const label =
-                            item.key === 'messages' && inboxUnreadCount > 0
-                                ? `Messages (${inboxUnreadCount > 99 ? '99+' : inboxUnreadCount})`
-                                : item.label;
-                        return (
-                        <DrawerItem
-                            key={item.key}
-                            label={label}
-                            icon={({ color }) => <Ionicons name={item.icon} size={22} color={color} />}
-                            onPress={item.onPress}
-                            {...drawerItemProps}
-                        />
-                        );
-                    })}
+                {renderDrawerItems(mainMenuItems)}
+
+                {isDayCamp && dayCampMenuItems.length > 0 && (
+                    <>
+                        <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Day Camp</Text>
+                        {renderDrawerItems(dayCampMenuItems)}
+                    </>
+                )}
 
                 {/* ── Administration Section (Admin+) ── */}
                 {canSeeAdminScreens && (
@@ -607,6 +671,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="DailySchedule" component={DailyScheduleScreen} />
             <Drawer.Screen name="TigerTimes" component={TigerTimesScreen} />
             <Drawer.Screen name="ElectiveSignUp" component={ElectiveSignUpScreen} />
+            <Drawer.Screen name="DayCampModule" component={DayCampPlaceholderScreen} />
         </Drawer.Navigator>
     );
 };

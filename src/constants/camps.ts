@@ -3,6 +3,7 @@ export const CAMP_SLUG = {
   TIMBER_LAKE_CAMP: 'timber-lake-camp',
   TIMBER_LAKE_WEST: 'timber-lake-west',
   TYLER_HILL_CAMP: 'tyler-hill-camp',
+  NORTH_SHORE_DAY_CAMP: 'north-shore-day-camp',
 } as const;
 
 export type CampSlug = (typeof CAMP_SLUG)[keyof typeof CAMP_SLUG];
@@ -19,7 +20,23 @@ export function isTylerHillCamp(slug: string | null | undefined): boolean {
   return slug === CAMP_SLUG.TYLER_HILL_CAMP;
 }
 
-type CampLike = { slug?: string | null; name?: string | null } | null | undefined;
+export type CampType = 'overnight' | 'day_camp';
+
+export function isNorthShoreDayCamp(slug: string | null | undefined): boolean {
+  return slug === CAMP_SLUG.NORTH_SHORE_DAY_CAMP;
+}
+
+type CampLike = {
+  slug?: string | null;
+  name?: string | null;
+  camp_type?: CampType | string | null;
+} | null | undefined;
+
+export function isDayCampCompany(company: CampLike): boolean {
+  if (!company) return false;
+  if (company.camp_type === 'day_camp') return true;
+  return isNorthShoreDayCamp(company.slug);
+}
 
 /** Timber Lake West — slug first, then company name fallback if slug was misconfigured. */
 export function isTimberLakeWestCompany(company: CampLike): boolean {

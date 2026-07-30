@@ -6,6 +6,7 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useRolePermissions, useUpdateRolePermission } from '../api/permissions';
+import { getDayCampRolePermissionMenuItems } from '../constants/dayCampMenu';
 
 interface Permission {
     id: string;
@@ -23,7 +24,11 @@ interface RolePermissions {
 /** Stable fallback — default `[]` from `data ??` is a new array each render and breaks useEffect deps. */
 const EMPTY_DB_PERMISSIONS: unknown[] = [];
 
-const getCompanyMenuItems = (companySlug?: string | null): Permission[] => {
+const getCompanyMenuItems = (companySlug?: string | null, isDayCamp?: boolean): Permission[] => {
+    if (isDayCamp) {
+        return getDayCampRolePermissionMenuItems();
+    }
+
     // NOTE: These IDs MUST match the `menu_item` values stored in `public.role_permissions`
     // and used by the web app role-permissions page.
     const baseItems: Permission[] = [
@@ -135,7 +140,7 @@ const getCompanyMenuItems = (companySlug?: string | null): Permission[] => {
 };
 
 export const RolePermissionsScreen = ({ navigation }: any) => {
-    const { companyId, companySlug, isSuperAdmin } = useCompany();
+    const { companyId, companySlug, isSuperAdmin, isDayCamp } = useCompany();
 
     type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'health_center' | 'viewer';
     const roleDefs: Array<{
@@ -156,7 +161,10 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
         []
     );
 
-    const menuItems = useMemo(() => getCompanyMenuItems(companySlug), [companySlug]);
+    const menuItems = useMemo(
+        () => getCompanyMenuItems(companySlug, isDayCamp),
+        [companySlug, isDayCamp],
+    );
 
     const permissions: Permission[] = [
         { id: 'activities', name: 'Activities & Field Trips', icon: 'leaf-outline', iconColor: '#10b981' },

@@ -57,7 +57,7 @@ function weatherIconName(condition: string | undefined): keyof typeof Ionicons.g
 export const DashboardScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const isDashboardFocused = useIsFocused();
-    const { companyId, season, isTylerHill, isTimberLakeCamp, isTimberLakeWest } = useCompany();
+    const { companyId, season, isTylerHill, isTimberLakeCamp, isTimberLakeWest, isDayCamp } = useCompany();
     const hasDashboardHeroBg = isTimberLakeWest || isTylerHill || isTimberLakeCamp;
 
     useFocusEffect(
@@ -683,7 +683,8 @@ export const DashboardScreen = ({ navigation }: any) => {
                     </StyledCard>
                 )}
 
-                {/* Athletics Schedule */}
+                {/* Athletics Schedule — overnight camps only (matches web Dashboard) */}
+                {!isDayCamp && (
                 <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                     <View style={styles.cardHeader}>
                         <Ionicons name="trophy-outline" size={20} color="#fbbf24" />
@@ -720,6 +721,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                         </Text>
                     </TouchableOpacity>
                 </StyledCard>
+                )}
 
                 <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                     <View style={styles.cardHeader}>
