@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useMemo,
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { isTimberLakeWestCompany, isTylerHillCamp, isDayCampCompany, shouldShowTigerTimes } from '../constants/camps';
+import { invalidateCampScopedQueries } from '../lib/queryClient';
 
 /** Super-admins can switch camps in-app; profile.company_id alone would reset to "home" camp on every auth refetch. */
 const SUPER_ADMIN_COMPANY_PREFERENCE_KEY = '@the_nest_active_company_id';
@@ -146,6 +147,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
 
         setCompanyId(newCompanyId);
         applyCompanyState(company);
+        invalidateCampScopedQueries();
         await AsyncStorage.setItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY, newCompanyId);
     }, [availableCompanies, isSuperAdmin, profile?.id, applyCompanyState]);
 

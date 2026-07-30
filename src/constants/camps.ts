@@ -51,3 +51,26 @@ export function shouldShowTigerTimes(company: CampLike): boolean {
   if (isTimberLakeWestCompany(company)) return false;
   return isTimberLakeCamp(company.slug);
 }
+
+export function getDailyNewsCampLabel(company: CampLike): string {
+  if (isTylerHillCamp(company?.slug)) return 'Tyler Hill';
+  if (isTimberLakeWestCompany(company)) return 'Timber Lake West';
+  if (isTimberLakeCamp(company?.slug)) return 'Timber Lake Camp';
+  return (company?.name ?? 'The Nest').trim();
+}
+
+export function getDailyNewsPageTitle(company: CampLike): string {
+  if (isTimberLakeWestCompany(company)) return 'Daily Wolf';
+  return `${getDailyNewsCampLabel(company)} Daily News`;
+}
+
+export function getDailyNewsPrintHeadline(company: CampLike): string {
+  if (isTimberLakeWestCompany(company)) return 'THE DAILY WOLF';
+  return `${getDailyNewsCampLabel(company).toUpperCase()} DAILY NEWS`;
+}
+
+export function getDailyNewsSubtitle(company: CampLike): string {
+  if (isTylerHillCamp(company?.slug)) return 'HOME OF THE BEARS';
+  if (isTimberLakeWestCompany(company)) return 'TIMBER LAKE WEST';
+  return '';
+}

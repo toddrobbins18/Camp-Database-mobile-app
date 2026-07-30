@@ -8,6 +8,12 @@ import { supabase } from '../lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
 import {
+    getDailyNewsPageTitle,
+    getDailyNewsPrintHeadline,
+    getDailyNewsSubtitle,
+    isTimberLakeWestCompany,
+} from '../constants/camps';
+import {
     useTodayBirthdays,
     useDailyNewsSchedule,
     useTodaySportsCalendar,
@@ -24,7 +30,12 @@ const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
 
 export const DailyNewsScreen = ({ navigation }: any) => {
-    const { companyId, season, isTimberLakeWest } = useCompany();
+    const { companyId, season, isTimberLakeWest, isTylerHill, availableCompanies } = useCompany();
+    const currentCompany = availableCompanies.find((c) => c.id === companyId) ?? null;
+    const dailyNewsTitle = getDailyNewsPageTitle(currentCompany);
+    const dailyNewsHeadline = getDailyNewsPrintHeadline(currentCompany);
+    const dailyNewsSubtitle = getDailyNewsSubtitle(currentCompany);
+    const showTimberLakeWestSections = isTimberLakeWestCompany(currentCompany);
     const queryClient = useQueryClient();
     const [showDailyWolfUpload, setShowDailyWolfUpload] = useState(false);
     const [dailyWolfDate, setDailyWolfDate] = useState(new Date().toISOString().split('T')[0]);
@@ -199,9 +210,7 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                     <Ionicons name="menu" size={28} color={theme.colors.primary} />
                 </TouchableOpacity>
                 <View style={styles.headerTitleContainer}>
-                    <Text style={styles.headerTitle}>
-                        {isTimberLakeWest ? 'Daily Wolf' : 'Tyler Hill Daily News'}
-                    </Text>
+                    <Text style={styles.headerTitle}>{dailyNewsTitle}</Text>
                 </View>
                 <TouchableOpacity
                     style={styles.printButton}
@@ -221,12 +230,10 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                 <StyledCard style={styles.newsCard}>
                     {/* Header Section */}
                     <View style={styles.newsHeader}>
-                        <Text style={styles.newsTitle}>
-                            {isTimberLakeWest ? 'THE DAILY WOLF' : 'TYLER HILL DAILY NEWS'}
-                        </Text>
-                        <Text style={styles.newsSubtitle}>
-                            {isTimberLakeWest ? 'TIMBER LAKE WEST' : 'HOME OF THE BEARS'}
-                        </Text>
+                        <Text style={styles.newsTitle}>{dailyNewsHeadline}</Text>
+                        {dailyNewsSubtitle ? (
+                            <Text style={styles.newsSubtitle}>{dailyNewsSubtitle}</Text>
+                        ) : null}
                         <Text style={styles.newsDate}>{formattedDate}</Text>
                     </View>
 
@@ -289,7 +296,7 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                     </View>
 
                     {/* Timber Lake West additions (match Daily Wolf printable/main dashboard content) */}
-                    {isTimberLakeWest && (
+                    {showTimberLakeWestSections && (
                         <>
                             <View style={styles.section}>
                                 <Text style={styles.sectionTitle}>Athletics</Text>
@@ -376,42 +383,44 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                     )}
                 </StyledCard>
 
-                {/* The Bear PDFs (Tyler Hill branding; storage/table keys remain daily_wolf_*) */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Ionicons name="document-text-outline" size={20} color={theme.colors.text} style={styles.sectionIcon} />
-                        <Text style={styles.sectionTitle}>The Bear PDFs</Text>
-                        <TouchableOpacity style={styles.uploadPdfButton} onPress={() => setShowDailyWolfUpload(true)}>
-                            <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
-                            <Text style={styles.uploadPdfButtonText}>Upload PDF</Text>
-                        </TouchableOpacity>
+                {isTylerHill && (
+                    <View style={styles.section}>
+                        <View style={styles.sectionHeader}>
+                            <Ionicons name="document-text-outline" size={20} color={theme.colors.text} style={styles.sectionIcon} />
+                            <Text style={styles.sectionTitle}>The Bear PDFs</Text>
+                            <TouchableOpacity style={styles.uploadPdfButton} onPress={() => setShowDailyWolfUpload(true)}>
+                                <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+                                <Text style={styles.uploadPdfButtonText}>Upload PDF</Text>
+                            </TouchableOpacity>
+                        </View>
+                        {dailyWolfDocs.length === 0 ? (
+                            <Text style={styles.emptyMessage}>No Bear PDFs uploaded yet</Text>
+                        ) : (
+                            dailyWolfDocs.slice(0, 10).map((doc: any) => (
+                                <View key={doc.id} style={styles.docRow}>
+                                    <Text style={styles.docName}>{doc.file_name}</Text>
+                                    <Text style={styles.docDate}>{doc.date}</Text>
+                                    <TouchableOpacity
+                                        onPress={async () => {
+                                            const path = pathFromFileUrl(doc.file_url, 'daily-wolf-documents');
+                                            if (path) {
+                                                try {
+                                                    const url = await getSignedUrl('dailyWolfDocuments', path);
+                                                    Linking.openURL(url);
+                                                } catch (_) {}
+                                            }
+                                        }}
+                                    >
+                                        <Text style={styles.viewPdfLink}>View</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ))
+                        )}
                     </View>
-                    {dailyWolfDocs.length === 0 ? (
-                        <Text style={styles.emptyMessage}>No Bear PDFs uploaded yet</Text>
-                    ) : (
-                        dailyWolfDocs.slice(0, 10).map((doc: any) => (
-                            <View key={doc.id} style={styles.docRow}>
-                                <Text style={styles.docName}>{doc.file_name}</Text>
-                                <Text style={styles.docDate}>{doc.date}</Text>
-                                <TouchableOpacity
-                                    onPress={async () => {
-                                        const path = pathFromFileUrl(doc.file_url, 'daily-wolf-documents');
-                                        if (path) {
-                                            try {
-                                                const url = await getSignedUrl('dailyWolfDocuments', path);
-                                                Linking.openURL(url);
-                                            } catch (_) {}
-                                        }
-                                    }}
-                                >
-                                    <Text style={styles.viewPdfLink}>View</Text>
-                                </TouchableOpacity>
-                            </View>
-                        ))
-                    )}
-                </View>
+                )}
             </ScrollView>
 
+            {isTylerHill && (
             <Modal visible={showDailyWolfUpload} transparent animationType="slide">
                 <Pressable style={styles.modalOverlay} onPress={() => setShowDailyWolfUpload(false)}>
                     <Pressable style={styles.modalContent} onPress={e => e.stopPropagation()}>
@@ -442,6 +451,7 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                     </Pressable>
                 </Pressable>
             </Modal>
+            )}
         </SafeAreaView>
     );
 };

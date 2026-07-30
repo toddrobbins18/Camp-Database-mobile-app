@@ -4,7 +4,8 @@ import { ActivityIndicator, AppState, AppStateStatus, Modal, StyleSheet, Text, V
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { queryClient } from './src/lib/queryClient';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { CompanyProvider } from './src/contexts/CompanyContext';
 import { useAppUpdatePrompt } from './src/hooks/useAppUpdatePrompt';
@@ -45,24 +46,6 @@ const updateStyles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.textSecondary,
     textAlign: 'center',
-  },
-});
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Keep data reasonably fresh across screens/apps without changing workflows.
-      staleTime: 5000,
-      gcTime: 5 * 60 * 1000,
-      refetchOnMount: true,
-      refetchOnReconnect: true,
-      retry: 1,
-      networkMode: 'offlineFirst',
-    },
-    mutations: {
-      retry: 1,
-      networkMode: 'offlineFirst',
-    },
   },
 });
 

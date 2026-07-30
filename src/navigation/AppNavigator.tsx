@@ -55,7 +55,8 @@ import {
 
 import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { useRole } from '../hooks/useRole';
-import { useRolePermissions } from '../api/permissions';
+import { useMenuAccess } from '../hooks/useMenuAccess';
+import { withMenuPermission } from '../components/MenuPermissionGate';
 import { useMessagesRealtimeSync, useInboxUnreadCount } from '../api/messages';
 import {
     registerInboxNotificationPresentation,
@@ -104,15 +105,13 @@ const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
     const { data: roleData } = useRole();
     const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp, isTimberLakeWest, isDayCamp } = useCompany();
-    const { data: rolePermissions = [] } = useRolePermissions(companyId);
+    const { hasMenuAccess } = useMenuAccess();
     const [showCampPicker, setShowCampPicker] = useState(false);
     const [showYearPicker, setShowYearPicker] = useState(false);
 
     // Role flags — globalRoles match web AuthContext (admin at one camp applies when switching camps).
-    const menuRoles = roleData?.globalRoles ?? roleData?.roles ?? [];
     const isSuperAdmin = isSuperAdminCompany || (roleData?.isSuperAdmin ?? false);
     const isAdmin = roleData?.isAdmin ?? false;
-    const isRoleLoaded = !!roleData;
 
     const [drawerAuthUserId, setDrawerAuthUserId] = useState<string | null>(null);
     useEffect(() => {
@@ -126,22 +125,6 @@ const CustomDrawerContent = (props: any) => {
     }, []);
 
     const { data: inboxUnreadCount = 0 } = useInboxUnreadCount(drawerAuthUserId);
-
-    // Match web: menu visibility is driven by role_permissions per company + global user roles.
-    const hasMenuAccess = (menuItem: string) => {
-        if (!isRoleLoaded) return true; // keep menu visible while role is loading
-        if (isSuperAdmin) return true;
-        if (!companyId) return false;
-        if (menuRoles.length === 0) return false;
-
-        return rolePermissions.some(
-            (perm: any) =>
-                perm?.company_id === companyId &&
-                perm?.can_access === true &&
-                menuRoles.includes(String(perm?.role ?? '')) &&
-                String(perm?.menu_item ?? '') === menuItem
-        );
-    };
 
     // Administration section is admin/super_admin only (matches web).
     const canSeeAdminScreens = isAdmin;
@@ -552,6 +535,16 @@ const CustomDrawerContent = (props: any) => {
     );
 };
 
+const GuardedCamperScreen = withMenuPermission('roster', CamperScreen);
+const GuardedCamperDetailScreen = withMenuPermission('roster', CamperDetailScreen);
+const GuardedStaffScreen = withMenuPermission('staff', StaffScreen);
+const GuardedStaffDetailScreen = withMenuPermission('staff', StaffDetailScreen);
+const GuardedMessagesScreen = withMenuPermission('messages', MessagesScreen);
+const GuardedCalendarScreen = withMenuPermission('calendar', CalendarScreen);
+const GuardedMenuScreen = withMenuPermission('menu', MenuScreen);
+const GuardedAddMenuItemScreen = withMenuPermission('menu', AddMenuItemScreen);
+const GuardedDailyNewsScreen = withMenuPermission('notes', DailyNewsScreen);
+
 // Camper Stack Navigator
 const CamperStackNavigator = () => {
     return (
@@ -560,8 +553,8 @@ const CamperStackNavigator = () => {
                 headerShown: false,
             }}
         >
-            <Stack.Screen name="CamperList" component={CamperScreen} />
-            <Stack.Screen name="CamperDetail" component={CamperDetailScreen} />
+            <Stack.Screen name="CamperList" component={GuardedCamperScreen} />
+            <Stack.Screen name="CamperDetail" component={GuardedCamperDetailScreen} />
         </Stack.Navigator>
     );
 };
@@ -573,8 +566,8 @@ const StaffStackNavigator = () => {
                 headerShown: false,
             }}
         >
-            <Stack.Screen name="StaffList" component={StaffScreen} />
-            <Stack.Screen name="StaffDetail" component={StaffDetailScreen} />
+            <Stack.Screen name="StaffList" component={GuardedStaffScreen} />
+            <Stack.Screen name="StaffDetail" component={GuardedStaffDetailScreen} />
         </Stack.Navigator>
     );
 };
@@ -587,8 +580,8 @@ const MenuStackNavigator = () => {
                 headerShown: false,
             }}
         >
-            <Stack.Screen name="MenuList" component={MenuScreen} />
-            <Stack.Screen name="AddMenuItem" component={AddMenuItemScreen} />
+            <Stack.Screen name="MenuList" component={GuardedMenuScreen} />
+            <Stack.Screen name="AddMenuItem" component={GuardedAddMenuItemScreen} />
         </Stack.Navigator>
     );
 };
@@ -637,7 +630,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Dashboard" component={DashboardScreen} />
             <Drawer.Screen name="Camper" component={CamperStackNavigator} />
             <Drawer.Screen name="Staff" component={StaffStackNavigator} />
-            <Drawer.Screen name="Calendar" component={CalendarScreen} />
+            <Drawer.Screen name="Calendar" component={GuardedCalendarScreen} />
             <Drawer.Screen name="Health" component={HealthScreen} />
             <Drawer.Screen name="Transport" component={TransportScreen} />
             <Drawer.Screen name="Sports" component={SportsScreen} />
@@ -650,7 +643,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="SpecialMeals" component={SpecialMealsScreen} />
             <Drawer.Screen name="IncidentReports" component={IncidentReportsScreen} />
             <Drawer.Screen name="Menu" component={MenuStackNavigator} />
-            <Drawer.Screen name="Messages" component={MessagesScreen} />
+            <Drawer.Screen name="Messages" component={GuardedMessagesScreen} />
             <Drawer.Screen name="AdminPanel" component={AdminPanelScreen} />
             <Drawer.Screen name="EvaluationQuestions" component={EvaluationQuestionsScreen} />
             <Drawer.Screen name="QuestionText" component={QuestionTextScreen} />
@@ -659,7 +652,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="ActivitiesFieldTrips" component={ActivitiesFieldTripsScreen} />
             <Drawer.Screen name="Appointments" component={AppointmentsScreen} />
             <Drawer.Screen name="Awards" component={AwardsScreen} />
-            <Drawer.Screen name="DailyNews" component={DailyNewsScreen} />
+            <Drawer.Screen name="DailyNews" component={GuardedDailyNewsScreen} />
             <Drawer.Screen name="DailyWolfManagement" component={DailyWolfManagementScreen} />
             <Drawer.Screen name="DailyWolfPrintable" component={DailyWolfPrintableScreen} />
             <Drawer.Screen name="UserApprovals" component={UserApprovalsScreen} />
