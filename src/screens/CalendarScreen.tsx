@@ -200,7 +200,7 @@ export const CalendarScreen = ({ navigation }: any) => {
     };
 
     const getTagStyle = (tag: string, source?: EventSource, originalData?: Record<string, unknown> | null) => {
-        if (source && originalData) {
+        if (source) {
             const accent = getMasterCalendarAccent(source, originalData);
             return { backgroundColor: accent.bg, color: accent.text, borderWidth: 0 };
         }
