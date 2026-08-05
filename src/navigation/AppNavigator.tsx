@@ -47,6 +47,19 @@ import { DailyScheduleScreen } from '../screens/DailyScheduleScreen';
 import { TigerTimesScreen } from '../screens/TigerTimesScreen';
 import { ElectiveSignUpScreen } from '../screens/ElectiveSignUpScreen';
 import { DayCampPlaceholderScreen } from '../screens/DayCampPlaceholderScreen';
+import { SunshineReportScreen } from '../screens/SunshineReportScreen';
+import { OfficeTransportChangesScreen } from '../screens/OfficeTransportChangesScreen';
+
+function DayCampModuleRouter({ route, navigation }: any) {
+    const moduleId = route.params?.moduleId;
+    if (moduleId === 'sunshine-report') {
+        return <SunshineReportScreen navigation={navigation} />;
+    }
+    if (moduleId === 'office-changes') {
+        return <OfficeTransportChangesScreen navigation={navigation} />;
+    }
+    return <DayCampPlaceholderScreen navigation={navigation} />;
+}
 import {
     getDayCampNestCarryoverMenuItems,
     getDayCampPocMenuItems,
@@ -686,7 +699,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="DailySchedule" component={DailyScheduleScreen} />
             <Drawer.Screen name="TigerTimes" component={TigerTimesScreen} />
             <Drawer.Screen name="ElectiveSignUp" component={ElectiveSignUpScreen} />
-            <Drawer.Screen name="DayCampModule" component={DayCampPlaceholderScreen} />
+            <Drawer.Screen name="DayCampModule" component={DayCampModuleRouter} />
         </Drawer.Navigator>
     );
 };
