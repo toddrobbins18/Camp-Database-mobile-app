@@ -49,6 +49,7 @@ import { ElectiveSignUpScreen } from '../screens/ElectiveSignUpScreen';
 import { DayCampPlaceholderScreen } from '../screens/DayCampPlaceholderScreen';
 import { SunshineReportScreen } from '../screens/SunshineReportScreen';
 import { OfficeTransportChangesScreen } from '../screens/OfficeTransportChangesScreen';
+import { SwimLessonsScreen } from '../screens/SwimLessonsScreen';
 
 import { BunkingScreen } from '../screens/BunkingScreen';
 
@@ -62,6 +63,9 @@ function DayCampModuleRouter({ route, navigation }: any) {
     }
     if (moduleId === 'office-changes') {
         return <OfficeTransportChangesScreen navigation={navigation} />;
+    }
+    if (moduleId === 'swim-lessons') {
+        return <SwimLessonsScreen navigation={navigation} />;
     }
     return <DayCampPlaceholderScreen navigation={navigation} />;
 }

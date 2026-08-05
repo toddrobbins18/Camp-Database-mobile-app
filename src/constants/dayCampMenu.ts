@@ -33,6 +33,7 @@ export function getDayCampNestCarryoverMenuItems(): MobileDrawerMenuItem[] {
 export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
   return [
     { key: 'bunking', menuId: 'bunking', label: 'Bunking', icon: 'bed-outline', screen: 'DayCampModule', params: { moduleId: 'bunking' } },
+    { key: 'swim-lessons', menuId: 'swim-lessons', label: 'Swim Lessons', icon: 'water-outline', screen: 'DayCampModule', params: { moduleId: 'swim-lessons' } },
     { key: 'sunshine-report', menuId: 'sunshine-report', label: 'Sunshine Report', icon: 'sunny-outline', screen: 'DayCampModule', params: { moduleId: 'sunshine-report' } },
     { key: 'transportation', menuId: 'transportation', label: 'Transportation', icon: 'car-outline', screen: 'Transport' },
     { key: 'office-changes', menuId: 'office-changes', label: 'Office Changes', icon: 'create-outline', screen: 'DayCampModule', params: { moduleId: 'office-changes' } },
