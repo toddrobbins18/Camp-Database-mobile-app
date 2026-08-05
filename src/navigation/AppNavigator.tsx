@@ -52,6 +52,7 @@ import { OfficeTransportChangesScreen } from '../screens/OfficeTransportChangesS
 import { SwimLessonsScreen } from '../screens/SwimLessonsScreen';
 
 import { SwimProgramScreen } from '../screens/SwimProgramScreen';
+import { NurseScreen } from '../screens/NurseScreen';
 
 import { BunkingScreen } from '../screens/BunkingScreen';
 
@@ -71,6 +72,9 @@ function DayCampModuleRouter({ route, navigation }: any) {
     }
     if (moduleId === 'swim') {
         return <SwimProgramScreen navigation={navigation} />;
+    }
+    if (moduleId === 'nurse') {
+        return <NurseScreen navigation={navigation} />;
     }
     return <DayCampPlaceholderScreen navigation={navigation} />;
 }

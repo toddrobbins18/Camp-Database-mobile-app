@@ -18,7 +18,7 @@ export function getDayCampNestCarryoverMenuItems(): MobileDrawerMenuItem[] {
     { key: 'appointments', menuId: 'appointments', label: 'Appointments', icon: 'calendar-outline', screen: 'Appointments' },
     { key: 'camper', menuId: 'roster', label: 'Camper', icon: 'people-outline', screen: 'Camper', params: { screen: 'CamperList' } },
     { key: 'daily-news', menuId: 'notes', label: 'Daily news', icon: 'document-text-outline', screen: 'DailyNews' },
-    { key: 'health-center', menuId: 'health-center', label: 'Health Center', icon: 'medical-outline', screen: 'DayCampModule', params: { moduleId: 'health-center' } },
+    { key: 'health-center', menuId: 'nurse', label: 'Health Center', icon: 'medical-outline', screen: 'DayCampModule', params: { moduleId: 'nurse' } },
     { key: 'incident-reports', menuId: 'incidents', label: 'Incident Reports', icon: 'warning-outline', screen: 'IncidentReports' },
     { key: 'master-calendar', menuId: 'calendar', label: 'Master Calendar', icon: 'calendar-outline', screen: 'Calendar' },
     { key: 'menu', menuId: 'menu', label: 'Menu', icon: 'restaurant-outline', screen: 'Menu' },
