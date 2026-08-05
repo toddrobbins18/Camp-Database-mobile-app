@@ -51,6 +51,8 @@ import { SunshineReportScreen } from '../screens/SunshineReportScreen';
 import { OfficeTransportChangesScreen } from '../screens/OfficeTransportChangesScreen';
 import { SwimLessonsScreen } from '../screens/SwimLessonsScreen';
 
+import { SwimProgramScreen } from '../screens/SwimProgramScreen';
+
 import { BunkingScreen } from '../screens/BunkingScreen';
 
 function DayCampModuleRouter({ route, navigation }: any) {
@@ -66,6 +68,9 @@ function DayCampModuleRouter({ route, navigation }: any) {
     }
     if (moduleId === 'swim-lessons') {
         return <SwimLessonsScreen navigation={navigation} />;
+    }
+    if (moduleId === 'swim') {
+        return <SwimProgramScreen navigation={navigation} />;
     }
     return <DayCampPlaceholderScreen navigation={navigation} />;
 }
