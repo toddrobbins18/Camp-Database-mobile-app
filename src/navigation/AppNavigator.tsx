@@ -50,10 +50,15 @@ import { DayCampPlaceholderScreen } from '../screens/DayCampPlaceholderScreen';
 import { SunshineReportScreen } from '../screens/SunshineReportScreen';
 import { OfficeTransportChangesScreen } from '../screens/OfficeTransportChangesScreen';
 
+import { BunkingScreen } from '../screens/BunkingScreen';
+
 function DayCampModuleRouter({ route, navigation }: any) {
     const moduleId = route.params?.moduleId;
     if (moduleId === 'sunshine-report') {
         return <SunshineReportScreen navigation={navigation} />;
+    }
+    if (moduleId === 'bunking') {
+        return <BunkingScreen navigation={navigation} />;
     }
     if (moduleId === 'office-changes') {
         return <OfficeTransportChangesScreen navigation={navigation} />;

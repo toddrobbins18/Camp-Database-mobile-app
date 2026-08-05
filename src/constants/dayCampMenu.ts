@@ -32,6 +32,7 @@ export function getDayCampNestCarryoverMenuItems(): MobileDrawerMenuItem[] {
 /** Nest 2.0 / Airtable POC — Day Camp section (matches web). */
 export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
   return [
+    { key: 'bunking', menuId: 'bunking', label: 'Bunking', icon: 'bed-outline', screen: 'DayCampModule', params: { moduleId: 'bunking' } },
     { key: 'sunshine-report', menuId: 'sunshine-report', label: 'Sunshine Report', icon: 'sunny-outline', screen: 'DayCampModule', params: { moduleId: 'sunshine-report' } },
     { key: 'transportation', menuId: 'transportation', label: 'Transportation', icon: 'car-outline', screen: 'Transport' },
     { key: 'office-changes', menuId: 'office-changes', label: 'Office Changes', icon: 'create-outline', screen: 'DayCampModule', params: { moduleId: 'office-changes' } },
