@@ -736,7 +736,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                             <Text style={styles.emptyText}>Nothing scheduled in the next 3 days.</Text>
                         </View>
                     ) : (
-                        <ScrollView style={styles.outlookScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                        <View style={styles.outlookContent}>
                             {groupedSupervisorOutlook.map((dayItems) => {
                                 const dateKey = dayItems[0]?.date;
                                 if (!dateKey) return null;
@@ -766,7 +766,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                                     </View>
                                 );
                             })}
-                        </ScrollView>
+                        </View>
                     )}
                 </StyledCard>
 
@@ -1162,8 +1162,8 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
         marginBottom: 6,
     },
-    outlookScroll: {
-        maxHeight: 260,
+    outlookContent: {
+        gap: 4,
     },
     outlookRow: {
         flexDirection: 'row',
