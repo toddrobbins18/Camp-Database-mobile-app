@@ -170,7 +170,13 @@ export function SunshineReportScreen({ navigation }: any) {
   if (loading && !groups.length) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
+            <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Sunshine Report</Text>
+        </View>
+        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 24 }} />
       </SafeAreaView>
     );
   }
@@ -178,8 +184,13 @@ export function SunshineReportScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Sunshine Report</Text>
-        <Text style={styles.headerSubtitle}>Daily camper tracking ({date})</Text>
+        <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
+          <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerTitle}>Sunshine Report</Text>
+          <Text style={styles.headerSubtitle}>Daily camper tracking ({date})</Text>
+        </View>
       </View>
       <View style={styles.actionsBar}>
         <TouchableOpacity style={styles.actionButton} onPress={sendEndOfDayEmails}>
@@ -275,9 +286,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
+  },
+  menuButton: {
+    marginRight: 8,
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 22,

@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
-import { useSeasonContext } from '../contexts/SeasonContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 
@@ -26,8 +25,7 @@ type Lesson = {
 };
 
 export function SwimLessonsScreen({ navigation }: any) {
-  const { companyId } = useCompany();
-  const { season } = useSeasonContext();
+  const { companyId, season } = useCompany();
   const [campers, setCampers] = useState<Camper[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);

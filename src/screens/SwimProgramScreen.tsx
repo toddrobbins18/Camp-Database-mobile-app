@@ -155,6 +155,9 @@ export function SwimProgramScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
+          <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
+        </TouchableOpacity>
         <View style={styles.headerIcon}>
           <Ionicons name="water" size={24} color={theme.colors.primary} />
         </View>
@@ -330,6 +333,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     alignItems: 'center',
+  },
+  menuButton: {
+    marginRight: 8,
   },
   headerIcon: {
     width: 40,

@@ -105,7 +105,13 @@ export function OfficeTransportChangesScreen({ navigation }: any) {
   if (loading && rows.length === 0) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
+            <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Office Transport Changes</Text>
+        </View>
+        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 24 }} />
       </SafeAreaView>
     );
   }
@@ -113,6 +119,9 @@ export function OfficeTransportChangesScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
+          <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
+        </TouchableOpacity>
         <View style={styles.headerIcon}>
           <Ionicons name="call" size={24} color="#fff" />
         </View>
@@ -242,6 +251,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     alignItems: 'center',
+  },
+  menuButton: {
+    marginRight: 8,
   },
   headerIcon: {
     width: 40,

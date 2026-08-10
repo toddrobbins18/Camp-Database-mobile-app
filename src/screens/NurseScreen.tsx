@@ -83,7 +83,13 @@ export function NurseScreen({ navigation }: any) {
   if (loading && records.length === 0) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
+            <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Health Center</Text>
+        </View>
+        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 24 }} />
       </SafeAreaView>
     );
   }
@@ -91,11 +97,14 @@ export function NurseScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
+          <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
+        </TouchableOpacity>
         <View style={styles.headerIcon}>
           <Ionicons name="medical" size={24} color="#fff" />
         </View>
         <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>Nurse Dashboard</Text>
+          <Text style={styles.headerTitle}>Health Center</Text>
           <Text style={styles.headerSubtitle}>Track incidents and treatments</Text>
         </View>
       </View>
@@ -254,6 +263,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     alignItems: 'center',
+  },
+  menuButton: {
+    marginRight: 8,
   },
   headerIcon: {
     width: 40,
