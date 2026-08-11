@@ -56,6 +56,7 @@ import { NurseScreen } from '../screens/NurseScreen';
 
 import { BunkingScreen } from '../screens/BunkingScreen';
 import { HiringScreen } from '../screens/HiringScreen';
+import { MediaScreen } from '../screens/MediaScreen';
 
 function DayCampModuleRouter({ route, navigation }: any) {
     const moduleId = route.params?.moduleId;
@@ -67,6 +68,9 @@ function DayCampModuleRouter({ route, navigation }: any) {
     }
     if (moduleId === 'hiring') {
         return <HiringScreen navigation={navigation} />;
+    }
+    if (moduleId === 'media') {
+        return <MediaScreen navigation={navigation} />;
     }
     if (moduleId === 'office-changes') {
         return <OfficeTransportChangesScreen navigation={navigation} />;

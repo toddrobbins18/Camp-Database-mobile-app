@@ -34,6 +34,7 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
   return [
     { key: 'bunking', menuId: 'bunking', label: 'Bunking', icon: 'bed-outline', screen: 'DayCampModule', params: { moduleId: 'bunking' } },
     { key: 'hiring', menuId: 'hiring', label: 'Hiring', icon: 'briefcase-outline', screen: 'DayCampModule', params: { moduleId: 'hiring' } },
+    { key: 'media', menuId: 'media', label: 'Media', icon: 'camera-outline', screen: 'DayCampModule', params: { moduleId: 'media' } },
     { key: 'swim', menuId: 'swim', label: 'Swim', icon: 'water-outline', screen: 'DayCampModule', params: { moduleId: 'swim' } },
     { key: 'swim-lessons', menuId: 'swim-lessons', label: 'Swim Lessons', icon: 'water-outline', screen: 'DayCampModule', params: { moduleId: 'swim-lessons' } },
     { key: 'sunshine-report', menuId: 'sunshine-report', label: 'Sunshine Report', icon: 'sunny-outline', screen: 'DayCampModule', params: { moduleId: 'sunshine-report' } },
