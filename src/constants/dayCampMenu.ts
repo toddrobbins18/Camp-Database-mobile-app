@@ -86,7 +86,7 @@ export const DAY_CAMP_MODULE_COPY: Record<string, { title: string; description: 
   },
   'sunshine-report': {
     title: 'Sunshine Report',
-    description: 'Daily camper tracking for Nursery Campers. Coming soon.',
+    description: 'Daily camper tracking — fill out throughout the day, then send to parents at the end of day.',
   },
   'office-changes': {
     title: 'Office Changes',
@@ -102,6 +102,6 @@ export const DAY_CAMP_MODULE_COPY: Record<string, { title: string; description: 
   },
   'parent-portal': {
     title: 'Parent Portal',
-    description: 'Parent login for swim lessons and transportation requests. Coming soon.',
+    description: 'Parent login for swim lessons, pickups, absences, and authorized adults.',
   },
 };
