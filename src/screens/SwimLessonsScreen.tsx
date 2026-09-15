@@ -1,5 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -40,6 +52,24 @@ export function SwimLessonsScreen({ navigation }: any) {
   const [cost, setCost] = useState('45');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+
+  const resetForm = () => {
+    setCamperId('');
+    setDuration('30');
+    setInstructor('');
+    setLocation('');
+    setCost('45');
+    setNotes('');
+    setDate(new Date());
+    setShowDatePicker(false);
+    setShowTimePicker(false);
+  };
+
+  const closeScheduleModal = () => {
+    setScheduleModalOpen(false);
+    resetForm();
+  };
 
   const load = async () => {
     if (!companyId) return;
@@ -93,7 +123,8 @@ export function SwimLessonsScreen({ navigation }: any) {
     }
 
     Alert.alert('Success', 'Swim lesson scheduled');
-    setCamperId(''); setDuration('30'); setInstructor(''); setLocation(''); setCost('45'); setNotes(''); setDate(new Date());
+    setScheduleModalOpen(false);
+    resetForm();
     load();
   };
 
@@ -140,142 +171,23 @@ export function SwimLessonsScreen({ navigation }: any) {
         </View>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Swim Lessons</Text>
-          <Text style={styles.headerSubtitle}>Schedule private lessons</Text>
+          <Text style={styles.headerSubtitle}>Schedule private swim lessons for eligible camp families</Text>
         </View>
+        <TouchableOpacity style={styles.scheduleHeaderBtn} onPress={() => setScheduleModalOpen(true)}>
+          <Ionicons name="add" size={16} color="#fff" />
+          <Text style={styles.scheduleHeaderBtnText}>Schedule lesson</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content}>
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Ionicons name="add" size={18} color={theme.colors.text} />
-            <Text style={styles.cardTitle}>Schedule a lesson</Text>
-          </View>
-          <View style={styles.cardContent}>
-            
-            <Text style={styles.label}>Camper</Text>
-            {/* Simple camper select for mobile; in a real app might want a proper searchable dropdown */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.camperChips}>
-              {campers.slice(0, 20).map(c => (
-                <TouchableOpacity 
-                  key={c.id} 
-                  style={[styles.chip, camperId === c.id && styles.chipActive]}
-                  onPress={() => setCamperId(c.id)}
-                >
-                  <Text style={[styles.chipText, camperId === c.id && styles.chipTextActive]}>{c.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <View style={styles.row}>
-                <View style={styles.flex1}>
-                    <Text style={styles.label}>Date</Text>
-                    <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
-                    <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
-                    <Text style={styles.datePickerText}>{format(date, 'MMM d, yyyy')}</Text>
-                    </TouchableOpacity>
-                    {showDatePicker && (
-                    <DateTimePicker
-                        value={date}
-                        mode="date"
-                        display="default"
-                        onChange={(event, selectedDate) => {
-                        setShowDatePicker(false);
-                        if (selectedDate) {
-                            const newDate = new Date(date);
-                            newDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-                            setDate(newDate);
-                        }
-                        }}
-                    />
-                    )}
-                </View>
-                <View style={{ width: 12 }} />
-                <View style={styles.flex1}>
-                    <Text style={styles.label}>Time</Text>
-                    <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowTimePicker(true)}>
-                    <Ionicons name="time-outline" size={18} color={theme.colors.textSecondary} />
-                    <Text style={styles.datePickerText}>{format(date, 'h:mm a')}</Text>
-                    </TouchableOpacity>
-                    {showTimePicker && (
-                    <DateTimePicker
-                        value={date}
-                        mode="time"
-                        display="default"
-                        onChange={(event, selectedDate) => {
-                        setShowTimePicker(false);
-                        if (selectedDate) {
-                            const newDate = new Date(date);
-                            newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
-                            setDate(newDate);
-                        }
-                        }}
-                    />
-                    )}
-                </View>
-            </View>
-
-            <View style={styles.row}>
-                <View style={styles.flex1}>
-                    <Text style={styles.label}>Minutes</Text>
-                    <TextInput
-                    style={styles.input}
-                    value={duration}
-                    onChangeText={setDuration}
-                    keyboardType="numeric"
-                    />
-                </View>
-                <View style={{ width: 12 }} />
-                <View style={styles.flex1}>
-                    <Text style={styles.label}>Cost (USD)</Text>
-                    <TextInput
-                    style={styles.input}
-                    value={cost}
-                    onChangeText={setCost}
-                    keyboardType="numeric"
-                    />
-                </View>
-            </View>
-
-            <Text style={styles.label}>Instructor</Text>
-            <TextInput
-              style={styles.input}
-              value={instructor}
-              onChangeText={setInstructor}
-            />
-
-            <Text style={styles.label}>Location</Text>
-            <TextInput
-              style={styles.input}
-              value={location}
-              onChangeText={setLocation}
-              placeholder="e.g. Main Pool"
-            />
-
-            <Text style={styles.label}>Notes</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              numberOfLines={2}
-            />
-
-            <TouchableOpacity 
-              style={[styles.submitButton, saving && styles.submitButtonDisabled]} 
-              onPress={submit}
-              disabled={saving}
-            >
-              <Ionicons name="calendar" size={18} color="#fff" />
-              <Text style={styles.submitButtonText}>{saving ? 'Saving...' : 'Schedule'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
             <Ionicons name="list" size={18} color={theme.colors.text} />
-            <Text style={styles.cardTitle}>Scheduled lessons</Text>
+            <Text style={styles.cardTitle}>All scheduled lessons</Text>
           </View>
+          <Text style={styles.cardDescription}>
+            Parents see these in their Parent Portal and confirm attendance.
+          </Text>
           <View style={styles.listContainer}>
             {lessons.length === 0 ? (
               <Text style={styles.emptyText}>No lessons scheduled yet.</Text>
@@ -325,6 +237,150 @@ export function SwimLessonsScreen({ navigation }: any) {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={scheduleModalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={closeScheduleModal}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Schedule a swim lesson</Text>
+              <TouchableOpacity onPress={closeScheduleModal} disabled={saving}>
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              <Text style={styles.label}>Camper</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.camperChips}>
+                {campers.slice(0, 20).map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.chip, camperId === c.id && styles.chipActive]}
+                    onPress={() => setCamperId(c.id)}
+                  >
+                    <Text style={[styles.chipText, camperId === c.id && styles.chipTextActive]}>{c.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <View style={styles.row}>
+                <View style={styles.flex1}>
+                  <Text style={styles.label}>Date</Text>
+                  <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
+                    <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
+                    <Text style={styles.datePickerText}>{format(date, 'MMM d, yyyy')}</Text>
+                  </TouchableOpacity>
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={date}
+                      mode="date"
+                      display="default"
+                      onChange={(_event, selectedDate) => {
+                        setShowDatePicker(false);
+                        if (selectedDate) {
+                          const newDate = new Date(date);
+                          newDate.setFullYear(
+                            selectedDate.getFullYear(),
+                            selectedDate.getMonth(),
+                            selectedDate.getDate(),
+                          );
+                          setDate(newDate);
+                        }
+                      }}
+                    />
+                  )}
+                </View>
+                <View style={{ width: 12 }} />
+                <View style={styles.flex1}>
+                  <Text style={styles.label}>Time</Text>
+                  <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowTimePicker(true)}>
+                    <Ionicons name="time-outline" size={18} color={theme.colors.textSecondary} />
+                    <Text style={styles.datePickerText}>{format(date, 'h:mm a')}</Text>
+                  </TouchableOpacity>
+                  {showTimePicker && (
+                    <DateTimePicker
+                      value={date}
+                      mode="time"
+                      display="default"
+                      onChange={(_event, selectedDate) => {
+                        setShowTimePicker(false);
+                        if (selectedDate) {
+                          const newDate = new Date(date);
+                          newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
+                          setDate(newDate);
+                        }
+                      }}
+                    />
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.row}>
+                <View style={styles.flex1}>
+                  <Text style={styles.label}>Minutes</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={duration}
+                    onChangeText={setDuration}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={{ width: 12 }} />
+                <View style={styles.flex1}>
+                  <Text style={styles.label}>Cost (USD)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={cost}
+                    onChangeText={setCost}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.label}>Instructor</Text>
+              <TextInput style={styles.input} value={instructor} onChangeText={setInstructor} />
+
+              <Text style={styles.label}>Location</Text>
+              <TextInput
+                style={styles.input}
+                value={location}
+                onChangeText={setLocation}
+                placeholder="e.g. Main Pool"
+              />
+
+              <Text style={styles.label}>Notes</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                numberOfLines={2}
+              />
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={closeScheduleModal} disabled={saving}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitButton, styles.modalSubmitButton, saving && styles.submitButtonDisabled]}
+                onPress={submit}
+                disabled={saving}
+              >
+                <Ionicons name="calendar" size={18} color="#fff" />
+                <Text style={styles.submitButtonText}>{saving ? 'Saving...' : 'Schedule'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -371,6 +427,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.colors.textSecondary,
     marginTop: 2,
+  },
+  scheduleHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  scheduleHeaderBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cardDescription: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
   },
   content: {
     flex: 1,
@@ -442,7 +519,62 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderRadius: 6,
-    marginTop: 20,
+    gap: 6,
+  },
+  modalSubmitButton: {
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '92%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text,
+    flex: 1,
+    paddingRight: 8,
+  },
+  modalBody: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  cancelBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  cancelBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.text,
   },
   submitButtonDisabled: {
     opacity: 0.7,
