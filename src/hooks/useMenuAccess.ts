@@ -22,13 +22,25 @@ export function useMenuAccess() {
             if (!companyId) return false;
             if (menuRoles.length === 0) return false;
 
-            return rolePermissions.some(
+            const hasPerm = rolePermissions.some(
                 (perm) =>
                     perm.company_id === companyId &&
                     perm.can_access === true &&
                     menuRoles.includes(String(perm.role)) &&
                     perm.menu_item === menuItem,
             );
+            if (hasPerm) return true;
+            // Match web: Bus Attendance allowed when Transportation is enabled for the role.
+            if (menuItem === 'bus-attendance') {
+                return rolePermissions.some(
+                    (perm) =>
+                        perm.company_id === companyId &&
+                        perm.can_access === true &&
+                        menuRoles.includes(String(perm.role)) &&
+                        perm.menu_item === 'transportation',
+                );
+            }
+            return false;
         },
         [isRoleLoaded, isSuperAdmin, companyId, menuRoles, rolePermissions],
     );

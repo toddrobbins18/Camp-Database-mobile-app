@@ -53,6 +53,7 @@ import { SwimLessonsScreen } from '../screens/SwimLessonsScreen';
 
 import { SwimProgramScreen } from '../screens/SwimProgramScreen';
 import { NurseScreen } from '../screens/NurseScreen';
+import { BusAttendanceScreen } from '../screens/BusAttendanceScreen';
 
 import { BunkingScreen } from '../screens/BunkingScreen';
 import { HiringScreen } from '../screens/HiringScreen';
@@ -87,6 +88,9 @@ function DayCampModuleRouter({ route, navigation }: any) {
     }
     if (moduleId === 'nurse') {
         return <NurseScreen navigation={navigation} />;
+    }
+    if (moduleId === 'bus-attendance') {
+        return <BusAttendanceScreen navigation={navigation} />;
     }
     return <DayCampPlaceholderScreen navigation={navigation} />;
 }

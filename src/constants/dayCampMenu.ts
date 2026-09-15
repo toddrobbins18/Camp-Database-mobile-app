@@ -40,6 +40,14 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
     { key: 'swim-lessons', menuId: 'swim-lessons', label: 'Swim Lessons', icon: 'water-outline', screen: 'DayCampModule', params: { moduleId: 'swim-lessons' } },
     { key: 'sunshine-report', menuId: 'sunshine-report', label: 'Sunshine Report', icon: 'sunny-outline', screen: 'DayCampModule', params: { moduleId: 'sunshine-report' } },
     { key: 'transportation', menuId: 'transportation', label: 'Transportation', icon: 'car-outline', screen: 'Transport' },
+    {
+      key: 'bus-attendance',
+      menuId: 'bus-attendance',
+      label: 'Bus Attendance',
+      icon: 'clipboard-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'bus-attendance' },
+    },
     { key: 'office-changes', menuId: 'office-changes', label: 'Office Changes', icon: 'create-outline', screen: 'DayCampModule', params: { moduleId: 'office-changes' } },
     { key: 'swim-bracelets', menuId: 'swim-bracelets', label: 'Swim Bracelets', icon: 'water-outline', screen: 'DayCampModule', params: { moduleId: 'swim-bracelets' } },
     { key: 'swim-progress', menuId: 'swim-progress', label: 'Swim Progress', icon: 'stats-chart-outline', screen: 'DayCampModule', params: { moduleId: 'swim-progress' } },
@@ -55,7 +63,10 @@ export function getDayCampPocItemsForCompany(company: CampLike): MobileDrawerMen
     if (isNorthShoreDayCamp(company?.slug) && NORTH_SHORE_SKIP_POC_MENU_IDS.has(item.menuId)) {
       return false;
     }
-    if (item.menuId === 'transportation' && !northShoreBusTransportEnabled(company)) {
+    if (
+      (item.menuId === 'transportation' || item.menuId === 'bus-attendance') &&
+      !northShoreBusTransportEnabled(company)
+    ) {
       return false;
     }
     return true;
