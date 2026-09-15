@@ -1,4 +1,10 @@
 import { supabase } from './supabase';
+import {
+  canonicalSunshineGroupName,
+  isNorthShoreSunshineGroup,
+  NORTH_SHORE_SUNSHINE_GROUP_NAMES,
+  sunshineGroupSortOrder,
+} from './sunshineGroups';
 
 type RosterChild = {
   id: string;
@@ -29,6 +35,7 @@ function filterActiveRoster<T extends { status?: string | null }>(rows: T[] | nu
 export async function syncSunshineFromRoster(
   companyId: string,
   season: string,
+  options?: { northShoreSunshineOnly?: boolean },
 ): Promise<SunshineRosterSyncResult> {
   const { data, error } = await supabase
     .from('children')
@@ -40,12 +47,18 @@ export async function syncSunshineFromRoster(
   if (error) throw error;
 
   const roster = filterActiveRoster(data as RosterChild[] | null);
-  const withGroup = roster.filter((c) => c.group_name?.trim());
+  const northShoreOnly = options?.northShoreSunshineOnly === true;
+
+  const eligible = northShoreOnly
+    ? roster.filter((c) => isNorthShoreSunshineGroup(c.group_name))
+    : roster.filter((c) => c.group_name?.trim());
+
+  const withGroup = eligible;
   const skippedNoGroup = roster.length - withGroup.length;
 
-  const groupNames = [...new Set(withGroup.map((c) => c.group_name!.trim()))].sort((a, b) =>
-    a.localeCompare(b),
-  );
+  const groupNames = northShoreOnly
+    ? [...NORTH_SHORE_SUNSHINE_GROUP_NAMES]
+    : [...new Set(withGroup.map((c) => c.group_name!.trim()))].sort((a, b) => a.localeCompare(b));
 
   const { data: existingGroups, error: groupsError } = await supabase
     .from('sunshine_groups')
@@ -70,7 +83,7 @@ export async function syncSunshineFromRoster(
       .insert({
         company_id: companyId,
         name,
-        sort_order: i,
+        sort_order: northShoreOnly ? sunshineGroupSortOrder(name) : i,
         season,
       })
       .select('id, name')
@@ -103,7 +116,11 @@ export async function syncSunshineFromRoster(
   }> = [];
 
   for (const child of withGroup) {
-    const groupName = child.group_name!.trim();
+    const groupName = northShoreOnly
+      ? canonicalSunshineGroupName(child.group_name!.trim())
+      : child.group_name!.trim();
+    if (!groupName) continue;
+
     const groupId = groupIdByName.get(normalizeGroupName(groupName));
     if (!groupId) continue;
 
@@ -121,13 +138,18 @@ export async function syncSunshineFromRoster(
     });
   }
 
+  const { error: deleteError } = await supabase
+    .from('sunshine_campers')
+    .delete()
+    .eq('company_id', companyId)
+    .eq('season', season);
+  if (deleteError) throw deleteError;
+
   const BATCH = 100;
   for (let i = 0; i < camperPayload.length; i += BATCH) {
     const batch = camperPayload.slice(i, i + BATCH);
-    const { error: upsertError } = await supabase
-      .from('sunshine_campers')
-      .upsert(batch, { onConflict: 'company_id,season,child_id' });
-    if (upsertError) throw upsertError;
+    const { error: insertError } = await supabase.from('sunshine_campers').insert(batch);
+    if (insertError) throw insertError;
   }
 
   return {
