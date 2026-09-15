@@ -8,8 +8,6 @@ import { supabase } from '../lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
 import {
-    getDailyNewsPageTitle,
-    getDailyNewsPrintHeadline,
     getDailyNewsSubtitle,
     isTimberLakeWestCompany,
 } from '../constants/camps';
@@ -32,10 +30,9 @@ const isSmallScreen = width < 375;
 export const DailyNewsScreen = ({ navigation }: any) => {
     const { companyId, season, isTimberLakeWest, isTylerHill, availableCompanies } = useCompany();
     const currentCompany = availableCompanies.find((c) => c.id === companyId) ?? null;
-    const dailyNewsTitle = getDailyNewsPageTitle(currentCompany);
-    const dailyNewsHeadline = getDailyNewsPrintHeadline(currentCompany);
-    const dailyNewsSubtitle = getDailyNewsSubtitle(currentCompany);
     const showTimberLakeWestSections = isTimberLakeWestCompany(currentCompany);
+    const dailyNewsSubtitle = getDailyNewsSubtitle(currentCompany);
+    const screenTitle = showTimberLakeWestSections ? 'Daily Wolf' : 'Daily News';
     const queryClient = useQueryClient();
     const [showDailyWolfUpload, setShowDailyWolfUpload] = useState(false);
     const [dailyWolfDate, setDailyWolfDate] = useState(new Date().toISOString().split('T')[0]);
@@ -210,7 +207,9 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                     <Ionicons name="menu" size={28} color={theme.colors.primary} />
                 </TouchableOpacity>
                 <View style={styles.headerTitleContainer}>
-                    <Text style={styles.headerTitle}>{dailyNewsTitle}</Text>
+                    <Text style={styles.headerTitle} numberOfLines={1}>
+                        {screenTitle}
+                    </Text>
                 </View>
                 <TouchableOpacity
                     style={styles.printButton}
@@ -228,13 +227,11 @@ export const DailyNewsScreen = ({ navigation }: any) => {
             >
                 {/* News Content Card */}
                 <StyledCard style={styles.newsCard}>
-                    {/* Header Section */}
                     <View style={styles.newsHeader}>
-                        <Text style={styles.newsTitle}>{dailyNewsHeadline}</Text>
+                        <Text style={styles.newsDate}>{formattedDate}</Text>
                         {dailyNewsSubtitle ? (
                             <Text style={styles.newsSubtitle}>{dailyNewsSubtitle}</Text>
                         ) : null}
-                        <Text style={styles.newsDate}>{formattedDate}</Text>
                     </View>
 
                     {/* Birthday Wishes – same data as Dashboard (children + staff) */}
@@ -470,7 +467,7 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.surface,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
-        minHeight: 60,
+        minHeight: 52,
     },
     menuButton: {
         padding: theme.spacing.xs,
@@ -480,9 +477,8 @@ const styles = StyleSheet.create({
         marginHorizontal: theme.spacing.md,
     },
     headerTitle: {
-        ...theme.typography.h1,
-        fontSize: isSmallScreen ? 18 : 24,
-        fontWeight: '700',
+        fontSize: isSmallScreen ? 16 : 18,
+        fontWeight: '600',
         color: theme.colors.text,
     },
     printButton: {
@@ -509,44 +505,31 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     scrollContent: {
-        padding: theme.spacing.md,
+        padding: theme.spacing.sm,
+        paddingBottom: theme.spacing.lg,
     },
     newsCard: {
-        padding: theme.spacing.lg,
+        padding: theme.spacing.md,
     },
     newsHeader: {
-        alignItems: 'center',
-        marginBottom: theme.spacing.xl,
-        paddingBottom: theme.spacing.lg,
-        borderBottomWidth: 2,
+        marginBottom: theme.spacing.md,
+        paddingBottom: theme.spacing.sm,
+        borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
-    newsTitle: {
-        ...theme.typography.h1,
-        fontSize: isSmallScreen ? 20 : 24,
-        fontWeight: '700',
-        color: theme.colors.text,
-        marginBottom: theme.spacing.xs,
-        letterSpacing: 1,
-        textAlign: 'center',
-    },
     newsSubtitle: {
-        ...theme.typography.body,
-        fontSize: isSmallScreen ? 14 : 16,
+        fontSize: 12,
         color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.sm,
+        marginTop: 2,
         fontStyle: 'italic',
-        textAlign: 'center',
     },
     newsDate: {
-        ...theme.typography.body,
-        fontSize: isSmallScreen ? 12 : 14,
-        color: theme.colors.text,
+        fontSize: isSmallScreen ? 14 : 15,
+        color: theme.colors.textSecondary,
         fontWeight: '500',
-        textAlign: 'center',
     },
     section: {
-        marginBottom: theme.spacing.xl,
+        marginBottom: theme.spacing.lg,
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -557,11 +540,10 @@ const styles = StyleSheet.create({
         marginRight: theme.spacing.xs,
     },
     sectionTitle: {
-        ...theme.typography.h3,
-        fontSize: isSmallScreen ? 16 : 18,
+        fontSize: isSmallScreen ? 15 : 16,
         fontWeight: '600',
         color: theme.colors.text,
-        marginBottom: theme.spacing.sm,
+        marginBottom: theme.spacing.xs,
     },
     birthdayNames: {
         ...theme.typography.body,

@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { isNorthShoreDayCamp, northShoreBusTransportEnabled, type CampLike } from './camps';
 
 export type MobileDrawerMenuItem = {
   key: string;
@@ -44,6 +45,21 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
     { key: 'swim-progress', menuId: 'swim-progress', label: 'Swim Progress', icon: 'stats-chart-outline', screen: 'DayCampModule', params: { moduleId: 'swim-progress' } },
     { key: 'parent-portal', menuId: 'parent-portal', label: 'Parent Portal', icon: 'people-circle-outline', screen: 'DayCampModule', params: { moduleId: 'parent-portal' } },
   ];
+}
+
+/** North Shore — hide Media per Todd (Jul 30). Bunking + Hiring enabled for roster. */
+const NORTH_SHORE_SKIP_POC_MENU_IDS = new Set(['media']);
+
+export function getDayCampPocItemsForCompany(company: CampLike): MobileDrawerMenuItem[] {
+  return getDayCampPocMenuItems().filter((item) => {
+    if (isNorthShoreDayCamp(company?.slug) && NORTH_SHORE_SKIP_POC_MENU_IDS.has(item.menuId)) {
+      return false;
+    }
+    if (item.menuId === 'transportation' && !northShoreBusTransportEnabled(company)) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export type DayCampRolePermissionItem = {

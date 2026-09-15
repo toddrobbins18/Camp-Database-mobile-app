@@ -92,7 +92,7 @@ function DayCampModuleRouter({ route, navigation }: any) {
 }
 import {
     getDayCampNestCarryoverMenuItems,
-    getDayCampPocMenuItems,
+    getDayCampPocItemsForCompany,
     MobileDrawerMenuItem,
 } from '../constants/dayCampMenu';
 
@@ -215,7 +215,10 @@ const CustomDrawerContent = (props: any) => {
 
     if (isDayCamp) {
         const carryover = filterDayCampMenu(getDayCampNestCarryoverMenuItems(), hasMenuAccess);
-        const poc = filterDayCampMenu(getDayCampPocMenuItems(), hasMenuAccess);
+        const poc = filterDayCampMenu(
+            getDayCampPocItemsForCompany({ slug: companySlug, camp_type: 'day_camp' }),
+            hasMenuAccess,
+        );
         mainMenuItems.push(...carryover.map((item) => toDrawerMenuItem(item, props.navigation)));
         dayCampMenuItems.push(...poc.map((item) => toDrawerMenuItem(item, props.navigation)));
     } else {

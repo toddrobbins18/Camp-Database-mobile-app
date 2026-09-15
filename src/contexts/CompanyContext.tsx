@@ -1,11 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
-import { isTimberLakeWestCompany, isTylerHillCamp, isDayCampCompany, shouldShowTigerTimes } from '../constants/camps';
+import {
+    COMPANY_BOOTSTRAP_VERSION,
+    DEFAULT_COMPANY_SLUG,
+    isTimberLakeWestCompany,
+    isTylerHillCamp,
+    isDayCampCompany,
+    shouldShowTigerTimes,
+} from '../constants/camps';
 import { invalidateCampScopedQueries } from '../lib/queryClient';
 
-/** Super-admins can switch camps in-app; profile.company_id alone would reset to "home" camp on every auth refetch. */
+/** Persists in-session camp switch (cleared on bootstrap bump). */
 const SUPER_ADMIN_COMPANY_PREFERENCE_KEY = '@the_nest_active_company_id';
+const COMPANY_BOOTSTRAP_KEY = '@the_nest_company_bootstrap_version';
 
 interface Company {
     id: string;
@@ -91,6 +99,8 @@ const COMPANY_SELECT = 'id, name, slug, theme_color, owl_pay_enabled, camp_type'
 export const CompanyProvider = ({ children }: CompanyProviderProps) => {
     const fetchGenerationRef = useRef(0);
     const fetchCompanyDataRef = useRef<(() => Promise<void>) | null>(null);
+    /** In-session camp pick (null = use North Shore default on next cold resolve). */
+    const activeCompanyIdRef = useRef<string | null>(null);
 
     const [companyId, setCompanyId] = useState<string | null>(null);
     const [companySlug, setCompanySlug] = useState<string | null>(null);
@@ -145,6 +155,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
             setProfile((prev: any) => (prev ? { ...prev, company_id: newCompanyId } : prev));
         }
 
+        activeCompanyIdRef.current = newCompanyId;
         setCompanyId(newCompanyId);
         applyCompanyState(company);
         invalidateCampScopedQueries();
@@ -230,27 +241,36 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                     setAvailableSeasons(merged);
                 }
 
-                let effectiveCompanyId: string | null = profileData.company_id ?? null;
-
-                if ((superAdmin || allowedCompanies.length > 1) && allowedCompanies.length > 0) {
-                    const stored = await AsyncStorage.getItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY);
-                    if (seq !== fetchGenerationRef.current) return;
-                    if (stored && allowedCompanies.some((c) => c.id === stored)) {
-                        effectiveCompanyId = stored;
-                    }
+                const bootstrapDone = await AsyncStorage.getItem(COMPANY_BOOTSTRAP_KEY);
+                if (seq !== fetchGenerationRef.current) return;
+                if (bootstrapDone !== COMPANY_BOOTSTRAP_VERSION) {
+                    await AsyncStorage.removeItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY);
+                    await AsyncStorage.setItem(COMPANY_BOOTSTRAP_KEY, COMPANY_BOOTSTRAP_VERSION);
                 }
 
-                setCompanyId(effectiveCompanyId);
-                const activeCompany = allowedCompanies.find((c) => c.id === effectiveCompanyId) ?? null;
+                const defaultCompany = allowedCompanies.find(
+                    (c) => c.slug === DEFAULT_COMPANY_SLUG,
+                );
+                const defaultCompanyId =
+                    defaultCompany?.id
+                    ?? profileData.company_id
+                    ?? allowedCompanies[0]?.id
+                    ?? null;
+
+                const resolvedCompanyId = activeCompanyIdRef.current ?? defaultCompanyId;
+                setCompanyId(resolvedCompanyId);
+
+                let activeCompany =
+                    allowedCompanies.find((c) => c.id === resolvedCompanyId) ?? null;
                 applyCompanyState(activeCompany);
 
                 if (seq !== fetchGenerationRef.current) return;
 
-                if (effectiveCompanyId && !activeCompany) {
+                if (resolvedCompanyId && !activeCompany) {
                     const { data: companyData, error: companyError } = await supabase
                         .from('companies')
                         .select(COMPANY_SELECT)
-                        .eq('id', effectiveCompanyId)
+                        .eq('id', resolvedCompanyId)
                         .single();
 
                     if (seq !== fetchGenerationRef.current) return;
@@ -279,6 +299,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 fetchCompanyData();
             } else if (event === 'SIGNED_OUT') {
                 fetchGenerationRef.current += 1;
+                activeCompanyIdRef.current = null;
                 void AsyncStorage.removeItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY);
                 setCompanyId(null);
                 setCompanySlug(null);

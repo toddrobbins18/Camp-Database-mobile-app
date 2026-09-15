@@ -6,6 +6,12 @@ export const CAMP_SLUG = {
   NORTH_SHORE_DAY_CAMP: 'north-shore-day-camp',
 } as const;
 
+/** Default camp when opening The Nest (North Shore day-camp focus). */
+export const DEFAULT_COMPANY_SLUG = CAMP_SLUG.NORTH_SHORE_DAY_CAMP;
+
+/** Bump to reset saved camp selection once (AsyncStorage bootstrap). */
+export const COMPANY_BOOTSTRAP_VERSION = 'north-shore-default-v2';
+
 export type CampSlug = (typeof CAMP_SLUG)[keyof typeof CAMP_SLUG];
 
 export function isTimberLakeCamp(slug: string | null | undefined): boolean {
@@ -31,6 +37,12 @@ type CampLike = {
   name?: string | null;
   camp_type?: CampType | string | null;
 } | null | undefined;
+
+export type { CampLike };
+
+export function northShoreBusTransportEnabled(company: CampLike): boolean {
+  return isNorthShoreDayCamp(company?.slug);
+}
 
 export function isDayCampCompany(company: CampLike): boolean {
   if (!company) return false;

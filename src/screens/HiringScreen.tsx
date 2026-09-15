@@ -15,11 +15,12 @@ import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
 import {
   HIRING_COLUMNS,
-  HIRING_STORAGE_KEY_PREFIX,
   HiringStaffMember,
   HiringStatus,
-  initialHiringStaffData,
 } from '../constants/hiringStaffData';
+import { fetchHiredStaffForHiring } from '../lib/hiringRoster';
+
+const HIRING_STORAGE_KEY_PREFIX = 'hiring-board-state-v2';
 
 const COLUMN_HEADER: Record<HiringStatus, { bg: string; text: string }> = {
   'to-hire': { bg: theme.colors.primary, text: '#ffffff' },
@@ -37,27 +38,38 @@ const DEPT_COLORS: Record<string, { bg: string; text: string; border: string }> 
   'CREATIVE ARTS': { bg: '#fffbeb', text: '#d97706', border: '#fde68a' },
 };
 
-async function loadStaff(storageKey: string): Promise<HiringStaffMember[]> {
+async function loadStaff(storageKey: string, companyId: string, season: string): Promise<HiringStaffMember[]> {
   try {
+    const roster = await fetchHiredStaffForHiring(companyId, season);
     const raw = await AsyncStorage.getItem(storageKey);
-    if (!raw) return initialHiringStaffData;
+    if (!raw) return roster;
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed as HiringStaffMember[];
-    return initialHiringStaffData;
+    if (!Array.isArray(parsed)) return roster;
+    const savedById = new Map((parsed as HiringStaffMember[]).map((s) => [s.id, s]));
+    return roster.map((member) => {
+      const prev = savedById.get(member.id);
+      return prev ? { ...member, ...prev, id: member.id, name: member.name } : member;
+    });
   } catch {
-    return initialHiringStaffData;
+    if (!companyId) return [];
+    return fetchHiredStaffForHiring(companyId, season);
   }
 }
 
 export function HiringScreen({ navigation }: any) {
-  const { companyId } = useCompany();
-  const storageKey = `${HIRING_STORAGE_KEY_PREFIX}-${companyId ?? 'default'}`;
-  const [staff, setStaff] = useState<HiringStaffMember[]>(initialHiringStaffData);
+  const { companyId, season } = useCompany();
+  const storageKey = `${HIRING_STORAGE_KEY_PREFIX}-${companyId ?? 'default'}-${season}`;
+  const [staff, setStaff] = useState<HiringStaffMember[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void loadStaff(storageKey).then(setStaff);
-  }, [storageKey]);
+    if (!companyId) return;
+    setLoading(true);
+    void loadStaff(storageKey, companyId, season)
+      .then(setStaff)
+      .finally(() => setLoading(false));
+  }, [storageKey, companyId, season]);
 
   useEffect(() => {
     void AsyncStorage.setItem(storageKey, JSON.stringify(staff));
@@ -164,8 +176,8 @@ export function HiringScreen({ navigation }: any) {
           <Ionicons name="briefcase-outline" size={22} color="#fff" />
         </View>
         <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>Staff Hiring 2026</Text>
-          <Text style={styles.headerSubtitle}>Hiring pipeline & budget management</Text>
+          <Text style={styles.headerTitle}>Staff Hiring {season}</Text>
+          <Text style={styles.headerSubtitle}>Hired staff from {season} roster</Text>
         </View>
       </View>
 

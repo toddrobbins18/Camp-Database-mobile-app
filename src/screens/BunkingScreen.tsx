@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
+import { fetchBunkingCampersFromRoster } from '../lib/bunkingRoster';
 
 type Camper = { id: string; name: string; town?: string; gender?: string; division?: string; requests?: string[]; disrequests?: string[] };
 
@@ -37,23 +38,15 @@ function isCabin(value: unknown): value is Cabin {
   );
 }
 
-const initialCabins: Cabin[] = [
-  { id: "a", name: "Cabin A — Pine Lodge", capacity: 8, gender: "Girls", ageGroup: "10-12", campers: [
-    { id: "c1", name: "Emma J." }, { id: "c2", name: "Sophia C." }, { id: "c3", name: "Ava M." },
-    { id: "c4", name: "Mia T." }, { id: "c5", name: "Isabella D." }, { id: "c6", name: "Olivia W." },
-  ]},
-  { id: "b", name: "Cabin B — Oak House", capacity: 8, gender: "Boys", ageGroup: "10-12", campers: [
-    { id: "c7", name: "Liam P." }, { id: "c8", name: "Noah W." }, { id: "c9", name: "Oliver B." },
-    { id: "c10", name: "Lucas A." }, { id: "c11", name: "Mason W." },
-  ]},
-  { id: "f", name: "Cabin F — Spruce Nest", capacity: 8, gender: "Girls", ageGroup: "8-10", campers: [] },
-];
+const initialCabins: Cabin[] = [];
 
 export function BunkingScreen({ navigation }: any) {
-  const { companyId } = useCompany();
+  const { companyId, season } = useCompany();
   const [cabins, setCabins] = useState<Cabin[]>(initialCabins);
   const [locked, setLocked] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+  const [rosterCount, setRosterCount] = useState<number | null>(null);
   
   // Modals
   const [camperOptionsModal, setCamperOptionsModal] = useState<{ camper: Camper; cabinId: string; cabinName: string } | null>(null);
@@ -85,6 +78,34 @@ export function BunkingScreen({ navigation }: any) {
     fetchBoard();
     return () => { cancelled = true; };
   }, [companyId]);
+
+  useEffect(() => {
+    if (!companyId || !season) return;
+    fetchBunkingCampersFromRoster(companyId, season)
+      .then((campers) => setRosterCount(campers.length))
+      .catch(() => setRosterCount(null));
+  }, [companyId, season]);
+
+  const handleLoadFromRoster = async () => {
+    if (!companyId) return;
+    setLoadingRoster(true);
+    try {
+      const campers = await fetchBunkingCampersFromRoster(companyId, season);
+      if (!campers.length) {
+        Alert.alert('No campers', `No active campers found for season ${season}.`);
+        return;
+      }
+      setRosterCount(campers.length);
+      Alert.alert(
+        'Roster loaded',
+        `${campers.length} campers loaded for ${season}. Use the web Bunking page to run the auto-optimizer, or assign cabins on web.`,
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Could not load roster');
+    } finally {
+      setLoadingRoster(false);
+    }
+  };
 
   useEffect(() => {
     if (!companyId) return;
@@ -167,16 +188,26 @@ export function BunkingScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
-          <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
-        </TouchableOpacity>
         <View style={styles.headerIcon}>
           <Ionicons name="bed-outline" size={24} color="#fff" />
         </View>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Bunking Boards</Text>
-          <Text style={styles.headerSubtitle}>Tap a camper to move them</Text>
+          <Text style={styles.headerSubtitle}>
+            Season {season}{rosterCount != null ? ` · ${rosterCount} on roster` : ''}
+          </Text>
         </View>
+        <TouchableOpacity
+          style={styles.loadRosterButton}
+          onPress={handleLoadFromRoster}
+          disabled={loadingRoster || locked}
+        >
+          {loadingRoster ? (
+            <ActivityIndicator size="small" color={theme.colors.primary} />
+          ) : (
+            <Ionicons name="refresh-outline" size={18} color={theme.colors.primary} />
+          )}
+        </TouchableOpacity>
         <TouchableOpacity style={styles.lockButton} onPress={() => setLocked(!locked)}>
           <Ionicons name={locked ? "lock-closed" : "lock-open"} size={20} color={locked ? theme.colors.primary : theme.colors.textSecondary} />
         </TouchableOpacity>
@@ -197,6 +228,19 @@ export function BunkingScreen({ navigation }: any) {
             <Text style={styles.statLabel}>Open</Text>
           </View>
         </View>
+
+        {cabins.length === 0 && !loading && (
+          <View style={styles.emptyState}>
+            <Ionicons name="people-outline" size={40} color={theme.colors.textSecondary} />
+            <Text style={styles.emptyTitle}>No cabins yet</Text>
+            <Text style={styles.emptyText}>
+              Tap refresh to load {season} campers from roster. Use web for auto-optimize.
+            </Text>
+            <TouchableOpacity style={styles.primaryButton} onPress={handleLoadFromRoster} disabled={loadingRoster}>
+              <Text style={styles.primaryButtonText}>Load from Roster</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {cabins.map((cabin) => {
           const pct = Math.round((cabin.campers.length / cabin.capacity) * 100);
@@ -365,9 +409,6 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.border,
     alignItems: 'center',
   },
-  menuButton: {
-    marginRight: 8,
-  },
   headerIcon: {
     width: 40,
     height: 40,
@@ -394,6 +435,35 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: '#f1f5f9',
     borderRadius: 8,
+  },
+  loadRosterButton: {
+    padding: 8,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  emptyState: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderStyle: 'dashed',
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
+    color: theme.colors.text,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 16,
   },
   content: {
     flex: 1,
