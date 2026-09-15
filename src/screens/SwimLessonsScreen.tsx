@@ -112,7 +112,19 @@ export function SwimLessonsScreen({ navigation }: any) {
   if (loading && lessons.length === 0) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
+            <Ionicons name="menu-outline" size={26} color={theme.colors.text} />
+          </TouchableOpacity>
+          <View style={styles.headerIcon}>
+            <Ionicons name="water" size={24} color="#fff" />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Swim Lessons</Text>
+            <Text style={styles.headerSubtitle}>Schedule private lessons</Text>
+          </View>
+        </View>
+        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 24 }} />
       </SafeAreaView>
     );
   }
@@ -120,6 +132,9 @@ export function SwimLessonsScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
+          <Ionicons name="menu-outline" size={26} color={theme.colors.text} />
+        </TouchableOpacity>
         <View style={styles.headerIcon}>
           <Ionicons name="water" size={24} color="#fff" />
         </View>
@@ -321,8 +336,11 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  menuButton: {
+    marginRight: 8,
+    padding: 4,
   },
   header: {
     flexDirection: 'row',
