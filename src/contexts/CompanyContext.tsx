@@ -9,6 +9,11 @@ import {
     isDayCampCompany,
     shouldShowTigerTimes,
 } from '../constants/camps';
+import {
+    AVAILABLE_SEASONS,
+    DEFAULT_SEASON,
+    SEASON_BOOTSTRAP_VERSION,
+} from '../constants/seasonConstants';
 import { invalidateCampScopedQueries } from '../lib/queryClient';
 
 /** Persists in-session camp switch (cleared on bootstrap bump). */
@@ -45,13 +50,15 @@ interface CompanyContextType {
     retryLoad: () => void;
 }
 
-const DEFAULT_SEASONS = ['2025', '2026'];
+const DEFAULT_SEASONS: string[] = [...AVAILABLE_SEASONS];
+const SEASON_STORAGE_KEY = '@the_nest_current_season';
+const SEASON_BOOTSTRAP_KEY = '@the_nest_season_bootstrap_version';
 
 const CompanyContext = createContext<CompanyContextType>({
     companyId: null,
     companySlug: null,
     companyThemeColor: null,
-    season: new Date().getFullYear().toString(),
+    season: DEFAULT_SEASON,
     setSeason: () => { },
     availableSeasons: DEFAULT_SEASONS,
     isTylerHill: false,
@@ -105,7 +112,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
     const [companyId, setCompanyId] = useState<string | null>(null);
     const [companySlug, setCompanySlug] = useState<string | null>(null);
     const [companyThemeColor, setCompanyThemeColor] = useState<string | null>(null);
-    const [season, setSeason] = useState(new Date().getFullYear().toString());
+    const [season, setSeasonState] = useState(DEFAULT_SEASON);
     const [availableSeasons, setAvailableSeasons] = useState<string[]>(DEFAULT_SEASONS);
     const [isTylerHill, setIsTylerHill] = useState(false);
     const [isTimberLakeCampState, setIsTimberLakeCampState] = useState(false);
@@ -326,6 +333,36 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
         setLoadError(null);
         setIsLoading(true);
         void fetchCompanyDataRef.current?.();
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const bootstrapDone = await AsyncStorage.getItem(SEASON_BOOTSTRAP_KEY);
+                if (cancelled) return;
+                if (bootstrapDone !== SEASON_BOOTSTRAP_VERSION) {
+                    await AsyncStorage.setItem(SEASON_STORAGE_KEY, DEFAULT_SEASON);
+                    await AsyncStorage.setItem(SEASON_BOOTSTRAP_KEY, SEASON_BOOTSTRAP_VERSION);
+                    setSeasonState(DEFAULT_SEASON);
+                    return;
+                }
+                const stored = await AsyncStorage.getItem(SEASON_STORAGE_KEY);
+                if (!cancelled && stored) {
+                    setSeasonState(stored);
+                }
+            } catch {
+                // keep DEFAULT_SEASON
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const setSeason = useCallback((nextSeason: string) => {
+        setSeasonState(nextSeason);
+        void AsyncStorage.setItem(SEASON_STORAGE_KEY, nextSeason);
     }, []);
 
     const contextValue = useMemo(

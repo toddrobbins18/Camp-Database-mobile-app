@@ -602,10 +602,13 @@ export const useTodaySpecialEventsActivities = (
             if (!companyId || !season) return [];
             const cacheKey = `dashboard_special_events_activities:${companyId}:${todayString}:${season}`;
             return readThroughCache<any[]>(cacheKey, async () => {
+                const divisionFilter = await resolveDashboardDivisionFilter(companyId);
+                const hasFullAccess = divisionFilter === null;
+
                 const { data, error } = await supabase
                     .from('special_events_activities')
                     .select(`
-                      id, title, time_slot, location, description, event_type, season,
+                      id, title, time_slot, location, description, event_type, season, division_id,
                       division:divisions(id, name),
                       special_events_divisions(division_id, division:divisions(id, name))
                     `)
@@ -613,10 +616,18 @@ export const useTodaySpecialEventsActivities = (
                     .eq('event_date', todayString)
                     .order('time_slot');
                 if (error) throw error;
-                const rows = (data || []).map((event: any) => ({
+                let rows = (data || []).map((event: any) => ({
                     ...event,
                     divisions: mergeActivityDivisions(event),
                 }));
+
+                if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
+                    rows = rows.filter(
+                        (event: { division_id?: string | null }) =>
+                            !event.division_id || divisionFilter.includes(event.division_id),
+                    );
+                }
+
                 const matched = rows.filter(
                     (e: { season?: string | null }) => e.season === season || e.season == null,
                 );
@@ -625,6 +636,99 @@ export const useTodaySpecialEventsActivities = (
             });
         },
         enabled: !!companyId && !!season && enabled,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
+    });
+};
+
+export type DashboardStats = {
+    activeCampers: number;
+    activeRoutes: number;
+    todayNotes: number;
+};
+
+/** Active campers, transportation routes, and daily notes — mirrors web Dashboard.tsx stat cards. */
+export const useDashboardStats = (
+    companyId: string | null,
+    season: string | null,
+    todayString: string,
+    enabled: boolean,
+) => {
+    return useQuery({
+        queryKey: ['dashboard_stats', companyId, season ?? '', todayString],
+        queryFn: async (): Promise<DashboardStats> => {
+            if (!companyId) {
+                return { activeCampers: 0, activeRoutes: 0, todayNotes: 0 };
+            }
+
+            const cacheKey = `dashboard_stats:${companyId}:${season ?? ''}:${todayString}`;
+            return readThroughCache(cacheKey, async () => {
+                const divisionFilter = await resolveDashboardDivisionFilter(companyId);
+                const hasFullAccess = divisionFilter === null;
+
+                let childrenQuery = supabase
+                    .from('children')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('status', 'active')
+                    .eq('company_id', companyId);
+
+                if (season) {
+                    childrenQuery = childrenQuery.eq('season', season);
+                }
+                if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
+                    childrenQuery = childrenQuery.in('division_id', divisionFilter);
+                }
+
+                const { count: childrenCount, error: childrenError } = await childrenQuery;
+                if (childrenError) throw childrenError;
+
+                const { count: tripsCount, error: tripsError } = await supabase
+                    .from('trips')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('status', 'active')
+                    .eq('company_id', companyId)
+                    .gte('date', todayString);
+                if (tripsError) throw tripsError;
+
+                let notesCount = 0;
+                if (hasFullAccess) {
+                    const { count, error } = await supabase
+                        .from('daily_notes')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('date', todayString)
+                        .eq('company_id', companyId);
+                    if (error) throw error;
+                    notesCount = count ?? 0;
+                } else if (divisionFilter && divisionFilter.length > 0 && season) {
+                    const { data: childrenInDivisions } = await supabase
+                        .from('children')
+                        .select('id')
+                        .eq('company_id', companyId)
+                        .eq('status', 'active')
+                        .eq('season', season)
+                        .in('division_id', divisionFilter);
+
+                    const childIds = (childrenInDivisions || []).map((c) => c.id);
+                    if (childIds.length > 0) {
+                        const { count, error } = await supabase
+                            .from('daily_notes')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('date', todayString)
+                            .eq('company_id', companyId)
+                            .in('child_id', childIds);
+                        if (error) throw error;
+                        notesCount = count ?? 0;
+                    }
+                }
+
+                return {
+                    activeCampers: childrenCount ?? 0,
+                    activeRoutes: tripsCount ?? 0,
+                    todayNotes: notesCount,
+                };
+            });
+        },
+        enabled: !!companyId && enabled,
         staleTime: 0,
         refetchOnWindowFocus: true,
     });

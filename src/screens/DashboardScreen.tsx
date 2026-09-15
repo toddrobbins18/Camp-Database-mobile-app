@@ -28,6 +28,7 @@ import {
     useDailyWolfContentRow,
     useUpcomingTripsForDashboard,
     useSupervisorThreeDayOutlook,
+    useDashboardStats,
 } from '../api/dashboard';
 import { groupOutlookItemsByDate, outlookDayHeading } from '../lib/personScheduleOutlook';
 import { useInboxUnreadCount } from '../api/messages';
@@ -66,6 +67,8 @@ export const DashboardScreen = ({ navigation }: any) => {
             void queryClient.invalidateQueries({ queryKey: ['daily_news_schedule'] });
             void queryClient.invalidateQueries({ queryKey: ['dashboard_birthdays'] });
             void queryClient.invalidateQueries({ queryKey: ['dashboard_special_meals'] });
+            void queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] });
+            void queryClient.invalidateQueries({ queryKey: ['dashboard_special_events_activities'] });
         }, [queryClient]),
     );
     const currentDate = new Date();
@@ -120,7 +123,15 @@ export const DashboardScreen = ({ navigation }: any) => {
     );
 
     const usesSportsCalendar = isTylerHill || isTimberLakeWest || isTimberLakeCamp;
-    const usesSpecialEventsTable = usesSportsCalendar;
+    const usesSpecialEventsTable = usesSportsCalendar || isDayCamp;
+    const showDashboardStats = !hasDashboardHeroBg;
+
+    const { data: dashboardStats, isLoading: statsLoading } = useDashboardStats(
+        companyId,
+        season ?? null,
+        todayString,
+        showDashboardStats,
+    );
 
     const { data: sportsToday = [] } = useTodaySportsCalendar(
         companyId,
@@ -408,6 +419,47 @@ export const DashboardScreen = ({ navigation }: any) => {
                         </Text>
                     </View>
                 </View>
+
+                {showDashboardStats && (
+                    <View style={styles.statsRow}>
+                        <View style={[styles.statCard, styles.statCardDefault]}>
+                            <View style={[styles.statIconWrap, styles.statIconDefault]}>
+                                <Ionicons name="people-outline" size={18} color="#2563eb" />
+                            </View>
+                            {statsLoading ? (
+                                <ActivityIndicator size="small" color={theme.colors.secondary} style={{ marginVertical: 8 }} />
+                            ) : (
+                                <Text style={styles.statValue}>{dashboardStats?.activeCampers ?? 0}</Text>
+                            )}
+                            <Text style={styles.statTitle}>Active Campers</Text>
+                            <Text style={styles.statTrend}>Season {season}</Text>
+                        </View>
+                        <View style={[styles.statCard, styles.statCardSuccess]}>
+                            <View style={[styles.statIconWrap, styles.statIconSuccess]}>
+                                <Ionicons name="bus-outline" size={18} color="#16a34a" />
+                            </View>
+                            {statsLoading ? (
+                                <ActivityIndicator size="small" color={theme.colors.secondary} style={{ marginVertical: 8 }} />
+                            ) : (
+                                <Text style={styles.statValue}>{dashboardStats?.activeRoutes ?? 0}</Text>
+                            )}
+                            <Text style={styles.statTitle}>Transportation</Text>
+                            <Text style={styles.statTrend}>All on schedule</Text>
+                        </View>
+                        <View style={[styles.statCard, styles.statCardInfo]}>
+                            <View style={[styles.statIconWrap, styles.statIconInfo]}>
+                                <Ionicons name="document-text-outline" size={18} color="#0284c7" />
+                            </View>
+                            {statsLoading ? (
+                                <ActivityIndicator size="small" color={theme.colors.secondary} style={{ marginVertical: 8 }} />
+                            ) : (
+                                <Text style={styles.statValue}>{dashboardStats?.todayNotes ?? 0}</Text>
+                            )}
+                            <Text style={styles.statTitle}>Today's Notes</Text>
+                            <Text style={styles.statTrend}>Today</Text>
+                        </View>
+                    </View>
+                )}
 
                 {/* Weather Widget */}
                 <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
@@ -1199,6 +1251,63 @@ const styles = StyleSheet.create({
     threeDayOutlookLabel: {
         color: '#d97706',
         marginTop: theme.spacing.sm,
+    },
+    statsRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: theme.spacing.md,
+    },
+    statCard: {
+        flex: 1,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.lg,
+        padding: theme.spacing.sm,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        minWidth: 0,
+    },
+    statCardDefault: {
+        borderLeftWidth: 3,
+        borderLeftColor: '#2563eb',
+    },
+    statCardSuccess: {
+        borderLeftWidth: 3,
+        borderLeftColor: '#16a34a',
+    },
+    statCardInfo: {
+        borderLeftWidth: 3,
+        borderLeftColor: '#0284c7',
+    },
+    statIconWrap: {
+        alignSelf: 'flex-end',
+        borderRadius: 8,
+        padding: 6,
+        marginBottom: 4,
+    },
+    statIconDefault: {
+        backgroundColor: '#dbeafe',
+    },
+    statIconSuccess: {
+        backgroundColor: '#dcfce7',
+    },
+    statIconInfo: {
+        backgroundColor: '#e0f2fe',
+    },
+    statValue: {
+        fontSize: 22,
+        fontWeight: '800',
+        color: theme.colors.text,
+    },
+    statTitle: {
+        fontSize: 10,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
+    statTrend: {
+        fontSize: 9,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
     },
     widgetCard: {
         backgroundColor: theme.colors.surface,
