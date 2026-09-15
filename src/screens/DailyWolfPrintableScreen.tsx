@@ -101,7 +101,7 @@ export const DailyWolfPrintableScreen = ({ navigation }: any) => {
     );
     const { data: specialActivitiesToday = [], isLoading: loadingSpecial } =
         useTodaySpecialEventsActivities(companyId, todayString, season ?? null, isTimberLakeWest);
-    const { data: todayMenuItems = [], isLoading: loadingMeals } = useTodayMeals(companyId, todayString, season ?? null);
+    const { data: todayMenuItems = [], isLoading: loadingMeals } = useTodayMeals(companyId, todayString);
 
     const loading = loadingBirthdays || loadingWolf || loadingSports || loadingSpecial || loadingMeals;
 

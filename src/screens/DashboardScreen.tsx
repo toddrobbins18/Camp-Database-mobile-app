@@ -69,6 +69,7 @@ export const DashboardScreen = ({ navigation }: any) => {
             void queryClient.invalidateQueries({ queryKey: ['dashboard_special_meals'] });
             void queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] });
             void queryClient.invalidateQueries({ queryKey: ['dashboard_special_events_activities'] });
+            void queryClient.invalidateQueries({ queryKey: ['dashboard_meals'] });
         }, [queryClient]),
     );
     const currentDate = new Date();
@@ -107,7 +108,7 @@ export const DashboardScreen = ({ navigation }: any) => {
         season ?? null,
         isDashboardFocused,
     );
-    const { data: todayMenuItems = [] } = useTodayMeals(companyId, todayString, season ?? null);
+    const { data: todayMenuItems = [] } = useTodayMeals(companyId, todayString);
     const { data: todaySpecialMeals = [] } = useTodaySpecialMeals(
         companyId,
         todayString,

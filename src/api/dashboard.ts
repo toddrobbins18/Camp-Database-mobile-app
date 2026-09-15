@@ -345,26 +345,19 @@ function sortTodayMenuItems(items: TodayMenuItem[]): TodayMenuItem[] {
     });
 }
 
-export const useTodayMeals = (
-    companyId: string | null,
-    todayString: string,
-    season?: string | null,
-) => {
+/** Today's menu — matches web Dashboard.tsx (date + company only; menu is calendar-day scoped). */
+export const useTodayMeals = (companyId: string | null, todayString: string) => {
     return useQuery({
-        queryKey: ['dashboard_meals', companyId, todayString, season ?? ''],
+        queryKey: ['dashboard_meals', companyId, todayString],
         queryFn: async () => {
             if (!companyId) return [];
-            const cacheKey = `dashboard_meals:${companyId}:${todayString}:${season ?? ''}`;
+            const cacheKey = `dashboard_meals:${companyId}:${todayString}`;
             return readThroughCache<TodayMenuItem[]>(cacheKey, async () => {
-                let q = supabase
+                const { data, error } = await supabase
                     .from('menu_items')
                     .select('id, meal_type, items, allergens, division_ids, created_at')
                     .eq('company_id', companyId)
                     .eq('date', todayString);
-                if (season != null && String(season).trim() !== '') {
-                    q = q.or(`season.eq.${season},season.is.null`);
-                }
-                const { data, error } = await q;
 
                 if (error) throw error;
 
@@ -383,6 +376,8 @@ export const useTodayMeals = (
             });
         },
         enabled: !!companyId,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
     });
 };
 
