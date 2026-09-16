@@ -1,4 +1,28 @@
-import jsPDF from "jspdf";
+import type jsPDF from "jspdf";
+import { installTextCodecPolyfill } from "./textCodecPolyfill";
+
+type JsPDFConstructor = typeof jsPDF;
+
+let jsPDFCtorPromise: Promise<JsPDFConstructor> | null = null;
+
+async function getJsPDFConstructor(): Promise<JsPDFConstructor> {
+  installTextCodecPolyfill();
+  if (!jsPDFCtorPromise) {
+    jsPDFCtorPromise = import("jspdf").then((mod) => {
+      const ctor = (mod.jsPDF ?? mod.default) as JsPDFConstructor | undefined;
+      if (typeof ctor !== "function") {
+        throw new Error("jsPDF module did not export a constructor");
+      }
+      return ctor;
+    });
+  }
+  return jsPDFCtorPromise;
+}
+
+async function createJsPDF(options?: ConstructorParameters<JsPDFConstructor>[0]) {
+  const JsPDF = await getJsPDFConstructor();
+  return new JsPDF(options);
+}
 
 export type BubbleSheetCamper = {
   name: string;
@@ -325,9 +349,18 @@ function renderBubbleSections(
 }
 
 export type TransportReportPdf = {
-  blob: Blob;
   filename: string;
+  bytes: Uint8Array;
 };
+
+function docToPdfResult(doc: jsPDF, filename: string): TransportReportPdf {
+  const buffer = doc.output("arraybuffer") as ArrayBuffer;
+  return { filename, bytes: new Uint8Array(buffer) };
+}
+
+function pdfBytesToBlob(bytes: Uint8Array): Blob {
+  return new Blob([bytes], { type: "application/pdf" });
+}
 
 function triggerBlobDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -338,7 +371,7 @@ function triggerBlobDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function buildBusBubbleSheetsPdf(options: {
+export async function buildBusBubbleSheetsPdf(options: {
   companyName: string;
   date: string;
   runPeriod: "am" | "pm";
@@ -347,7 +380,7 @@ export function buildBusBubbleSheetsPdf(options: {
     routeName: string;
     campers: BubbleSheetCamper[];
   }[];
-}): TransportReportPdf | null {
+}): Promise<TransportReportPdf | null> {
   const sections = options.routes
     .filter((r) => r.campers.length > 0)
     .map((r) => ({
@@ -358,7 +391,7 @@ export function buildBusBubbleSheetsPdf(options: {
 
   if (!sections.length) return null;
 
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+  const doc = await createJsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   renderBubbleSections(
     doc,
     options.companyName,
@@ -368,13 +401,10 @@ export function buildBusBubbleSheetsPdf(options: {
   );
 
   const safeDate = options.date.replace(/[^0-9-]/g, "");
-  return {
-    blob: doc.output("blob"),
-    filename: `bus-bubble-sheets-${safeDate}-${options.runPeriod}.pdf`,
-  };
+  return docToPdfResult(doc, `bus-bubble-sheets-${safeDate}-${options.runPeriod}.pdf`);
 }
 
-export function downloadBusBubbleSheetsPdf(options: {
+export async function downloadBusBubbleSheetsPdf(options: {
   companyName: string;
   date: string;
   runPeriod: "am" | "pm";
@@ -383,21 +413,21 @@ export function downloadBusBubbleSheetsPdf(options: {
     routeName: string;
     campers: BubbleSheetCamper[];
   }[];
-}): boolean {
-  const built = buildBusBubbleSheetsPdf(options);
+}): Promise<boolean> {
+  const built = await buildBusBubbleSheetsPdf(options);
   if (!built) return false;
-  triggerBlobDownload(built.blob, built.filename);
+  triggerBlobDownload(pdfBytesToBlob(built.bytes), built.filename);
   return true;
 }
 
-export function buildGroupBubbleSheetPdf(options: {
+export async function buildGroupBubbleSheetPdf(options: {
   companyName: string;
   date: string;
   groups: {
     groupName: string;
     campers: BubbleSheetCamper[];
   }[];
-}): TransportReportPdf | null {
+}): Promise<TransportReportPdf | null> {
   const sections = options.groups
     .filter((g) => g.campers.length > 0)
     .map((g) => ({
@@ -408,7 +438,7 @@ export function buildGroupBubbleSheetPdf(options: {
 
   if (!sections.length) return null;
 
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+  const doc = await createJsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   renderBubbleSections(
     doc,
     options.companyName,
@@ -418,27 +448,24 @@ export function buildGroupBubbleSheetPdf(options: {
   );
 
   const safeDate = options.date.replace(/[^0-9-]/g, "");
-  return {
-    blob: doc.output("blob"),
-    filename: `group-bubble-sheet-${safeDate}.pdf`,
-  };
+  return docToPdfResult(doc, `group-bubble-sheet-${safeDate}.pdf`);
 }
 
-export function downloadGroupBubbleSheetPdf(options: {
+export async function downloadGroupBubbleSheetPdf(options: {
   companyName: string;
   date: string;
   groups: {
     groupName: string;
     campers: BubbleSheetCamper[];
   }[];
-}): boolean {
-  const built = buildGroupBubbleSheetPdf(options);
+}): Promise<boolean> {
+  const built = await buildGroupBubbleSheetPdf(options);
   if (!built) return false;
-  triggerBlobDownload(built.blob, built.filename);
+  triggerBlobDownload(pdfBytesToBlob(built.bytes), built.filename);
   return true;
 }
 
-export function buildCombinedAttendanceBubbleSheetPdf(options: {
+export async function buildCombinedAttendanceBubbleSheetPdf(options: {
   companyName: string;
   date: string;
   runPeriod: "am" | "pm";
@@ -451,7 +478,7 @@ export function buildCombinedAttendanceBubbleSheetPdf(options: {
     groupName: string;
     campers: BubbleSheetCamper[];
   }[];
-}): TransportReportPdf | null {
+}): Promise<TransportReportPdf | null> {
   const busSections: BubbleSheetSection[] = options.busRoutes
     .filter((r) => r.campers.length > 0)
     .map((r) => ({
@@ -471,7 +498,7 @@ export function buildCombinedAttendanceBubbleSheetPdf(options: {
   const sections = [...busSections, ...groupSections];
   if (!sections.length) return null;
 
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+  const doc = await createJsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   renderBubbleSections(
     doc,
     options.companyName,
@@ -481,13 +508,10 @@ export function buildCombinedAttendanceBubbleSheetPdf(options: {
   );
 
   const safeDate = options.date.replace(/[^0-9-]/g, "");
-  return {
-    blob: doc.output("blob"),
-    filename: `daycamp-attendance-bubble-${safeDate}-${options.runPeriod}.pdf`,
-  };
+  return docToPdfResult(doc, `daycamp-attendance-bubble-${safeDate}-${options.runPeriod}.pdf`);
 }
 
-export function downloadCombinedAttendanceBubbleSheetPdf(options: {
+export async function downloadCombinedAttendanceBubbleSheetPdf(options: {
   companyName: string;
   date: string;
   runPeriod: "am" | "pm";
@@ -500,9 +524,9 @@ export function downloadCombinedAttendanceBubbleSheetPdf(options: {
     groupName: string;
     campers: BubbleSheetCamper[];
   }[];
-}): boolean {
-  const built = buildCombinedAttendanceBubbleSheetPdf(options);
+}): Promise<boolean> {
+  const built = await buildCombinedAttendanceBubbleSheetPdf(options);
   if (!built) return false;
-  triggerBlobDownload(built.blob, built.filename);
+  triggerBlobDownload(pdfBytesToBlob(built.bytes), built.filename);
   return true;
 }

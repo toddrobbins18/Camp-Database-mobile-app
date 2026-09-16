@@ -31,6 +31,7 @@ import {
   type BusAttendanceMap,
 } from '../lib/transportBusAttendance';
 import { loadGroupRoster, type GroupRosterCamper } from '../lib/transportGroupAttendance';
+import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
 import {
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
@@ -167,21 +168,12 @@ async function shareCsv(rows: (string | number)[][], filename: string) {
   await Share.share({ url: file.uri, title: filename, message: csv });
 }
 
-async function sharePdfBlob(blob: Blob, filename: string) {
-  const base64 = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.includes(',') ? result.split(',')[1] : result);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-  const file = new File(Paths.cache, filename);
+async function shareTransportPdf(pdf: { filename: string; bytes: Uint8Array }) {
+  const file = new File(Paths.cache, pdf.filename);
   if (file.exists) file.delete();
   file.create({ overwrite: true });
-  file.write(base64, { encoding: 'base64' });
-  await Share.share({ url: file.uri, title: filename });
+  file.write(pdf.bytes);
+  await Share.share({ url: file.uri, title: pdf.filename });
 }
 
 export function useDayCampTransport() {
@@ -1587,32 +1579,38 @@ export function useDayCampTransport() {
       return;
     }
     if (reportName === 'Attendance') {
-      const sheetRoutes = routes
-        .map((r) => ({
-          bus: r.bus,
-          routeName: r.name,
-          campers: campersOnRoute(r.id, getEffectiveCore(r.id)).map((c) => ({
-            name: c.name,
-            detail: c.stopName,
-          })),
-        }))
-        .filter((r) => r.campers.length > 0);
-      const groups = groupRosterByGroup.map(([groupName, campers]) => ({
-        groupName,
-        campers: campers.map((c) => ({ name: c.name })),
-      }));
-      const { buildCombinedAttendanceBubbleSheetPdf } = await import('../lib/transportBubbleSheetPdf');
-      const built = buildCombinedAttendanceBubbleSheetPdf({
-        companyName,
-        date: overrideDate,
-        runPeriod: timeOfDay,
-        busRoutes: sheetRoutes,
-        groups,
-      });
-      if (!built) {
-        toast('No campers to print', undefined, true);
-      } else {
-        await sharePdfBlob(built.blob, built.filename);
+      try {
+        const sheetRoutes = routes
+          .map((r) => ({
+            bus: r.bus,
+            routeName: r.name,
+            campers: campersOnRoute(r.id, getEffectiveCore(r.id)).map((c) => ({
+              name: c.name,
+              detail: c.stopName,
+            })),
+          }))
+          .filter((r) => r.campers.length > 0);
+        const groups = groupRosterByGroup.map(([groupName, campers]) => ({
+          groupName,
+          campers: campers.map((c) => ({ name: c.name })),
+        }));
+        installTextCodecPolyfill();
+        const { buildCombinedAttendanceBubbleSheetPdf } = await import('../lib/transportBubbleSheetPdf');
+        const built = await buildCombinedAttendanceBubbleSheetPdf({
+          companyName,
+          date: overrideDate,
+          runPeriod: timeOfDay,
+          busRoutes: sheetRoutes,
+          groups,
+        });
+        if (!built) {
+          toast('No campers to print', undefined, true);
+        } else {
+          await shareTransportPdf(built);
+        }
+      } catch (err) {
+        console.error('[Transport] Attendance PDF failed', err);
+        toast('PDF failed', 'Could not generate attendance bubble sheet.', true);
       }
       return;
     }

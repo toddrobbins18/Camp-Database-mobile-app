@@ -1,4 +1,8 @@
 import 'react-native-gesture-handler';
+import { installTextCodecPolyfill } from './src/lib/textCodecPolyfill';
+
+installTextCodecPolyfill();
+
 import { registerRootComponent } from 'expo';
 
 import App from './App';

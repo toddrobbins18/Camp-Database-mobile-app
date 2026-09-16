@@ -1,11 +1,13 @@
-import React, { useMemo, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import MapView, { Marker, Polyline, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { CAMP_LOCATION, isCampStop, normAddr } from '../lib/transportBoardUtils';
 import type { TransportRouteStop } from '../lib/transportRoster';
 
 const UNPLOTTED_COLOR = '#8b5cf6';
+const MIN_ZOOM_DELTA = 0.002;
+const MAX_ZOOM_DELTA = 2;
 
 export type MapRoute = {
   id: number;
@@ -84,6 +86,7 @@ export function TransportRouteMapNative({
 }: TransportRouteMapNativeProps) {
   const mapRef = useRef<MapView>(null);
   const hasFitRef = useRef(false);
+  const [region, setRegion] = useState<Region | null>(null);
 
   const allPoints = useMemo(() => {
     const routePoints = routes.flatMap((r) => r.stops.map((s) => ({ lat: s.lat, lng: s.lng })));
@@ -116,17 +119,65 @@ export function TransportRouteMapNative({
     };
   }, [allPoints]);
 
-  useEffect(() => {
-    if (hasFitRef.current || allPoints.length < 2) return;
-    hasFitRef.current = true;
+  const fitAllPoints = useCallback(() => {
+    if (allPoints.length === 0) return;
+    if (allPoints.length === 1) {
+      const next: Region = {
+        latitude: allPoints[0].lat,
+        longitude: allPoints[0].lng,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      };
+      mapRef.current?.animateToRegion(next, 250);
+      setRegion(next);
+      return;
+    }
     mapRef.current?.fitToCoordinates(
       allPoints.map((p) => ({ latitude: p.lat, longitude: p.lng })),
       { edgePadding: { top: 48, right: 48, bottom: 48, left: 48 }, animated: true },
     );
   }, [allPoints]);
 
+  useEffect(() => {
+    setRegion(initialRegion);
+    hasFitRef.current = false;
+  }, [initialRegion]);
+
+  useEffect(() => {
+    if (hasFitRef.current || allPoints.length < 2) return;
+    hasFitRef.current = true;
+    fitAllPoints();
+  }, [allPoints, fitAllPoints]);
+
+  const zoomBy = useCallback(
+    (factor: number) => {
+      const base = region ?? initialRegion;
+      const next: Region = {
+        latitude: base.latitude,
+        longitude: base.longitude,
+        latitudeDelta: Math.min(Math.max(base.latitudeDelta * factor, MIN_ZOOM_DELTA), MAX_ZOOM_DELTA),
+        longitudeDelta: Math.min(Math.max(base.longitudeDelta * factor, MIN_ZOOM_DELTA), MAX_ZOOM_DELTA),
+      };
+      mapRef.current?.animateToRegion(next, 200);
+      setRegion(next);
+    },
+    [region, initialRegion],
+  );
+
+  const zoomIn = useCallback(() => zoomBy(0.5), [zoomBy]);
+  const zoomOut = useCallback(() => zoomBy(2), [zoomBy]);
+
   return (
-    <MapView ref={mapRef} style={styles.map} initialRegion={initialRegion} showsUserLocation={false}>
+    <View style={styles.mapWrap}>
+    <MapView
+      ref={mapRef}
+      style={styles.map}
+      initialRegion={initialRegion}
+      showsUserLocation={false}
+      zoomEnabled
+      scrollEnabled
+      onRegionChangeComplete={setRegion}
+    >
       {routes.map((route) => {
         const coords = routeCoordinates(route);
         if (coords.length > 1) {
@@ -177,13 +228,56 @@ export function TransportRouteMapNative({
         ) : null,
       )}
     </MapView>
+    <View style={styles.zoomControls}>
+      <TouchableOpacity style={styles.zoomBtn} onPress={zoomIn} accessibilityLabel="Zoom in">
+        <Ionicons name="add" size={20} color="#334155" />
+      </TouchableOpacity>
+      <View style={styles.zoomDivider} />
+      <TouchableOpacity style={styles.zoomBtn} onPress={zoomOut} accessibilityLabel="Zoom out">
+        <Ionicons name="remove" size={20} color="#334155" />
+      </TouchableOpacity>
+      <View style={styles.zoomDivider} />
+      <TouchableOpacity style={styles.zoomBtn} onPress={fitAllPoints} accessibilityLabel="Fit all routes">
+        <Ionicons name="scan-outline" size={18} color="#334155" />
+      </TouchableOpacity>
+    </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  mapWrap: {
+    flex: 1,
+    width: '100%',
+  },
   map: {
     flex: 1,
     width: '100%',
+  },
+  zoomControls: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  zoomBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoomDivider: {
+    height: 1,
+    backgroundColor: '#e2e8f0',
   },
   marker: {
     borderWidth: 2,

@@ -37,6 +37,7 @@ import {
   type BusCheckinMap,
 } from '../lib/transportBusCheckins';
 import { buildRunRoutes, getEffectiveCoreStops, loadTransportRunBoard, type TransportRunBoard } from '../lib/transportRunBoard';
+import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
 
 function ymdFromDate(d: Date): string {
   return format(d, 'yyyy-MM-dd');
@@ -46,21 +47,12 @@ function dateFromYmd(ymd: string): Date {
   return new Date(`${ymd}T12:00:00`);
 }
 
-async function sharePdfBlob(blob: Blob, filename: string) {
-  const base64 = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.includes(',') ? result.split(',')[1] : result);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-  const file = new File(Paths.cache, filename);
+async function shareTransportPdf(pdf: { filename: string; bytes: Uint8Array }) {
+  const file = new File(Paths.cache, pdf.filename);
   if (file.exists) file.delete();
   file.create({ overwrite: true });
-  file.write(base64, { encoding: 'base64' });
-  await Share.share({ url: file.uri, title: filename });
+  file.write(pdf.bytes);
+  await Share.share({ url: file.uri, title: pdf.filename });
 }
 
 export function BusAttendanceScreen({ navigation }: any) {
@@ -319,19 +311,20 @@ export function BusAttendanceScreen({ navigation }: any) {
       })),
     }));
 
-    const { buildBusBubbleSheetsPdf } = await import('../lib/transportBubbleSheetPdf');
-    const built = buildBusBubbleSheetsPdf({
-      companyName,
-      date: runDate,
-      runPeriod: timeOfDay,
-      routes: sheetRoutes,
-    });
-    if (!built) {
-      Alert.alert('No campers to print', 'No campers scheduled on buses for this run.');
-      return;
-    }
     try {
-      await sharePdfBlob(built.blob, built.filename);
+      installTextCodecPolyfill();
+      const { buildBusBubbleSheetsPdf } = await import('../lib/transportBubbleSheetPdf');
+      const built = await buildBusBubbleSheetsPdf({
+        companyName,
+        date: runDate,
+        runPeriod: timeOfDay,
+        routes: sheetRoutes,
+      });
+      if (!built) {
+        Alert.alert('No campers to print', 'No campers scheduled on buses for this run.');
+        return;
+      }
+      await shareTransportPdf(built);
     } catch {
       Alert.alert('Bubble sheet', 'Could not share PDF.');
     }
