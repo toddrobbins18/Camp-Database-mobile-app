@@ -542,6 +542,7 @@ async function continueUploadAfterValidation(
                     date: dateIso,
                     type: row.type || 'General',
                     description: row.description || '',
+                    location: row.location || null,
                     severity: row.severity || null,
                     reported_by: row.reported_by || null,
                     reporter_id: reporter_id ?? null,

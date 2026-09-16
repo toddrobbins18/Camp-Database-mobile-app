@@ -10,6 +10,7 @@ export interface IncidentReport {
     date: string;
     type: string;
     description: string;
+    location?: string;
     severity?: string;
     reported_by?: string;
     reporter_id?: string;
@@ -164,6 +165,7 @@ export const useUpdateIncidentReport = () => {
             date?: string;
             type?: string;
             description?: string;
+            location?: string;
             severity?: string;
             reported_by?: string;
             status?: string;

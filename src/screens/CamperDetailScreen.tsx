@@ -163,6 +163,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                         type,
                         severity,
                         description,
+                        location,
                         status,
                         reported_by,
                         tags,
@@ -1296,6 +1297,11 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                             ) : null}
                                                         </View>
                                                     </View>
+                                                    {report.location ? (
+                                                        <Text style={styles.achievementType}>
+                                                            Location: {report.location}
+                                                        </Text>
+                                                    ) : null}
                                                     {report.reported_by ? (
                                                         <Text style={styles.achievementType}>
                                                             Reported by {report.reported_by}

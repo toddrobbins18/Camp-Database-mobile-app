@@ -52,6 +52,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
         date: '',
         type: '',
         description: '',
+        location: '',
         severity: '',
         reportedBy: '',
         status: 'Open',
@@ -68,6 +69,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
     const [incidentType, setIncidentType] = useState<string>('');
     const [severity, setSeverity] = useState<string>('');
     const [description, setDescription] = useState<string>('');
+    const [location, setLocation] = useState<string>('');
     const [reportedBy, setReportedBy] = useState<string>('');
     const [status, setStatus] = useState<string>('Open');
     /** Inline picker inside Add Incident modal — avoids stacking a second RN Modal (breaks on iOS). */
@@ -174,6 +176,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
         setSeverity('');
         setStatus('Open');
         setDescription('');
+        setLocation('');
         setReportedBy('');
         setTags([]);
         setTagInput('');
@@ -193,6 +196,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                 date: editingIncident.date || new Date().toISOString().split('T')[0],
                 type: editingIncident.type || '',
                 description: editingIncident.description || '',
+                location: editingIncident.location || '',
                 severity: editingIncident.severity || '',
                 reportedBy: editingIncident.reported_by || '',
                 status: (editingIncident.status && formatLabel(editingIncident.status)) || 'Open',
@@ -328,6 +332,11 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                     <Text style={styles.incidentCardDescription} numberOfLines={3}>
                                         {report.description || 'none'}
                                     </Text>
+                                    {report.location ? (
+                                        <Text style={styles.incidentCardReportedBy}>
+                                            Location: {report.location}
+                                        </Text>
+                                    ) : null}
                                     {(report.reported_by || report.staff?.name) && (
                                         <Text style={styles.incidentCardReportedBy}>
                                             Reported by: {report.staff?.name || report.reported_by}
@@ -625,6 +634,22 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                 />
                             </View>
 
+                            {/* Location Section */}
+                            <View style={styles.formSection}>
+                                <Text style={styles.formLabel}>Location</Text>
+                                <View style={[styles.inputContainer, { borderColor: getFieldBorderColor('location') }]}>
+                                    <TextInput
+                                        style={styles.inputField}
+                                        placeholder="Where did the incident occur?"
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        value={location}
+                                        onChangeText={setLocation}
+                                        onFocus={() => setFocusedField('location')}
+                                        onBlur={() => setFocusedField((prev) => (prev === 'location' ? null : prev))}
+                                    />
+                                </View>
+                            </View>
+
                             {/* Tags Section */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Tags (Optional)</Text>
@@ -713,6 +738,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                         addIncidentMutation.mutate({
                                             type: incidentType,
                                             description,
+                                            location: location.trim() || undefined,
                                             severity: severity || undefined,
                                             status,
                                             reported_by: reportedBy || undefined,
@@ -957,6 +983,16 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                 />
                             </View>
                             <View style={styles.formSection}>
+                                <Text style={styles.formLabel}>Location</Text>
+                                <TextInput
+                                    style={styles.inputField}
+                                    value={editForm.location}
+                                    onChangeText={(t) => setEditForm((f) => ({ ...f, location: t }))}
+                                    placeholder="Where did the incident occur?"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                />
+                            </View>
+                            <View style={styles.formSection}>
                                 <Text style={styles.formLabel}>Severity</Text>
                                 <TouchableOpacity style={styles.inputContainer} onPress={() => setEditIncidentSubsheet('severity')}>
                                     <TextInput style={styles.inputField} value={editForm.severity} editable={false} pointerEvents="none" />
@@ -998,6 +1034,7 @@ export const IncidentReportsScreen = ({ navigation }: any) => {
                                                 date: formatDateForStorage(editDate),
                                                 type: editForm.type,
                                                 description: editForm.description,
+                                                location: editForm.location.trim() || undefined,
                                                 severity: editForm.severity || undefined,
                                                 reported_by: editForm.reportedBy || undefined,
                                                 status: editForm.status,

@@ -124,8 +124,8 @@ const CSV_GUIDE_FORMATS: Record<
     incident_reports: {
         title: 'Incident Reports',
         shortLabel: 'Incidents',
-        columns: 'child_id, date, type, severity, description, reported_by, status',
-        example: '<child_id>, 2024-06-15, Minor Injury, Low, Scraped knee on playground, Jane Smith, resolved',
+        columns: 'child_id, date, type, severity, description, location, reported_by, status',
+        example: '<child_id>, 2024-06-15, Minor Injury, Low, Scraped knee on playground, Main Playground, Jane Smith, resolved',
         notes: 'child_id UUID. type: Injury, Illness, Behavioral, Other.',
     },
     master_calendar: {

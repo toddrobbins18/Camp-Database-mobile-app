@@ -196,7 +196,7 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                 case 'incidents': {
                     const { data } = await supabase
                         .from('incident_reports')
-                        .select('date, type, severity, status, description, children(name, division_id)')
+                        .select('date, type, severity, status, description, location, children(name, division_id)')
                         .eq('company_id', companyId)
                         .eq('season', season)
                         .gte('date', fromDate)
@@ -212,6 +212,7 @@ export const ReportsScreen = ({ navigation }: ReportsScreenProps) => {
                         Type: row.type || 'N/A',
                         Severity: row.severity || 'N/A',
                         Status: row.status || 'N/A',
+                        Location: row.location || 'N/A',
                         Description: row.description || '',
                     }));
                     summaryRows = {
