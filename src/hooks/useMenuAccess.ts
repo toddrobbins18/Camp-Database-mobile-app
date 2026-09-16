@@ -31,7 +31,11 @@ export function useMenuAccess() {
             );
             if (hasPerm) return true;
             // Match web: Bus Attendance allowed when Transportation is enabled for the role.
-            if (menuItem === 'bus-attendance') {
+            if (
+                menuItem === 'bus-attendance' ||
+                menuItem === 'change-sheets' ||
+                menuItem === 'pending-transport-changes'
+            ) {
                 return rolePermissions.some(
                     (perm) =>
                         perm.company_id === companyId &&

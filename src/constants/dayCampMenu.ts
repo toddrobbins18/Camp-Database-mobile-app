@@ -48,6 +48,22 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
       screen: 'DayCampModule',
       params: { moduleId: 'bus-attendance' },
     },
+    {
+      key: 'change-sheets',
+      menuId: 'change-sheets',
+      label: 'Change Sheets',
+      icon: 'document-text-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'change-sheets' },
+    },
+    {
+      key: 'pending-transport-changes',
+      menuId: 'pending-transport-changes',
+      label: 'Pending Changes',
+      icon: 'time-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'pending-transport-changes' },
+    },
     { key: 'office-changes', menuId: 'office-changes', label: 'Office Changes', icon: 'create-outline', screen: 'DayCampModule', params: { moduleId: 'office-changes' } },
     { key: 'swim-bracelets', menuId: 'swim-bracelets', label: 'Swim Bracelets', icon: 'water-outline', screen: 'DayCampModule', params: { moduleId: 'swim-bracelets' } },
     { key: 'swim-progress', menuId: 'swim-progress', label: 'Swim Progress', icon: 'stats-chart-outline', screen: 'DayCampModule', params: { moduleId: 'swim-progress' } },
@@ -64,7 +80,10 @@ export function getDayCampPocItemsForCompany(company: CampLike): MobileDrawerMen
       return false;
     }
     if (
-      (item.menuId === 'transportation' || item.menuId === 'bus-attendance') &&
+      (item.menuId === 'transportation' ||
+        item.menuId === 'bus-attendance' ||
+        item.menuId === 'change-sheets' ||
+        item.menuId === 'pending-transport-changes') &&
       !northShoreBusTransportEnabled(company)
     ) {
       return false;
