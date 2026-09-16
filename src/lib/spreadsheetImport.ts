@@ -8,6 +8,34 @@ export function isSpreadsheetFileName(fileName: string): boolean {
     return SPREADSHEET_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }
 
+function escapeCsvCell(value: string): string {
+    if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+    return value;
+}
+
+/** Serialize parsed spreadsheet rows back to CSV text (for legacy CSV-only upload paths). */
+export function spreadsheetRowsToCsvText(rows: Record<string, unknown>[]): string {
+    if (rows.length === 0) return '';
+    const headers = Array.from(
+        rows.reduce((set, row) => {
+            Object.keys(row).forEach((key) => set.add(key));
+            return set;
+        }, new Set<string>()),
+    );
+    const lines = [
+        headers.map(escapeCsvCell).join(','),
+        ...rows.map((row) =>
+            headers
+                .map((header) => {
+                    const value = row[header];
+                    return escapeCsvCell(value == null ? '' : String(value).trim());
+                })
+                .join(','),
+        ),
+    ];
+    return lines.join('\n');
+}
+
 function recordsToObjects(records: string[][]): Record<string, unknown>[] {
     if (records.length === 0) return [];
     const headers = records[0].map((h) => h.replace(/^"|"$/g, '').trim());
@@ -33,6 +61,9 @@ export function parseCsvTextToRows(text: string, parseCsvDocument: (t: string) =
             lower.includes('personid') ||
             lower.includes('bunk number') || 
             lower.includes('bunk name') ||
+            lower.includes('day of') ||
+            lower.includes('day off') ||
+            lower.includes('night off') ||
             lower.includes('is primary') ||
             lower.includes('first name') ||
             lower.includes('last name') ||
@@ -70,6 +101,9 @@ export function parseExcelBufferToRows(buffer: ArrayBuffer): Record<string, unkn
                     val.includes('personid') ||
                     val.includes('bunk number') || 
                     val.includes('bunk name') ||
+                    val.includes('day of') ||
+                    val.includes('day off') ||
+                    val.includes('night off') ||
                     val.includes('is primary') ||
                     val.includes('first name') ||
                     val.includes('last name') ||

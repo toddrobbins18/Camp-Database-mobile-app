@@ -1,5 +1,10 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { isSpreadsheetFileName, parseCsvTextToRows, parseExcelBufferToRows } from './spreadsheetImport';
+import {
+    isSpreadsheetFileName,
+    parseCsvTextToRows,
+    parseExcelBufferToRows,
+    spreadsheetRowsToCsvText,
+} from './spreadsheetImport';
 
 const SPREADSHEET_MIME_TYPES = [
     'text/csv',
@@ -81,18 +86,22 @@ export async function pickAndReadCsvText(): Promise<
         const asset = result.assets[0];
         const name = asset.name || 'upload.csv';
         const lower = name.toLowerCase();
-        if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
-            return {
-                ok: false,
-                error: 'not_csv',
-                message: 'Excel files are supported on the Health screen upload. Choose a .csv file here, or use Health → Upload.',
-            };
-        }
-        if (!lower.endsWith('.csv') && !lower.endsWith('.txt')) {
-            return { ok: false, error: 'not_csv', message: 'Please choose a .csv file.' };
+        if (!isSpreadsheetFileName(name)) {
+            return { ok: false, error: 'not_csv', message: 'Please choose a .csv, .xlsx, or .xls file.' };
         }
 
-        const text = await (await fetch(asset.uri)).text();
+        let text: string;
+        if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+            const response = await fetch(asset.uri);
+            const buffer = await response.arrayBuffer();
+            const rows = parseExcelBufferToRows(buffer);
+            if (rows.length === 0) {
+                return { ok: false, error: 'read_failed', message: 'Spreadsheet has no data rows.' };
+            }
+            text = spreadsheetRowsToCsvText(rows);
+        } else {
+            text = await (await fetch(asset.uri)).text();
+        }
         if (!text.trim()) {
             return { ok: false, error: 'read_failed', message: 'File is empty.' };
         }

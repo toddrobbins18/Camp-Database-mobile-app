@@ -3,7 +3,9 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal,
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView as GHScrollView, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
+import { pickAndReadSpreadsheetRows } from '../lib/pickCsvDocument';
+import { parseCsvDocument } from '../lib/csvLine';
+import { pickCell } from '../lib/spreadsheetRowUtils';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { ModalPickerOverlay } from '../components/ModalPickerOverlay';
@@ -482,31 +484,16 @@ export const ODManagementScreen = ({ navigation }: any) => {
             return;
         }
         try {
-            const result = await DocumentPicker.getDocumentAsync({
-                copyToCacheDirectory: true,
-                type: ['text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel'],
-            });
-            const file = result.assets?.[0];
-            if (!file) return;
-            setLastCsvFileName(file.name || 'Selected CSV');
+            const picked = await pickAndReadSpreadsheetRows(parseCsvDocument);
+            if (!picked.ok) {
+                if (picked.error === 'canceled') return;
+                Alert.alert('Upload failed', picked.message || 'Could not read file.');
+                return;
+            }
+            setLastCsvFileName(picked.fileName);
 
             setCsvUploading(true);
             setCsvUploadResult(null);
-            const csvText = await (await fetch(file.uri)).text();
-            const lines = csvText.split(/\r?\n/).filter((line) => line.trim().length > 0);
-            if (lines.length < 2) {
-                Alert.alert('Invalid file', 'CSV is empty or missing data rows.');
-                return;
-            }
-
-            const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/"/g, ''));
-            const personIdx = headers.findIndex((h) => h === 'person id' || h === 'person_id');
-            const bunkIdx = headers.findIndex((h) => h === 'bunk number' || h === 'bunk_number');
-            const primaryIdx = headers.findIndex((h) => h === 'is primary' || h === 'is_primary');
-            if (personIdx === -1 || bunkIdx === -1) {
-                Alert.alert('Invalid CSV format', 'Required columns: Person ID, Bunk Number');
-                return;
-            }
 
             const [{ data: staffRows, error: staffErr }, { data: bunkRows, error: bunkErr }] = await Promise.all([
                 supabase.from('staff').select('id, person_id').eq('company_id', companyId).eq('season', season),
@@ -523,27 +510,27 @@ export const ODManagementScreen = ({ navigation }: any) => {
             (bunkRows || []).forEach((b: any) => bunkByNumber.set(String(b.bunk_number).trim(), b.id));
 
             const summary: CsvUploadResult = { success: 0, failed: 0, errors: [] };
-            for (let i = 1; i < lines.length; i += 1) {
-                const values = lines[i].split(',').map((v) => v.trim().replace(/"/g, ''));
-                const personId = String(values[personIdx] || '').toLowerCase().trim();
-                const bunkNumber = String(values[bunkIdx] || '').trim();
-                const isPrimaryRaw = String(values[primaryIdx] || '').toLowerCase();
+            for (let i = 0; i < picked.rows.length; i += 1) {
+                const row = picked.rows[i];
+                const personId = pickCell(row, 'person_id', 'Person ID', 'PersonID').toLowerCase().trim();
+                const bunkNumber = pickCell(row, 'bunk_number', 'Bunk Number').trim();
+                const isPrimaryRaw = pickCell(row, 'is_primary', 'Is Primary').toLowerCase();
                 const isPrimary = ['true', '1', 'yes', 'y'].includes(isPrimaryRaw);
                 if (!personId || !bunkNumber) {
                     summary.failed += 1;
-                    summary.errors.push(`Row ${i + 1}: Invalid person id or bunk number`);
+                    summary.errors.push(`Row ${i + 2}: Invalid person id or bunk number`);
                     continue;
                 }
                 const staffId = staffByPersonId.get(personId);
                 if (!staffId) {
                     summary.failed += 1;
-                    summary.errors.push(`Row ${i + 1}: Staff with Person ID "${values[personIdx]}" not found`);
+                    summary.errors.push(`Row ${i + 2}: Staff with Person ID "${personId}" not found`);
                     continue;
                 }
                 const bunkId = bunkByNumber.get(bunkNumber);
                 if (!bunkId) {
                     summary.failed += 1;
-                    summary.errors.push(`Row ${i + 1}: Bunk #${bunkNumber} not found`);
+                    summary.errors.push(`Row ${i + 2}: Bunk #${bunkNumber} not found`);
                     continue;
                 }
 
@@ -557,7 +544,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     .maybeSingle();
                 if (existingErr) {
                     summary.failed += 1;
-                    summary.errors.push(`Row ${i + 1}: ${existingErr.message}`);
+                    summary.errors.push(`Row ${i + 2}: ${existingErr.message}`);
                     continue;
                 }
 
@@ -565,7 +552,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     const { error } = await supabase.from('bunk_staff').update({ is_primary: isPrimary }).eq('id', existing.id);
                     if (error) {
                         summary.failed += 1;
-                        summary.errors.push(`Row ${i + 1}: ${error.message}`);
+                        summary.errors.push(`Row ${i + 2}: ${error.message}`);
                         continue;
                     }
                 } else {
@@ -578,7 +565,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                     });
                     if (error) {
                         summary.failed += 1;
-                        summary.errors.push(`Row ${i + 1}: ${error.message}`);
+                        summary.errors.push(`Row ${i + 2}: ${error.message}`);
                         continue;
                     }
                 }
@@ -588,9 +575,9 @@ export const ODManagementScreen = ({ navigation }: any) => {
             setCsvUploadResult(summary);
             await queryClient.invalidateQueries({ queryKey: ['bunk_staff'] });
             await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
-            if (summary.success > 0) Alert.alert('Upload complete', `Assigned ${summary.success} staff record(s) from CSV.`);
+            if (summary.success > 0) Alert.alert('Upload complete', `Assigned ${summary.success} staff record(s).`);
         } catch (error: any) {
-            Alert.alert('Upload failed', error?.message || 'Failed to process CSV file');
+            Alert.alert('Upload failed', error?.message || 'Failed to process file');
         } finally {
             setCsvUploading(false);
         }
@@ -884,37 +871,20 @@ export const ODManagementScreen = ({ navigation }: any) => {
             return;
         }
         try {
-            const result = await DocumentPicker.getDocumentAsync({
-                copyToCacheDirectory: true,
-                type: ['text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel'],
-            });
-            const file = result.assets?.[0];
-            if (!file) return;
+            const picked = await pickAndReadSpreadsheetRows(parseCsvDocument);
+            if (!picked.ok) {
+                if (picked.error === 'canceled') return;
+                Alert.alert('Upload failed', picked.message || 'Could not read file.');
+                return;
+            }
 
             setScheduleUploading(true);
             setScheduleUploadResult(null);
 
-            const csvText = await (await fetch(file.uri)).text();
-            const lines = csvText.split(/\r?\n/).filter((line) => line.trim().length > 0);
-            if (lines.length < 2) {
-                Alert.alert('Invalid file', 'CSV is empty or missing data rows.');
-                return;
-            }
-
-            const headers = lines[0].split(',').map((h) => h.trim().replace(/"/g, '').toLowerCase());
-            const rows = lines.slice(1).map((line) => {
-                const values = line.split(',').map((v) => v.trim().replace(/"/g, ''));
-                const obj: Record<string, unknown> = {};
-                headers.forEach((header, index) => {
-                    obj[header] = values[index] ?? null;
-                });
-                return obj;
-            });
-
             const summary = await importStaffDaysOffSchedule(supabase, {
                 companyId,
                 season,
-                rows,
+                rows: picked.rows,
             });
             setScheduleUploadResult(summary);
             await queryClient.invalidateQueries({ queryKey: ['staff_days_off'] });
@@ -926,7 +896,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                 Alert.alert('Upload failed', summary.errors[0] || `${summary.failed} row(s) failed.`);
             }
         } catch (error: any) {
-            Alert.alert('Upload failed', error?.message || 'Failed to process CSV file');
+            Alert.alert('Upload failed', error?.message || 'Failed to process file');
         } finally {
             setScheduleUploading(false);
         }
@@ -1730,7 +1700,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
                             ) : (
                                 <View style={styles.csvUploadCard}>
                                     <Text style={styles.csvUploadTitle}>Upload Bunk Assignments</Text>
-                                    <Text style={styles.csvUploadSubtitle}>Upload a CSV with columns: Person ID, Bunk Number, Is Primary (optional)</Text>
+                                    <Text style={styles.csvUploadSubtitle}>Upload a CSV or Excel file with columns: Person ID, Bunk Number, Is Primary (optional)</Text>
                                     <View style={styles.csvFormatBox}>
                                         <Text style={styles.csvFormatTitle}>CSV Example</Text>
                                         <Text style={styles.csvFormatText}>Person ID,Bunk Number,Is Primary</Text>
