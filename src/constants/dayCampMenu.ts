@@ -68,6 +68,14 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
     { key: 'swim-bracelets', menuId: 'swim-bracelets', label: 'Swim Bracelets', icon: 'water-outline', screen: 'DayCampModule', params: { moduleId: 'swim-bracelets' } },
     { key: 'swim-progress', menuId: 'swim-progress', label: 'Swim Progress', icon: 'stats-chart-outline', screen: 'DayCampModule', params: { moduleId: 'swim-progress' } },
     { key: 'parent-portal', menuId: 'parent-portal', label: 'Parent Portal', icon: 'people-circle-outline', screen: 'DayCampModule', params: { moduleId: 'parent-portal' } },
+    {
+      key: 'parent-portal-dashboard',
+      menuId: 'parent-portal-dashboard',
+      label: 'Portal Dashboard',
+      icon: 'shield-checkmark-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'parent-portal-dashboard' },
+    },
   ];
 }
 
@@ -149,5 +157,9 @@ export const DAY_CAMP_MODULE_COPY: Record<string, { title: string; description: 
   'parent-portal': {
     title: 'Parent Portal',
     description: 'Parent login for swim lessons, pickups, absences, and authorized adults.',
+  },
+  'parent-portal-dashboard': {
+    title: 'Portal Dashboard',
+    description: 'Staff review and approve parent submissions before they update routes and paperwork.',
   },
 };

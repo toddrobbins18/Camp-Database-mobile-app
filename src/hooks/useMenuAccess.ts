@@ -30,6 +30,16 @@ export function useMenuAccess() {
                     perm.menu_item === menuItem,
             );
             if (hasPerm) return true;
+            // Match web ProtectedRoute: Portal Dashboard uses parent-portal permission.
+            if (menuItem === 'parent-portal-dashboard') {
+                return rolePermissions.some(
+                    (perm) =>
+                        perm.company_id === companyId &&
+                        perm.can_access === true &&
+                        menuRoles.includes(String(perm.role)) &&
+                        perm.menu_item === 'parent-portal',
+                );
+            }
             // Match web: Bus Attendance allowed when Transportation is enabled for the role.
             if (
                 menuItem === 'bus-attendance' ||

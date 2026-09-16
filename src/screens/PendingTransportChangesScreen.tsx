@@ -21,6 +21,7 @@ import {
   type TransportRunPeriod,
 } from '../lib/transportDailyOverrides';
 import { buildPendingChangeSheetRows, type TransportChangeSheetRow } from '../lib/transportChangeSheets';
+import { CHANGE_TYPES } from '../constants/parentPortalConstants';
 
 function ymdFromDate(d: Date) {
   return format(d, 'yyyy-MM-dd');
@@ -32,7 +33,7 @@ function dateFromYmd(ymd: string) {
 
 type PendingAction =
   | { kind: 'absence'; id: string; camper: string }
-  | { kind: 'pickup'; id: string; camper: string };
+  | { kind: 'pickup'; id: string; camper: string; changeType: string };
 
 export function PendingTransportChangesScreen({ navigation }: { navigation: any }) {
   const { routeMeta, coreStops, loading: boardLoading, companyId } = useTransportBoardSnapshot();
@@ -61,7 +62,6 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
           .select('id, status, change_type, children:camper_id(name)')
           .eq('company_id', companyId)
           .eq('change_date', sheetDate)
-          .eq('change_type', 'bus_change')
           .eq('status', 'submitted'),
       ]);
 
@@ -72,7 +72,8 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
       }
       for (const row of pickupRes.data ?? []) {
         const name = (row as { children?: { name?: string } }).children?.name?.trim();
-        if (name) pendingActions.push({ kind: 'pickup', id: row.id, camper: name });
+        const changeType = (row as { change_type?: string }).change_type ?? 'other';
+        if (name) pendingActions.push({ kind: 'pickup', id: row.id, camper: name, changeType });
       }
       setActions(pendingActions);
 
@@ -113,8 +114,13 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
     }
   };
 
-  const findAction = (camper: string): PendingAction | undefined =>
-    actions.find((a) => a.camper.toLowerCase() === camper.toLowerCase());
+  const findAction = (row: TransportChangeSheetRow): PendingAction | undefined =>
+    actions.find((a) => {
+      if (a.camper.toLowerCase() !== row.camper.toLowerCase()) return false;
+      if (a.kind === 'absence') return row.source.toLowerCase().includes('absence');
+      const label = CHANGE_TYPES.find((t) => t.v === a.changeType)?.l ?? a.changeType.replace(/_/g, ' ');
+      return row.description.toLowerCase().includes(label.toLowerCase());
+    });
 
   const isToday = sheetDate === todayDateString();
   const isFuture = sheetDate > todayDateString();
@@ -189,7 +195,7 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
             </View>
           ) : (
             rows.map((row, i) => {
-              const action = findAction(row.camper);
+              const action = findAction(row);
               const canApprove = !!action;
               return (
                 <View key={`${row.camper}-${row.source}-${i}`} style={styles.card}>
@@ -221,7 +227,7 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
                     <Text style={styles.waitHint}>
                       {row.source.includes('Swim')
                         ? 'Waiting for parent confirmation on swim lesson'
-                        : 'Review in office or parent portal'}
+                        : 'Approve in Portal Dashboard or here'}
                     </Text>
                   )}
                 </View>
