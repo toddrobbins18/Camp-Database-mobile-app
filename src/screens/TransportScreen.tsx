@@ -19,6 +19,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCompany } from '../contexts/CompanyContext';
+import { northShoreBusTransportEnabled } from '../constants/camps';
+import { DayCampTransportScreen } from './DayCampTransportScreen';
 import { useTrips, useAddTrip, useUpdateTrip, useDeleteTrip, useManageTripRoster, useTripAttendees, useTripAttachments } from '../api/transport';
 import { useCampers, useDivisions } from '../api/campers';
 import { useStaff } from '../api/staff';
@@ -357,11 +359,10 @@ const TripCard = ({ trip, onDelete, onEdit, onManageRoster, onViewSportsRoster }
 
 
 export const TransportScreen = ({ navigation }: any) => {
+    const { isDayCamp, companySlug, companyId, season } = useCompany();
+
     const { width } = useWindowDimensions();
     const isLargeScreen = width >= 768; // Tablet/Desktop breakpoint
-
-
-    const { companyId, season } = useCompany();
 
     const { data: rawTrips = [], isLoading } = useTrips(companyId, season);
     const { data: rawCampers = [] } = useCampers(companyId, season);
@@ -1910,6 +1911,10 @@ export const TransportScreen = ({ navigation }: any) => {
             </TouchableWithoutFeedback>
         </Modal>
     );
+
+    if (isDayCamp && northShoreBusTransportEnabled({ slug: companySlug })) {
+        return <DayCampTransportScreen navigation={navigation} />;
+    }
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>

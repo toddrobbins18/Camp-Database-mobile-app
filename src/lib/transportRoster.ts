@@ -1,20 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  getBundledMappointRoutesCsv2026,
+  parseMappointRoutesCsv,
+  resolveBundledGeocodeResult,
+  mappointRoutesSummary,
+  type ParsedMappointRoute,
+} from './mappointTransportImport';
 
-/** MapPoint bundled CSV is web-only; mobile attendance reads saved transport_boards. */
-function getBundledMappointRoutesCsv2026(): string {
-  return "";
-}
-
-function parseMappointRoutesCsv(
-  _csv: string,
-  _opts?: { direction?: string },
-): { stops: { address: string; camperNames: string[] }[] }[] {
-  return [];
-}
-
-function resolveBundledGeocodeResult(_address: string): null {
-  return null;
-}
+export {
+  getBundledMappointRoutesCsv2026,
+  parseMappointRoutesCsv,
+  resolveBundledGeocodeResult,
+  mappointRoutesSummary,
+};
+export type { ParsedMappointRoute };
 
 export type TransportEnrolledCamper = {
   id: string;
@@ -108,7 +107,7 @@ export async function normalizeTransportBoardForSeason(
   board = stripEmptyRouteShell(board);
 
   const enrolled = await loadEnrolledCampersForTransport(supabase, companyId, season);
-  const hints = season !== "2026" ? buildMappoint2026AddressHints() : undefined;
+  const hints = season !== "2026" ? await buildMappoint2026AddressHints() : undefined;
   const unplottedCampers = buildUnplottedFromEnrollment({
     enrolled,
     coreStops: board.coreStops,
@@ -207,8 +206,9 @@ export function camperNamesOnBoard(coreStops: Record<number, TransportRouteStop[
 }
 
 /** Build address hints from 2026 MapPoint CSV (historical learning — not auto-routing). */
-export function buildMappoint2026AddressHints(): Map<string, { address: string; lat: number; lng: number }> {
-  const routes = parseMappointRoutesCsv(getBundledMappointRoutesCsv2026(), { direction: "AM" });
+export async function buildMappoint2026AddressHints(): Promise<Map<string, { address: string; lat: number; lng: number }>> {
+  const csv = await getBundledMappointRoutesCsv2026();
+  const routes = parseMappointRoutesCsv(csv, { direction: "AM" });
   const hints = new Map<string, { address: string; lat: number; lng: number }>();
 
   for (const route of routes) {
@@ -263,11 +263,12 @@ export function buildUnplottedFromEnrollment(options: {
 }
 
 /** Stops-only route template from 2026 MapPoint — no camper names on routes. */
-export function build2026MappointRouteTemplate(routeColors: string[]): {
+export async function build2026MappointRouteTemplate(routeColors: string[]): Promise<{
   coreStops: Record<number, TransportRouteStop[]>;
   routeMeta: TransportRouteMeta[];
-} {
-  const routes = parseMappointRoutesCsv(getBundledMappointRoutesCsv2026(), { direction: "AM" });
+}> {
+  const csv = await getBundledMappointRoutesCsv2026();
+  const routes = parseMappointRoutesCsv(csv, { direction: "AM" });
   return buildRouteTemplateFromParsedRoutes(routes, routeColors);
 }
 

@@ -7,6 +7,9 @@ const config = getDefaultConfig(__dirname);
 if (!config.resolver.assetExts.includes('wasm')) {
   config.resolver.assetExts.push('wasm');
 }
+if (!config.resolver.assetExts.includes('csv')) {
+  config.resolver.assetExts.push('csv');
+}
 
 // OPFS / SharedArrayBuffer support for expo-sqlite on web
 config.server = {
