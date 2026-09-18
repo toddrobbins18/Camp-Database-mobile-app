@@ -19,6 +19,7 @@ import {
   statusBadgeStyle,
 } from '../constants/parentPortalConstants';
 import { formatCampDateTime } from '../lib/campTime';
+import { DISMISSAL_REALTIME_TABLES } from '../lib/dismissalDashboard';
 
 type TabId = 'pickups' | 'absences' | 'swim';
 
@@ -140,6 +141,24 @@ export function ParentPortalDashboardScreen({ navigation }: { navigation: any })
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!companyId) return;
+    const channel = supabase.channel(`portal-dashboard-mobile-${companyId}`);
+    for (const table of DISMISSAL_REALTIME_TABLES) {
+      channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table, filter: `company_id=eq.${companyId}` },
+        () => {
+          void load();
+        },
+      );
+    }
+    channel.subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [companyId, load]);
 
   const pendingPickups = useMemo(() => pickups.filter((p) => p.status === 'submitted').length, [pickups]);
   const pendingAbsences = useMemo(() => absences.filter((a) => a.status === 'submitted').length, [absences]);

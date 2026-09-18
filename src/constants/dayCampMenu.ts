@@ -14,7 +14,7 @@ export type MobileDrawerMenuItem = {
 /** Todd carryover — existing Nest modules (matches web dayCampMenu.ts). */
 export function getDayCampNestCarryoverMenuItems(): MobileDrawerMenuItem[] {
   return [
-    { key: 'dashboard', menuId: 'dashboard', label: 'Dashboard', icon: 'home-outline', screen: 'Dashboard' },
+    { key: 'dashboard', menuId: 'dashboard', label: 'Front Office', icon: 'home-outline', screen: 'Dashboard' },
     { key: 'activities-field-trips', menuId: 'activities', label: 'Activities & Field Trips', icon: 'leaf-outline', screen: 'ActivitiesFieldTrips' },
     { key: 'tutoring-therapy', menuId: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', screen: 'TutoringTherapy' },
     { key: 'camper', menuId: 'roster', label: 'Camper', icon: 'people-outline', screen: 'Camper', params: { screen: 'CamperList' } },
