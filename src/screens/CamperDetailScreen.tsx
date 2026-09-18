@@ -17,6 +17,17 @@ import { formatSportsAcademySessionDate } from '../lib/sportsAcademyUtils';
 import { PersonThreeDayOutlook } from '../components/PersonThreeDayOutlook';
 import { ProfileQuickSearch } from '../components/ProfileQuickSearch';
 import { formatIsoDateToUs, toIsoDateOrNull } from '../api/staffPayload';
+import {
+    getCamperEffectiveDivision,
+    getCamperGradeDisplay,
+    getDivisionDropdownLabel,
+    dedupeDivisionsForDropdown,
+} from '../lib/divisionFilterUtils';
+import {
+    DAY_CAMP_ENROLLMENT_WEEKS,
+    formatEnrolledWeeksLabel,
+    resolveEnrolledWeeks,
+} from '../lib/enrolledWeeks';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -37,7 +48,7 @@ type BirthdaySubTabType = 'info' | 'party';
 
 export const CamperDetailScreen = ({ route, navigation }: any) => {
     const { camper: camperParam } = route.params || {};
-    const { companyId, season, isTimberLakeWest } = useCompany();
+    const { companyId, season, isTimberLakeWest, isDayCamp } = useCompany();
     const { data: divisionsData = [] } = useDivisions(companyId);
     const { data: staffLeaders = [] } = useStaff(companyId, season);
     const leaders = staffLeaders.map((s: any) => ({
@@ -77,6 +88,30 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
         enabled: !!camperParam?.id,
     });
     const camper = fullChild ?? camperParam;
+
+    const enrolledWeeks = useMemo(
+        () => resolveEnrolledWeeks((camper as any)?.enrolled_weeks, (camper as any)?.session),
+        [camper],
+    );
+    const enrolledWeeksLabel = formatEnrolledWeeksLabel(enrolledWeeks);
+    const showEnrolledWeeks =
+        isDayCamp && (enrolledWeeks.length > 0 || Boolean((camper as any)?.session));
+
+    const effectiveDivision = useMemo(
+        () => getCamperEffectiveDivision(camper as any),
+        [camper],
+    );
+    const gradeDisplay = useMemo(
+        () => getCamperGradeDisplay((camper as any)?.grade, effectiveDivision.name),
+        [camper, effectiveDivision.name],
+    );
+    const divisionDisplay = getDivisionDropdownLabel(
+        effectiveDivision.name ?? (camper as any)?.category,
+    );
+    const dropdownDivisions = useMemo(
+        () => dedupeDivisionsForDropdown(divisionsData as any),
+        [divisionsData],
+    );
 
     // Align with web ChildProfile: same child_id set via person_id + real columns title/category/description
     const { data: achievements = [], isLoading: achievementsLoading } = useQuery({
@@ -543,12 +578,14 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                 </View>
                                 <View style={styles.cardContent}>
                                     <View style={styles.infoGrid}>
-                                        <View style={styles.infoGridItem}>
-                                            <Text style={styles.infoLabel}>Grade</Text>
-                                            <View style={styles.infoValueBox}>
-                                                <Text style={styles.infoValueText}>{camper.grade || '-'}</Text>
+                                        {gradeDisplay !== 'N/A' ? (
+                                            <View style={styles.infoGridItem}>
+                                                <Text style={styles.infoLabel}>Grade</Text>
+                                                <View style={styles.infoValueBox}>
+                                                    <Text style={styles.infoValueText}>{gradeDisplay}</Text>
+                                                </View>
                                             </View>
-                                        </View>
+                                        ) : null}
                                         <View style={styles.infoGridItem}>
                                             <Text style={styles.infoLabel}>Gender</Text>
                                             <View style={styles.infoValueBox}>
@@ -557,13 +594,11 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                 </Text>
                                             </View>
                                         </View>
-                                        {((camper as any).division?.name || (camper as any).category) ? (
+                                        {divisionDisplay ? (
                                             <View style={styles.infoGridItem}>
                                                 <Text style={styles.infoLabel}>Division</Text>
                                                 <View style={styles.infoValueBox}>
-                                                    <Text style={styles.infoValueText}>
-                                                        {(camper as any).division?.name || (camper as any).category}
-                                                    </Text>
+                                                    <Text style={styles.infoValueText}>{divisionDisplay}</Text>
                                                 </View>
                                             </View>
                                         ) : null}
@@ -583,6 +618,43 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                 <View style={styles.infoValueBox}>
                                                     <Text style={styles.infoValueText}>{(camper as any).group_name}</Text>
                                                 </View>
+                                            </View>
+                                        ) : null}
+                                        {showEnrolledWeeks ? (
+                                            <View style={[styles.infoGridItem, styles.enrolledWeeksGridItem]}>
+                                                <Text style={styles.infoLabel}>Enrolled Weeks</Text>
+                                                {enrolledWeeksLabel ? (
+                                                    <Text style={styles.enrolledWeeksLabel}>{enrolledWeeksLabel}</Text>
+                                                ) : null}
+                                                <View style={styles.enrolledWeeksRow}>
+                                                    {Array.from({ length: DAY_CAMP_ENROLLMENT_WEEKS }, (_, i) => {
+                                                        const week = i + 1;
+                                                        const active = enrolledWeeks.includes(week);
+                                                        return (
+                                                            <View
+                                                                key={week}
+                                                                style={[
+                                                                    styles.enrolledWeekBadge,
+                                                                    active && styles.enrolledWeekBadgeActive,
+                                                                ]}
+                                                            >
+                                                                <Text
+                                                                    style={[
+                                                                        styles.enrolledWeekBadgeText,
+                                                                        active && styles.enrolledWeekBadgeTextActive,
+                                                                    ]}
+                                                                >
+                                                                    {week}
+                                                                </Text>
+                                                            </View>
+                                                        );
+                                                    })}
+                                                </View>
+                                                {!enrolledWeeksLabel && (camper as any)?.session ? (
+                                                    <Text style={styles.enrolledWeeksSession}>
+                                                        CampMinder: {(camper as any).session}
+                                                    </Text>
+                                                ) : null}
                                             </View>
                                         ) : null}
                                         {(camper as any).leader ? (
@@ -2302,7 +2374,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                            {divisionsData.map((division: any) => (
+                            {dropdownDivisions.map((division: any) => (
                                 <Pressable
                                     key={division.id}
                                     style={[
@@ -2994,6 +3066,47 @@ const styles = StyleSheet.create({
         flex: 1,
         minWidth: '45%',
         marginBottom: 0,
+    },
+    enrolledWeeksGridItem: {
+        minWidth: '100%',
+    },
+    enrolledWeeksLabel: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: theme.colors.text,
+        marginBottom: 8,
+    },
+    enrolledWeeksRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+    },
+    enrolledWeekBadge: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: '#f3f4f6',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    enrolledWeekBadgeActive: {
+        backgroundColor: theme.colors.secondary,
+        borderColor: theme.colors.secondary,
+    },
+    enrolledWeekBadgeText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: theme.colors.textSecondary,
+    },
+    enrolledWeekBadgeTextActive: {
+        color: '#fff',
+    },
+    enrolledWeeksSession: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 6,
     },
     infoRow: {
         marginBottom: 0,

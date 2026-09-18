@@ -57,9 +57,10 @@ const APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS = [
   'trails-end-camp',
 ] as const;
 
+/** Appointments module — overnight camps only (not day camp). */
 export function appointmentsEnabledForCompany(company: CampLike): boolean {
   if (!company) return false;
-  if (isDayCampCompany(company)) return true;
+  if (isDayCampCompany(company)) return false;
   const slug = company.slug ?? '';
   return APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS.includes(slug as (typeof APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS)[number]);
 }

@@ -8,6 +8,7 @@ export function normalizeDivisionNameForFilter(name?: string | null): string {
 
     return name
         .replace(/\bSuper\s+Senior\b/gi, 'Super')
+        .replace(/\bSub\s+Senior\b/gi, 'Super')
         .replace(/\bTeens\b/gi, 'Teen')
         .replace(/\bTN\d+\b/gi, 'Teen')
         .replace(/\bTeen\s+Teen\b/gi, 'Teen')
@@ -23,11 +24,62 @@ export function getDivisionDropdownLabel(name?: string | null): string {
 
     return name
         .replace(/\bSuper\s+Senior\b/gi, 'Super')
+        .replace(/\bSub\s+Senior\b/gi, 'Super')
         .replace(/\bTeens\b/gi, 'Teen')
         .replace(/\bTN\d+\b/gi, 'Teen')
         .replace(/\bTeen\s+Teen\b/gi, 'Teen')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+export type DivisionOption = {
+    id: string;
+    name?: string | null;
+    sort_order?: number | null;
+};
+
+/** One dropdown row per canonical division label (drops TN alias duplicates). */
+export function dedupeDivisionsForDropdown(divisions: DivisionOption[]): DivisionOption[] {
+    const byKey = new Map<string, DivisionOption>();
+
+    for (const division of divisions) {
+        const label = getDivisionDropdownLabel(division.name);
+        if (!label) continue;
+        const key = normalizeDivisionNameForFilter(label);
+        const existing = byKey.get(key);
+        if (!existing || (division.sort_order ?? 999) < (existing.sort_order ?? 999)) {
+            byKey.set(key, division);
+        }
+    }
+
+    return [...byKey.values()].sort(
+        (a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999),
+    );
+}
+
+/** K, Pre-K, 1st, 2nd, etc. — day-camp divisions are often the same camp grade. */
+export function looksLikeCampGrade(value?: string | null): boolean {
+    const v = (value ?? '').trim().toLowerCase();
+    if (!v) return false;
+    if (/^pre-?k(inder(garten)?)?$/.test(v)) return true;
+    if (/^k(inder(garten)?)?$/.test(v)) return true;
+    if (/^\d+(st|nd|rd|th)?$/.test(v)) return true;
+    if (/^grade\s*\d+/.test(v)) return true;
+    return false;
+}
+
+/** School/camp grade for display — never repeat the division name in the grade slot. */
+export function getCamperGradeDisplay(
+    grade?: string | null,
+    divisionName?: string | null,
+): string {
+    const value = (grade ?? '').trim();
+    if (!value) return 'N/A';
+    // Day camp: grade and division both come from CampGradeID (e.g. "2nd") — keep grade visible.
+    if (looksLikeCampGrade(value)) return value;
+    if (divisionsMatchForFilter(value, divisionName)) return 'N/A';
+    if (divisionsMatchForFilter(value, getDivisionDropdownLabel(divisionName))) return 'N/A';
+    return value;
 }
 
 export function divisionsMatchForFilter(a?: string | null, b?: string | null): boolean {

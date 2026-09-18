@@ -10,7 +10,9 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useAddCamper, useEditCamper, useDeleteCamper, useDivisions } from '../api/campers';
 import {
     camperMatchesDivisionFilter,
+    dedupeDivisionsForDropdown,
     getCamperEffectiveDivision,
+    getCamperGradeDisplay,
     getDivisionDropdownLabel,
     normalizeDivisionNameForFilter,
 } from '../lib/divisionFilterUtils';
@@ -261,17 +263,23 @@ export const CamperScreen = ({ navigation }: any) => {
     });
     const campersPerPage = 50;
 
+    const dropdownDivisions = useMemo(
+        () => dedupeDivisionsForDropdown(divisionsData as any),
+        [divisionsData],
+    );
+
     const selectedDivisionLabel = useMemo(() => {
         if (selectedDivisionId === 'all') return 'All Divisions';
-        const match = divisionsData.find((d: any) => String(d?.id) === String(selectedDivisionId));
+        const match = dropdownDivisions.find((d) => String(d?.id) === String(selectedDivisionId));
         return getDivisionDropdownLabel(match?.name) ?? 'All Divisions';
-    }, [divisionsData, selectedDivisionId]);
+    }, [dropdownDivisions, selectedDivisionId]);
 
     const filteredCampers = useMemo(() => {
         const q = (searchQuery || '').trim().toLowerCase();
-        const selectedDivision = divisionsData.find((d: any) => String(d?.id) === String(selectedDivisionId));
+        const selectedDivision = dropdownDivisions.find((d) => String(d?.id) === String(selectedDivisionId));
         return campersData.filter(camper => {
             const effectiveDivision = getCamperEffectiveDivision(camper as any);
+            const gradeDisplay = getCamperGradeDisplay((camper as any).grade, effectiveDivision.name);
             if (selectedDivisionId !== 'all') {
                 if (!camperMatchesDivisionFilter(
                     effectiveDivision.id,
@@ -284,7 +292,7 @@ export const CamperScreen = ({ navigation }: any) => {
             }
             if (q) {
                 const name = (camper.name || '').toLowerCase();
-                const grade = ((camper as any).grade ?? '').toString().toLowerCase();
+                const grade = gradeDisplay === 'N/A' ? '' : gradeDisplay.toLowerCase();
                 const divName = (effectiveDivision.name ?? '').toLowerCase();
                 if (!name.includes(q) && !grade.includes(q) && !divName.includes(q)) return false;
             }
@@ -304,7 +312,7 @@ export const CamperScreen = ({ navigation }: any) => {
 
             return compareByLastName(a, b);
         });
-    }, [campersData, selectedDivisionId, sortBy, searchQuery, divisionsData]);
+    }, [campersData, selectedDivisionId, sortBy, searchQuery, dropdownDivisions]);
 
     const totalCampers = filteredCampers.length;
     const totalPages = Math.ceil(totalCampers / campersPerPage);
@@ -934,7 +942,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 nestedScrollEnabled={true}
                                 showsVerticalScrollIndicator={true}
                             >
-                                {[{ id: 'all', name: 'All Divisions' }, ...divisionsData].map((division: any) => (
+                                {[{ id: 'all', name: 'All Divisions' }, ...dropdownDivisions].map((division: any) => (
                                     <TouchableOpacity
                                         key={division.id}
                                         style={[
@@ -1720,7 +1728,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                             nestedScrollEnabled={true}
                                             showsVerticalScrollIndicator={true}
                                         >
-                                            {divisionsData.map((division: any) => (
+                                            {dropdownDivisions.map((division: any) => (
                                                 <TouchableOpacity
                                                     key={division.id}
                                                     style={[
@@ -2681,7 +2689,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 nestedScrollEnabled={true}
                                 showsVerticalScrollIndicator={true}
                             >
-                                {divisionsData.map((division: any) => (
+                                {dropdownDivisions.map((division: any) => (
                                     <TouchableOpacity
                                         key={division.id}
                                         style={[
@@ -2843,6 +2851,8 @@ export const CamperScreen = ({ navigation }: any) => {
                 <View style={styles.grid}>
                     {currentCampers.map((camper, index) => {
                         const effectiveDivision = getCamperEffectiveDivision(camper as any);
+                        const gradeDisplay = getCamperGradeDisplay((camper as any).grade, effectiveDivision.name);
+                        const divisionDisplay = getDivisionDropdownLabel(effectiveDivision.name) || 'N/A';
                         return (
                         <TouchableOpacity
                             key={startIndex + index}
@@ -2855,7 +2865,7 @@ export const CamperScreen = ({ navigation }: any) => {
                                 <View style={styles.cardTop}>
                                     <View style={styles.cardTopLeft}>
                                         <Text style={styles.camperName} numberOfLines={1} ellipsizeMode="tail">{camper.name}</Text>
-                                        <Text style={styles.camperGrade}>{(camper as any).grade || 'N/A'}</Text>
+                                        <Text style={styles.camperGrade}>Grade: {gradeDisplay}</Text>
                                     </View>
                                     <View style={styles.cardTopRight}>
                                         <TouchableOpacity
@@ -2917,9 +2927,11 @@ export const CamperScreen = ({ navigation }: any) => {
                                 </View>
 
                                 <View style={styles.cardFooter}>
-                                    <Text style={styles.divisionText}>
-                                        Division: {getDivisionDropdownLabel(effectiveDivision.name) || 'N/A'}
-                                    </Text>
+                                    {divisionDisplay !== 'N/A' ? (
+                                        <Text style={styles.divisionText}>
+                                            Division: {divisionDisplay}
+                                        </Text>
+                                    ) : null}
                                     {(camper as any).bunk ? (
                                         <Text style={styles.divisionText}>Bunk: {(camper as any).bunk.bunk_name || `Bunk ${(camper as any).bunk.bunk_number}`}</Text>
                                     ) : null}

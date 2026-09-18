@@ -620,6 +620,7 @@ const GuardedActivitiesFieldTripsScreen = withMenuPermission('activities', Activ
 const GuardedSpecialEventsScreen = withMenuPermission('special-events', SpecialEventsScreen);
 const GuardedRainyDayScheduleScreen = withMenuPermission('rainy-day', RainyDayScheduleScreen);
 const GuardedAppointmentsScreen = withMenuPermission('appointments', AppointmentsScreen);
+const GuardedTutoringTherapyScreen = withMenuPermission('tutoring-therapy', TutoringTherapyScreen);
 const GuardedIncidentReportsScreen = withMenuPermission('incidents', IncidentReportsScreen);
 const GuardedReportsScreen = withMenuPermission('reports', ReportsScreen);
 const GuardedAdminPanelScreen = withMenuPermission('admin', AdminPanelScreen);
@@ -720,7 +721,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="Sports" component={SportsScreen} />
             <Drawer.Screen name="SportsCalendar" component={SportsCalendarScreen} />
             <Drawer.Screen name="RainyDaySchedule" component={GuardedRainyDayScheduleScreen} />
-            <Drawer.Screen name="TutoringTherapy" component={TutoringTherapyScreen} />
+            <Drawer.Screen name="TutoringTherapy" component={GuardedTutoringTherapyScreen} />
             <Drawer.Screen name="Reports" component={GuardedReportsScreen} />
             <Drawer.Screen name="RosterTemplates" component={RosterTemplatesScreen} />
             <Drawer.Screen name="SpecialEvents" component={GuardedSpecialEventsScreen} />

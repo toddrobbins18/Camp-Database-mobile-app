@@ -16,7 +16,7 @@ export function getDayCampNestCarryoverMenuItems(): MobileDrawerMenuItem[] {
   return [
     { key: 'dashboard', menuId: 'dashboard', label: 'Dashboard', icon: 'home-outline', screen: 'Dashboard' },
     { key: 'activities-field-trips', menuId: 'activities', label: 'Activities & Field Trips', icon: 'leaf-outline', screen: 'ActivitiesFieldTrips' },
-    { key: 'appointments', menuId: 'appointments', label: 'Appointments', icon: 'calendar-outline', screen: 'Appointments' },
+    { key: 'tutoring-therapy', menuId: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', screen: 'TutoringTherapy' },
     { key: 'camper', menuId: 'roster', label: 'Camper', icon: 'people-outline', screen: 'Camper', params: { screen: 'CamperList' } },
     { key: 'daily-news', menuId: 'notes', label: 'Daily news', icon: 'document-text-outline', screen: 'DailyNews' },
     { key: 'health-center', menuId: 'nurse', label: 'Health Center', icon: 'medical-outline', screen: 'DayCampModule', params: { moduleId: 'nurse' } },
