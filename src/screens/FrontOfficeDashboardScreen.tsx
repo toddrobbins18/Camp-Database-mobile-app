@@ -199,6 +199,12 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
                     <View style={styles.linkRow}>
                         <TouchableOpacity
                             style={styles.linkBtn}
+                            onPress={() => navigation.navigate('DayCampModule', { moduleId: 'transport-admin' })}
+                        >
+                            <Text style={styles.linkBtnText}>Transport Admin</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.linkBtn}
                             onPress={() => navigation.navigate('DayCampModule', { moduleId: 'parent-portal-dashboard' })}
                         >
                             <Text style={styles.linkBtnText}>Portal Dashboard</Text>

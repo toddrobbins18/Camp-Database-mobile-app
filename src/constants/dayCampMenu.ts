@@ -41,6 +41,14 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
       screen: 'DayCampModule',
       params: { moduleId: 'front-office' },
     },
+    {
+      key: 'transport-admin',
+      menuId: 'transport-admin',
+      label: 'Transport Admin',
+      icon: 'bus-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'transport-admin' },
+    },
     { key: 'bunking', menuId: 'bunking', label: 'Bunking', icon: 'bed-outline', screen: 'DayCampModule', params: { moduleId: 'bunking' } },
     { key: 'hiring', menuId: 'hiring', label: 'Hiring', icon: 'briefcase-outline', screen: 'DayCampModule', params: { moduleId: 'hiring' } },
     { key: 'media', menuId: 'media', label: 'Media', icon: 'camera-outline', screen: 'DayCampModule', params: { moduleId: 'media' } },
@@ -97,6 +105,7 @@ export function getDayCampPocItemsForCompany(company: CampLike): MobileDrawerMen
     }
     if (
       (item.menuId === 'transportation' ||
+        item.menuId === 'transport-admin' ||
         item.menuId === 'bus-attendance' ||
         item.menuId === 'change-sheets' ||
         item.menuId === 'pending-transport-changes') &&
@@ -169,5 +178,9 @@ export const DAY_CAMP_MODULE_COPY: Record<string, { title: string; description: 
   'parent-portal-dashboard': {
     title: 'Portal Dashboard',
     description: 'Staff review and approve parent submissions before they update routes and paperwork.',
+  },
+  'transport-admin': {
+    title: 'Transport Admin',
+    description: 'Staff backend for bus exceptions — log pickup, absence, swim, nurse sent-home, and approve.',
   },
 };

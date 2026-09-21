@@ -44,7 +44,9 @@ export function useMenuAccess() {
             if (
                 menuItem === 'bus-attendance' ||
                 menuItem === 'change-sheets' ||
-                menuItem === 'pending-transport-changes'
+                menuItem === 'pending-transport-changes' ||
+                menuItem === 'transport-admin' ||
+                menuItem === 'front-office'
             ) {
                 return rolePermissions.some(
                     (perm) =>
