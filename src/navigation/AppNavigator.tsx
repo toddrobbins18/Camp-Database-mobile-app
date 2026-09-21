@@ -62,6 +62,7 @@ import { HiringScreen } from '../screens/HiringScreen';
 import { MediaScreen } from '../screens/MediaScreen';
 import { ParentPortalScreen } from '../screens/ParentPortalScreen';
 import { ParentPortalDashboardScreen } from '../screens/ParentPortalDashboardScreen';
+import { FrontOfficeDashboardScreen } from '../screens/FrontOfficeDashboardScreen';
 
 function DayCampModuleRouter({ route, navigation }: any) {
     const moduleId = route.params?.moduleId;
@@ -82,6 +83,9 @@ function DayCampModuleRouter({ route, navigation }: any) {
     }
     if (moduleId === 'parent-portal-dashboard') {
         return <ParentPortalDashboardScreen navigation={navigation} />;
+    }
+    if (moduleId === 'front-office') {
+        return <FrontOfficeDashboardScreen navigation={navigation} />;
     }
     if (moduleId === 'office-changes') {
         return <OfficeTransportChangesScreen navigation={navigation} />;

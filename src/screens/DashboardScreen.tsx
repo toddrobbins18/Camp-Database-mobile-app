@@ -36,7 +36,6 @@ import { supabase } from '../lib/supabase';
 import { formatTime12Hour } from '../lib/formatTime';
 import { formatDashboardSpecialEventSubtitle } from '../lib/dailyWolfPrintableUtils';
 import { formatMenuMealTypeLabel } from '../api/menu';
-import { FrontOfficeDashboardScreen } from './FrontOfficeDashboardScreen';
 
 const DEFAULT_WEATHER_ZIP = '18469';
 
@@ -372,10 +371,6 @@ export const DashboardScreen = ({ navigation }: any) => {
             setNotesLoading(false);
         }
     };
-
-    if (isDayCamp) {
-        return <FrontOfficeDashboardScreen navigation={navigation} />;
-    }
 
     const ink = hasDashboardHeroBg ? '#ffffff' : theme.colors.text;
 

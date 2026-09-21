@@ -14,7 +14,7 @@ export type MobileDrawerMenuItem = {
 /** Todd carryover — existing Nest modules (matches web dayCampMenu.ts). */
 export function getDayCampNestCarryoverMenuItems(): MobileDrawerMenuItem[] {
   return [
-    { key: 'dashboard', menuId: 'dashboard', label: 'Front Office', icon: 'home-outline', screen: 'Dashboard' },
+    { key: 'dashboard', menuId: 'dashboard', label: 'Dashboard', icon: 'home-outline', screen: 'Dashboard' },
     { key: 'activities-field-trips', menuId: 'activities', label: 'Activities & Field Trips', icon: 'leaf-outline', screen: 'ActivitiesFieldTrips' },
     { key: 'tutoring-therapy', menuId: 'tutoring-therapy', label: 'Tutoring & Therapy', icon: 'book-outline', screen: 'TutoringTherapy' },
     { key: 'camper', menuId: 'roster', label: 'Camper', icon: 'people-outline', screen: 'Camper', params: { screen: 'CamperList' } },
@@ -33,6 +33,14 @@ export function getDayCampNestCarryoverMenuItems(): MobileDrawerMenuItem[] {
 /** Nest 2.0 / Airtable POC — Day Camp section (matches web). */
 export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
   return [
+    {
+      key: 'front-office',
+      menuId: 'front-office',
+      label: 'Front Office',
+      icon: 'radio-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'front-office' },
+    },
     { key: 'bunking', menuId: 'bunking', label: 'Bunking', icon: 'bed-outline', screen: 'DayCampModule', params: { moduleId: 'bunking' } },
     { key: 'hiring', menuId: 'hiring', label: 'Hiring', icon: 'briefcase-outline', screen: 'DayCampModule', params: { moduleId: 'hiring' } },
     { key: 'media', menuId: 'media', label: 'Media', icon: 'camera-outline', screen: 'DayCampModule', params: { moduleId: 'media' } },
