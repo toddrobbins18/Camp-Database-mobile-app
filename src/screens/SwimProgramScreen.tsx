@@ -29,10 +29,16 @@ import {
   type LevelRecord,
   type LevelStatus,
   type SkillStatus,
-  fetchSwimRosterChildren,
+  fetchSwimHistoryReportForCompany,
+  fetchSwimRosterChildrenForCompany,
+  fetchSwimSeasonsForCompany,
+  loadSwimProgramDataForCompany,
+  saveSwimBraceletForCompany,
+  saveSwimLevelForCompany,
   levelFromSkills,
   mergeBracelets,
   mergeLevels,
+  type SwimHistoryReportRow,
 } from '../lib/swimProgram';
 
 const BRACELET_COLORS: Record<BraceletColor, { bg: string; text: string; border: string }> = {
@@ -140,16 +146,31 @@ function DateField({
 
 export function SwimProgramScreen({ navigation }: any) {
   const { companyId, season } = useCompany();
-  const [activeTab, setActiveTab] = useState<'bracelets' | 'levels'>('bracelets');
+  const [viewSeason, setViewSeason] = useState(season);
+  const [seasonOptions, setSeasonOptions] = useState<string[]>([season]);
+  const [activeTab, setActiveTab] = useState<'bracelets' | 'levels' | 'history'>('bracelets');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyReport, setHistoryReport] = useState<SwimHistoryReportRow[]>([]);
   const [braceletData, setBraceletData] = useState<BraceletRecord[]>([]);
   const [levelData, setLevelData] = useState<LevelRecord[]>([]);
   const [selectedBracelet, setSelectedBracelet] = useState<BraceletRecord | null>(null);
   const [selectedLevel, setSelectedLevel] = useState<LevelRecord | null>(null);
 
+  useEffect(() => {
+    setViewSeason(season);
+  }, [season]);
+
+  useEffect(() => {
+    if (!companyId) return;
+    fetchSwimSeasonsForCompany(companyId)
+      .then((seasons) => setSeasonOptions(seasons.length ? seasons : [season]))
+      .catch(console.error);
+  }, [companyId, season]);
+
   const loadRoster = useCallback(async () => {
-    if (!companyId || !season) {
+    if (!companyId || !viewSeason) {
       setBraceletData([]);
       setLevelData([]);
       setLoading(false);
@@ -157,26 +178,40 @@ export function SwimProgramScreen({ navigation }: any) {
     }
     setLoading(true);
     try {
-      const children = await fetchSwimRosterChildren(companyId, season);
-      setBraceletData((prev) => {
-        const existing = new Map(prev.map((b) => [b.id, b]));
-        return mergeBracelets(existing, children);
-      });
-      setLevelData((prev) => {
-        const existing = new Map(prev.map((l) => [l.id, l]));
-        return mergeLevels(existing, children);
-      });
+      const { bracelets, levels } = await loadSwimProgramDataForCompany(companyId, viewSeason);
+      const children = await fetchSwimRosterChildrenForCompany(companyId, viewSeason);
+      setBraceletData(mergeBracelets(bracelets, children));
+      setLevelData(mergeLevels(levels, children));
     } catch (err) {
       console.error('[SwimProgram] roster load error:', err);
       Alert.alert('Error', 'Could not load swim roster.');
     } finally {
       setLoading(false);
     }
-  }, [companyId, season]);
+  }, [companyId, viewSeason]);
+
+  const loadHistory = useCallback(async () => {
+    if (!companyId) {
+      setHistoryReport([]);
+      return;
+    }
+    setHistoryLoading(true);
+    try {
+      setHistoryReport(await fetchSwimHistoryReportForCompany(companyId));
+    } catch (err) {
+      console.error('[SwimProgram] history load error:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [companyId]);
 
   useEffect(() => {
     void loadRoster();
   }, [loadRoster]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
 
   const filteredBracelets = useMemo(
     () =>
@@ -213,18 +248,30 @@ export function SwimProgramScreen({ navigation }: any) {
   );
 
   const updateBracelet = (id: string, patch: Partial<BraceletRecord>) => {
-    setBraceletData((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+    setBraceletData((prev) => {
+      const next = prev.map((b) => (b.id === id ? { ...b, ...patch } : b));
+      const record = next.find((b) => b.id === id);
+      if (record && companyId && viewSeason) {
+        void saveSwimBraceletForCompany(companyId, viewSeason, record).catch(console.error);
+      }
+      return next;
+    });
     setSelectedBracelet((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
   };
 
   const updateLevel = (id: string, patch: Partial<LevelRecord> | ((r: LevelRecord) => Partial<LevelRecord>)) => {
-    setLevelData((prev) =>
-      prev.map((r) => {
+    setLevelData((prev) => {
+      const next = prev.map((r) => {
         if (r.id !== id) return r;
         const p = typeof patch === 'function' ? patch(r) : patch;
         return { ...r, ...p, lastModified: 'Just now' };
-      }),
-    );
+      });
+      const record = next.find((r) => r.id === id);
+      if (record && companyId && viewSeason) {
+        void saveSwimLevelForCompany(companyId, viewSeason, record).catch(console.error);
+      }
+      return next;
+    });
     setSelectedLevel((prev) => {
       if (prev?.id !== id) return prev;
       const p = typeof patch === 'function' ? patch(prev) : patch;
@@ -267,8 +314,19 @@ export function SwimProgramScreen({ navigation }: any) {
         </View>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Swim Program</Text>
-          <Text style={styles.headerSubtitle}>Bracelet tracking and skill-level reporting</Text>
+          <Text style={styles.headerSubtitle}>
+            {loading ? 'Loading…' : `${braceletData.length} campers`} · season {viewSeason}
+          </Text>
         </View>
+      </View>
+
+      <View style={styles.seasonRow}>
+        <OptionPicker
+          label="Season"
+          value={viewSeason}
+          options={seasonOptions}
+          onChange={setViewSeason}
+        />
       </View>
 
       <View style={styles.searchContainer}>
@@ -320,13 +378,59 @@ export function SwimProgramScreen({ navigation }: any) {
         >
           <Text style={[styles.tabText, activeTab === 'levels' && styles.tabTextActive]}>Swim Level Report</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'history' && styles.tabActive]}
+          onPress={() => setActiveTab('history')}
+        >
+          <Text style={[styles.tabText, activeTab === 'history' && styles.tabTextActive]}>Prior Seasons</Text>
+        </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {loading && activeTab !== 'history' ? (
         <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 32 }} />
       ) : (
         <ScrollView style={styles.content}>
-          {activeTab === 'bracelets' ? (
+          {activeTab === 'history' ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Prior seasons — campers with saved swim data</Text>
+              </View>
+              {historyLoading ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} style={{ margin: 24 }} />
+              ) : historyReport.length === 0 ? (
+                <Text style={styles.emptyState}>
+                  No prior swim data yet. Enter data on Bracelets / Level Report or import CSV on web.
+                </Text>
+              ) : (
+                historyReport.flatMap((row) =>
+                  row.seasons.map((s) => (
+                    <View key={`${row.personId}-${s.season}`} style={styles.listItem}>
+                      <Text style={styles.camperName}>{row.name}</Text>
+                      <Text style={styles.camperGroup}>
+                        Season {s.season} · {s.bracelet?.currentBracelet || '—'} bracelet
+                      </Text>
+                      {s.levels ? (
+                        <View style={styles.listSubInfoLevels}>
+                          <View style={styles.levelBlock}>
+                            <Text style={styles.infoLabel}>Goldfish</Text>
+                            <Text style={styles.infoValue}>{s.levels.goldfish.join(' ')}</Text>
+                          </View>
+                          <View style={styles.levelBlock}>
+                            <Text style={styles.infoLabel}>Minnow</Text>
+                            <Text style={styles.infoValue}>{s.levels.minnow.join(' ')}</Text>
+                          </View>
+                          <View style={styles.levelBlock}>
+                            <Text style={styles.infoLabel}>Tadpole</Text>
+                            <Text style={styles.infoValue}>{s.levels.tadpole.join(' ')}</Text>
+                          </View>
+                        </View>
+                      ) : null}
+                    </View>
+                  )),
+                )
+              )}
+            </View>
+          ) : activeTab === 'bracelets' ? (
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>Current bracelet status & test history</Text>
@@ -602,6 +706,14 @@ const styles = StyleSheet.create({
   headerTextContainer: { flex: 1 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: theme.colors.text },
   headerSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
+  seasonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 12,
+  },
+  seasonLabel: { fontSize: 14, fontWeight: '500', color: theme.colors.text },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',

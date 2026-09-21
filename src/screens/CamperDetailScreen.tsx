@@ -16,6 +16,7 @@ import { formatBirthdayDisplay } from '../lib/birthdayDate';
 import { formatSportsAcademySessionDate } from '../lib/sportsAcademyUtils';
 import { PersonThreeDayOutlook } from '../components/PersonThreeDayOutlook';
 import { ProfileQuickSearch } from '../components/ProfileQuickSearch';
+import { CamperSwimHistoryTab } from '../components/CamperSwimHistoryTab';
 import { formatIsoDateToUs, toIsoDateOrNull } from '../api/staffPayload';
 import {
     getCamperEffectiveDivision,
@@ -41,7 +42,8 @@ type TabType =
     | 'activities'
     | 'sports-academy'
     | 'incidents'
-    | 'appointments';
+    | 'appointments'
+    | 'swim';
 type BirthdaySubTabType = 'info' | 'party';
 
 
@@ -435,11 +437,15 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             { key: 'incidents', label: 'Incident Reports' },
             { key: 'appointments', label: 'Appointments' },
         ];
+        let filtered = all;
         if (isTimberLakeWest) {
-            return all.filter((t) => t.key !== 'sports-academy');
+            filtered = filtered.filter((t) => t.key !== 'sports-academy');
         }
-        return all;
-    }, [isTimberLakeWest]);
+        if (isDayCamp && (camper as any)?.person_id) {
+            filtered = [...filtered, { key: 'swim' as const, label: 'Swim' }];
+        }
+        return filtered;
+    }, [isTimberLakeWest, isDayCamp, camper]);
 
     useEffect(() => {
         if (isTimberLakeWest && activeTab === 'sports-academy') {
@@ -1527,6 +1533,12 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                 })}
                             </View>
                         )}
+                    </View>
+                )}
+
+                {activeTab === 'swim' && (camper as any)?.person_id && (
+                    <View style={styles.tabContent}>
+                        <CamperSwimHistoryTab personId={(camper as any).person_id} />
                     </View>
                 )}
             </ScrollView>
