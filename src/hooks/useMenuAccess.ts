@@ -43,6 +43,7 @@ export function useMenuAccess() {
             // Match web: Bus Attendance allowed when Transportation is enabled for the role.
             if (
                 menuItem === 'bus-attendance' ||
+                menuItem === 'group-bubble-sheets' ||
                 menuItem === 'change-sheets' ||
                 menuItem === 'pending-transport-changes' ||
                 menuItem === 'transport-admin' ||

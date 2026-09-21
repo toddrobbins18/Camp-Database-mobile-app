@@ -65,6 +65,14 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
       params: { moduleId: 'bus-attendance' },
     },
     {
+      key: 'group-bubble-sheets',
+      menuId: 'group-bubble-sheets',
+      label: 'Group Bubble Sheets',
+      icon: 'people-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'group-bubble-sheets' },
+    },
+    {
       key: 'change-sheets',
       menuId: 'change-sheets',
       label: 'Change Sheets',
@@ -107,6 +115,7 @@ export function getDayCampPocItemsForCompany(company: CampLike): MobileDrawerMen
       (item.menuId === 'transportation' ||
         item.menuId === 'transport-admin' ||
         item.menuId === 'bus-attendance' ||
+        item.menuId === 'group-bubble-sheets' ||
         item.menuId === 'change-sheets' ||
         item.menuId === 'pending-transport-changes') &&
       !northShoreBusTransportEnabled(company)
@@ -178,6 +187,10 @@ export const DAY_CAMP_MODULE_COPY: Record<string, { title: string; description: 
   'parent-portal-dashboard': {
     title: 'Portal Dashboard',
     description: 'Staff review and approve parent submissions before they update routes and paperwork.',
+  },
+  'group-bubble-sheets': {
+    title: 'Group Bubble Sheets',
+    description: 'Print team attendance sheets filtered by enrollment week.',
   },
   'transport-admin': {
     title: 'Transport Admin',

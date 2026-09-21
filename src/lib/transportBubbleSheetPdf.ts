@@ -183,7 +183,12 @@ function drawTitleBlock(
   return y + 6;
 }
 
-function drawTableHeader(doc: jsPDF, layout: SheetLayout, y: number): number {
+function drawTableHeader(
+  doc: jsPDF,
+  layout: SheetLayout,
+  y: number,
+  detailColumnLabel = "Stop / Group",
+): number {
   const rowTop = y;
   const rowBottom = y + HEADER_HEIGHT;
 
@@ -198,7 +203,7 @@ function drawTableHeader(doc: jsPDF, layout: SheetLayout, y: number): number {
   doc.setFontSize(8);
   doc.text("#", layout.textNum, textY);
   doc.text("Camper", layout.textName, textY);
-  doc.text("Stop / Group", layout.textStop, textY);
+  doc.text(detailColumnLabel, layout.textStop, textY);
   doc.text("Present", layout.colPresentCenter, textY, { align: "center" });
   doc.text("Absent", layout.colAbsentCenter, textY, { align: "center" });
   doc.setFont("helvetica", "normal");
@@ -307,20 +312,22 @@ function renderBubbleSections(
   sheetTitle: string,
   metaLines: string[],
   sections: BubbleSheetSection[],
+  options?: { detailColumnLabel?: string },
 ) {
   const layout = createLayout(doc);
+  const detailColumnLabel = options?.detailColumnLabel ?? "Stop / Group";
   let y = drawTitleBlock(doc, layout, companyName, sheetTitle, metaLines);
 
   const drawSectionTable = (section: BubbleSheetSection) => {
     y = drawSectionHeader(doc, layout, section.title, section.subtitle, y);
-    y = drawTableHeader(doc, layout, y);
+    y = drawTableHeader(doc, layout, y, detailColumnLabel);
 
     for (let idx = 0; idx < section.campers.length; idx++) {
       if (y + ROW_HEIGHT > layout.usableBottom) {
         doc.addPage();
         y = layout.margin;
         y = drawSectionHeader(doc, layout, `${section.title} (continued)`, undefined, y);
-        y = drawTableHeader(doc, layout, y);
+        y = drawTableHeader(doc, layout, y, detailColumnLabel);
       }
       drawTableRow(doc, layout, y, idx + 1, section.campers[idx]);
       y += ROW_HEIGHT;
@@ -422,7 +429,8 @@ export async function downloadBusBubbleSheetsPdf(options: {
 
 export async function buildGroupBubbleSheetPdf(options: {
   companyName: string;
-  date: string;
+  enrollmentWeek: number;
+  weekDateRange?: string;
   groups: {
     groupName: string;
     campers: BubbleSheetCamper[];
@@ -431,29 +439,33 @@ export async function buildGroupBubbleSheetPdf(options: {
   const sections = options.groups
     .filter((g) => g.campers.length > 0)
     .map((g) => ({
-      title: g.groupName,
-      subtitle: `${g.campers.length} campers`,
+      title: `Group · ${g.groupName}`,
+      subtitle: `${g.campers.length} campers enrolled this week`,
       campers: g.campers,
     }));
 
   if (!sections.length) return null;
+
+  const metaLines = [`Enrollment Week: ${options.enrollmentWeek}`];
+  if (options.weekDateRange) metaLines.push(`Dates: ${options.weekDateRange}`);
 
   const doc = await createJsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   renderBubbleSections(
     doc,
     options.companyName,
     "Group Attendance Bubble Sheet",
-    [`Date: ${options.date}`],
+    metaLines,
     sections,
+    { detailColumnLabel: "Team" },
   );
 
-  const safeDate = options.date.replace(/[^0-9-]/g, "");
-  return docToPdfResult(doc, `group-bubble-sheet-${safeDate}.pdf`);
+  return docToPdfResult(doc, `group-bubble-sheet-week-${options.enrollmentWeek}.pdf`);
 }
 
 export async function downloadGroupBubbleSheetPdf(options: {
   companyName: string;
-  date: string;
+  enrollmentWeek: number;
+  weekDateRange?: string;
   groups: {
     groupName: string;
     campers: BubbleSheetCamper[];
@@ -469,6 +481,8 @@ export async function buildCombinedAttendanceBubbleSheetPdf(options: {
   companyName: string;
   date: string;
   runPeriod: "am" | "pm";
+  enrollmentWeek?: number;
+  weekDateRange?: string;
   busRoutes: {
     bus: string;
     routeName: string;
@@ -498,13 +512,20 @@ export async function buildCombinedAttendanceBubbleSheetPdf(options: {
   const sections = [...busSections, ...groupSections];
   if (!sections.length) return null;
 
+  const metaLines = [`Date: ${options.date}`, `Run: ${options.runPeriod.toUpperCase()}`];
+  if (options.enrollmentWeek != null) {
+    metaLines.push(`Enrollment Week: ${options.enrollmentWeek}`);
+    if (options.weekDateRange) metaLines.push(`Week dates: ${options.weekDateRange}`);
+  }
+
   const doc = await createJsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   renderBubbleSections(
     doc,
     options.companyName,
     "Day Camp Attendance Bubble Sheet",
-    [`Date: ${options.date}`, `Run: ${options.runPeriod.toUpperCase()}`],
+    metaLines,
     sections,
+    { detailColumnLabel: options.enrollmentWeek != null ? "Team" : "Stop / Group" },
   );
 
   const safeDate = options.date.replace(/[^0-9-]/g, "");
