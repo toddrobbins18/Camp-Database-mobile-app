@@ -34,6 +34,7 @@ type NurseRecord = {
   counselor: string | null;
   nurse_name: string | null;
   sent_home: boolean | null;
+  transport_status: string | null;
   called_home: boolean | null;
   notes: string | null;
   created_at: string;
@@ -83,7 +84,9 @@ function recordToForm(record: NurseRecord): RecordForm {
   };
 }
 
-function formToPayload(form: RecordForm): Partial<NurseRecord> {
+function formToPayload(form: RecordForm, existing?: NurseRecord): Partial<NurseRecord> {
+  const keepAcknowledged =
+    existing?.sent_home && form.sent_home && existing.transport_status === 'acknowledged';
   return {
     date: form.date,
     camper_name: form.camper_name.trim() || null,
@@ -96,6 +99,7 @@ function formToPayload(form: RecordForm): Partial<NurseRecord> {
     sent_home: form.sent_home,
     called_home: form.called_home,
     notes: form.notes.trim() || null,
+    transport_status: form.sent_home ? (keepAcknowledged ? 'acknowledged' : 'submitted') : null,
   };
 }
 
@@ -166,7 +170,8 @@ export function NurseScreen({ navigation }: any) {
   const handleSave = async () => {
     if (!companyId) return;
 
-    const payload = formToPayload(form);
+    const existing = editingId ? records.find((r) => r.id === editingId) : undefined;
+    const payload = formToPayload(form, existing);
     setSaving(true);
     try {
       if (editingId) {

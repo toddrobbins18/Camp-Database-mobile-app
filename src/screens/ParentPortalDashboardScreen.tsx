@@ -19,7 +19,7 @@ import {
   statusBadgeStyle,
 } from '../constants/parentPortalConstants';
 import { formatCampDateTime } from '../lib/campTime';
-import { DISMISSAL_REALTIME_TABLES } from '../lib/dismissalDashboard';
+import { approveDismissalSwim, DISMISSAL_REALTIME_TABLES } from '../lib/dismissalDashboard';
 
 type TabId = 'pickups' | 'absences' | 'swim';
 
@@ -50,6 +50,7 @@ type SwimRow = {
   scheduled_at: string;
   instructor: string | null;
   parent_confirmed: boolean;
+  transport_status: string | null;
   camperName: string;
 };
 
@@ -91,7 +92,7 @@ export function ParentPortalDashboardScreen({ navigation }: { navigation: any })
         supabase
           .from('swim_lessons')
           .select(`
-            id, scheduled_at, instructor, parent_confirmed,
+            id, scheduled_at, instructor, parent_confirmed, transport_status,
             children:camper_id(name)
           `)
           .eq('company_id', companyId)
@@ -130,6 +131,7 @@ export function ParentPortalDashboardScreen({ navigation }: { navigation: any })
           scheduled_at: l.scheduled_at,
           instructor: l.instructor,
           parent_confirmed: l.parent_confirmed,
+          transport_status: l.transport_status ?? null,
           camperName: l.children?.name ?? '—',
         })),
       );
@@ -162,6 +164,13 @@ export function ParentPortalDashboardScreen({ navigation }: { navigation: any })
 
   const pendingPickups = useMemo(() => pickups.filter((p) => p.status === 'submitted').length, [pickups]);
   const pendingAbsences = useMemo(() => absences.filter((a) => a.status === 'submitted').length, [absences]);
+  const pendingSwim = useMemo(
+    () =>
+      swimLessons.filter(
+        (l) => l.parent_confirmed && (l.transport_status ?? 'submitted') === 'submitted',
+      ).length,
+    [swimLessons],
+  );
 
   const approvePickup = async (id: string) => {
     setApproving(id);
@@ -187,6 +196,21 @@ export function ParentPortalDashboardScreen({ navigation }: { navigation: any })
         return;
       }
       Alert.alert('Approved', 'This absence will appear on approved change sheets and routes.');
+      await load();
+    } finally {
+      setApproving(null);
+    }
+  };
+
+  const approveSwim = async (id: string) => {
+    setApproving(id);
+    try {
+      const { error } = await approveDismissalSwim(supabase, id);
+      if (error) {
+        Alert.alert('Approve failed', error.message);
+        return;
+      }
+      Alert.alert('Approved', 'Swim lesson will appear on change sheets and routes.');
       await load();
     } finally {
       setApproving(null);
@@ -227,7 +251,7 @@ export function ParentPortalDashboardScreen({ navigation }: { navigation: any })
         {([
           { id: 'pickups' as const, label: 'Pickups', count: pendingPickups },
           { id: 'absences' as const, label: 'Absences', count: pendingAbsences },
-          { id: 'swim' as const, label: 'Swim', count: 0 },
+          { id: 'swim' as const, label: 'Swim', count: pendingSwim },
         ]).map((tab) => (
           <TouchableOpacity
             key={tab.id}
@@ -346,6 +370,22 @@ export function ParentPortalDashboardScreen({ navigation }: { navigation: any })
                   </View>
                   <Text style={styles.meta}>{formatCampDateTime(l.scheduled_at)}</Text>
                   {l.instructor ? <Text style={styles.detail}>{l.instructor}</Text> : null}
+                  {l.parent_confirmed && l.transport_status !== 'acknowledged' ? (
+                    <TouchableOpacity
+                      style={styles.approveBtn}
+                      onPress={() => void approveSwim(l.id)}
+                      disabled={approving === l.id}
+                    >
+                      {approving === l.id ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+                          <Text style={styles.approveBtnText}>Approve transport</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               ))
             ))}

@@ -443,7 +443,10 @@ export function ParentPortalScreen({ navigation }: any) {
                     {l.parent_confirmed ? (
                       <TouchableOpacity
                         onPress={async () => {
-                          await supabase.from('swim_lessons').update({ parent_confirmed: false, parent_confirmed_at: null }).eq('id', l.id);
+                          await supabase
+                            .from('swim_lessons')
+                            .update({ parent_confirmed: false, parent_confirmed_at: null, transport_status: null })
+                            .eq('id', l.id);
                           void loadAll();
                         }}
                       >
@@ -455,7 +458,11 @@ export function ParentPortalScreen({ navigation }: any) {
                         onPress={async () => {
                           await supabase
                             .from('swim_lessons')
-                            .update({ parent_confirmed: true, parent_confirmed_at: new Date().toISOString() })
+                            .update({
+                              parent_confirmed: true,
+                              parent_confirmed_at: new Date().toISOString(),
+                              transport_status: 'submitted',
+                            })
                             .eq('id', l.id);
                           void loadAll();
                         }}

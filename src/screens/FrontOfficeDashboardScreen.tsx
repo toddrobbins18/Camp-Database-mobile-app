@@ -18,7 +18,9 @@ import { campTodayDateString } from '../lib/parentPortalCutoff';
 import {
     ABSENCE_TYPE_LABELS,
     approveDismissalAbsence,
+    approveDismissalNurse,
     approveDismissalPickup,
+    approveDismissalSwim,
     DISMISSAL_REALTIME_TABLES,
     fetchDismissalDashboard,
     PICKUP_CHANGE_LABELS,
@@ -71,7 +73,12 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
 
     const pendingTodayCount = useMemo(() => {
         if (!data) return 0;
-        return data.pendingPickups.length + data.pendingAbsences.length;
+        return (
+            data.pendingPickups.length +
+            data.pendingAbsences.length +
+            data.pendingNurse.length +
+            data.pendingSwim.length
+        );
     }, [data]);
 
     const openOfficeCount = useMemo(
@@ -100,6 +107,34 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
                 text: 'Approve',
                 onPress: async () => {
                     const { error } = await approveDismissalAbsence(supabase, id);
+                    if (error) Alert.alert('Error', error.message);
+                    else void load();
+                },
+            },
+        ]);
+    };
+
+    const approveNurse = (id: string, name: string) => {
+        Alert.alert('Approve sent home', `Approve nurse sent-home for ${name}?`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Approve',
+                onPress: async () => {
+                    const { error } = await approveDismissalNurse(supabase, id);
+                    if (error) Alert.alert('Error', error.message);
+                    else void load();
+                },
+            },
+        ]);
+    };
+
+    const approveSwim = (id: string, name: string) => {
+        Alert.alert('Approve swim lesson', `Approve swim transport change for ${name}?`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Approve',
+                onPress: async () => {
+                    const { error } = await approveDismissalSwim(supabase, id);
                     if (error) Alert.alert('Error', error.message);
                     else void load();
                 },
@@ -151,7 +186,10 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
                     </View>
                     <View style={styles.statCard}>
                         <Text style={styles.statValue}>
-                            {(data?.approvedPickups.length ?? 0) + (data?.approvedAbsences.length ?? 0)}
+                            {(data?.approvedPickups.length ?? 0) +
+                                (data?.approvedAbsences.length ?? 0) +
+                                (data?.approvedNurse.length ?? 0) +
+                                (data?.approvedSwim.length ?? 0)}
                         </Text>
                         <Text style={styles.statLabel}>Approved</Text>
                     </View>
@@ -181,8 +219,11 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
                 ) : null}
 
                 <Text style={styles.sectionTitle}>Incoming — needs approval</Text>
-                {!data?.pendingPickups.length && !data?.pendingAbsences.length ? (
-                    <Text style={styles.empty}>No pending parent changes for today.</Text>
+                {!data?.pendingPickups.length &&
+                !data?.pendingAbsences.length &&
+                !data?.pendingNurse.length &&
+                !data?.pendingSwim.length ? (
+                    <Text style={styles.empty}>No pending changes for today.</Text>
                 ) : null}
                 {data?.pendingPickups.map((p) => (
                     <View key={p.id} style={styles.pendingCard}>
@@ -209,6 +250,32 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
                             <Text style={styles.cardMeta}>{a.familyName}</Text>
                         </View>
                         <TouchableOpacity style={styles.approveBtn} onPress={() => approveAbsence(a.id, a.camperName)}>
+                            <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                            <Text style={styles.approveBtnText}>Approve</Text>
+                        </TouchableOpacity>
+                    </View>
+                ))}
+                {data?.pendingNurse.map((n) => (
+                    <View key={n.id} style={styles.pendingCard}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.cardName}>{n.camper_name}</Text>
+                            <Text style={styles.cardType}>Nurse · Sent home</Text>
+                            {n.reason ? <Text style={styles.cardMeta}>{n.reason}</Text> : null}
+                        </View>
+                        <TouchableOpacity style={styles.approveBtn} onPress={() => approveNurse(n.id, n.camper_name)}>
+                            <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                            <Text style={styles.approveBtnText}>Approve</Text>
+                        </TouchableOpacity>
+                    </View>
+                ))}
+                {data?.pendingSwim.map((s) => (
+                    <View key={s.id} style={styles.pendingCard}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.cardName}>{s.camperName}</Text>
+                            <Text style={styles.cardType}>Swim · Parent confirmed</Text>
+                            {s.instructor ? <Text style={styles.cardMeta}>{s.instructor}</Text> : null}
+                        </View>
+                        <TouchableOpacity style={styles.approveBtn} onPress={() => approveSwim(s.id, s.camperName)}>
                             <Ionicons name="checkmark-circle" size={18} color="#fff" />
                             <Text style={styles.approveBtnText}>Approve</Text>
                         </TouchableOpacity>

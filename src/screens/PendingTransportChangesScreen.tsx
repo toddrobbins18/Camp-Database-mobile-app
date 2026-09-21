@@ -20,6 +20,8 @@ import {
   todayDateString,
   type TransportRunPeriod,
 } from '../lib/transportDailyOverrides';
+import { campYmdToUtcEndIso, campYmdToUtcStartIso } from '../lib/campTime';
+import { approveDismissalNurse, approveDismissalSwim } from '../lib/dismissalDashboard';
 import { buildPendingChangeSheetRows, type TransportChangeSheetRow } from '../lib/transportChangeSheets';
 import { CHANGE_TYPES } from '../constants/parentPortalConstants';
 
@@ -33,7 +35,9 @@ function dateFromYmd(ymd: string) {
 
 type PendingAction =
   | { kind: 'absence'; id: string; camper: string }
-  | { kind: 'pickup'; id: string; camper: string; changeType: string };
+  | { kind: 'pickup'; id: string; camper: string; changeType: string }
+  | { kind: 'nurse'; id: string; camper: string }
+  | { kind: 'swim'; id: string; camper: string };
 
 export function PendingTransportChangesScreen({ navigation }: { navigation: any }) {
   const { routeMeta, coreStops, loading: boardLoading, companyId } = useTransportBoardSnapshot();
@@ -49,7 +53,7 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
     if (!companyId) return;
     setLoadingSheet(true);
     try {
-      const [exceptions, absenceRes, pickupRes] = await Promise.all([
+      const [exceptions, absenceRes, pickupRes, nurseRes, swimRes] = await Promise.all([
         fetchTransportExceptionsForReport(supabase, companyId, sheetDate),
         supabase
           .from('absences')
@@ -63,6 +67,22 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
           .eq('company_id', companyId)
           .eq('change_date', sheetDate)
           .eq('status', 'submitted'),
+        supabase
+          .from('nurse_records')
+          .select('id, camper_name')
+          .eq('company_id', companyId)
+          .eq('date', sheetDate)
+          .eq('sent_home', true)
+          .eq('transport_status', 'submitted'),
+        supabase
+          .from('swim_lessons')
+          .select('id, children:camper_id(name)')
+          .eq('company_id', companyId)
+          .eq('parent_confirmed', true)
+          .eq('transport_status', 'submitted')
+          .neq('status', 'cancelled')
+          .gte('scheduled_at', campYmdToUtcStartIso(sheetDate))
+          .lt('scheduled_at', campYmdToUtcEndIso(sheetDate)),
       ]);
 
       const pendingActions: PendingAction[] = [];
@@ -74,6 +94,14 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
         const name = (row as { children?: { name?: string } }).children?.name?.trim();
         const changeType = (row as { change_type?: string }).change_type ?? 'other';
         if (name) pendingActions.push({ kind: 'pickup', id: row.id, camper: name, changeType });
+      }
+      for (const row of nurseRes.data ?? []) {
+        const name = (row as { camper_name?: string }).camper_name?.trim();
+        if (name) pendingActions.push({ kind: 'nurse', id: row.id, camper: name });
+      }
+      for (const row of swimRes.data ?? []) {
+        const name = (row as { children?: { name?: string } }).children?.name?.trim();
+        if (name) pendingActions.push({ kind: 'swim', id: row.id, camper: name });
       }
       setActions(pendingActions);
 
@@ -98,16 +126,21 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
   const approve = async (action: PendingAction) => {
     setApproving(action.id);
     try {
-      const table = action.kind === 'absence' ? 'absences' : 'pickup_changes';
-      const { error } = await supabase
-        .from(table)
-        .update({ status: 'acknowledged' })
-        .eq('id', action.id);
+      let error: { message: string } | null = null;
+      if (action.kind === 'absence') {
+        ({ error } = await supabase.from('absences').update({ status: 'acknowledged' }).eq('id', action.id));
+      } else if (action.kind === 'pickup') {
+        ({ error } = await supabase.from('pickup_changes').update({ status: 'acknowledged' }).eq('id', action.id));
+      } else if (action.kind === 'nurse') {
+        ({ error } = await approveDismissalNurse(supabase, action.id));
+      } else {
+        ({ error } = await approveDismissalSwim(supabase, action.id));
+      }
       if (error) {
         Alert.alert('Approve failed', error.message);
         return;
       }
-      Alert.alert('Approved', `${action.camper} will appear on approved change sheets.`);
+      Alert.alert('Approved', `${action.camper} approved.`);
       await loadPending();
     } finally {
       setApproving(null);
@@ -118,6 +151,8 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
     actions.find((a) => {
       if (a.camper.toLowerCase() !== row.camper.toLowerCase()) return false;
       if (a.kind === 'absence') return row.source.toLowerCase().includes('absence');
+      if (a.kind === 'nurse') return row.source.toLowerCase().includes('nurse');
+      if (a.kind === 'swim') return row.source.toLowerCase().includes('swim');
       const label = CHANGE_TYPES.find((t) => t.v === a.changeType)?.l ?? a.changeType.replace(/_/g, ' ');
       return row.description.toLowerCase().includes(label.toLowerCase());
     });
