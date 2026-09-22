@@ -29,6 +29,11 @@ import {
     formatEnrolledWeeksLabel,
     resolveEnrolledWeeks,
 } from '../lib/enrolledWeeks';
+import {
+    fetchCamperFamilyContact,
+    hasCamperContactInfo,
+    mergeCamperContact,
+} from '../lib/camperContactInfo';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -90,6 +95,16 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
         enabled: !!camperParam?.id,
     });
     const camper = fullChild ?? camperParam;
+
+    const { data: contactInfo } = useQuery({
+        queryKey: ['camper_contact', camper?.id],
+        queryFn: async () => {
+            if (!camper?.id) return null;
+            const { family, authorizedPickups } = await fetchCamperFamilyContact(supabase, camper.id);
+            return mergeCamperContact(camper as any, family, authorizedPickups);
+        },
+        enabled: !!camper?.id,
+    });
 
     const enrolledWeeks = useMemo(
         () => resolveEnrolledWeeks((camper as any)?.enrolled_weeks, (camper as any)?.session),
@@ -685,22 +700,78 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                     <Text style={styles.cardDescription}>Emergency contacts and guardian information</Text>
                                 </View>
                                 <View style={styles.cardContent}>
-                                    <View style={styles.infoRow}>
-                                        <Text style={styles.infoLabel}>Guardian Email</Text>
-                                        <View style={styles.infoValueBox}>
-                                            <Text style={styles.infoValueText}>
-                                                {(camper as any).guardianEmail || (camper as any).guardian_email || '-'}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <View style={styles.infoRow}>
-                                        <Text style={styles.infoLabel}>Guardian Phone</Text>
-                                        <View style={styles.infoValueBox}>
-                                            <Text style={styles.infoValueText}>
-                                                {(camper as any).guardianPhone || (camper as any).guardian_phone || '-'}
-                                            </Text>
-                                        </View>
-                                    </View>
+                                    {contactInfo && hasCamperContactInfo(contactInfo) ? (
+                                        <>
+                                            {contactInfo.familyName ? (
+                                                <View style={styles.infoRow}>
+                                                    <Text style={styles.infoLabel}>Family (Parent Portal)</Text>
+                                                    <View style={styles.infoValueBox}>
+                                                        <Text style={styles.infoValueText}>{contactInfo.familyName}</Text>
+                                                    </View>
+                                                </View>
+                                            ) : null}
+                                            {contactInfo.guardianName ? (
+                                                <View style={styles.infoRow}>
+                                                    <Text style={styles.infoLabel}>Parent 1 (P1)</Text>
+                                                    <View style={styles.infoValueBox}>
+                                                        <Text style={styles.infoValueText}>{contactInfo.guardianName}</Text>
+                                                    </View>
+                                                </View>
+                                            ) : null}
+                                            {contactInfo.guardianNameP2 ? (
+                                                <View style={styles.infoRow}>
+                                                    <Text style={styles.infoLabel}>Parent 2 (P2)</Text>
+                                                    <View style={styles.infoValueBox}>
+                                                        <Text style={styles.infoValueText}>{contactInfo.guardianNameP2}</Text>
+                                                    </View>
+                                                </View>
+                                            ) : null}
+                                            {contactInfo.guardianEmail ? (
+                                                <View style={styles.infoRow}>
+                                                    <Text style={styles.infoLabel}>P1 Email</Text>
+                                                    <View style={styles.infoValueBox}>
+                                                        <Text style={styles.infoValueText}>{contactInfo.guardianEmail}</Text>
+                                                    </View>
+                                                </View>
+                                            ) : null}
+                                            {contactInfo.guardianPhone ? (
+                                                <View style={styles.infoRow}>
+                                                    <Text style={styles.infoLabel}>P1 Phone</Text>
+                                                    <View style={styles.infoValueBox}>
+                                                        <Text style={styles.infoValueText}>{contactInfo.guardianPhone}</Text>
+                                                    </View>
+                                                </View>
+                                            ) : null}
+                                            {contactInfo.emergencyContact ? (
+                                                <View style={styles.infoRow}>
+                                                    <Text style={styles.infoLabel}>Emergency Contact</Text>
+                                                    <View style={styles.infoValueBox}>
+                                                        <Text style={styles.infoValueText}>{contactInfo.emergencyContact}</Text>
+                                                    </View>
+                                                </View>
+                                            ) : null}
+                                            {contactInfo.authorizedPickups.map((pickup) => (
+                                                <View
+                                                    key={`${pickup.fullName}-${pickup.phone ?? ''}`}
+                                                    style={styles.infoRow}
+                                                >
+                                                    <Text style={styles.infoLabel}>
+                                                        Authorized pickup{pickup.relationship ? ` · ${pickup.relationship}` : ''}
+                                                    </Text>
+                                                    <View style={styles.infoValueBox}>
+                                                        <Text style={styles.infoValueText}>{pickup.fullName}</Text>
+                                                        {(pickup.phone || pickup.email) ? (
+                                                            <Text style={styles.enrolledWeeksSession}>
+                                                                {[pickup.phone, pickup.email].filter(Boolean).join(' · ')}
+                                                            </Text>
+                                                        ) : null}
+                                                    </View>
+                                                </View>
+                                            ))}
+                                        </>
+                                    ) : (
+                                        <Text style={styles.enrolledWeeksSession}>No contact information available</Text>
+                                    )}
                                 </View>
                             </StyledCard>
                         </View>
