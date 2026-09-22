@@ -15,6 +15,8 @@ import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
 import { campTodayDateString } from '../lib/parentPortalCutoff';
+import { getFrontOfficeTransportMenuItems } from '../constants/dayCampMenu';
+import { northShoreBusTransportEnabled } from '../constants/camps';
 import {
     ABSENCE_TYPE_LABELS,
     approveDismissalAbsence,
@@ -35,6 +37,11 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [live, setLive] = useState(false);
+    const showTransport = northShoreBusTransportEnabled({ slug: companySlug, camp_type: 'day_camp' });
+    const frontOfficeTransportLinks = useMemo(
+        () => getFrontOfficeTransportMenuItems({ slug: companySlug, camp_type: 'day_camp' }),
+        [companySlug],
+    );
 
     const load = useCallback(async () => {
         if (!companyId || !season) return;
@@ -195,32 +202,23 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
                     </View>
                 </View>
 
-                {companySlug === 'north-shore-day-camp' ? (
+                {showTransport && frontOfficeTransportLinks.length > 0 ? (
                     <View style={styles.linkRow}>
-                        <TouchableOpacity
-                            style={styles.linkBtn}
-                            onPress={() => navigation.navigate('DayCampModule', { moduleId: 'transport-admin' })}
-                        >
-                            <Text style={styles.linkBtnText}>Transport Admin</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.linkBtn}
-                            onPress={() => navigation.navigate('DayCampModule', { moduleId: 'parent-portal-dashboard' })}
-                        >
-                            <Text style={styles.linkBtnText}>Portal Dashboard</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.linkBtn}
-                            onPress={() => navigation.navigate('DayCampModule', { moduleId: 'pending-transport-changes' })}
-                        >
-                            <Text style={styles.linkBtnText}>Pending Changes</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.linkBtn}
-                            onPress={() => navigation.navigate('Transport')}
-                        >
-                            <Text style={styles.linkBtnText}>Transport</Text>
-                        </TouchableOpacity>
+                        {frontOfficeTransportLinks.map((item) => (
+                            <TouchableOpacity
+                                key={item.key}
+                                style={styles.linkBtn}
+                                onPress={() => {
+                                    if (item.params) {
+                                        navigation.navigate(item.screen, item.params);
+                                    } else {
+                                        navigation.navigate(item.screen);
+                                    }
+                                }}
+                            >
+                                <Text style={styles.linkBtnText}>{item.label}</Text>
+                            </TouchableOpacity>
+                        ))}
                     </View>
                 ) : null}
 

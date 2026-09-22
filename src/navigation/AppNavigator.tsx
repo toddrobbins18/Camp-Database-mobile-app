@@ -120,7 +120,8 @@ function DayCampModuleRouter({ route, navigation }: any) {
 }
 import {
     getDayCampNestCarryoverMenuItems,
-    getDayCampPocItemsForCompany,
+    getDayCampSidebarPocItems,
+    getParentPortalMenuItems,
     MobileDrawerMenuItem,
 } from '../constants/dayCampMenu';
 
@@ -240,15 +241,23 @@ const CustomDrawerContent = (props: any) => {
         icon: keyof typeof Ionicons.glyphMap;
         onPress: () => void;
     }> = [];
+    const parentPortalMenuItems: Array<{
+        key: string;
+        label: string;
+        icon: keyof typeof Ionicons.glyphMap;
+        onPress: () => void;
+    }> = [];
 
     if (isDayCamp) {
         const carryover = filterDayCampMenu(getDayCampNestCarryoverMenuItems(), hasMenuAccess);
         const poc = filterDayCampMenu(
-            getDayCampPocItemsForCompany({ slug: companySlug, camp_type: 'day_camp' }),
+            getDayCampSidebarPocItems({ slug: companySlug, camp_type: 'day_camp' }),
             hasMenuAccess,
         );
+        const parentPortal = filterDayCampMenu(getParentPortalMenuItems(), hasMenuAccess);
         mainMenuItems.push(...carryover.map((item) => toDrawerMenuItem(item, props.navigation)));
         dayCampMenuItems.push(...poc.map((item) => toDrawerMenuItem(item, props.navigation)));
+        parentPortalMenuItems.push(...parentPortal.map((item) => toDrawerMenuItem(item, props.navigation)));
     } else {
     mainMenuItems.push(
         { key: 'dashboard', label: 'Dashboard', icon: 'home-outline', onPress: () => props.navigation.navigate('Dashboard') },
@@ -543,6 +552,13 @@ const CustomDrawerContent = (props: any) => {
                     <>
                         <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Day Camp</Text>
                         {renderDrawerItems(dayCampMenuItems)}
+                    </>
+                )}
+
+                {isDayCamp && parentPortalMenuItems.length > 0 && (
+                    <>
+                        <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Parent Facing</Text>
+                        {renderDrawerItems(parentPortalMenuItems)}
                     </>
                 )}
 

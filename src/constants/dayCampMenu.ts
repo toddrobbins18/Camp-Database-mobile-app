@@ -11,6 +11,21 @@ export type MobileDrawerMenuItem = {
   params?: Record<string, string>;
 };
 
+/** Staff transport tools — linked from Front Office, not top-level drawer. */
+export const FRONT_OFFICE_TRANSPORT_MENU_IDS = new Set([
+  'transport-admin',
+  'bus-attendance',
+  'change-sheets',
+  'pending-transport-changes',
+  'group-bubble-sheets',
+]);
+
+/** Bus transport modules — gated when North Shore bus transport is disabled. */
+const BUS_TRANSPORT_MENU_IDS = new Set(['transportation', ...FRONT_OFFICE_TRANSPORT_MENU_IDS]);
+
+/** Parent-facing staff tools — Parent Portal drawer section. */
+export const PARENT_PORTAL_MENU_IDS = new Set(['parent-portal', 'parent-portal-dashboard']);
+
 /** Todd carryover — existing Nest modules (matches web dayCampMenu.ts). */
 export function getDayCampNestCarryoverMenuItems(): MobileDrawerMenuItem[] {
   return [
@@ -106,24 +121,57 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
 /** North Shore — hide Media per Todd (Jul 30). Bunking + Hiring enabled for roster. */
 const NORTH_SHORE_SKIP_POC_MENU_IDS = new Set(['media']);
 
+function isTransportMenuItem(menuId: string): boolean {
+  return BUS_TRANSPORT_MENU_IDS.has(menuId);
+}
+
 export function getDayCampPocItemsForCompany(company: CampLike): MobileDrawerMenuItem[] {
   return getDayCampPocMenuItems().filter((item) => {
     if (isNorthShoreDayCamp(company?.slug) && NORTH_SHORE_SKIP_POC_MENU_IDS.has(item.menuId)) {
       return false;
     }
-    if (
-      (item.menuId === 'transportation' ||
-        item.menuId === 'transport-admin' ||
-        item.menuId === 'bus-attendance' ||
-        item.menuId === 'group-bubble-sheets' ||
-        item.menuId === 'change-sheets' ||
-        item.menuId === 'pending-transport-changes') &&
-      !northShoreBusTransportEnabled(company)
-    ) {
+    if (isTransportMenuItem(item.menuId) && !northShoreBusTransportEnabled(company)) {
       return false;
     }
     return true;
   });
+}
+
+/** Day Camp drawer — excludes Front Office transport links and Parent Portal items. */
+export function getDayCampSidebarPocItems(company: CampLike): MobileDrawerMenuItem[] {
+  return getDayCampPocItemsForCompany(company).filter(
+    (item) =>
+      !FRONT_OFFICE_TRANSPORT_MENU_IDS.has(item.menuId) &&
+      !PARENT_PORTAL_MENU_IDS.has(item.menuId),
+  );
+}
+
+/** Transport shortcuts on the Front Office screen. */
+export function getFrontOfficeTransportMenuItems(company: CampLike): MobileDrawerMenuItem[] {
+  return getDayCampPocItemsForCompany(company).filter((item) =>
+    FRONT_OFFICE_TRANSPORT_MENU_IDS.has(item.menuId),
+  );
+}
+
+export function getParentPortalMenuItems(): MobileDrawerMenuItem[] {
+  return [
+    {
+      key: 'parent-portal',
+      menuId: 'parent-portal',
+      label: 'Parent Portal',
+      icon: 'people-circle-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'parent-portal' },
+    },
+    {
+      key: 'parent-portal-dashboard',
+      menuId: 'parent-portal-dashboard',
+      label: 'Portal Dashboard',
+      icon: 'shield-checkmark-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'parent-portal-dashboard' },
+    },
+  ];
 }
 
 export type DayCampRolePermissionItem = {
