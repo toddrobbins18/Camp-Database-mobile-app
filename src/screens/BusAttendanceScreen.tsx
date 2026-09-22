@@ -38,6 +38,7 @@ import {
 } from '../lib/transportBusCheckins';
 import { buildRunRoutes, getEffectiveCoreStops, loadTransportRunBoard, type TransportRunBoard } from '../lib/transportRunBoard';
 import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
+import { FrontOfficeBackButton } from '../components/FrontOfficeBackButton';
 
 function ymdFromDate(d: Date): string {
   return format(d, 'yyyy-MM-dd');
@@ -337,6 +338,7 @@ export function BusAttendanceScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <FrontOfficeBackButton navigation={navigation} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
           <Ionicons name="menu-outline" size={26} color={theme.colors.text} />

@@ -32,6 +32,7 @@ import {
 } from '../lib/enrollmentWeekCalendar';
 import { loadGroupRoster } from '../lib/transportGroupAttendance';
 import { buildGroupBubbleSheetPdf } from '../lib/transportBubbleSheetPdf';
+import { FrontOfficeBackButton } from '../components/FrontOfficeBackButton';
 import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
 
 const ALL_GROUPS = '__all__';
@@ -155,11 +156,9 @@ export function GroupBubbleSheetsScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <FrontOfficeBackButton navigation={navigation} />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color={theme.colors.primary} />
-          </TouchableOpacity>
           <View style={styles.headerText}>
             <Text style={styles.title}>Group Bubble Sheets</Text>
             <Text style={styles.subtitle}>Team rosters filtered by enrollment week</Text>

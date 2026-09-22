@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { theme } from '../theme/theme';
+import { FrontOfficeBackButton } from '../components/FrontOfficeBackButton';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
@@ -257,6 +258,7 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <FrontOfficeBackButton navigation={navigation} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuBtn}>
           <Ionicons name="menu-outline" size={26} color={theme.colors.text} />
