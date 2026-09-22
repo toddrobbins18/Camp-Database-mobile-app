@@ -17,7 +17,7 @@ import { File, Paths } from 'expo-file-system';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
-import { campTodayDateString } from '../lib/parentPortalCutoff';
+import { campDateStringInSeason } from '../lib/campSeasonDate';
 import { DAY_CAMP_ENROLLMENT_WEEKS } from '../lib/enrolledWeeks';
 import {
   buildMonFriEnrollmentWeeks,
@@ -69,7 +69,7 @@ export function GroupBubbleSheetsScreen({ navigation }: any) {
     try {
       const loaded = await loadEnrollmentWeekCalendar(supabase, companyId, season);
       setCalendar(loaded);
-      const currentWeek = enrollmentWeekForDate(loaded, campTodayDateString());
+      const currentWeek = enrollmentWeekForDate(loaded, campDateStringInSeason(season));
       if (currentWeek != null) setSelectedWeek(currentWeek);
     } finally {
       setCalendarLoading(false);

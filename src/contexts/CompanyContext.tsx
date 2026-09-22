@@ -13,6 +13,7 @@ import {
     AVAILABLE_SEASONS,
     DEFAULT_SEASON,
     SEASON_BOOTSTRAP_VERSION,
+    isCampSeason,
 } from '../constants/seasonConstants';
 import { invalidateCampScopedQueries } from '../lib/queryClient';
 
@@ -348,8 +349,11 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                     return;
                 }
                 const stored = await AsyncStorage.getItem(SEASON_STORAGE_KEY);
-                if (!cancelled && stored) {
+                if (!cancelled && stored && isCampSeason(stored)) {
                     setSeasonState(stored);
+                } else if (!cancelled && stored && !isCampSeason(stored)) {
+                    setSeasonState(DEFAULT_SEASON);
+                    await AsyncStorage.setItem(SEASON_STORAGE_KEY, DEFAULT_SEASON);
                 }
             } catch {
                 // keep DEFAULT_SEASON
@@ -361,6 +365,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
     }, []);
 
     const setSeason = useCallback((nextSeason: string) => {
+        if (!isCampSeason(nextSeason)) return;
         setSeasonState(nextSeason);
         void AsyncStorage.setItem(SEASON_STORAGE_KEY, nextSeason);
     }, []);

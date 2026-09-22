@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
+import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 
@@ -38,11 +39,16 @@ type Lesson = {
 
 export function SwimLessonsScreen({ navigation }: any) {
   const { companyId, season } = useCompany();
+  const { operationalDate } = useCampOperationalDate();
   const [campers, setCampers] = useState<Camper[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [date, setDate] = useState<Date>(new Date());
+  const [date, setDate] = useState<Date>(() => operationalDate);
+
+  useEffect(() => {
+    setDate(operationalDate);
+  }, [operationalDate]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [camperId, setCamperId] = useState('');
@@ -61,7 +67,7 @@ export function SwimLessonsScreen({ navigation }: any) {
     setLocation('');
     setCost('45');
     setNotes('');
-    setDate(new Date());
+    setDate(operationalDate);
     setShowDatePicker(false);
     setShowTimePicker(false);
   };

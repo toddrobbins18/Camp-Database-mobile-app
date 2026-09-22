@@ -17,7 +17,7 @@ import { File, Paths } from 'expo-file-system';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
-import { campTodayDateString } from '../lib/parentPortalCutoff';
+import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import {
   allRoutesBusSubmitted,
   busSubmissionKey,
@@ -57,10 +57,15 @@ async function shareTransportPdf(pdf: { filename: string; bytes: Uint8Array }) {
 
 export function BusAttendanceScreen({ navigation }: any) {
   const { companyId, season, availableCompanies } = useCompany();
+  const { operationalDateString } = useCampOperationalDate();
   const companyName =
     availableCompanies.find((c) => c.id === companyId)?.name ?? 'Day Camp';
 
-  const [runDate, setRunDate] = useState(campTodayDateString());
+  const [runDate, setRunDate] = useState(operationalDateString);
+
+  useEffect(() => {
+    setRunDate(operationalDateString);
+  }, [operationalDateString]);
   const [timeOfDay, setTimeOfDay] = useState<'am' | 'pm'>('am');
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -86,7 +91,7 @@ export function BusAttendanceScreen({ navigation }: any) {
     [routeIdsWithRoster, busSubmissions],
   );
   const submittedCount = routes.filter((r) => isRouteBusSubmitted(r.id, busSubmissions)).length;
-  const isToday = runDate === campTodayDateString();
+  const isToday = runDate === operationalDateString;
 
   useEffect(() => {
     if (!companyId || !season) return;
@@ -369,7 +374,7 @@ export function BusAttendanceScreen({ navigation }: any) {
           )}
           <TouchableOpacity
             style={styles.todayQuickBtn}
-            onPress={() => setRunDate(campTodayDateString())}
+            onPress={() => setRunDate(operationalDateString)}
           >
             <Text style={styles.todayQuickBtnText}>Today</Text>
           </TouchableOpacity>

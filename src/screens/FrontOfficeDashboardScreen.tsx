@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
-import { campTodayDateString } from '../lib/parentPortalCutoff';
+import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import { getFrontOfficeTransportMenuItems } from '../constants/dayCampMenu';
 import { northShoreBusTransportEnabled } from '../constants/camps';
 import {
@@ -32,7 +32,12 @@ import {
 
 export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) {
     const { companyId, season, companySlug } = useCompany();
-    const [selectedDate] = useState(campTodayDateString());
+    const { operationalDateString } = useCampOperationalDate();
+    const [selectedDate, setSelectedDate] = useState(operationalDateString);
+
+    useEffect(() => {
+        setSelectedDate(operationalDateString);
+    }, [operationalDateString]);
     const [data, setData] = useState<DismissalDashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);

@@ -1,4 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { campDateInSeason } from '../lib/campSeasonDate';
+import { DEFAULT_SEASON } from '../constants/seasonConstants';
 import {
     View,
     Text,
@@ -49,14 +51,21 @@ export const MenuScreen = ({ navigation }: any) => {
     const [isDeleting, setIsDeleting] = useState(false);
 
     // Add Menu Item form states
-    const [menuDate, setMenuDate] = useState(new Date(2026, 0, 22));
+    const [menuDate, setMenuDate] = useState(() => campDateInSeason(season || DEFAULT_SEASON));
     const [mealType, setMealType] = useState('');
     const [menuItemsText, setMenuItemsText] = useState('');
     const [allergens, setAllergens] = useState('');
     const [selectedDivisionIds, setSelectedDivisionIds] = useState<string[]>([]);
     const [addMenuSubsheet, setAddMenuSubsheet] = useState<AddMenuSubsheet>(null);
-    const [calendarCurrentDate, setCalendarCurrentDate] = useState(new Date());
-    const [calendarSelectedDate, setCalendarSelectedDate] = useState(new Date());
+    const [calendarCurrentDate, setCalendarCurrentDate] = useState(() => campDateInSeason(season || DEFAULT_SEASON));
+    const [calendarSelectedDate, setCalendarSelectedDate] = useState(() => campDateInSeason(season || DEFAULT_SEASON));
+
+    useEffect(() => {
+        const aligned = campDateInSeason(season || DEFAULT_SEASON);
+        setMenuDate(aligned);
+        setCalendarCurrentDate(aligned);
+        setCalendarSelectedDate(aligned);
+    }, [season]);
     const [menuCsvUploading, setMenuCsvUploading] = useState(false);
 
     const mealTypes = [...MEAL_TYPE_OPTIONS];
@@ -115,7 +124,7 @@ export const MenuScreen = ({ navigation }: any) => {
         closeAddMenuTransientUi();
         setShowAddMenuItemModal(false);
         // Reset form
-        setMenuDate(new Date(2026, 0, 22));
+        setMenuDate(campDateInSeason(season || DEFAULT_SEASON));
         setMealType('');
         setMenuItemsText('');
         setAllergens('');

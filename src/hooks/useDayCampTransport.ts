@@ -3,6 +3,8 @@ import { Alert, Share } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
+import { campDateStringInSeason } from '../lib/campSeasonDate';
+import { DEFAULT_SEASON } from '../constants/seasonConstants';
 import { parseCSV, pickFirst } from '../lib/sunshineCsv';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import {
@@ -20,7 +22,6 @@ import {
   fetchTransportExceptionsForReport,
   loadManualOverrides,
   saveManualOverrides,
-  todayDateString,
   type TransportException,
 } from '../lib/transportDailyOverrides';
 import {
@@ -201,7 +202,13 @@ export function useDayCampTransport() {
     () => (season === '2026' ? initialRouteMeta.map((r) => r.id) : []),
   );
   const [timeOfDay, setTimeOfDay] = useState<'am' | 'pm'>('am');
-  const [overrideDate, setOverrideDate] = useState(todayDateString);
+  const [overrideDate, setOverrideDate] = useState(() =>
+    campDateStringInSeason(season || DEFAULT_SEASON),
+  );
+
+  useEffect(() => {
+    setOverrideDate(campDateStringInSeason(season || DEFAULT_SEASON));
+  }, [season]);
   const [todayOverrides, setTodayOverrides] = useState(emptyManualOverrides());
   const [transportExceptions, setTransportExceptions] = useState<TransportException[]>([]);
   const [overridesLoading, setOverridesLoading] = useState(true);
@@ -1645,7 +1652,7 @@ export function useDayCampTransport() {
       }
       return;
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const today = overrideDate;
     const safeName = reportName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const filename = `daycamp-${safeName}-${today}.csv`;
     let reportBusAttendance: BusAttendanceMap = {};
@@ -1740,7 +1747,7 @@ export function useDayCampTransport() {
     overrideDate,
     setOverrideDate: (d: string) => {
       overrideLoadedKeyRef.current = null;
-      setOverrideDate(d || todayDateString());
+      setOverrideDate(d || campDateStringInSeason(season || DEFAULT_SEASON));
     },
     transportExceptions,
     todayOverrides,

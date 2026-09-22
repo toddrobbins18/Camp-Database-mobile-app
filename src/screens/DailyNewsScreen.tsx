@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator, Share, Modal, Pressable, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,18 +41,18 @@ export const DailyNewsScreen = ({ navigation }: any) => {
     const [dailyWolfFileName, setDailyWolfFileName] = useState('');
     const [dailyWolfUploading, setDailyWolfUploading] = useState(false);
 
-    const currentDate = new Date();
+    const { operationalDate, operationalDateString } = useCampOperationalDate();
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-    const dayName = dayNames[currentDate.getDay()];
-    const monthName = monthNames[currentDate.getMonth()];
-    const day = currentDate.getDate();
-    const year = currentDate.getFullYear();
+    const dayName = dayNames[operationalDate.getDay()];
+    const monthName = monthNames[operationalDate.getMonth()];
+    const day = operationalDate.getDate();
+    const year = operationalDate.getFullYear();
     const formattedDate = `${dayName}, ${monthName} ${day}, ${year}`;
-    const todayString = currentDate.toISOString().split('T')[0];
-    const todayMonth = currentDate.getMonth() + 1;
-    const todayDay = currentDate.getDate();
+    const todayString = operationalDateString;
+    const todayMonth = operationalDate.getMonth() + 1;
+    const todayDay = operationalDate.getDate();
 
     // Birthdays: same as Dashboard (children + staff, name + type/age) – aligned with main app Daily Notes
     const { data: birthdays = [] } = useTodayBirthdays(companyId, season ?? null, todayMonth, todayDay);

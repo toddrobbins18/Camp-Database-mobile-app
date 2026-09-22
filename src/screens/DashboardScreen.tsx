@@ -36,15 +36,9 @@ import { supabase } from '../lib/supabase';
 import { formatTime12Hour } from '../lib/formatTime';
 import { formatDashboardSpecialEventSubtitle } from '../lib/dailyWolfPrintableUtils';
 import { formatMenuMealTypeLabel } from '../api/menu';
+import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 
 const DEFAULT_WEATHER_ZIP = '18469';
-
-function formatLocalDateYmd(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
 
 function weatherIconName(condition: string | undefined): keyof typeof Ionicons.glyphMap {
     const c = (condition ?? '').toLowerCase();
@@ -72,10 +66,10 @@ export const DashboardScreen = ({ navigation }: any) => {
             void queryClient.invalidateQueries({ queryKey: ['dashboard_meals'] });
         }, [queryClient]),
     );
-    const currentDate = new Date();
-    const todayString = formatLocalDateYmd(currentDate);
-    const todayMonth = currentDate.getMonth() + 1;
-    const todayDay = currentDate.getDate();
+    const { now, operationalDate, operationalDateString } = useCampOperationalDate();
+    const todayString = operationalDateString;
+    const todayMonth = operationalDate.getMonth() + 1;
+    const todayDay = operationalDate.getDate();
 
     const [dashboardUserId, setDashboardUserId] = useState<string | null>(null);
     useEffect(() => {
@@ -209,13 +203,7 @@ export const DashboardScreen = ({ navigation }: any) => {
         return specialActivitiesToday.filter((e: any) => e.event_type === 'evening-activity');
     }, [isTimberLakeWest, specialActivitiesToday]);
 
-    const [now, setNow] = useState(() => new Date());
-    useEffect(() => {
-        const id = setInterval(() => setNow(new Date()), 30_000);
-        return () => clearInterval(id);
-    }, []);
-
-    const formattedDateLong = now.toLocaleDateString(undefined, {
+    const formattedDateLong = operationalDate.toLocaleDateString(undefined, {
         weekday: 'long',
         month: 'long',
         day: 'numeric',

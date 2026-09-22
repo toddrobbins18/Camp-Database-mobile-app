@@ -1,4 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { campDateInSeason } from '../lib/campSeasonDate';
+import { DEFAULT_SEASON } from '../constants/seasonConstants';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -82,8 +84,14 @@ export const CalendarScreen = ({ navigation }: any) => {
             void queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
         }, [companyId, queryClient]),
     );
-    const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1));
-    const [selectedDate, setSelectedDate] = useState(new Date(2026, 6, 1));
+    const [currentDate, setCurrentDate] = useState(() => campDateInSeason(season || DEFAULT_SEASON));
+    const [selectedDate, setSelectedDate] = useState(() => campDateInSeason(season || DEFAULT_SEASON));
+
+    useEffect(() => {
+        const aligned = campDateInSeason(season || DEFAULT_SEASON);
+        setCurrentDate(aligned);
+        setSelectedDate(aligned);
+    }, [season]);
     const [showEventList, setShowEventList] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 

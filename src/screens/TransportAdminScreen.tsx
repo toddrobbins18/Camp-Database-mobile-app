@@ -19,7 +19,7 @@ import { format } from 'date-fns';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
-import { campTodayDateString } from '../lib/parentPortalCutoff';
+import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import { campDateTimeToIso, swimLessonBusRun } from '../lib/campTime';
 import {
   ABSENCE_TYPE_LABELS,
@@ -162,8 +162,13 @@ function OptionPicker({
 
 export function TransportAdminScreen({ navigation }: { navigation: any }) {
   const { companyId, season } = useCompany();
+  const { operationalDateString } = useCampOperationalDate();
   const [activeTab, setActiveTab] = useState<TabId>('pending');
-  const [selectedDate, setSelectedDate] = useState(campTodayDateString());
+  const [selectedDate, setSelectedDate] = useState(operationalDateString);
+
+  useEffect(() => {
+    setSelectedDate(operationalDateString);
+  }, [operationalDateString]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [dashboard, setDashboard] = useState<DismissalDashboardData | null>(null);
   const [exceptions, setExceptions] = useState<TransportException[]>([]);
@@ -267,7 +272,7 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
           <Ionicons name="calendar-outline" size={18} color={theme.colors.primary} />
           <Text style={styles.dateBtnText}>{selectedDate}</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setSelectedDate(campTodayDateString())}>
+        <TouchableOpacity onPress={() => setSelectedDate(operationalDateString)}>
           <Text style={styles.todayLink}>Today</Text>
         </TouchableOpacity>
       </View>

@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCompany } from '../contexts/CompanyContext';
+import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import { northShoreBusTransportEnabled } from '../constants/camps';
 import { DayCampTransportScreen } from './DayCampTransportScreen';
 import { useTrips, useAddTrip, useUpdateTrip, useDeleteTrip, useManageTripRoster, useTripAttendees, useTripAttachments } from '../api/transport';
@@ -360,6 +361,7 @@ const TripCard = ({ trip, onDelete, onEdit, onManageRoster, onViewSportsRoster }
 
 export const TransportScreen = ({ navigation }: any) => {
     const { isDayCamp, companySlug, companyId, season } = useCompany();
+    const { operationalDate, operationalDateString } = useCampOperationalDate();
 
     const { width } = useWindowDimensions();
     const isLargeScreen = width >= 768; // Tablet/Desktop breakpoint
@@ -459,8 +461,13 @@ export const TransportScreen = ({ navigation }: any) => {
 
     // View State
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
-    const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
-    const [calendarCurrentDate, setCalendarCurrentDate] = useState(() => new Date());
+    const [selectedDate, setSelectedDate] = useState(operationalDateString);
+    const [calendarCurrentDate, setCalendarCurrentDate] = useState(() => operationalDate);
+
+    useEffect(() => {
+        setSelectedDate(operationalDateString);
+        setCalendarCurrentDate(operationalDate);
+    }, [operationalDateString, operationalDate]);
 
     const selectedDateObj = useMemo(
         () => new Date(selectedDate + 'T00:00:00'),
