@@ -61,6 +61,7 @@ import { BunkingScreen } from '../screens/BunkingScreen';
 import { HiringScreen } from '../screens/HiringScreen';
 import { MediaScreen } from '../screens/MediaScreen';
 import { ParentPortalScreen } from '../screens/ParentPortalScreen';
+import { ParentAuthScreen } from '../screens/ParentAuthScreen';
 import { ParentPortalDashboardScreen } from '../screens/ParentPortalDashboardScreen';
 import { FrontOfficeDashboardScreen } from '../screens/FrontOfficeDashboardScreen';
 import { TransportAdminScreen } from '../screens/TransportAdminScreen';
@@ -79,6 +80,9 @@ function DayCampModuleRouter({ route, navigation }: any) {
     }
     if (moduleId === 'media') {
         return <MediaScreen navigation={navigation} />;
+    }
+    if (moduleId === 'parent-portal-auth') {
+        return <ParentAuthScreen navigation={navigation} />;
     }
     if (moduleId === 'parent-portal') {
         return <ParentPortalScreen navigation={navigation} />;

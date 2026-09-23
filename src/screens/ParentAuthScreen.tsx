@@ -10,24 +10,33 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
-import { useCompany } from '../contexts/CompanyContext';
-import { PARENT_PORTAL_COMPANY_SLUG_KEY } from '../constants/parentPortalConstants';
+import { useParentCompany } from '../hooks/useParentCompany';
+import { useRole } from '../hooks/useRole';
+import { userIsCampStaff } from '../constants/parentPortalConstants';
+import { useParentPortalColors } from '../components/parentPortal/ParentPortalShell';
 
 type Props = {
   navigation: any;
+  embedded?: boolean;
   onAuthenticated?: () => void;
+  onOpenFamilyPortal?: () => void;
 };
 
-export function ParentAuthScreen({ navigation, onAuthenticated }: Props) {
-  const { companySlug } = useCompany();
-  const [companyId, setCompanyId] = useState<string | null>(null);
+export function ParentAuthScreen({
+  navigation,
+  embedded = false,
+  onAuthenticated,
+  onOpenFamilyPortal,
+}: Props) {
+  const { companyId, companySlug, companyName, themeColor, loading: companyLoading } = useParentCompany();
+  const colors = useParentPortalColors(themeColor, companySlug);
+  const { data: roleData, isLoading: roleLoading } = useRole(companyId);
+
   const [loading, setLoading] = useState(false);
-  const [booting, setBooting] = useState(true);
   const [tab, setTab] = useState<'login' | 'signup'>('login');
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,20 +46,18 @@ export function ParentAuthScreen({ navigation, onAuthenticated }: Props) {
   const [suEmail, setSuEmail] = useState('');
   const [suPassword, setSuPassword] = useState('');
 
+  const isStaffPreview = userIsCampStaff(roleData?.globalRoles ?? []);
+
   useEffect(() => {
-    const boot = async () => {
-      const slug = companySlug ?? (await AsyncStorage.getItem(PARENT_PORTAL_COMPANY_SLUG_KEY));
-      if (slug) await AsyncStorage.setItem(PARENT_PORTAL_COMPANY_SLUG_KEY, slug);
-      if (!slug) {
-        setBooting(false);
-        return;
-      }
-      const { data } = await supabase.from('companies').select('id').eq('slug', slug).maybeSingle();
-      setCompanyId(data?.id ?? null);
-      setBooting(false);
-    };
-    void boot();
-  }, [companySlug]);
+    if (roleLoading || companyLoading) return;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSessionChecked(true);
+      if (!session) return;
+      if (isStaffPreview) return;
+      onAuthenticated?.();
+    });
+  }, [roleLoading, companyLoading, isStaffPreview, onAuthenticated]);
 
   const handleLogin = async () => {
     if (!companyId) {
@@ -106,139 +113,183 @@ export function ParentAuthScreen({ navigation, onAuthenticated }: Props) {
     else Alert.alert('Email sent', 'Password reset email sent.');
   };
 
-  if (booting) {
+  const openFamilyPortal = () => {
+    if (onOpenFamilyPortal) {
+      onOpenFamilyPortal();
+      return;
+    }
+    navigation.navigate('DayCampModule', { moduleId: 'parent-portal' });
+  };
+
+  const goToNest = () => navigation.navigate('Dashboard');
+
+  if (companyLoading || roleLoading || !sessionChecked) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={theme.colors.secondary} />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator color={colors.brand} />
       </View>
     );
   }
 
   if (!companyId) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
-            <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Parent Portal</Text>
-        </View>
+      <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]}>
+        {!embedded ? (
+          <View style={styles.drawerHeader}>
+            <TouchableOpacity onPress={() => navigation.openDrawer()}>
+              <Ionicons name="menu-outline" size={28} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.drawerTitle, { color: colors.text }]}>Parent Portal</Text>
+          </View>
+        ) : null}
         <View style={styles.centered}>
-          <Text style={styles.mutedText}>Camp not found. Switch to your day camp and try again.</Text>
+          <View style={[styles.card, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
+            <Text style={[styles.cardHeading, { color: colors.text }]}>Camp not found</Text>
+            <Text style={[styles.muted, { color: colors.textMuted }]}>
+              Open Parent Portal from Parent Facing → Login / Signup in the menu.
+            </Text>
+          </View>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
-          <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
-        </TouchableOpacity>
-        <View style={styles.headerIcon}>
-          <Ionicons name="people-outline" size={22} color="#fff" />
-        </View>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>Parent Portal</Text>
-          <Text style={styles.headerSubtitle}>Manage pickups, absences & authorized adults</Text>
-        </View>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.cardWrap} keyboardShouldPersistTaps="handled">
-        <View style={styles.tabs}>
-          <TouchableOpacity style={[styles.tab, tab === 'login' && styles.tabActive]} onPress={() => setTab('login')}>
-            <Text style={[styles.tabText, tab === 'login' && styles.tabTextActive]}>Log In</Text>
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]}>
+      {!embedded ? (
+        <View style={styles.drawerHeader}>
+          <TouchableOpacity onPress={() => navigation.openDrawer()}>
+            <Ionicons name="menu-outline" size={28} color={colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.tab, tab === 'signup' && styles.tabActive]} onPress={() => setTab('signup')}>
-            <Text style={[styles.tabText, tab === 'signup' && styles.tabTextActive]}>Sign Up</Text>
-          </TouchableOpacity>
+          <Text style={[styles.drawerTitle, { color: colors.text }]}>Login / Signup</Text>
         </View>
+      ) : null}
 
-        {tab === 'login' ? (
-          <View style={styles.form}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
-            <Text style={styles.label}>Password</Text>
-            <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} />
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleLogin} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Sign In</Text>}
+      {isStaffPreview ? (
+        <View style={[styles.staffBanner, { backgroundColor: colors.elevated, borderBottomColor: colors.border }]}>
+          <Text style={[styles.staffText, { color: colors.textMuted }]}>
+            <Text style={{ fontWeight: '700', color: colors.text }}>Staff preview</Text> — this is the login page parents see.
+          </Text>
+          <View style={styles.staffActions}>
+            <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.border }]} onPress={goToNest}>
+              <Text style={[styles.outlineBtnText, { color: colors.text }]}>Back to The Nest</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleForgotPassword}>
-              <Text style={styles.linkText}>Forgot password?</Text>
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.brand }]} onPress={openFamilyPortal}>
+              <Text style={styles.primaryBtnText}>Open family portal</Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          <View style={styles.form}>
-            <Text style={styles.label}>Family Last Name</Text>
-            <TextInput style={styles.input} value={familyName} onChangeText={setFamilyName} />
-            <Text style={styles.label}>Your Full Name</Text>
-            <TextInput style={styles.input} value={contactName} onChangeText={setContactName} />
-            <Text style={styles.label}>Phone</Text>
-            <TextInput style={styles.input} value={phone} onChangeText={setPhone} />
-            <Text style={styles.label}>Email</Text>
-            <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" value={suEmail} onChangeText={setSuEmail} />
-            <Text style={styles.label}>Password</Text>
-            <TextInput style={styles.input} secureTextEntry value={suPassword} onChangeText={setSuPassword} />
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleSignUp} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create Parent Account</Text>}
+        </View>
+      ) : null}
+
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={[styles.heroCard, { backgroundColor: colors.brand }]}>
+          <Text style={styles.heroEyebrow}>Family portal</Text>
+          <Text style={styles.heroTitle}>Your family&apos;s home at {companyName}</Text>
+          <Text style={styles.heroBody}>
+            Manage pickups, report absences, update authorized adults, and confirm swim lessons.
+          </Text>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
+          <View style={styles.brandRow}>
+            <View style={[styles.brandIcon, { backgroundColor: colors.brand }]}>
+              <Ionicons name="shield-checkmark" size={22} color="#fff" />
+            </View>
+            <View>
+              <Text style={[styles.cardHeading, { color: colors.text }]}>{companyName}</Text>
+              <Text style={[styles.muted, { color: colors.textMuted }]}>Parent sign in</Text>
+            </View>
+          </View>
+
+          <View style={[styles.tabs, { backgroundColor: colors.brandSubtle }]}>
+            <TouchableOpacity
+              style={[styles.tab, tab === 'login' && { backgroundColor: colors.elevated }]}
+              onPress={() => setTab('login')}
+            >
+              <Text style={[styles.tabText, { color: tab === 'login' ? colors.brand : colors.textMuted }]}>Log in</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, tab === 'signup' && { backgroundColor: colors.elevated }]}
+              onPress={() => setTab('signup')}
+            >
+              <Text style={[styles.tabText, { color: tab === 'signup' ? colors.brand : colors.textMuted }]}>Sign up</Text>
             </TouchableOpacity>
           </View>
-        )}
+
+          {tab === 'login' ? (
+            <View style={styles.form}>
+              <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+              <TextInput
+                style={[styles.input, { borderColor: colors.border, color: colors.text }]}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+              />
+              <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+              <TextInput
+                style={[styles.input, { borderColor: colors.border, color: colors.text }]}
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.brand }]} onPress={handleLogin} disabled={loading}>
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Sign in</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleForgotPassword}>
+                <Text style={[styles.link, { color: colors.brand }]}>Forgot password?</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.form}>
+              <Text style={[styles.label, { color: colors.text }]}>Family last name</Text>
+              <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} value={familyName} onChangeText={setFamilyName} />
+              <Text style={[styles.label, { color: colors.text }]}>Your full name</Text>
+              <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} value={contactName} onChangeText={setContactName} />
+              <Text style={[styles.label, { color: colors.text }]}>Phone</Text>
+              <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} value={phone} onChangeText={setPhone} />
+              <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+              <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} autoCapitalize="none" keyboardType="email-address" value={suEmail} onChangeText={setSuEmail} />
+              <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+              <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} secureTextEntry value={suPassword} onChangeText={setSuPassword} />
+              <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.brand }]} onPress={handleSignUp} disabled={loading}>
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create parent account</Text>}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  root: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  mutedText: { color: theme.colors.textSecondary, textAlign: 'center' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  menuButton: { marginRight: 8 },
-  headerIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  headerTextContainer: { flex: 1 },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
-  headerSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
-  cardWrap: { padding: 16 },
-  tabs: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, padding: 4, marginBottom: 16 },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 6 },
-  tabActive: { backgroundColor: '#dbeafe' },
-  tabText: { fontSize: 14, color: theme.colors.textSecondary, fontWeight: '500' },
-  tabTextActive: { color: theme.colors.secondary, fontWeight: '700' },
-  form: { backgroundColor: '#fff', borderRadius: 12, padding: 16, gap: 8 },
-  label: { fontSize: 13, fontWeight: '600', color: theme.colors.text, marginTop: 8 },
-  input: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    backgroundColor: '#fff',
-  },
-  primaryBtn: {
-    marginTop: 12,
-    backgroundColor: theme.colors.secondary,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
+  drawerHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 16 },
+  drawerTitle: { fontSize: 18, fontWeight: '700' },
+  staffBanner: { padding: 16, borderBottomWidth: 1, gap: 12 },
+  staffText: { fontSize: 13, lineHeight: 18 },
+  staffActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  scroll: { padding: 16, paddingBottom: 32 },
+  heroCard: { borderRadius: 24, padding: 20, marginBottom: 16 },
+  heroEyebrow: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600' },
+  heroTitle: { color: '#fff', fontSize: 24, fontWeight: '700', marginTop: 8 },
+  heroBody: { color: 'rgba(255,255,255,0.9)', fontSize: 14, lineHeight: 20, marginTop: 8 },
+  card: { borderRadius: 24, borderWidth: 1, padding: 20 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  brandIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  cardHeading: { fontSize: 16, fontWeight: '700' },
+  muted: { fontSize: 13, marginTop: 2 },
+  tabs: { flexDirection: 'row', borderRadius: 14, padding: 4, marginBottom: 8 },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
+  tabText: { fontSize: 14, fontWeight: '600' },
+  form: { gap: 4 },
+  label: { fontSize: 13, fontWeight: '600', marginTop: 10, marginBottom: 6 },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
+  primaryBtn: { marginTop: 12, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  linkText: { textAlign: 'center', color: theme.colors.secondary, fontSize: 12, marginTop: 12 },
+  outlineBtn: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 },
+  outlineBtnText: { fontWeight: '600', fontSize: 13 },
+  link: { textAlign: 'center', fontSize: 12, marginTop: 12, fontWeight: '600' },
 });

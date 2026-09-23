@@ -156,9 +156,17 @@ export function getFrontOfficeTransportMenuItems(company: CampLike): MobileDrawe
 export function getParentPortalMenuItems(): MobileDrawerMenuItem[] {
   return [
     {
+      key: 'parent-portal-auth',
+      menuId: 'parent-portal',
+      label: 'Login / Signup',
+      icon: 'log-in-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'parent-portal-auth' },
+    },
+    {
       key: 'parent-portal',
       menuId: 'parent-portal',
-      label: 'Parent Portal',
+      label: 'Family Portal',
       icon: 'people-circle-outline',
       screen: 'DayCampModule',
       params: { moduleId: 'parent-portal' },
