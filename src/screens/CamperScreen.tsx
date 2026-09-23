@@ -9,12 +9,19 @@ import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampers, useAddCamper, useEditCamper, useDeleteCamper, useDivisions } from '../api/campers';
 import {
+    camperMatchesDayCampDivisionFilter,
     camperMatchesDivisionFilter,
+    camperMatchesGenderFilter,
+    compareByCamperGender,
     dedupeDivisionsForDropdown,
     getCamperEffectiveDivision,
     getCamperGradeDisplay,
+    getDayCampDivisionDropdownLabel,
+    getDayCampGradeSortIndex,
     getDivisionDropdownLabel,
     normalizeDivisionNameForFilter,
+    prepareDayCampDivisionDropdown,
+    type CamperGenderFilter,
 } from '../lib/divisionFilterUtils';
 import { compareByLastName } from '../lib/nameSortUtils';
 import { useRole } from '../hooks/useRole';
@@ -53,7 +60,7 @@ const ScreenHeader = ({ title, navigation }: { title: string, navigation: any })
 );
 
 export const CamperScreen = ({ navigation }: any) => {
-    const { companyId, season } = useCompany();
+    const { companyId, season, isDayCamp } = useCompany();
     const queryClient = useQueryClient();
     const { data: campersData = [], isLoading, isError } = useCampers(companyId, season);
     const { data: roleData } = useRole();
@@ -85,9 +92,11 @@ export const CamperScreen = ({ navigation }: any) => {
 
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedDivisionId, setSelectedDivisionId] = useState<string>('all');
+    const [selectedGender, setSelectedGender] = useState<CamperGenderFilter>('all');
     const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
+    const [showGenderDropdown, setShowGenderDropdown] = useState(false);
     const [divisionButtonLayout, setDivisionButtonLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
-    const [sortBy, setSortBy] = useState<'division' | 'name'>('name');
+    const [sortBy, setSortBy] = useState<'division' | 'name' | 'gender' | 'group'>('name');
     const [scannerMode, setScannerMode] = useState(false);
     const [rfidInput, setRfidInput] = useState('');
     const [isScanning, setIsScanning] = useState(false);
@@ -263,16 +272,26 @@ export const CamperScreen = ({ navigation }: any) => {
     });
     const campersPerPage = 50;
 
-    const dropdownDivisions = useMemo(
-        () => dedupeDivisionsForDropdown(divisionsData as any),
-        [divisionsData],
-    );
+    const dropdownDivisions = useMemo(() => {
+        if (isDayCamp) {
+            return prepareDayCampDivisionDropdown(divisionsData as any, campersData as any);
+        }
+        return dedupeDivisionsForDropdown(divisionsData as any);
+    }, [divisionsData, campersData, isDayCamp]);
+
+    const divisionDropdownLabel = (name?: string | null) =>
+        isDayCamp ? getDayCampDivisionDropdownLabel(name) : getDivisionDropdownLabel(name);
 
     const selectedDivisionLabel = useMemo(() => {
         if (selectedDivisionId === 'all') return 'All Divisions';
         const match = dropdownDivisions.find((d) => String(d?.id) === String(selectedDivisionId));
-        return getDivisionDropdownLabel(match?.name) ?? 'All Divisions';
-    }, [dropdownDivisions, selectedDivisionId]);
+        return divisionDropdownLabel(match?.name) || 'All Divisions';
+    }, [dropdownDivisions, selectedDivisionId, isDayCamp]);
+
+    const selectedGenderLabel = useMemo(() => {
+        if (selectedGender === 'all') return 'All Genders';
+        return selectedGender;
+    }, [selectedGender]);
 
     const filteredCampers = useMemo(() => {
         const q = (searchQuery || '').trim().toLowerCase();
@@ -281,14 +300,24 @@ export const CamperScreen = ({ navigation }: any) => {
             const effectiveDivision = getCamperEffectiveDivision(camper as any);
             const gradeDisplay = getCamperGradeDisplay((camper as any).grade, effectiveDivision.name);
             if (selectedDivisionId !== 'all') {
-                if (!camperMatchesDivisionFilter(
-                    effectiveDivision.id,
-                    effectiveDivision.name,
-                    String(selectedDivisionId),
-                    selectedDivision?.name,
-                )) {
-                    return false;
-                }
+                const matchesDivision = isDayCamp
+                    ? camperMatchesDayCampDivisionFilter(
+                        effectiveDivision.id,
+                        effectiveDivision.name,
+                        (camper as any).grade,
+                        String(selectedDivisionId),
+                        selectedDivision?.name,
+                    )
+                    : camperMatchesDivisionFilter(
+                        effectiveDivision.id,
+                        effectiveDivision.name,
+                        String(selectedDivisionId),
+                        selectedDivision?.name,
+                    );
+                if (!matchesDivision) return false;
+            }
+            if (!camperMatchesGenderFilter((camper as any).gender, selectedGender)) {
+                return false;
             }
             if (q) {
                 const name = (camper.name || '').toLowerCase();
@@ -300,26 +329,58 @@ export const CamperScreen = ({ navigation }: any) => {
         }).sort((a, b) => {
             if (sortBy === 'name') return compareByLastName(a, b);
 
+            if (sortBy === 'gender') {
+                const genderCompare = compareByCamperGender((a as any).gender, (b as any).gender);
+                if (genderCompare !== 0) return genderCompare;
+                const divA = getCamperEffectiveDivision(a as any);
+                const divB = getCamperEffectiveDivision(b as any);
+                const gradeCompare =
+                    getDayCampGradeSortIndex(divA.name ?? (a as any).grade) -
+                    getDayCampGradeSortIndex(divB.name ?? (b as any).grade);
+                if (gradeCompare !== 0) return gradeCompare;
+                return compareByLastName(a, b);
+            }
+
+            if (sortBy === 'group') {
+                const groupA = ((a as any).group_name || '').trim().toLowerCase();
+                const groupB = ((b as any).group_name || '').trim().toLowerCase();
+                if (groupA !== groupB) {
+                    if (!groupA) return 1;
+                    if (!groupB) return -1;
+                    return groupA.localeCompare(groupB);
+                }
+                return compareByLastName(a, b);
+            }
+
             const divA = getCamperEffectiveDivision(a as any);
             const divB = getCamperEffectiveDivision(b as any);
-            const orderA = divA.sort_order ?? 999;
-            const orderB = divB.sort_order ?? 999;
+            const orderA = isDayCamp
+                ? getDayCampGradeSortIndex(divA.name ?? (a as any).grade)
+                : (divA.sort_order ?? 999);
+            const orderB = isDayCamp
+                ? getDayCampGradeSortIndex(divB.name ?? (b as any).grade)
+                : (divB.sort_order ?? 999);
             if (orderA !== orderB) return orderA - orderB;
 
-            const nameA = normalizeDivisionNameForFilter(divA.name);
-            const nameB = normalizeDivisionNameForFilter(divB.name);
-            if (nameA !== nameB) return nameA.localeCompare(nameB);
+            if (isDayCamp) {
+                const genderCompare = compareByCamperGender((a as any).gender, (b as any).gender);
+                if (genderCompare !== 0) return genderCompare;
+            } else {
+                const nameA = normalizeDivisionNameForFilter(divA.name);
+                const nameB = normalizeDivisionNameForFilter(divB.name);
+                if (nameA !== nameB) return nameA.localeCompare(nameB);
+            }
 
             return compareByLastName(a, b);
         });
-    }, [campersData, selectedDivisionId, sortBy, searchQuery, dropdownDivisions]);
+    }, [campersData, selectedDivisionId, selectedGender, sortBy, searchQuery, dropdownDivisions, isDayCamp]);
 
     const totalCampers = filteredCampers.length;
     const totalPages = Math.ceil(totalCampers / campersPerPage);
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, selectedDivisionId, sortBy, season]);
+    }, [searchQuery, selectedDivisionId, selectedGender, sortBy, season]);
 
     useEffect(() => {
         if (totalPages > 0 && currentPage > totalPages) {
@@ -907,13 +968,44 @@ export const CamperScreen = ({ navigation }: any) => {
                             <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
+                    {isDayCamp && (
+                        <View style={styles.divisionFilterContainer}>
+                            <TouchableOpacity
+                                style={styles.divisionFilter}
+                                onPress={() => setShowGenderDropdown(!showGenderDropdown)}
+                            >
+                                <Text style={styles.divisionFilterText}>{selectedGenderLabel}</Text>
+                                <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+                    )}
                     <TouchableOpacity
                         style={styles.sortButton}
-                        onPress={() => setSortBy(sortBy === 'division' ? 'name' : 'division')}
+                        onPress={() => {
+                            if (isDayCamp) {
+                                setSortBy((prev) =>
+                                    prev === 'name'
+                                        ? 'division'
+                                        : prev === 'division'
+                                            ? 'gender'
+                                            : prev === 'gender'
+                                                ? 'group'
+                                                : 'name',
+                                );
+                                return;
+                            }
+                            setSortBy(sortBy === 'division' ? 'name' : 'division');
+                        }}
                     >
                         <Ionicons name="swap-vertical-outline" size={18} color={theme.colors.text} />
                         <Text style={styles.sortButtonText}>
-                            {sortBy === 'division' ? 'Sort by Division' : 'Sort by Name'}
+                            {sortBy === 'name'
+                                ? 'Sort by Name'
+                                : sortBy === 'division'
+                                    ? 'Sort by Division'
+                                    : sortBy === 'gender'
+                                        ? 'Sort by Gender'
+                                        : 'Sort by Group'}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -963,9 +1055,69 @@ export const CamperScreen = ({ navigation }: any) => {
                                             styles.bottomSheetOptionText,
                                             selectedDivisionId === division.id && styles.bottomSheetOptionTextSelected
                                         ]}>
-                                            {getDivisionDropdownLabel(division.name)}
+                                            {divisionDropdownLabel(division.name)}
                                         </Text>
                                         {selectedDivisionId === division.id && (
+                                            <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </Pressable>
+                    </Pressable>
+                </Modal>
+
+                <Modal
+                    visible={showGenderDropdown}
+                    presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
+                    transparent={true}
+                    animationType="slide"
+                    onRequestClose={() => setShowGenderDropdown(false)}
+                >
+                    <Pressable
+                        style={styles.bottomSheetOverlay}
+                        onPress={() => setShowGenderDropdown(false)}
+                    >
+                        <Pressable
+                            style={styles.bottomSheet}
+                            onPress={(e) => e.stopPropagation()}
+                        >
+                            <View style={styles.bottomSheetHeader}>
+                                <Text style={styles.bottomSheetTitle}>Select Gender</Text>
+                            </View>
+                            <ScrollView
+                                style={styles.bottomSheetScroll}
+                                nestedScrollEnabled={true}
+                                showsVerticalScrollIndicator={true}
+                            >
+                                {([
+                                    { id: 'all', label: 'All Genders' },
+                                    { id: 'Male', label: 'Male' },
+                                    { id: 'Female', label: 'Female' },
+                                ] as const).map((option) => (
+                                    <TouchableOpacity
+                                        key={option.id}
+                                        style={[
+                                            styles.bottomSheetOption,
+                                            selectedGender === option.id && styles.bottomSheetOptionSelected,
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedGender(option.id);
+                                            setShowGenderDropdown(false);
+                                        }}
+                                    >
+                                        <Ionicons
+                                            name="person-outline"
+                                            size={24}
+                                            color={selectedGender === option.id ? theme.colors.secondary : theme.colors.textSecondary}
+                                        />
+                                        <Text style={[
+                                            styles.bottomSheetOptionText,
+                                            selectedGender === option.id && styles.bottomSheetOptionTextSelected,
+                                        ]}>
+                                            {option.label}
+                                        </Text>
+                                        {selectedGender === option.id && (
                                             <Ionicons name="checkmark" size={20} color={theme.colors.secondary} style={{ marginLeft: 'auto' }} />
                                         )}
                                     </TouchableOpacity>
