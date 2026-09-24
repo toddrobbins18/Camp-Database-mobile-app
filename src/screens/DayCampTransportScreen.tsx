@@ -48,6 +48,8 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
 
   const toolbarItems = [
     { key: 'mappoint', label: 'Apply MapPoint', icon: 'git-network-outline' as const, onPress: t.handleLoadMappointRoutes, loading: t.mappointImporting },
+    { key: 'template', label: 'Route Template', icon: 'layers-outline' as const, onPress: t.handleApplyRouteTemplate, loading: t.applyingTemplate },
+    { key: 'history', label: 'Historical', icon: 'time-outline' as const, onPress: t.handleApplyHistoricalAssignments, loading: t.applyingHistorical, disabled: t.unplottedCampers.length === 0 },
     { key: 'bulk', label: 'Bulk Upload', icon: 'cloud-upload-outline' as const, onPress: t.openBulkImport },
     { key: 'camper', label: 'Add Camper', icon: 'person-add-outline' as const, onPress: () => t.setAddCamperOpen(true) },
     { key: 'regeo', label: 'Re-geocode', icon: 'location-outline' as const, onPress: t.handleRegeocodeAll, loading: t.regeocoding },
@@ -356,14 +358,26 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
           <Text style={styles.title}>Transport</Text>
           <Text style={styles.subtitle}>Bus routes, maps, coordination, and travel reports</Text>
         </View>
-        <View style={styles.totalBadge}>
-          <Ionicons name="people" size={16} color={theme.colors.secondary} />
-          <View>
-            <Text style={styles.totalLabel}>Total Campers</Text>
-            <Text style={styles.totalValue}>
-              {t.totalCampers.total}
-              <Text style={styles.totalSub}> ({t.totalCampers.assigned} routed · {t.totalCampers.unplotted} unplotted)</Text>
-            </Text>
+        <View style={styles.headerStats}>
+          {t.referenceStatus && (
+            <View style={styles.referenceBadge}>
+              <Ionicons name="server-outline" size={14} color={theme.colors.secondary} />
+              <Text style={styles.referenceBadgeText} numberOfLines={2}>
+                {t.referenceStatus.loaded
+                  ? `${t.referenceStatus.referenceSeason} · ${t.referenceStatus.priorCount} priors`
+                  : 'No reference dataset'}
+              </Text>
+            </View>
+          )}
+          <View style={styles.totalBadge}>
+            <Ionicons name="people" size={16} color={theme.colors.secondary} />
+            <View>
+              <Text style={styles.totalLabel}>Total Campers</Text>
+              <Text style={styles.totalValue}>
+                {t.totalCampers.total}
+                <Text style={styles.totalSub}> ({t.totalCampers.assigned} routed · {t.totalCampers.unplotted} unplotted)</Text>
+              </Text>
+            </View>
           </View>
         </View>
       </View>
@@ -372,9 +386,9 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
         {toolbarItems.map((item) => (
           <TouchableOpacity
             key={item.key}
-            style={styles.toolbarBtn}
+            style={[styles.toolbarBtn, item.disabled && styles.toolbarBtnDisabled]}
             onPress={item.onPress}
-            disabled={item.loading}
+            disabled={item.loading || item.disabled}
           >
             {item.loading ? (
               <ActivityIndicator size="small" color={theme.colors.secondary} />
@@ -591,6 +605,19 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
               style={styles.overflowItem}
               onPress={() => {
                 setShowOverflow(false);
+                void t.pickMapPointReferenceCsv();
+              }}
+              disabled={t.importingReference}
+            >
+              <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.secondary} />
+              <Text style={styles.overflowText}>
+                {t.importingReference ? 'Importing reference…' : 'Import MapPoint Reference'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.overflowItem}
+              onPress={() => {
+                setShowOverflow(false);
                 t.handleClearAllCampers();
               }}
             >
@@ -614,7 +641,11 @@ const styles = StyleSheet.create({
   headerText: { flex: 1 },
   title: { ...theme.typography.h2, fontSize: 22 },
   subtitle: { ...theme.typography.bodySmall, marginTop: 2 },
-  totalBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, padding: 8, borderWidth: 1, borderColor: theme.colors.border, maxWidth: 140 },
+  headerStats: { alignItems: 'flex-end', gap: 6, maxWidth: 150 },
+  referenceBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: theme.colors.border },
+  referenceBadgeText: { fontSize: 9, color: theme.colors.textSecondary, flexShrink: 1 },
+  totalBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, padding: 8, borderWidth: 1, borderColor: theme.colors.border },
+  toolbarBtnDisabled: { opacity: 0.45 },
   totalLabel: { fontSize: 9, color: theme.colors.textSecondary, textTransform: 'uppercase' },
   totalValue: { fontSize: 13, fontWeight: '700', color: theme.colors.text },
   totalSub: { fontSize: 9, fontWeight: '400', color: theme.colors.textSecondary },

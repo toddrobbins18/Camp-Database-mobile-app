@@ -42,6 +42,7 @@ import {
 } from '../lib/enrollmentWeekCalendar';
 import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
 import {
+  build2026MappointRouteTemplate,
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
   type TransportBoardPayload,
@@ -50,6 +51,17 @@ import {
   type TransportRoutesSource,
   type TransportUnplottedCamper,
 } from '../lib/transportRoster';
+import {
+  applyHistoricalAssignments,
+  getReferenceDatasetStatus,
+  importMapPointCsvToWarehouse,
+  loadCamperPriorMap,
+  pickHistoricalBusForCamper,
+  reorderStopsByHistoricalPriors,
+  syncBundledMapPointToWarehouse,
+  type ReferenceDatasetStatus,
+} from '../lib/historicalRouteLearning';
+import type { CamperRoutingPrior } from '../lib/routeReferenceWarehouse';
 import {
   loadBoardCache,
   persistBoardCache,
@@ -218,6 +230,10 @@ export function useDayCampTransport() {
   const [persistLoaded, setPersistLoaded] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [mappointImporting, setMappointImporting] = useState(false);
+  const [applyingHistorical, setApplyingHistorical] = useState(false);
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [importingReference, setImportingReference] = useState(false);
+  const [referenceStatus, setReferenceStatus] = useState<ReferenceDatasetStatus | null>(null);
   const [regeocoding, setRegeocoding] = useState(false);
 
   const [addRouteOpen, setAddRouteOpen] = useState(false);
@@ -267,6 +283,7 @@ export function useDayCampTransport() {
   const lastKnownStopCountRef = useRef(0);
   const groupLoadedKeyRef = useRef<string | null>(null);
   const geocodeCacheRef = useRef(new TransportGeocodeCache());
+  const priorMapRef = useRef<Map<string, CamperRoutingPrior> | null>(null);
   const boardStateRef = useRef({
     coreStops: {} as Record<number, TransportRouteStop[]>,
     routeMeta: [] as TransportRouteMeta[],
@@ -280,6 +297,17 @@ export function useDayCampTransport() {
   useEffect(() => {
     void geocodeCacheRef.current.init();
   }, []);
+
+  const refreshReferenceStatus = useCallback(async () => {
+    if (!companyId) return;
+    const status = await getReferenceDatasetStatus(supabase, companyId, '2026');
+    setReferenceStatus(status);
+    priorMapRef.current = await loadCamperPriorMap(supabase, companyId, '2026');
+  }, [companyId]);
+
+  useEffect(() => {
+    void refreshReferenceStatus();
+  }, [refreshReferenceStatus]);
 
   const excludedCampers = useMemo(
     () => excludedCamperSet(transportExceptions, timeOfDay),
@@ -1132,6 +1160,19 @@ export function useDayCampTransport() {
       await finalizeBoardForSeason(importPayload);
       setTodayOverrides(emptyManualOverrides());
       overrideLoadedKeyRef.current = null;
+
+      if (companyId) {
+        const { data: userRes } = await supabase.auth.getUser();
+        const synced = await syncBundledMapPointToWarehouse(supabase, companyId, {
+          userId: userRes.user?.id,
+          referenceSeason: '2026',
+        });
+        if (!synced.ok) {
+          console.warn('[Transport] MapPoint warehouse sync failed:', synced.error);
+        }
+        await refreshReferenceStatus();
+      }
+
       toast(
         geocodeFailed ? '2026 MapPoint routes applied (partial)' : '2026 MapPoint routes applied',
         geocodeFailed
@@ -1146,6 +1187,117 @@ export function useDayCampTransport() {
       skipPersistRef.current = false;
       setMappointImporting(false);
     }
+  };
+
+  const handleApplyRouteTemplate = async () => {
+    if (!companyId) return;
+    setApplyingTemplate(true);
+    try {
+      const { coreStops: templateStops, routeMeta: templateMeta } =
+        await build2026MappointRouteTemplate(ROUTE_COLORS);
+
+      const payload: TransportBoardPayload = {
+        coreStops: templateStops,
+        routeMeta: templateMeta,
+        unplottedCampers,
+        routesConfigured: true,
+        routesSeason: season,
+        routesSource: 'mappoint2026',
+      };
+
+      const normalized = await normalizeTransportBoardForSeason(supabase, companyId, season, payload);
+      await persistBoard(normalized);
+      await finalizeBoardForSeason(normalized);
+
+      toast(
+        'Route template applied',
+        `${templateMeta.length} buses loaded (stops only). Use Apply Historical Assignments to place returning campers.`,
+      );
+    } catch (e: unknown) {
+      toast('Template apply failed', e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setApplyingTemplate(false);
+    }
+  };
+
+  const handleApplyHistoricalAssignments = async () => {
+    if (!companyId) return;
+    setApplyingHistorical(true);
+    try {
+      const priorMap = priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, '2026'));
+      priorMapRef.current = priorMap;
+
+      const result = applyHistoricalAssignments({
+        coreStops,
+        routeMeta,
+        unplottedCampers,
+        priorMap,
+      });
+
+      let nextCore = result.coreStops;
+      if (result.placed.length > 0) {
+        nextCore = reorderStopsByHistoricalPriors(nextCore, priorMap);
+      }
+
+      const payload: TransportBoardPayload = {
+        coreStops: nextCore,
+        routeMeta,
+        unplottedCampers: result.unplottedCampers,
+        routesConfigured: true,
+        routesSeason: season,
+        routesSource: routesSource ?? 'manual',
+      };
+
+      await persistBoard(payload);
+      await finalizeBoardForSeason(payload);
+
+      toast(
+        'Historical assignments applied',
+        `${result.placed.length} campers placed on prior buses · ${result.unplottedCampers.length} still unplotted${result.skippedNoBus.length ? ` · ${result.skippedNoBus.length} prior bus not on board` : ''}`,
+        result.placed.length === 0,
+      );
+    } catch (e: unknown) {
+      toast('Historical apply failed', e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setApplyingHistorical(false);
+    }
+  };
+
+  const handleImportMapPointReference = async (csvText: string, label?: string) => {
+    if (!companyId) return;
+    setImportingReference(true);
+    try {
+      const { data: userRes } = await supabase.auth.getUser();
+      const result = await importMapPointCsvToWarehouse(supabase, companyId, csvText, {
+        referenceSeason: '2026',
+        label: label ?? 'MapPoint reference import',
+        userId: userRes.user?.id,
+      });
+
+      if (!result.ok) {
+        toast('Reference import failed', result.error ?? 'Unknown error', true);
+        return;
+      }
+
+      await refreshReferenceStatus();
+      toast(
+        'MapPoint reference dataset updated',
+        `${result.stats?.assignmentCount ?? 0} assignments · ${result.stats?.busCount ?? 0} buses stored for learning`,
+      );
+    } catch (e: unknown) {
+      toast('Reference import failed', e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setImportingReference(false);
+    }
+  };
+
+  const pickMapPointReferenceCsv = async () => {
+    const picked = await pickAndReadCsvText();
+    if (!picked.ok) {
+      if (picked.error !== 'canceled') toast('Import error', picked.message, true);
+      return;
+    }
+    await handleImportMapPointReference(picked.text, picked.fileName);
   };
 
   const handleRegeocodeAll = async () => {
@@ -1309,6 +1461,12 @@ export function useDayCampTransport() {
   const handleOptimizeRoutes = async (targetRouteId?: number) => {
     setOptimizing(true);
     try {
+      if (companyId) {
+        priorMapRef.current =
+          priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, '2026'));
+      }
+      const priorMap = priorMapRef.current ?? new Map<string, CamperRoutingPrior>();
+
       const targetRoutes =
         targetRouteId !== undefined
           ? routeMeta.filter((r) => r.id === targetRouteId)
@@ -1388,20 +1546,25 @@ export function useDayCampTransport() {
         });
         if (targetRouteId === undefined) {
           unplottedCampers.forEach((camper) => {
-            let bestRouteId = targetRoutes[0]?.id;
-            let bestDist = Infinity;
-            targetRoutes.forEach((r) => {
-              const stops = proposedCore[r.id];
-              const refPoints =
-                stops.length > 0
-                  ? stops.map((s) => ({ lat: s.lat, lng: s.lng }))
-                  : [{ lat: CAMP_LOCATION.lat, lng: CAMP_LOCATION.lng }];
-              const minD = Math.min(...refPoints.map((p) => Math.hypot(camper.lat - p.lat, camper.lng - p.lng)));
-              if (minD < bestDist) {
-                bestDist = minD;
-                bestRouteId = r.id;
-              }
-            });
+            let bestRouteId = pickHistoricalBusForCamper(camper, priorMap, routeMeta);
+            let bestDist = bestRouteId !== undefined ? 0 : Infinity;
+
+            if (bestRouteId === undefined) {
+              bestRouteId = targetRoutes[0]?.id;
+              targetRoutes.forEach((r) => {
+                const stops = proposedCore[r.id];
+                const refPoints =
+                  stops.length > 0
+                    ? stops.map((s) => ({ lat: s.lat, lng: s.lng }))
+                    : [{ lat: CAMP_LOCATION.lat, lng: CAMP_LOCATION.lng }];
+                const minD = Math.min(...refPoints.map((p) => Math.hypot(camper.lat - p.lat, camper.lng - p.lng)));
+                if (minD < bestDist) {
+                  bestDist = minD;
+                  bestRouteId = r.id;
+                }
+              });
+            }
+
             if (bestRouteId !== undefined) {
               proposedCore[bestRouteId].push({
                 name: camper.name,
@@ -1422,6 +1585,9 @@ export function useDayCampTransport() {
         targetRoutes.forEach((r) => {
           proposedCore[r.id] = nearestNeighborOrder(proposedCore[r.id]);
         });
+        if (priorMap.size > 0) {
+          Object.assign(proposedCore, reorderStopsByHistoricalPriors(proposedCore, priorMap));
+        }
       }
       let beforeMiles = 0;
       let afterMiles = 0;
@@ -1739,6 +1905,10 @@ export function useDayCampTransport() {
     season,
     boardLoading,
     mappointImporting,
+    applyingHistorical,
+    applyingTemplate,
+    importingReference,
+    referenceStatus,
     regeocoding,
     optimizing,
     overridesLoading,
@@ -1787,6 +1957,9 @@ export function useDayCampTransport() {
     handleAddUnplottedCamper,
     handleRemoveUnplotted,
     handleLoadMappointRoutes,
+    handleApplyRouteTemplate,
+    handleApplyHistoricalAssignments,
+    pickMapPointReferenceCsv,
     handleRegeocodeAll,
     handleMoveStop,
     handleRemoveStop,
