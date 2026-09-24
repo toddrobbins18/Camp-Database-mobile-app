@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Alert, ActivityIndicator, useWindowDimensions, Platform, Switch, Share } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView as GHScrollView, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -38,6 +38,8 @@ import {
     STAFF_DAYS_OFF_CSV_TEMPLATE,
     type StaffDaysOffCsvUploadResult,
 } from '../lib/staffDaysOffCsvImport';
+import { useOdCampDay } from '../hooks/useOdCampDay';
+import { formatDateAsOdCampDayYmd, odCampDayDateInSeason } from '../lib/odCampDay';
 
 interface StaffMember {
     id: string;
@@ -90,7 +92,9 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const bunkModalMaxHeight = Math.round(windowHeight * 0.9);
 
     const [activeTab, setActiveTab] = useState<'OD' | 'OFF' | 'FREE_PLAY'>('OD');
-    const [selectedDate, setSelectedDate] = useState(new Date());
+    const { today: odToday } = useOdCampDay(season || '');
+    const followingOdTodayRef = useRef(true);
+    const [selectedDate, setSelectedDate] = useState(() => odCampDayDateInSeason(season || ''));
     const [searchQuery, setSearchQuery] = useState('');
     /** Matches web ODManagement.tsx `genderFilter` */
     const [genderFilter, setGenderFilter] = useState<OdGenderFilter>('all');
@@ -131,7 +135,19 @@ export const ODManagementScreen = ({ navigation }: any) => {
     const [isScanning, setIsScanning] = useState(false);
     const rfidInputRef = useRef<TextInput>(null);
 
-    const dateString = selectedDate.toISOString().split('T')[0];
+    useEffect(() => {
+        if (!season) return;
+        followingOdTodayRef.current = true;
+        setSelectedDate(odCampDayDateInSeason(season));
+    }, [season]);
+
+    useEffect(() => {
+        if (followingOdTodayRef.current) {
+            setSelectedDate(odToday);
+        }
+    }, [odToday]);
+
+    const dateString = useMemo(() => formatDateAsOdCampDayYmd(selectedDate), [selectedDate]);
     const { data: staffList = [] } = useStaff(companyId, season);
 
     // Fetch staff_days_off for the selected date (same schema as web)
@@ -369,6 +385,7 @@ export const ODManagementScreen = ({ navigation }: any) => {
     };
 
     const navigateDate = (direction: 'prev' | 'next') => {
+        followingOdTodayRef.current = false;
         const newDate = new Date(selectedDate);
         if (direction === 'prev') {
             newDate.setDate(newDate.getDate() - 1);
@@ -376,6 +393,11 @@ export const ODManagementScreen = ({ navigation }: any) => {
             newDate.setDate(newDate.getDate() + 1);
         }
         setSelectedDate(newDate);
+    };
+
+    const goToOdToday = () => {
+        followingOdTodayRef.current = true;
+        setSelectedDate(odToday);
     };
 
     const staffById = new Map((staffList || []).map((s: any) => [s.id, s]));
@@ -1048,9 +1070,13 @@ export const ODManagementScreen = ({ navigation }: any) => {
                         onPress={() => setShowDatePicker(true)}
                     >
                         <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
+                        <Text style={styles.dateHint}>Camp day rolls at 1:00 AM</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => navigateDate('next')}>
                         <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.todayBtn} onPress={goToOdToday}>
+                        <Text style={styles.todayBtnText}>Today</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -2109,6 +2135,26 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: theme.colors.text,
+        textAlign: 'center',
+    },
+    dateHint: {
+        fontSize: 10,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        marginTop: 2,
+    },
+    todayBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+    },
+    todayBtnText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.secondary,
     },
     genderFilterBlock: {
         marginBottom: theme.spacing.md,
