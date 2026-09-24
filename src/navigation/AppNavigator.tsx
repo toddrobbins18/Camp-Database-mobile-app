@@ -130,6 +130,7 @@ import {
 } from '../constants/dayCampMenu';
 
 import { ODManagementScreen } from '../screens/ODManagementScreen';
+import { StaffTimeClockScreen } from '../screens/StaffTimeClockScreen';
 import { useRole } from '../hooks/useRole';
 import { useMenuAccess } from '../hooks/useMenuAccess';
 import { withMenuPermission } from '../components/MenuPermissionGate';
@@ -298,6 +299,11 @@ const CustomDrawerContent = (props: any) => {
     if (hasMenuAccess('od-management')) {
         mainMenuItems.push(
             { key: 'od-management', label: 'OD Management', icon: 'clipboard-outline', onPress: () => props.navigation.navigate('ODManagement') }
+        );
+    }
+    if (hasMenuAccess('staff-time-clock')) {
+        mainMenuItems.push(
+            { key: 'staff-time-clock', label: 'Staff Time Clock', icon: 'time-outline', onPress: () => props.navigation.navigate('StaffTimeClock') }
         );
     }
     if (hasMenuAccess('special-events')) {
@@ -777,6 +783,7 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="AccessDenied" component={AccessDeniedScreen} />
             <Drawer.Screen name="SpecialistSportAssignments" component={GuardedSpecialistSportAssignmentsScreen} />
             <Drawer.Screen name="ODManagement" component={ODManagementScreen} />
+            <Drawer.Screen name="StaffTimeClock" component={StaffTimeClockScreen} />
             <Drawer.Screen name="OwlPay" component={OwlPayGateScreen} />
             <Drawer.Screen name="DailySchedule" component={DailyScheduleScreen} />
             <Drawer.Screen name="TigerTimes" component={TigerTimesScreen} />

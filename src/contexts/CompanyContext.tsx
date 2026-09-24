@@ -20,6 +20,8 @@ import { invalidateCampScopedQueries } from '../lib/queryClient';
 /** Persists in-session camp switch (cleared on bootstrap bump). */
 const SUPER_ADMIN_COMPANY_PREFERENCE_KEY = '@the_nest_active_company_id';
 const COMPANY_BOOTSTRAP_KEY = '@the_nest_company_bootstrap_version';
+/** Set on SIGNED_IN so the next resolve picks North Shore; not set on background refresh. */
+const LOGIN_DEFAULTS_KEY = '@the_nest_login_defaults';
 
 interface Company {
     id: string;
@@ -256,6 +258,18 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                     await AsyncStorage.setItem(COMPANY_BOOTSTRAP_KEY, COMPANY_BOOTSTRAP_VERSION);
                 }
 
+                const applyLoginDefaults = (await AsyncStorage.getItem(LOGIN_DEFAULTS_KEY)) === '1';
+                if (seq !== fetchGenerationRef.current) return;
+                if (applyLoginDefaults) {
+                    await AsyncStorage.removeItem(LOGIN_DEFAULTS_KEY);
+                }
+
+                const storedCompanyId = await AsyncStorage.getItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY);
+                if (seq !== fetchGenerationRef.current) return;
+                if (storedCompanyId && !activeCompanyIdRef.current) {
+                    activeCompanyIdRef.current = storedCompanyId;
+                }
+
                 const defaultCompany = allowedCompanies.find(
                     (c) => c.slug === DEFAULT_COMPANY_SLUG,
                 );
@@ -265,7 +279,9 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                     ?? allowedCompanies[0]?.id
                     ?? null;
 
-                const resolvedCompanyId = activeCompanyIdRef.current ?? defaultCompanyId;
+                const resolvedCompanyId = applyLoginDefaults
+                    ? defaultCompanyId
+                    : (activeCompanyIdRef.current ?? storedCompanyId ?? defaultCompanyId);
                 setCompanyId(resolvedCompanyId);
 
                 let activeCompany =
@@ -304,11 +320,19 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
             if (event === 'SIGNED_IN') {
+                activeCompanyIdRef.current = null;
+                void AsyncStorage.multiRemove([
+                    SUPER_ADMIN_COMPANY_PREFERENCE_KEY,
+                ]);
+                void AsyncStorage.setItem(LOGIN_DEFAULTS_KEY, '1');
                 fetchCompanyData();
             } else if (event === 'SIGNED_OUT') {
                 fetchGenerationRef.current += 1;
                 activeCompanyIdRef.current = null;
-                void AsyncStorage.removeItem(SUPER_ADMIN_COMPANY_PREFERENCE_KEY);
+                void AsyncStorage.multiRemove([
+                    SUPER_ADMIN_COMPANY_PREFERENCE_KEY,
+                    LOGIN_DEFAULTS_KEY,
+                ]);
                 setCompanyId(null);
                 setCompanySlug(null);
                 setCompanyThemeColor(null);
