@@ -55,6 +55,7 @@ const getCompanyMenuItems = (companySlug?: string | null, isDayCamp?: boolean): 
         { id: 'messages', name: 'Messages', icon: 'chatbubble-outline', iconColor: '#3b82f6' },
         { id: 'transportation', name: 'Transportation', icon: 'car-outline', iconColor: '#64748b' },
         { id: 'od-management', name: 'OD Management', icon: 'clipboard-outline', iconColor: '#64748b' },
+        { id: 'staff-time-clock', name: 'Staff Time Clock', icon: 'time-outline', iconColor: '#64748b' },
         { id: 'appointments', name: 'Appointments', icon: 'medical-outline', iconColor: '#ef4444' },
         { id: 'reports', name: 'Reports', icon: 'bar-chart-outline', iconColor: '#64748b' },
         { id: 'nurse', name: 'Nurse', icon: 'medical-outline', iconColor: '#ef4444' },

@@ -1,6 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useCompany } from '../contexts/CompanyContext';
+import { staffTimeClockEnabledForCompany } from '../constants/camps';
+import { resolveStaffForCampView } from '../lib/profileCampResolution';
+import { ensureStaffQrToken } from '../lib/staffTimeClock';
+import { StaffQrBadge } from '../components/staff/StaffQrBadge';
 import {
     View,
     Text,
@@ -36,18 +40,75 @@ const TABS = [
 ];
 
 export const StaffDetailScreen = ({ route, navigation }: any) => {
-    const { companyId, season } = useCompany();
+    const { companyId, season, companySlug, availableCompanies } = useCompany();
     const staffId = route?.params?.staff?.id as string | undefined;
+    const [resolvedStaffId, setResolvedStaffId] = useState<string | undefined>(staffId);
+    const [campCheckDone, setCampCheckDone] = useState(false);
+    const showTimeClockQr = staffTimeClockEnabledForCompany({ slug: companySlug });
+    const companyName =
+        availableCompanies.find((c) => c.id === companyId)?.name ?? 'this camp';
+
+    useEffect(() => {
+        setResolvedStaffId(staffId);
+    }, [staffId]);
+
+    useEffect(() => {
+        if (!staffId || !companyId || !season) {
+            setCampCheckDone(true);
+            return;
+        }
+
+        let cancelled = false;
+        setCampCheckDone(false);
+
+        (async () => {
+            const resolution = await resolveStaffForCampView(
+                supabase,
+                staffId,
+                companyId,
+                season,
+            );
+            if (cancelled) return;
+
+            if (resolution.kind === 'redirect') {
+                navigation.replace('StaffDetail', {
+                    staff: { id: resolution.recordId, name: resolution.name },
+                });
+                setResolvedStaffId(resolution.recordId);
+                setCampCheckDone(true);
+                return;
+            }
+
+            if (resolution.kind === 'not_found') {
+                Alert.alert(
+                    'Not on roster',
+                    resolution.name
+                        ? `${resolution.name} is not on the ${companyName} roster for ${season}.`
+                        : `This staff member is not on the ${companyName} roster for ${season}.`,
+                    [{ text: 'Back to Staff', onPress: () => navigation.navigate('Staff') }],
+                );
+                setCampCheckDone(true);
+                return;
+            }
+
+            setResolvedStaffId(resolution.recordId);
+            setCampCheckDone(true);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [staffId, companyId, season, companyName, navigation]);
 
     const { data: loadedStaff, isLoading: staffLoading } = useQuery({
-        queryKey: ['staff_detail', staffId, companyId, season],
+        queryKey: ['staff_detail', resolvedStaffId, companyId, season],
         queryFn: async () => {
-            if (!staffId) return null;
+            if (!resolvedStaffId) return null;
 
             const { data: staffData, error: staffError } = await supabase
                 .from('staff')
                 .select('*, division:division_id(id, name), supervisor:leader_id(id, name, role)')
-                .eq('id', staffId)
+                .eq('id', resolvedStaffId)
                 .single();
 
             if (staffError) throw staffError;
@@ -55,7 +116,7 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
             const { data: leaderAssignmentData } = await supabase
                 .from('staff_leader_assignments')
                 .select('id, leader:leader_id(id, name, role)')
-                .eq('staff_id', staffId)
+                .eq('staff_id', resolvedStaffId)
                 .eq('company_id', companyId || '')
                 .eq('season', season || '');
 
@@ -64,7 +125,22 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                 assignedLeaders: leaderAssignmentData || [],
             };
         },
-        enabled: !!staffId,
+        enabled: !!resolvedStaffId && campCheckDone,
+    });
+
+    const { data: qrToken } = useQuery({
+        queryKey: ['staff_qr_token', resolvedStaffId],
+        queryFn: async () => {
+            if (!resolvedStaffId) return null;
+            const { data } = await supabase
+                .from('staff')
+                .select('qr_token')
+                .eq('id', resolvedStaffId)
+                .single();
+            if (data?.qr_token) return data.qr_token as string;
+            return ensureStaffQrToken(supabase, resolvedStaffId);
+        },
+        enabled: !!resolvedStaffId && showTimeClockQr && campCheckDone,
     });
 
     const [staff, setStaff] = useState<any>(route?.params?.staff ?? {});
@@ -149,14 +225,14 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
         Alert.alert('Evaluate Staff', 'Evaluation form flow can be connected next.');
     };
 
-    const openEditModal = () => {
+    const openEditModal = async () => {
         setEditForm({
-            name: staff?.name || '',
-            role: staff?.role || '',
-            department: staff?.department || '',
-            email: staff?.email || '',
-            phone: staff?.phone || '',
-            staff_type: staff?.staff_type || '',
+            name: displayStaff?.name || staff?.name || '',
+            role: displayStaff?.role || staff?.role || '',
+            department: displayStaff?.department || staff?.department || '',
+            email: displayStaff?.email || staff?.email || '',
+            phone: displayStaff?.phone || staff?.phone || '',
+            staff_type: displayStaff?.staff_type || staff?.staff_type || '',
         });
         setEditVisible(true);
     };
@@ -200,7 +276,7 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
         }
     };
 
-    if (staffLoading && staffId) {
+    if ((staffLoading || !campCheckDone) && staffId) {
         return (
             <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -381,6 +457,22 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                             </View>
                         </View>
                     </View>
+
+                    {activeTab === 'Overview' && showTimeClockQr ? (
+                        <View style={styles.infoCard}>
+                            <Text style={styles.cardTitle}>Time Clock QR Badge</Text>
+                            <Text style={styles.cardSubtitle}>
+                                Share or save for Staff Time Clock sign-in and sign-out
+                            </Text>
+                            {qrToken && displayStaff?.name ? (
+                                <StaffQrBadge staffName={displayStaff.name} qrToken={qrToken} />
+                            ) : (
+                                <Text style={styles.fieldValue}>
+                                    Unable to load QR badge. Confirm the staff time clock migration has been applied.
+                                </Text>
+                            )}
+                        </View>
+                    ) : null}
                 </View>
                 )}
             </ScrollView>
@@ -470,6 +562,12 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                                     style={styles.input}
                                     placeholder="general_counselor / specialist / both / not_specified"
                                 />
+                                {showTimeClockQr && qrToken && editForm.name ? (
+                                    <View style={{ marginTop: 16 }}>
+                                        <Text style={styles.inputLabel}>Time Clock QR Badge</Text>
+                                        <StaffQrBadge staffName={editForm.name} qrToken={qrToken} />
+                                    </View>
+                                ) : null}
                             </ScrollView>
                             <View style={styles.editFooter}>
                                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditVisible(false)}>

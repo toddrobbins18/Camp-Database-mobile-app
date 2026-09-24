@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Pressable, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Pressable, ActivityIndicator, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -34,6 +34,7 @@ import {
     hasCamperContactInfo,
     mergeCamperContact,
 } from '../lib/camperContactInfo';
+import { resolveChildForCampView } from '../lib/profileCampResolution';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -55,7 +56,63 @@ type BirthdaySubTabType = 'info' | 'party';
 
 export const CamperDetailScreen = ({ route, navigation }: any) => {
     const { camper: camperParam } = route.params || {};
-    const { companyId, season, isTimberLakeWest, isDayCamp } = useCompany();
+    const { companyId, season, isTimberLakeWest, isDayCamp, availableCompanies } = useCompany();
+    const [resolvedCamperId, setResolvedCamperId] = useState<string | undefined>(camperParam?.id);
+    const [campCheckDone, setCampCheckDone] = useState(false);
+    const companyName =
+        availableCompanies.find((c) => c.id === companyId)?.name ?? 'this camp';
+
+    useEffect(() => {
+        setResolvedCamperId(camperParam?.id);
+    }, [camperParam?.id]);
+
+    useEffect(() => {
+        if (!camperParam?.id || !companyId || !season) {
+            setCampCheckDone(true);
+            return;
+        }
+
+        let cancelled = false;
+        setCampCheckDone(false);
+
+        (async () => {
+            const resolution = await resolveChildForCampView(
+                supabase,
+                camperParam.id,
+                companyId,
+                season,
+            );
+            if (cancelled) return;
+
+            if (resolution.kind === 'redirect') {
+                navigation.replace('CamperDetail', {
+                    camper: { id: resolution.recordId, name: resolution.name },
+                });
+                setResolvedCamperId(resolution.recordId);
+                setCampCheckDone(true);
+                return;
+            }
+
+            if (resolution.kind === 'not_found') {
+                Alert.alert(
+                    'Not on roster',
+                    resolution.name
+                        ? `${resolution.name} is not on the ${companyName} roster for ${season}.`
+                        : `This camper is not on the ${companyName} roster for ${season}.`,
+                    [{ text: 'Back to Campers', onPress: () => navigation.navigate('Camper') }],
+                );
+                setCampCheckDone(true);
+                return;
+            }
+
+            setResolvedCamperId(resolution.recordId);
+            setCampCheckDone(true);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [camperParam?.id, companyId, season, companyName, navigation]);
     const { data: divisionsData = [] } = useDivisions(companyId);
     const { data: staffLeaders = [] } = useStaff(companyId, season);
     const leaders = staffLeaders.map((s: any) => ({
@@ -81,18 +138,18 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
 
     // When navigating from Awards "View Profile" we only get { id, name }. Fetch full child so profile shows all details.
     const { data: fullChild, isLoading: fullChildLoading } = useQuery({
-        queryKey: ['child', camperParam?.id],
+        queryKey: ['child', resolvedCamperId, companyId, season],
         queryFn: async () => {
-            if (!camperParam?.id) return null;
+            if (!resolvedCamperId) return null;
             const { data, error } = await supabase
                 .from('children')
                 .select('*, division:divisions(id, name, gender, sort_order), leader:leader_id(id, name, role), bunk:bunk_id(id, bunk_number, bunk_name)')
-                .eq('id', camperParam.id)
+                .eq('id', resolvedCamperId)
                 .single();
             if (error) throw error;
             return data;
         },
-        enabled: !!camperParam?.id,
+        enabled: !!resolvedCamperId && campCheckDone,
     });
     const camper = fullChild ?? camperParam;
 
@@ -482,7 +539,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
     }
 
     const isMinimalCamper = camperParam.id && !camperParam.grade && !camperParam.division_id;
-    const showProfileLoading = fullChildLoading && isMinimalCamper;
+    const showProfileLoading = (!campCheckDone || fullChildLoading) && isMinimalCamper;
 
     return (
         <SafeAreaView style={styles.container}>

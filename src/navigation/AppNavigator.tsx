@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Pressable, ScrollView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCompany } from '../contexts/CompanyContext';
+import { staffTimeClockEnabledForCompany } from '../constants/camps';
 import { LoginScreen } from '../screens/LoginScreen';
 import { SignUpScreen } from '../screens/SignUpScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
@@ -143,6 +144,8 @@ import {
 import { supabase } from '../lib/supabase';
 import { theme } from '../theme/theme';
 import { getMenuDrawerThemeFromCompany } from '../theme/menuDrawerTheme';
+import { isScreenAllowedForCompany } from '../lib/campScreenAccess';
+import { getActiveRoute } from '../lib/navigationRouteUtils';
 
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
@@ -301,7 +304,7 @@ const CustomDrawerContent = (props: any) => {
             { key: 'od-management', label: 'OD Management', icon: 'clipboard-outline', onPress: () => props.navigation.navigate('ODManagement') }
         );
     }
-    if (hasMenuAccess('staff-time-clock')) {
+    if (staffTimeClockEnabledForCompany({ slug: companySlug }) && hasMenuAccess('staff-time-clock')) {
         mainMenuItems.push(
             { key: 'staff-time-clock', label: 'Staff Time Clock', icon: 'time-outline', onPress: () => props.navigation.navigate('StaffTimeClock') }
         );
@@ -709,6 +712,30 @@ const MenuStackNavigator = () => {
     );
 };
 
+function CampSwitchNavigationGuard({
+    navigationRef,
+}: {
+    navigationRef: ReturnType<typeof useNavigationContainerRef>;
+}) {
+    const { companyId, companySlug, isDayCamp } = useCompany();
+
+    useEffect(() => {
+        if (!companyId || !navigationRef.isReady()) return;
+
+        const state = navigationRef.getRootState();
+        if (!state) return;
+
+        const activeRoute = getActiveRoute(state);
+        const company = { slug: companySlug, camp_type: isDayCamp ? 'day_camp' : 'overnight' };
+
+        if (!isScreenAllowedForCompany(activeRoute, company)) {
+            navigationRef.navigate('MainApp', { screen: 'Dashboard' });
+        }
+    }, [companyId, companySlug, isDayCamp, navigationRef]);
+
+    return null;
+}
+
 // Main App Navigator (Drawer)
 const MainAppNavigator = () => {
     const [realtimeUserId, setRealtimeUserId] = useState<string | null>(null);
@@ -795,6 +822,7 @@ const MainAppNavigator = () => {
 
 // Root Navigator (Stack)
 export const AppNavigator = () => {
+    const navigationRef = useNavigationContainerRef();
     const [initialRouteName, setInitialRouteName] = useState<'Login' | 'MainApp' | null>(null);
 
     useEffect(() => {
@@ -814,7 +842,8 @@ export const AppNavigator = () => {
     }
 
     return (
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
+            <CampSwitchNavigationGuard navigationRef={navigationRef} />
             <Stack.Navigator
                 screenOptions={{
                     headerShown: false,

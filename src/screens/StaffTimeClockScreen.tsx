@@ -26,6 +26,7 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
   const [scanInput, setScanInput] = useState('');
   const [scanning, setScanning] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
+  const [lastPunch, setLastPunch] = useState<{ name: string; action: 'in' | 'out'; at: string } | null>(null);
   const inputRef = useRef<TextInput>(null);
   const workDate = staffTimeClockWorkDate();
 
@@ -44,8 +45,8 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
     return () => clearTimeout(t);
   }, []);
 
-  const handleScan = async () => {
-    const raw = scanInput.trim();
+  const handleScan = async (value?: string) => {
+    const raw = (value ?? scanInput).trim();
     if (!raw || !companyId || !season) return;
     setScanning(true);
     try {
@@ -60,6 +61,7 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
       if (!result.ok) {
         Alert.alert('Scan failed', result.message);
       } else {
+        setLastPunch({ name: result.staffName, action: result.action, at: result.at });
         Alert.alert(
           result.action === 'in' ? 'Signed in' : 'Signed out',
           `${result.staffName} · ${format(new Date(result.at), 'h:mm a')}`,
@@ -76,6 +78,8 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
   };
 
   const signedIn = rows.filter((r) => r.signed_in_at && !r.signed_out_at).length;
+  const completed = rows.filter((r) => r.signed_in_at && r.signed_out_at).length;
+  const formattedDate = format(new Date(`${workDate}T12:00:00`), 'EEEE, MMMM d, yyyy');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -85,7 +89,9 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
         </TouchableOpacity>
         <View style={styles.headerText}>
           <Text style={styles.title}>Staff Time Clock</Text>
-          <Text style={styles.subtitle}>Auto sign-out 4:15 PM · {workDate}</Text>
+          <Text style={styles.subtitle}>
+            Scan QR badge or wristband · {formattedDate} · auto sign-out 4:15 PM
+          </Text>
         </View>
         <TouchableOpacity onPress={() => void refresh()}>
           <Ionicons name="refresh" size={22} color={theme.colors.secondary} />
@@ -94,46 +100,95 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
 
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Signed in</Text>
-          <Text style={styles.statValue}>{signedIn}</Text>
+          <Text style={styles.statLabel}>Signed in now</Text>
+          <Text style={[styles.statValue, styles.statValueGreen]}>{signedIn}</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Total</Text>
+          <Text style={styles.statLabel}>Completed today</Text>
+          <Text style={styles.statValue}>{completed}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Total punches</Text>
           <Text style={styles.statValue}>{rows.length}</Text>
         </View>
       </View>
 
+      {lastPunch ? (
+        <View style={styles.lastPunchCard}>
+          <Ionicons
+            name={lastPunch.action === 'in' ? 'log-in-outline' : 'log-out-outline'}
+            size={22}
+            color="#15803d"
+          />
+          <View style={styles.lastPunchText}>
+            <Text style={styles.lastPunchName}>{lastPunch.name}</Text>
+            <Text style={styles.lastPunchMeta}>
+              {lastPunch.action === 'in' ? 'Signed in' : 'Signed out'} at{' '}
+              {format(new Date(lastPunch.at), 'h:mm a')}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.scanBox}>
+        <View style={styles.scanTitleRow}>
+          <Ionicons name="qr-code-outline" size={18} color={theme.colors.text} />
+          <Text style={styles.scanTitle}>Scan badge</Text>
+        </View>
         <TextInput
           ref={inputRef}
           style={styles.scanInput}
           value={scanInput}
           onChangeText={setScanInput}
-          placeholder="Scan QR or wristband…"
+          placeholder="Scan QR code or wristband…"
           onSubmitEditing={() => void handleScan()}
           editable={!scanning}
           autoCapitalize="none"
           autoCorrect={false}
         />
+        <Text style={styles.scanHint}>
+          QR badge · RFID wristband · First scan = in · Second scan = out
+        </Text>
         <TouchableOpacity style={styles.scanBtn} onPress={() => void handleScan()} disabled={scanning}>
-          {scanning ? <ActivityIndicator color="#fff" /> : <Text style={styles.scanBtnText}>Submit</Text>}
+          {scanning ? <ActivityIndicator color="#fff" /> : <Text style={styles.scanBtnText}>Submit scan</Text>}
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.list}>
-        {rows.map((row) => (
-          <View key={row.id} style={styles.row}>
-            <Text style={styles.rowName}>{row.staff?.name ?? 'Staff'}</Text>
-            <Text style={styles.rowMeta}>
-              {row.signed_in_at ? `In ${format(new Date(row.signed_in_at), 'h:mm a')}` : ''}
-              {row.signed_out_at
-                ? ` · Out ${format(new Date(row.signed_out_at), 'h:mm a')}${row.auto_signed_out ? ' (auto)' : ''}`
-                : row.signed_in_at
-                  ? ' · On site'
-                  : ''}
-            </Text>
-          </View>
-        ))}
+      <Text style={styles.logTitle}>Today&apos;s log</Text>
+      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+        {rows.length === 0 ? (
+          <Text style={styles.emptyLog}>No punches yet today.</Text>
+        ) : (
+          rows.map((row) => (
+            <View key={row.id} style={styles.row}>
+              <Text style={styles.rowName}>{row.staff?.name ?? 'Staff'}</Text>
+              <View style={styles.badgeRow}>
+                {row.signed_in_at ? (
+                  <View style={styles.badge}>
+                    <Ionicons name="log-in-outline" size={12} color={theme.colors.textSecondary} />
+                    <Text style={styles.badgeText}>
+                      In {format(new Date(row.signed_in_at), 'h:mm a')}
+                      {row.sign_in_method ? ` · ${row.sign_in_method}` : ''}
+                    </Text>
+                  </View>
+                ) : null}
+                {row.signed_out_at ? (
+                  <View style={[styles.badge, row.auto_signed_out && styles.badgeAuto]}>
+                    <Ionicons name="log-out-outline" size={12} color={theme.colors.textSecondary} />
+                    <Text style={styles.badgeText}>
+                      Out {format(new Date(row.signed_out_at), 'h:mm a')}
+                      {row.auto_signed_out ? ' · auto' : row.sign_out_method ? ` · ${row.sign_out_method}` : ''}
+                    </Text>
+                  </View>
+                ) : row.signed_in_at ? (
+                  <View style={[styles.badge, styles.badgeOnSite]}>
+                    <Text style={styles.badgeOnSiteText}>On site</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -161,7 +216,29 @@ const styles = StyleSheet.create({
   },
   statLabel: { fontSize: 11, color: theme.colors.textSecondary },
   statValue: { fontSize: 24, fontWeight: '700', color: theme.colors.text },
-  scanBox: { paddingHorizontal: theme.spacing.md, marginBottom: 8, gap: 8 },
+  statValueGreen: { color: '#15803d' },
+  lastPunchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: theme.spacing.md,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#86efac',
+    backgroundColor: '#f0fdf4',
+  },
+  lastPunchText: { flex: 1 },
+  lastPunchName: { fontWeight: '700', color: theme.colors.text },
+  lastPunchMeta: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
+  scanBox: {
+    paddingHorizontal: theme.spacing.md,
+    marginBottom: 8,
+    gap: 8,
+  },
+  scanTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  scanTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   scanInput: {
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -170,6 +247,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: theme.colors.surface,
   },
+  scanHint: { fontSize: 11, color: theme.colors.textSecondary },
   scanBtn: {
     backgroundColor: theme.colors.secondary,
     borderRadius: theme.borderRadius.md,
@@ -177,12 +255,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scanBtnText: { color: '#fff', fontWeight: '600' },
-  list: { flex: 1, paddingHorizontal: theme.spacing.md },
+  logTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text,
+    paddingHorizontal: theme.spacing.md,
+    marginBottom: 4,
+  },
+  list: { flex: 1 },
+  listContent: { paddingHorizontal: theme.spacing.md, paddingBottom: 24 },
+  emptyLog: { fontSize: 13, color: theme.colors.textSecondary, paddingVertical: 12 },
   row: {
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
-  rowName: { fontWeight: '600', color: theme.colors.text },
-  rowMeta: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
+  rowName: { fontWeight: '600', color: theme.colors.text, marginBottom: 4 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  badgeAuto: { backgroundColor: '#f3f4f6' },
+  badgeText: { fontSize: 11, color: theme.colors.textSecondary },
+  badgeOnSite: { backgroundColor: '#15803d', borderColor: '#15803d' },
+  badgeOnSiteText: { fontSize: 11, color: '#fff', fontWeight: '600' },
 });
