@@ -61,8 +61,15 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
     const { companyId, season, isTimberLakeWest, isDayCamp, availableCompanies } = useCompany();
     const [resolvedCamperId, setResolvedCamperId] = useState<string | undefined>(camperParam?.id);
     const [campCheckDone, setCampCheckDone] = useState(false);
+    const openSeasonRef = useRef(season);
     const companyName =
         availableCompanies.find((c) => c.id === companyId)?.name ?? 'this camp';
+
+    useEffect(() => {
+        if (openSeasonRef.current !== season) {
+            navigation.navigate('Camper');
+        }
+    }, [season, navigation]);
 
     useEffect(() => {
         setResolvedCamperId(camperParam?.id);
@@ -70,19 +77,24 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
 
     useEffect(() => {
         if (!camperParam?.id || !companyId || !season) {
+            setResolvedCamperId(undefined);
             setCampCheckDone(true);
             return;
         }
 
+        openSeasonRef.current = season;
+        const loadSeason = openSeasonRef.current;
+
         let cancelled = false;
         setCampCheckDone(false);
+        setResolvedCamperId(undefined);
 
         (async () => {
             const resolution = await resolveChildForCampView(
                 supabase,
                 camperParam.id,
                 companyId,
-                season,
+                loadSeason,
             );
             if (cancelled) return;
 
@@ -96,14 +108,15 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             }
 
             if (resolution.kind === 'not_found') {
+                setResolvedCamperId(undefined);
+                setCampCheckDone(true);
                 Alert.alert(
                     'Not on roster',
                     resolution.name
-                        ? `${resolution.name} is not on the ${companyName} roster for ${season}.`
-                        : `This camper is not on the ${companyName} roster for ${season}.`,
+                        ? `${resolution.name} is not on the ${companyName} roster for ${loadSeason}.`
+                        : `This camper is not on the ${companyName} roster for ${loadSeason}.`,
                     [{ text: 'Back to Campers', onPress: () => navigation.navigate('Camper') }],
                 );
-                setCampCheckDone(true);
                 return;
             }
 
@@ -114,7 +127,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
         return () => {
             cancelled = true;
         };
-    }, [camperParam?.id, companyId, season, companyName, navigation]);
+    }, [camperParam?.id, companyId, companyName, navigation]);
     const { data: divisionsData = [] } = useDivisions(companyId);
     const { data: staffLeaders = [] } = useStaff(companyId, season);
     const leaders = staffLeaders.map((s: any) => ({
@@ -142,18 +155,20 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
     const { data: fullChild, isLoading: fullChildLoading } = useQuery({
         queryKey: ['child', resolvedCamperId, companyId, season],
         queryFn: async () => {
-            if (!resolvedCamperId) return null;
+            if (!resolvedCamperId || !companyId || !season) return null;
             const { data, error } = await supabase
                 .from('children')
                 .select('*, division:divisions(id, name, gender, sort_order), leader:leader_id(id, name, role), bunk:bunk_id(id, bunk_number, bunk_name)')
                 .eq('id', resolvedCamperId)
+                .eq('company_id', companyId)
+                .eq('season', season)
                 .single();
             if (error) throw error;
             return data;
         },
-        enabled: !!resolvedCamperId && campCheckDone,
+        enabled: !!resolvedCamperId && !!campCheckDone,
     });
-    const camper = fullChild ?? camperParam;
+    const camper = campCheckDone && resolvedCamperId && fullChild ? fullChild : null;
 
     const { data: contactInfo } = useQuery({
         queryKey: ['camper_contact', camper?.id],
@@ -540,8 +555,22 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
         );
     }
 
-    const isMinimalCamper = camperParam.id && !camperParam.grade && !camperParam.division_id;
-    const showProfileLoading = (!campCheckDone || fullChildLoading) && isMinimalCamper;
+    const showProfileLoading = !campCheckDone || (!!resolvedCamperId && fullChildLoading);
+
+    if (campCheckDone && !resolvedCamperId) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.profileSearchRow}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.profileSearchBack}>
+                        <Ionicons name="chevron-back" size={24} color="#374151" />
+                    </TouchableOpacity>
+                </View>
+                <View style={[styles.header, { justifyContent: 'center' }]}>
+                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>
@@ -554,7 +583,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
 
             {/* Header */}
             <View style={styles.header}>
-                {showProfileLoading ? (
+                {showProfileLoading || !camper ? (
                     <View style={styles.headerContent}>
                         <Text style={styles.headerTitle}>{camperParam.name}</Text>
                         <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginLeft: 8 }} />
