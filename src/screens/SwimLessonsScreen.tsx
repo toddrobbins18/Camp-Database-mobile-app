@@ -21,13 +21,20 @@ import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import {
+  ALL_CAMP_WEEKDAYS,
   buildSwimLessonRows,
   CAMP_WEEKDAY_OPTIONS,
+  DEFAULT_SWIM_LESSON_TIME,
   generateRecurringSwimLessonDates,
   resolveSwimLessonWeekCalendar,
+  SWIM_LESSON_TIME_OPTIONS,
   swimLessonWeekOptions,
   type CampWeekday,
 } from '../lib/swimLessonSchedule';
+import {
+  fetchSwimLessonInstructorOptions,
+  saveInstructorName,
+} from '../lib/swimLessonInstructors';
 import {
   loadEnrollmentWeekCalendar,
   type EnrollmentWeekCalendar,
@@ -65,11 +72,12 @@ export function SwimLessonsScreen({ navigation }: any) {
     setDate(operationalDate);
   }, [operationalDate]);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
   const [camperId, setCamperId] = useState('');
+  const [lessonTime, setLessonTime] = useState(DEFAULT_SWIM_LESSON_TIME);
   const [duration, setDuration] = useState('30');
   const [instructor, setInstructor] = useState('');
-  const [location, setLocation] = useState('');
+  const [instructorOptions, setInstructorOptions] = useState<string[]>([]);
+  const [newInstructorName, setNewInstructorName] = useState('');
   const [cost, setCost] = useState('45');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -102,14 +110,14 @@ export function SwimLessonsScreen({ navigation }: any) {
     setScheduleMode('once');
     setSelectedWeeks([]);
     setSelectedDays([]);
+    setLessonTime(DEFAULT_SWIM_LESSON_TIME);
     setDuration('30');
     setInstructor('');
-    setLocation('');
+    setNewInstructorName('');
     setCost('45');
     setNotes('');
     setDate(operationalDate);
     setShowDatePicker(false);
-    setShowTimePicker(false);
   };
 
   const closeScheduleModal = () => {
@@ -137,6 +145,7 @@ export function SwimLessonsScreen({ navigation }: any) {
   useEffect(() => {
     if (!scheduleModalOpen || !companyId) return;
     void loadEnrollmentWeekCalendar(supabase, companyId, season).then(setWeekCalendar);
+    void fetchSwimLessonInstructorOptions(supabase, companyId, season).then(setInstructorOptions);
   }, [scheduleModalOpen, companyId, season]);
 
   const toggleWeek = (weekNumber: number) => {
@@ -172,9 +181,8 @@ export function SwimLessonsScreen({ navigation }: any) {
     const durationMinutes = parseInt(duration) || 30;
     const costCents = Math.round(parseFloat(cost || '0') * 100);
     const instructorVal = instructor || null;
-    const locationVal = location || null;
     const notesVal = notes || null;
-    const timeStr = format(date, 'HH:mm');
+    const timeStr = lessonTime;
 
     setSaving(true);
 
@@ -198,7 +206,7 @@ export function SwimLessonsScreen({ navigation }: any) {
         time: timeStr,
         durationMinutes,
         instructor: instructorVal,
-        location: locationVal,
+        location: null,
         costCents,
         notes: notesVal,
         recurrenceSeriesId: seriesId,
@@ -219,7 +227,6 @@ export function SwimLessonsScreen({ navigation }: any) {
         scheduled_at,
         duration_minutes: durationMinutes,
         instructor: instructorVal,
-        location: locationVal,
         cost_cents: costCents,
         notes: notesVal,
       });
@@ -319,10 +326,6 @@ export function SwimLessonsScreen({ navigation }: any) {
                             <Text style={styles.detailText}>{l.instructor || 'TBD'}</Text>
                         </View>
                         <View style={styles.detailItem}>
-                            <Ionicons name="location-outline" size={12} color={theme.colors.textSecondary} />
-                            <Text style={styles.detailText}>{l.location || 'TBD'}</Text>
-                        </View>
-                        <View style={styles.detailItem}>
                             <Ionicons name="cash-outline" size={12} color={theme.colors.textSecondary} />
                             <Text style={styles.detailText}>${(l.cost_cents / 100).toFixed(2)}</Text>
                         </View>
@@ -393,7 +396,7 @@ export function SwimLessonsScreen({ navigation }: any) {
                   onPress={() => setScheduleMode('recurring')}
                 >
                   <Text style={[styles.chipText, scheduleMode === 'recurring' && styles.chipTextActive]}>
-                    Recurring by week
+                    Repeat weekly
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -426,58 +429,39 @@ export function SwimLessonsScreen({ navigation }: any) {
                       />
                     )}
                   </View>
-                  <View style={{ width: 12 }} />
-                  <View style={styles.flex1}>
-                    <Text style={styles.label}>Time</Text>
-                    <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowTimePicker(true)}>
-                      <Ionicons name="time-outline" size={18} color={theme.colors.textSecondary} />
-                      <Text style={styles.datePickerText}>{format(date, 'h:mm a')}</Text>
-                    </TouchableOpacity>
-                    {showTimePicker && (
-                      <DateTimePicker
-                        value={date}
-                        mode="time"
-                        display="default"
-                        onChange={(_event, selectedDate) => {
-                          setShowTimePicker(false);
-                          if (selectedDate) {
-                            const newDate = new Date(date);
-                            newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
-                            setDate(newDate);
-                          }
-                        }}
-                      />
-                    )}
-                  </View>
                 </View>
-              ) : (
+              ) : null}
+
+              <Text style={styles.label}>Time</Text>
+              <View style={styles.modeRow}>
+                {SWIM_LESSON_TIME_OPTIONS.map((slot) => (
+                  <TouchableOpacity
+                    key={slot.value}
+                    style={[styles.modeChip, lessonTime === slot.value && styles.chipActive]}
+                    onPress={() => setLessonTime(slot.value)}
+                  >
+                    <Text style={[styles.chipText, lessonTime === slot.value && styles.chipTextActive]}>
+                      {slot.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {scheduleMode === 'recurring' ? (
                 <>
-                  <View style={styles.row}>
-                    <View style={styles.flex1}>
-                      <Text style={styles.label}>Time</Text>
-                      <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowTimePicker(true)}>
-                        <Ionicons name="time-outline" size={18} color={theme.colors.textSecondary} />
-                        <Text style={styles.datePickerText}>{format(date, 'h:mm a')}</Text>
+                  <View style={styles.quickRow}>
+                    <Text style={styles.label}>Weeks</Text>
+                    <View style={styles.quickActions}>
+                      <TouchableOpacity
+                        onPress={() => setSelectedWeeks(weekOptions.map((w) => w.weekNumber))}
+                      >
+                        <Text style={styles.quickActionText}>All weeks</Text>
                       </TouchableOpacity>
-                      {showTimePicker && (
-                        <DateTimePicker
-                          value={date}
-                          mode="time"
-                          display="default"
-                          onChange={(_event, selectedDate) => {
-                            setShowTimePicker(false);
-                            if (selectedDate) {
-                              const newDate = new Date(date);
-                              newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
-                              setDate(newDate);
-                            }
-                          }}
-                        />
-                      )}
+                      <TouchableOpacity onPress={() => setSelectedWeeks([])}>
+                        <Text style={styles.quickActionText}>Clear</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
-
-                  <Text style={styles.label}>Weeks</Text>
                   <View style={styles.weekGrid}>
                     {weekOptions.map((week) => (
                       <TouchableOpacity
@@ -508,7 +492,17 @@ export function SwimLessonsScreen({ navigation }: any) {
                     ))}
                   </View>
 
-                  <Text style={styles.label}>Days</Text>
+                  <View style={styles.quickRow}>
+                    <Text style={styles.label}>Days</Text>
+                    <View style={styles.quickActions}>
+                      <TouchableOpacity onPress={() => setSelectedDays([...ALL_CAMP_WEEKDAYS])}>
+                        <Text style={styles.quickActionText}>Mon–Fri</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setSelectedDays([])}>
+                        <Text style={styles.quickActionText}>Clear</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                   <View style={styles.modeRow}>
                     {CAMP_WEEKDAY_OPTIONS.map((day) => (
                       <TouchableOpacity
@@ -534,7 +528,7 @@ export function SwimLessonsScreen({ navigation }: any) {
                       : 'Pick at least one week and one day'}
                   </Text>
                 </>
-              )}
+              ) : null}
 
               <View style={styles.row}>
                 <View style={styles.flex1}>
@@ -559,15 +553,37 @@ export function SwimLessonsScreen({ navigation }: any) {
               </View>
 
               <Text style={styles.label}>Instructor</Text>
-              <TextInput style={styles.input} value={instructor} onChangeText={setInstructor} />
-
-              <Text style={styles.label}>Location</Text>
-              <TextInput
-                style={styles.input}
-                value={location}
-                onChangeText={setLocation}
-                placeholder="e.g. Main Pool"
-              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.camperChips}>
+                {instructorOptions.map((name) => (
+                  <TouchableOpacity
+                    key={name}
+                    style={[styles.chip, instructor === name && styles.chipActive]}
+                    onPress={() => setInstructor(name)}
+                  >
+                    <Text style={[styles.chipText, instructor === name && styles.chipTextActive]}>{name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <View style={styles.row}>
+                <TextInput
+                  style={[styles.input, styles.flex1]}
+                  value={newInstructorName}
+                  onChangeText={setNewInstructorName}
+                  placeholder="Add instructor name"
+                />
+                <TouchableOpacity
+                  style={styles.addInstructorBtn}
+                  onPress={async () => {
+                    if (!companyId || !newInstructorName.trim()) return;
+                    const next = await saveInstructorName(companyId, newInstructorName);
+                    setInstructorOptions(next);
+                    setInstructor(newInstructorName.trim());
+                    setNewInstructorName('');
+                  }}
+                >
+                  <Ionicons name="add" size={20} color={theme.colors.primary} />
+                </TouchableOpacity>
+              </View>
 
               <Text style={styles.label}>Notes</Text>
               <TextInput
@@ -984,5 +1000,29 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginTop: 8,
     marginBottom: 4,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  quickActionText: {
+    fontSize: 12,
+    color: theme.colors.primary,
+    fontWeight: '500',
+  },
+  addInstructorBtn: {
+    marginLeft: 8,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: '#fff',
+    alignSelf: 'center',
   },
 });
