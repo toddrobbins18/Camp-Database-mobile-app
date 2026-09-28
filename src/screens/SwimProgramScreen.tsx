@@ -40,6 +40,7 @@ import {
   mergeLevels,
   type SwimHistoryReportRow,
 } from '../lib/swimProgram';
+import { SwimGroupFormationPanel } from '../components/swim/SwimGroupFormationPanel';
 
 const BRACELET_COLORS: Record<BraceletColor, { bg: string; text: string; border: string }> = {
   Red: { bg: '#fee2e2', text: '#ef4444', border: '#fca5a5' },
@@ -148,7 +149,7 @@ export function SwimProgramScreen({ navigation }: any) {
   const { companyId, season } = useCompany();
   const [viewSeason, setViewSeason] = useState(season);
   const [seasonOptions, setSeasonOptions] = useState<string[]>([season]);
-  const [activeTab, setActiveTab] = useState<'bracelets' | 'levels' | 'history'>('bracelets');
+  const [activeTab, setActiveTab] = useState<'bracelets' | 'levels' | 'formation' | 'history'>('bracelets');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -373,32 +374,46 @@ export function SwimProgramScreen({ navigation }: any) {
         </ScrollView>
       </View>
 
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'bracelets' && styles.tabActive]}
-          onPress={() => setActiveTab('bracelets')}
-        >
-          <Text style={[styles.tabText, activeTab === 'bracelets' && styles.tabTextActive]}>Swim Bracelets</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'levels' && styles.tabActive]}
-          onPress={() => setActiveTab('levels')}
-        >
-          <Text style={[styles.tabText, activeTab === 'levels' && styles.tabTextActive]}>Swim Level Report</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'history' && styles.tabActive]}
-          onPress={() => setActiveTab('history')}
-        >
-          <Text style={[styles.tabText, activeTab === 'history' && styles.tabTextActive]}>Prior Seasons</Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll}>
+        <View style={styles.tabs}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'bracelets' && styles.tabActive]}
+            onPress={() => setActiveTab('bracelets')}
+          >
+            <Text style={[styles.tabText, activeTab === 'bracelets' && styles.tabTextActive]}>Bracelets</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'levels' && styles.tabActive]}
+            onPress={() => setActiveTab('levels')}
+          >
+            <Text style={[styles.tabText, activeTab === 'levels' && styles.tabTextActive]}>Levels</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'formation' && styles.tabActive]}
+            onPress={() => setActiveTab('formation')}
+          >
+            <Text style={[styles.tabText, activeTab === 'formation' && styles.tabTextActive]}>Group Formation</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'history' && styles.tabActive]}
+            onPress={() => setActiveTab('history')}
+          >
+            <Text style={[styles.tabText, activeTab === 'history' && styles.tabTextActive]}>Prior Seasons</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
 
-      {loading && activeTab !== 'history' ? (
+      {loading && activeTab !== 'history' && activeTab !== 'formation' ? (
         <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 32 }} />
       ) : (
         <ScrollView style={styles.content}>
-          {activeTab === 'history' ? (
+          {activeTab === 'formation' ? (
+            companyId ? (
+              <SwimGroupFormationPanel companyId={companyId} season={viewSeason} />
+            ) : (
+              <Text style={styles.emptyState}>Select a camp to build swim groups.</Text>
+            )
+          ) : activeTab === 'history' ? (
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>Prior seasons — campers with saved swim data</Text>
@@ -759,12 +774,15 @@ const styles = StyleSheet.create({
   braceletPillText: { fontSize: 11, fontWeight: '600' },
   statNumber: { fontSize: 20, fontWeight: 'bold', color: theme.colors.text },
   statLabel: { fontSize: 11, color: theme.colors.textSecondary },
-  tabs: {
-    flexDirection: 'row',
+  tabsScroll: {
     backgroundColor: '#fff',
-    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
+    flexGrow: 0,
+  },
+  tabs: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
   },
   tab: {
     paddingVertical: 12,
