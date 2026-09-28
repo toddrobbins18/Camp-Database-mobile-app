@@ -15,6 +15,11 @@ export type ParentPortalColors = {
   textMuted: string;
   textSubtle: string;
   border: string;
+  shadow: string;
+  success: string;
+  successBg: string;
+  warning: string;
+  warningBg: string;
 };
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -64,15 +69,20 @@ export function buildParentPortalColors(themeColor: string): ParentPortalColors 
   const brand = resolveParentPortalThemeColor(themeColor);
   return {
     brand,
-    brandDark: mix(brand, '#000000', 0.22),
-    brandSoft: mix(brand, '#ffffff', 0.88),
-    brandMuted: mix(brand, '#ffffff', 0.78),
-    brandSubtle: mix(brand, '#ffffff', 0.94),
-    bg: mix(brand, '#ffffff', 0.955),
-    elevated: '#ffffff',
-    text: mix(brand, '#1e293b', 0.35),
-    textMuted: '#64748b',
-    textSubtle: '#94a3b8',
-    border: mix(brand, '#ffffff', 0.82),
+    brandDark: mix(brand, '#0f172a', 0.35),
+    brandSoft: mix(brand, '#ffffff', 0.9),
+    brandMuted: mix(brand, '#ffffff', 0.82),
+    brandSubtle: mix(brand, '#ffffff', 0.95),
+    bg: '#F4F6F8',
+    elevated: '#FFFFFF',
+    text: '#0F172A',
+    textMuted: '#64748B',
+    textSubtle: '#94A3B8',
+    border: '#E2E8F0',
+    shadow: mix(brand, '#0f172a', 0.5),
+    success: '#15803D',
+    successBg: '#F0FDF4',
+    warning: '#B45309',
+    warningBg: '#FFFBEB',
   };
 }

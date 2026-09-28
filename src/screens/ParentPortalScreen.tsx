@@ -184,12 +184,12 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.bg, padding: 24 }]}>
         <View style={[styles.linkCard, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
-          <Text style={[styles.linkTitle, { color: colors.text }]}>Welcome to {companyName}</Text>
+          <Text style={[styles.linkTitle, { color: colors.text }]}>Almost there!</Text>
           <Text style={[styles.linkBody, { color: colors.textMuted }]}>
-            Your account isn&apos;t linked to a family yet. Create your family profile to get started.
+            One quick step — set up your family profile so we can show your kids here.
           </Text>
           <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.brand }]} onPress={linkAccount}>
-            <Text style={styles.primaryBtnText}>Create family & continue</Text>
+            <Text style={styles.primaryBtnText}>Set up my family</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.border }]} onPress={handleSignOut}>
             <Text style={[styles.outlineBtnText, { color: colors.text }]}>Sign out</Text>
@@ -226,7 +226,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
       activeView={activeView}
       onNavigate={setActiveView}
       onSignOut={handleSignOut}
-      onOpenDrawer={() => navigation.openDrawer()}
+      showDrawer={false}
     >
       {activeView === 'home' && <ParentHomeView {...sharedProps} />}
       {activeView === 'campers' && <ParentCampersView {...sharedProps} />}

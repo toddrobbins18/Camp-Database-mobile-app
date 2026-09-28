@@ -18,6 +18,7 @@ import {
   resolveParentPortalThemeColor,
   type ParentPortalColors,
 } from '../../lib/parentPortalTheme';
+import { PP, ppFont } from '../../lib/parentPortalUi';
 
 type Props = {
   campName: string;
@@ -45,8 +46,7 @@ export function ParentPortalShell({
   activeView,
   onNavigate,
   onSignOut,
-  onOpenDrawer,
-  showDrawer = true,
+  showDrawer = false,
   children,
 }: Props) {
   const colors = useMemo(() => {
@@ -57,39 +57,37 @@ export function ParentPortalShell({
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const navIcon = (id: ParentPortalView): keyof typeof Ionicons.glyphMap => {
+  const navIcon = (
+    id: ParentPortalView,
+    active: boolean,
+  ): keyof typeof Ionicons.glyphMap => {
     const item = PARENT_PORTAL_NAV.find((n) => n.id === id);
-    return (item?.icon ?? 'ellipse-outline') as keyof typeof Ionicons.glyphMap;
+    const base = (item?.icon ?? 'ellipse-outline') as string;
+    if (!active) return base as keyof typeof Ionicons.glyphMap;
+    return base.replace('-outline', '') as keyof typeof Ionicons.glyphMap;
   };
+
+  const moreActive = moreOpen || MOBILE_MORE.includes(activeView);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <View style={styles.bgOrbA} />
-      <View style={styles.bgOrbB} />
-
       <View style={styles.header}>
-        {showDrawer && onOpenDrawer ? (
-          <TouchableOpacity onPress={onOpenDrawer} style={styles.menuBtn}>
-            <Ionicons name="menu-outline" size={26} color={colors.text} />
-          </TouchableOpacity>
-        ) : null}
-        <View style={styles.brandIconWrap}>
-          <View style={[styles.brandIcon, { backgroundColor: colors.brandDark }]}>
-            <View style={[styles.brandIconOverlay, { backgroundColor: colors.brand }]} />
-            <Ionicons name="shield-checkmark" size={20} color="#fff" style={styles.brandIconGlyph} />
-          </View>
-        </View>
-        <View style={styles.headerText}>
-          <Text style={styles.campName} numberOfLines={1}>
+        <View style={styles.headerMain}>
+          <Text style={[ppFont.titleSm, { color: colors.text }]} numberOfLines={1}>
             {campName}
           </Text>
-          <Text style={styles.familyLine} numberOfLines={1}>
-            {familyName} Family{contactName ? ` · ${contactName}` : ''}
+          <Text style={[ppFont.caption, { color: colors.textMuted, marginTop: 2 }]} numberOfLines={1}>
+            {familyName} family
+            {contactName ? ` · Hi, ${contactName.split(' ')[0]}!` : ''}
           </Text>
         </View>
-        <TouchableOpacity onPress={onSignOut} style={[styles.signOutBtn, { backgroundColor: colors.brandSubtle }]}>
-          <Ionicons name="log-out-outline" size={18} color={colors.brand} />
-          <Text style={[styles.signOutText, { color: colors.brand }]}>Sign out</Text>
+        <TouchableOpacity
+          onPress={onSignOut}
+          style={styles.signOutBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel="Sign out"
+        >
+          <Ionicons name="log-out-outline" size={22} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
 
@@ -103,88 +101,86 @@ export function ParentPortalShell({
       </ScrollView>
 
       {moreOpen ? (
-        <View style={[styles.morePanel, { backgroundColor: colors.elevated, borderTopColor: colors.border }]}>
+        <View style={[styles.moreSheet, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
           {MOBILE_MORE.map((viewId) => {
             const item = PARENT_PORTAL_NAV.find((n) => n.id === viewId)!;
             const active = activeView === viewId;
             return (
               <TouchableOpacity
                 key={viewId}
-                style={[
-                  styles.moreItem,
-                  { backgroundColor: active ? colors.brand : colors.brandSubtle },
-                ]}
+                style={styles.moreRow}
                 onPress={() => {
                   onNavigate(viewId);
                   setMoreOpen(false);
                 }}
               >
-                <Ionicons name={navIcon(viewId)} size={18} color={active ? '#fff' : colors.brand} />
-                <Text style={[styles.moreItemText, { color: active ? '#fff' : colors.text }]}>{item.label}</Text>
+                <Ionicons
+                  name={navIcon(viewId, active)}
+                  size={20}
+                  color={active ? colors.brand : colors.textMuted}
+                />
+                <Text
+                  style={[
+                    ppFont.bodyMedium,
+                    { color: active ? colors.brand : colors.text, flex: 1, marginLeft: PP.md },
+                  ]}
+                >
+                  {item.label}
+                </Text>
+                {active ? <View style={[styles.activeDot, { backgroundColor: colors.brand }]} /> : null}
               </TouchableOpacity>
             );
           })}
         </View>
       ) : null}
 
-      <SafeAreaView edges={['bottom']} style={[styles.bottomNavWrap, { backgroundColor: colors.elevated, borderTopColor: colors.border }]}>
-        <View style={styles.bottomNav}>
+      <SafeAreaView edges={['bottom']} style={[styles.tabBarWrap, { backgroundColor: colors.elevated, borderTopColor: colors.border }]}>
+        <View style={styles.tabBar}>
           {MOBILE_PRIMARY.map((viewId) => {
             const item = PARENT_PORTAL_NAV.find((n) => n.id === viewId)!;
             const active = activeView === viewId;
             return (
               <TouchableOpacity
                 key={viewId}
-                style={styles.navItem}
+                style={styles.tabItem}
                 onPress={() => {
                   setMoreOpen(false);
                   onNavigate(viewId);
                 }}
-                activeOpacity={0.75}
+                activeOpacity={0.6}
               >
-                <View
+                <Ionicons
+                  name={navIcon(viewId, active)}
+                  size={22}
+                  color={active ? colors.brand : colors.textSubtle}
+                />
+                <Text
                   style={[
-                    styles.navIconWrap,
-                    active
-                      ? [styles.navIconActive, { backgroundColor: colors.brand, shadowColor: colors.brandDark }]
-                      : { backgroundColor: colors.brandSubtle },
+                    ppFont.tab,
+                    { color: active ? colors.brand : colors.textSubtle, marginTop: 4 },
+                    active && { fontWeight: '600' },
                   ]}
                 >
-                  <Ionicons
-                    name={navIcon(viewId)}
-                    size={19}
-                    color={active ? '#fff' : colors.textSubtle}
-                  />
-                </View>
-                <Text style={[styles.navLabel, active && { color: colors.brand, fontWeight: '700' }]}>
                   {item.mobileLabel}
                 </Text>
               </TouchableOpacity>
             );
           })}
           <TouchableOpacity
-            style={styles.navItem}
+            style={styles.tabItem}
             onPress={() => setMoreOpen((v) => !v)}
-            activeOpacity={0.75}
+            activeOpacity={0.6}
           >
-            <View
-              style={[
-                styles.navIconWrap,
-                moreOpen || MOBILE_MORE.includes(activeView)
-                  ? [styles.navIconActive, { backgroundColor: colors.brand, shadowColor: colors.brandDark }]
-                  : { backgroundColor: colors.brandSubtle },
-              ]}
-            >
-              <Ionicons
-                name="ellipsis-horizontal"
-                size={19}
-                color={moreOpen || MOBILE_MORE.includes(activeView) ? '#fff' : colors.textSubtle}
-              />
-            </View>
+            <Ionicons
+              name={moreActive ? 'ellipsis-horizontal' : 'ellipsis-horizontal-outline'}
+              size={22}
+              color={moreActive ? colors.brand : colors.textSubtle}
+            />
             <Text
               style={[
-                styles.navLabel,
-                (moreOpen || MOBILE_MORE.includes(activeView)) && { color: colors.brand, fontWeight: '700' },
+                ppFont.tab,
+                { color: moreActive ? colors.brand : colors.textSubtle, marginTop: 4 },
+                moreActive && { fontWeight: '600' },
               ]}
             >
               More
@@ -199,139 +195,67 @@ export function ParentPortalShell({
 function createStyles(colors: ParentPortalColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
-    bgOrbA: {
-      position: 'absolute',
-      width: 220,
-      height: 220,
-      borderRadius: 110,
-      backgroundColor: colors.brandSoft,
-      opacity: 0.55,
-      top: -60,
-      right: -70,
-    },
-    bgOrbB: {
-      position: 'absolute',
-      width: 180,
-      height: 180,
-      borderRadius: 90,
-      backgroundColor: colors.brandMuted,
-      opacity: 0.4,
-      top: 180,
-      left: -80,
-    },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingVertical: 12,
+      paddingHorizontal: PP.xl,
+      paddingVertical: PP.md,
       backgroundColor: colors.elevated,
-      borderBottomWidth: 1,
+      borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.border,
-      zIndex: 2,
-      ...Platform.select({
-        ios: {
-          shadowColor: colors.brandDark,
-          shadowOpacity: 0.06,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 4 },
-        },
-        android: { elevation: 3 },
-      }),
     },
-    menuBtn: { padding: 4, marginRight: 4 },
-    brandIconWrap: { marginRight: 10 },
-    brandIcon: {
-      width: 42,
-      height: 42,
-      borderRadius: 15,
-      overflow: 'hidden',
-      alignItems: 'center',
-      justifyContent: 'center',
-      ...Platform.select({
-        ios: {
-          shadowColor: colors.brandDark,
-          shadowOpacity: 0.25,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: 4 },
-        },
-        android: { elevation: 4 },
-      }),
-    },
-    brandIconOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      opacity: 0.75,
-      left: '15%',
-    },
-    brandIconGlyph: { zIndex: 1 },
-    headerText: { flex: 1, minWidth: 0 },
-    campName: { fontSize: 16, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
-    familyLine: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+    headerMain: { flex: 1, minWidth: 0 },
     signOutBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 999,
-    },
-    signOutText: { fontSize: 12, fontWeight: '700' },
-    main: { flex: 1, zIndex: 1 },
-    mainContent: { padding: 16, paddingBottom: 28 },
-    morePanel: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderTopWidth: 1,
-    },
-    moreItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      borderRadius: 14,
-      minWidth: '46%',
-    },
-    moreItemText: { fontSize: 13, fontWeight: '700' },
-    bottomNavWrap: {
-      borderTopWidth: 1,
-      ...Platform.select({
-        ios: {
-          shadowColor: colors.brandDark,
-          shadowOpacity: 0.1,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: -6 },
-        },
-        android: { elevation: 12 },
-      }),
-    },
-    bottomNav: {
-      flexDirection: 'row',
-      paddingHorizontal: 6,
-      paddingTop: 8,
-      paddingBottom: 4,
-    },
-    navItem: { flex: 1, alignItems: 'center', gap: 5 },
-    navIconWrap: {
       width: 40,
       height: 40,
-      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
+      marginLeft: PP.sm,
     },
-    navIconActive: {
+    main: { flex: 1 },
+    mainContent: {
+      paddingHorizontal: PP.xl,
+      paddingTop: PP.lg,
+      paddingBottom: PP.xxxl,
+    },
+    moreSheet: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      paddingHorizontal: PP.xl,
+      paddingVertical: PP.sm,
+    },
+    moreRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: PP.md,
+    },
+    activeDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+    },
+    tabBarWrap: {
+      borderTopWidth: StyleSheet.hairlineWidth,
       ...Platform.select({
         ios: {
-          shadowOpacity: 0.35,
+          shadowColor: '#000',
+          shadowOpacity: 0.04,
           shadowRadius: 8,
-          shadowOffset: { width: 0, height: 4 },
+          shadowOffset: { width: 0, height: -2 },
         },
-        android: { elevation: 4 },
+        android: { elevation: 8 },
       }),
     },
-    navLabel: { fontSize: 10, fontWeight: '600', color: colors.textSubtle },
+    tabBar: {
+      flexDirection: 'row',
+      paddingTop: PP.sm,
+      paddingBottom: PP.xs,
+    },
+    tabItem: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: PP.xs,
+    },
   });
 }
 
