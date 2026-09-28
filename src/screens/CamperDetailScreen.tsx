@@ -638,7 +638,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                 {/* Tab Content */}
                 {activeTab === 'overview' && (
                     <View style={styles.tabContent}>
-                        {camper?.id && companyId ? (
+                        {!isDayCamp && camper?.id && companyId ? (
                             <PersonThreeDayOutlook
                                 personType="child"
                                 personId={camper.id}
@@ -837,7 +837,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
 
                 {activeTab === 'birthday' && (
                     <View style={styles.tabContent}>
-                        {/* Birthday Sub-tabs */}
+                        {!isDayCamp && (
                         <View style={styles.subTabsContainer}>
                             <ScrollView
                                 horizontal
@@ -875,9 +875,9 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                 </TouchableOpacity>
                             </ScrollView>
                         </View>
+                        )}
 
-                        {/* Birthday Info Sub-tab */}
-                        {activeBirthdaySubTab === 'info' && (
+                        {(isDayCamp || activeBirthdaySubTab === 'info') && (
                             <StyledCard style={styles.infoCard}>
                                 <View style={styles.cardHeader}>
                                     <Text style={styles.cardTitle}>Birthday Information</Text>
@@ -915,8 +915,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                             </StyledCard>
                         )}
 
-                        {/* Party Preferences Sub-tab */}
-                        {activeBirthdaySubTab === 'party' && (
+                        {!isDayCamp && activeBirthdaySubTab === 'party' && (
                             <StyledCard style={styles.infoCard}>
                                 <View style={styles.cardHeader}>
                                     <View style={styles.cardHeaderRow}>
@@ -1028,12 +1027,74 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
 
                 {activeTab === 'health-center' && (
                     <View style={styles.tabContent}>
-                        {(healthAdmissionsLoading || healthMedicationsLoading) && (
+                        {healthAdmissionsLoading && (
                             <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                                 <ActivityIndicator size="small" color={theme.colors.secondary} />
                             </View>
                         )}
-                        {!healthAdmissionsLoading && !healthMedicationsLoading && (
+                        {!healthAdmissionsLoading && isDayCamp && (
+                            <StyledCard style={styles.infoCard}>
+                                <View style={styles.cardHeader}>
+                                    <Text style={styles.cardTitle}>Health Center Visits</Text>
+                                    <Text style={styles.cardDescription}>
+                                        {healthAdmissions.length} visit{healthAdmissions.length === 1 ? '' : 's'} recorded
+                                    </Text>
+                                </View>
+                                <View style={styles.cardContent}>
+                                    {healthAdmissions.length === 0 ? (
+                                        <Text style={styles.emptyPartyText}>No Health Center visits recorded</Text>
+                                    ) : (
+                                        <View style={{ gap: 12 }}>
+                                            {healthAdmissions.map((admission: any) => {
+                                                const inVisit = !admission.checked_out_at;
+                                                const start = new Date(admission.admitted_at);
+                                                const end = admission.checked_out_at
+                                                    ? new Date(admission.checked_out_at)
+                                                    : new Date();
+                                                const diffMs = end.getTime() - start.getTime();
+                                                const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                                                const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                                                const duration =
+                                                    hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+                                                return (
+                                                    <View key={admission.id} style={styles.healthHistoryRow}>
+                                                        <View style={styles.healthHistoryHeader}>
+                                                            <Text style={styles.healthHistoryDate}>
+                                                                {start.toLocaleString('en-US', {
+                                                                    month: 'short',
+                                                                    day: 'numeric',
+                                                                    year: 'numeric',
+                                                                    hour: 'numeric',
+                                                                    minute: '2-digit',
+                                                                })}
+                                                            </Text>
+                                                            <View style={styles.healthDurationBadge}>
+                                                                <Text style={styles.healthDurationBadgeText}>
+                                                                    {inVisit ? 'In visit' : duration}
+                                                                </Text>
+                                                            </View>
+                                                        </View>
+                                                        {admission.checked_out_at ? (
+                                                            <Text style={styles.healthHistoryReason}>
+                                                                Out{' '}
+                                                                {new Date(admission.checked_out_at).toLocaleTimeString(
+                                                                    'en-US',
+                                                                    { hour: 'numeric', minute: '2-digit' },
+                                                                )}
+                                                            </Text>
+                                                        ) : null}
+                                                        {admission.reason ? (
+                                                            <Text style={styles.healthHistoryReason}>{admission.reason}</Text>
+                                                        ) : null}
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    )}
+                                </View>
+                            </StyledCard>
+                        )}
+                        {!healthAdmissionsLoading && !isDayCamp && !healthMedicationsLoading && (
                             <>
                                 {(() => {
                                     const currentAdmission = healthAdmissions.find((a: any) => !a.checked_out_at);

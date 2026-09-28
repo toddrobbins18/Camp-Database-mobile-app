@@ -29,7 +29,7 @@ const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
 
 export const DailyNewsScreen = ({ navigation }: any) => {
-    const { companyId, season, isTimberLakeWest, isTylerHill, availableCompanies } = useCompany();
+    const { companyId, season, isTimberLakeWest, isTylerHill, isDayCamp, availableCompanies } = useCompany();
     const currentCompany = availableCompanies.find((c) => c.id === companyId) ?? null;
     const showTimberLakeWestSections = isTimberLakeWestCompany(currentCompany);
     const dailyNewsSubtitle = getDailyNewsSubtitle(currentCompany);
@@ -187,9 +187,13 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                 '',
                 'Today’s events: ' + (scheduleEvents.length ? scheduleEvents.map((e: any) => e.title || e.description).join('; ') : 'None'),
                 '',
-                'Meals – Breakfast: ' + (meals?.breakfast || 'TBD'),
-                'Lunch: ' + (meals?.lunch || 'TBD'),
-                'Dinner: ' + (meals?.dinner || 'TBD'),
+                ...(isDayCamp
+                    ? ['Lunch: ' + (meals?.lunch || 'TBD')]
+                    : [
+                        'Meals – Breakfast: ' + (meals?.breakfast || 'TBD'),
+                        'Lunch: ' + (meals?.lunch || 'TBD'),
+                        'Dinner: ' + (meals?.dinner || 'TBD'),
+                    ]),
             ];
             await Share.share({
                 message: lines.join('\n'),
@@ -274,22 +278,31 @@ export const DailyNewsScreen = ({ navigation }: any) => {
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Today's Menu</Text>
                         <View style={styles.menuContainer}>
-                            <View style={styles.menuItem}>
-                                <Text style={styles.menuLabel}>Breakfast:</Text>
-                                <Text style={styles.menuValue}>{meals?.breakfast?.trim() || '—'}</Text>
-                            </View>
-                            <View style={styles.menuItem}>
-                                <Text style={styles.menuLabel}>Lunch:</Text>
-                                <Text style={styles.menuValue}>{meals?.lunch?.trim() || '—'}</Text>
-                            </View>
-                            <View style={styles.menuItem}>
-                                <Text style={styles.menuLabel}>Snack:</Text>
-                                <Text style={styles.menuValue}>{meals?.snack?.trim() || '—'}</Text>
-                            </View>
-                            <View style={styles.menuItem}>
-                                <Text style={styles.menuLabel}>Dinner:</Text>
-                                <Text style={styles.menuValue}>{meals?.dinner?.trim() || '—'}</Text>
-                            </View>
+                            {isDayCamp ? (
+                                <View style={styles.menuItem}>
+                                    <Text style={styles.menuLabel}>Lunch:</Text>
+                                    <Text style={styles.menuValue}>{meals?.lunch?.trim() || '—'}</Text>
+                                </View>
+                            ) : (
+                                <>
+                                    <View style={styles.menuItem}>
+                                        <Text style={styles.menuLabel}>Breakfast:</Text>
+                                        <Text style={styles.menuValue}>{meals?.breakfast?.trim() || '—'}</Text>
+                                    </View>
+                                    <View style={styles.menuItem}>
+                                        <Text style={styles.menuLabel}>Lunch:</Text>
+                                        <Text style={styles.menuValue}>{meals?.lunch?.trim() || '—'}</Text>
+                                    </View>
+                                    <View style={styles.menuItem}>
+                                        <Text style={styles.menuLabel}>Snack:</Text>
+                                        <Text style={styles.menuValue}>{meals?.snack?.trim() || '—'}</Text>
+                                    </View>
+                                    <View style={styles.menuItem}>
+                                        <Text style={styles.menuLabel}>Dinner:</Text>
+                                        <Text style={styles.menuValue}>{meals?.dinner?.trim() || '—'}</Text>
+                                    </View>
+                                </>
+                            )}
                         </View>
                     </View>
 

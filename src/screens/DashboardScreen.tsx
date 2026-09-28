@@ -423,6 +423,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                             <Text style={styles.statTitle}>Active Campers</Text>
                             <Text style={styles.statTrend}>Season {season}</Text>
                         </View>
+                        {!isDayCamp && (
                         <View style={[styles.statCard, styles.statCardSuccess]}>
                             <View style={[styles.statIconWrap, styles.statIconSuccess]}>
                                 <Ionicons name="bus-outline" size={18} color="#16a34a" />
@@ -435,6 +436,8 @@ export const DashboardScreen = ({ navigation }: any) => {
                             <Text style={styles.statTitle}>Transportation</Text>
                             <Text style={styles.statTrend}>All on schedule</Text>
                         </View>
+                        )}
+                        {!isDayCamp && (
                         <View style={[styles.statCard, styles.statCardInfo]}>
                             <View style={[styles.statIconWrap, styles.statIconInfo]}>
                                 <Ionicons name="document-text-outline" size={18} color="#0284c7" />
@@ -447,6 +450,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                             <Text style={styles.statTitle}>Today's Notes</Text>
                             <Text style={styles.statTrend}>Today</Text>
                         </View>
+                        )}
                     </View>
                 )}
 
@@ -764,6 +768,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                 </StyledCard>
                 )}
 
+                {!isDayCamp && (
                 <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
                     <View style={styles.cardHeader}>
                         <Ionicons name="calendar" size={20} color={theme.colors.primary} />
@@ -810,6 +815,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                         </View>
                     )}
                 </StyledCard>
+                )}
 
                 {/* Today's Birthdays */}
                 <StyledCard style={[styles.widgetCard, hasDashboardHeroBg && styles.glassCard]}>
