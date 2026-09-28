@@ -215,3 +215,17 @@ export const normalizeAddress = (raw: string): string =>
 
 export const isCampStop = (stop: TransportRouteStop) =>
   normAddr(stop.address) === normAddr(CAMP_LOCATION.address);
+
+/** Stop label for route lists: 1, 2, 3… or C for camp. */
+export function getRouteStopLabel(
+  stops: Pick<TransportRouteStop, 'address'>[],
+  index: number,
+  campAddress: string = CAMP_LOCATION.address,
+): string {
+  if (normAddr(stops[index].address) === normAddr(campAddress)) return 'C';
+  let num = 0;
+  for (let j = 0; j <= index; j++) {
+    if (normAddr(stops[j].address) !== normAddr(campAddress)) num++;
+  }
+  return String(num);
+}

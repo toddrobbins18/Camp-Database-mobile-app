@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { theme } from '../theme/theme';
-import { CAMP_LOCATION, ROUTE_COLORS, isCampStop } from '../lib/transportBoardUtils';
+import { CAMP_LOCATION, ROUTE_COLORS, getRouteStopLabel, isCampStop } from '../lib/transportBoardUtils';
 import { todayDateString } from '../lib/transportDailyOverrides';
 import { TransportRouteMapNative } from '../components/TransportRouteMapNative';
 import { DAY_CAMP_REPORTS, useDayCampTransport } from '../hooks/useDayCampTransport';
@@ -257,6 +257,14 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                           style={styles.stopRow}
                           onPress={() => !isCampStop(stop) && t.setStopAction({ routeId: r.id, stopIndex: i, stop })}
                         >
+                          <View
+                            style={[
+                              styles.stopNumber,
+                              { backgroundColor: isCampStop(stop) ? '#16a34a' : r.color },
+                            ]}
+                          >
+                            <Text style={styles.stopNumberText}>{getRouteStopLabel(r.stops, i)}</Text>
+                          </View>
                           <Text style={styles.stopName} numberOfLines={1}>
                             {isCampStop(stop) ? stop.name : stop.camperNames?.join(', ') || stop.name}
                           </Text>
@@ -700,7 +708,16 @@ const styles = StyleSheet.create({
   routeName: { fontSize: 10, color: theme.colors.textSecondary, marginTop: 2 },
   routeMeta: { fontSize: 10, color: theme.colors.textSecondary, marginTop: 2 },
   stopList: { maxHeight: 80, marginTop: 6 },
-  stopRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
+  stopRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
+  stopNumber: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  stopNumberText: { fontSize: 9, fontWeight: '700', color: '#fff' },
   stopName: { flex: 1, fontSize: 10, color: theme.colors.text },
   stopTime: { fontSize: 9, color: theme.colors.textSecondary, marginLeft: 4 },
   tabContent: { flex: 1 },
