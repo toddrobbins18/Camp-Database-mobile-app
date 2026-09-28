@@ -6,28 +6,16 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
-import {
-  HIRING_COLUMNS,
-  HiringStaffMember,
-  HiringStatus,
-} from '../constants/hiringStaffData';
-import { fetchHiredStaffForHiring } from '../lib/hiringRoster';
+import type { HiringStaffMember } from '../lib/hiringRoster';
+import { fetchHiredStaffForHiring, mergeHiringPipelineWithSaved } from '../lib/hiringRoster';
 
 const HIRING_STORAGE_KEY_PREFIX = 'hiring-board-state-v2';
-
-const COLUMN_HEADER: Record<HiringStatus, { bg: string; text: string }> = {
-  'to-hire': { bg: theme.colors.primary, text: '#ffffff' },
-  interviewing: { bg: '#f59e0b', text: '#ffffff' },
-  offered: { bg: '#64748b', text: '#ffffff' },
-  hired: { bg: '#10b981', text: '#ffffff' },
-};
 
 const DEPT_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   PROGRAMMING: { bg: '#eff6ff', text: theme.colors.primary, border: '#bfdbfe' },
@@ -45,11 +33,7 @@ async function loadStaff(storageKey: string, companyId: string, season: string):
     if (!raw) return roster;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return roster;
-    const savedById = new Map((parsed as HiringStaffMember[]).map((s) => [s.id, s]));
-    return roster.map((member) => {
-      const prev = savedById.get(member.id);
-      return prev ? { ...member, ...prev, id: member.id, name: member.name } : member;
-    });
+    return mergeHiringPipelineWithSaved(roster, parsed as HiringStaffMember[]);
   } catch {
     if (!companyId) return [];
     return fetchHiredStaffForHiring(companyId, season);
@@ -86,13 +70,8 @@ export function HiringScreen({ navigation }: any) {
     [staff, searchQuery],
   );
 
-  const totalPositions = staff.length;
-  const hiredCount = staff.filter((s) => s.status === 'hired').length;
-  const toHireCount = staff.filter((s) => s.status === 'to-hire').length;
-  const interviewingCount = staff.filter((s) => s.status === 'interviewing').length;
+  const hiredCount = staff.length;
   const totalBudget = staff.reduce((sum, s) => sum + s.netBudget, 0);
-  const usedBudget = staff.filter((s) => s.status === 'hired').reduce((sum, s) => sum + s.netBudget, 0);
-  const budgetPct = totalBudget > 0 ? (usedBudget / totalBudget) * 100 : 0;
 
   const departments = useMemo(() => Array.from(new Set(staff.map((s) => s.department))), [staff]);
 
@@ -103,31 +82,12 @@ export function HiringScreen({ navigation }: any) {
         return {
           name: dept,
           totalPositions: deptStaff.length,
-          filled: deptStaff.filter((s) => s.status === 'hired').length,
-          budgetUsed: deptStaff.filter((s) => s.status === 'hired').reduce((sum, s) => sum + s.netBudget, 0),
+          filled: deptStaff.length,
+          budgetUsed: deptStaff.reduce((sum, s) => sum + s.netBudget, 0),
         };
       }),
     [departments, staff],
   );
-
-  const updateStatus = useCallback((id: string, status: HiringStatus) => {
-    setStaff((prev) => prev.map((m) => (m.id === id ? { ...m, status } : m)));
-  }, []);
-
-  const promptMove = (member: HiringStaffMember) => {
-    const options = HIRING_COLUMNS.filter((c) => c.status !== member.status);
-    Alert.alert(
-      member.name,
-      'Move to hiring status',
-      [
-        ...options.map((col) => ({
-          text: col.title,
-          onPress: () => updateStatus(member.id, col.status),
-        })),
-        { text: 'Cancel', style: 'cancel' as const },
-      ],
-    );
-  };
 
   const renderStaffCard = (member: HiringStaffMember) => {
     const deptStyle = DEPT_COLORS[member.department] ?? {
@@ -137,12 +97,7 @@ export function HiringScreen({ navigation }: any) {
     };
 
     return (
-      <TouchableOpacity
-        key={member.id}
-        style={styles.staffCard}
-        activeOpacity={0.85}
-        onPress={() => promptMove(member)}
-      >
+      <View key={member.id} style={styles.staffCard}>
         <View style={styles.cardRow}>
           <Ionicons name="reorder-three-outline" size={18} color={theme.colors.textSecondary} />
           <View style={styles.cardBody}>
@@ -162,7 +117,7 @@ export function HiringScreen({ navigation }: any) {
             {!!member.notes && <Text style={styles.cardNotes}>{member.notes}</Text>}
           </View>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -177,7 +132,7 @@ export function HiringScreen({ navigation }: any) {
         </View>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Staff Hiring {season}</Text>
-          <Text style={styles.headerSubtitle}>Hired staff from {season} roster</Text>
+          <Text style={styles.headerSubtitle}>Active hired staff for {season} only</Text>
         </View>
       </View>
 
@@ -194,10 +149,8 @@ export function HiringScreen({ navigation }: any) {
 
         <View style={styles.statsGrid}>
           {[
-            { title: 'Total Positions', value: totalPositions, icon: 'people-outline' as const, color: theme.colors.text },
-            { title: 'Hired', value: hiredCount, icon: 'checkmark-circle-outline' as const, color: '#10b981' },
-            { title: 'To Hire', value: toHireCount, icon: 'person-add-outline' as const, color: theme.colors.primary },
-            { title: 'In Progress', value: interviewingCount, icon: 'people-outline' as const, color: '#f59e0b' },
+            { title: 'Hired Staff', value: hiredCount, icon: 'checkmark-circle-outline' as const, color: '#10b981' },
+            { title: 'Departments', value: departments.length, icon: 'business-outline' as const, color: theme.colors.primary },
           ].map((stat) => (
             <View key={stat.title} style={styles.statCard}>
               <View>
@@ -211,16 +164,12 @@ export function HiringScreen({ navigation }: any) {
           ))}
         </View>
 
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Budget Overview</Text>
-          <View style={styles.budgetRow}><Text style={styles.budgetLabel}>Total Budget</Text><Text style={styles.budgetValue}>${totalBudget.toLocaleString()}</Text></View>
-          <View style={styles.budgetRow}><Text style={styles.budgetLabel}>Committed</Text><Text style={[styles.budgetValue, { color: '#10b981' }]}>${usedBudget.toLocaleString()}</Text></View>
-          <View style={styles.budgetRow}><Text style={styles.budgetLabel}>Available</Text><Text style={[styles.budgetValue, { color: theme.colors.primary }]}>${(totalBudget - usedBudget).toLocaleString()}</Text></View>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${budgetPct}%` }]} />
+        {totalBudget > 0 && (
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Budget Overview</Text>
+            <View style={styles.budgetRow}><Text style={styles.budgetLabel}>Total on roster</Text><Text style={styles.budgetValue}>${totalBudget.toLocaleString()}</Text></View>
           </View>
-          <Text style={styles.progressCaption}>{budgetPct.toFixed(1)}% of budget committed</Text>
-        </View>
+        )}
 
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>Department Breakdown</Text>
@@ -246,37 +195,25 @@ export function HiringScreen({ navigation }: any) {
         </View>
 
         <View style={styles.pipelineHeader}>
-          <Text style={styles.pipelineTitle}>Hiring Pipeline</Text>
-          <Text style={styles.pipelineSubtitle}>Tap a staff card to update their hiring status</Text>
+          <Text style={styles.pipelineTitle}>{season} Hired Staff</Text>
+          <Text style={styles.pipelineSubtitle}>
+            {loading ? 'Loading…' : `${filteredStaff.length} active hired for this camp and season`}
+          </Text>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.kanbanRow}>
-          {HIRING_COLUMNS.map((column) => {
-            const columnStaff = filteredStaff.filter((s) => s.status === column.status);
-            const columnBudget = columnStaff.reduce((sum, s) => sum + s.netBudget, 0);
-            const header = COLUMN_HEADER[column.status];
-            return (
-              <View key={column.status} style={styles.column}>
-                <View style={[styles.columnHeader, { backgroundColor: header.bg }]}>
-                  <View style={styles.columnHeaderTop}>
-                    <Text style={[styles.columnTitle, { color: header.text }]}>{column.title}</Text>
-                    <View style={styles.columnCountBadge}>
-                      <Text style={styles.columnCountText}>{columnStaff.length}</Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.columnBudget, { color: header.text }]}>Budget: ${columnBudget.toLocaleString()}</Text>
-                </View>
-                <ScrollView style={styles.columnBody} nestedScrollEnabled>
-                  {columnStaff.length === 0 ? (
-                    <Text style={styles.emptyColumn}>Drop staff here</Text>
-                  ) : (
-                    columnStaff.map(renderStaffCard)
-                  )}
-                </ScrollView>
+        {departmentStats.map((dept) => {
+          const deptStaff = filteredStaff.filter((s) => s.department === dept.name);
+          if (deptStaff.length === 0) return null;
+          return (
+            <View key={dept.name} style={styles.deptSection}>
+              <View style={styles.deptSectionHeader}>
+                <Text style={styles.deptSectionTitle}>{dept.name}</Text>
+                <Text style={styles.deptSectionCount}>{deptStaff.length} hired</Text>
               </View>
-            );
-          })}
-        </ScrollView>
+              {deptStaff.map(renderStaffCard)}
+            </View>
+          );
+        })}
       </ScrollView>
     </SafeAreaView>
   );
@@ -360,26 +297,10 @@ const styles = StyleSheet.create({
   pipelineHeader: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
   pipelineTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.text },
   pipelineSubtitle: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 },
-  kanbanRow: { paddingHorizontal: 12, paddingBottom: 24, gap: 12 },
-  column: { width: 280, marginHorizontal: 4 },
-  columnHeader: { borderTopLeftRadius: 10, borderTopRightRadius: 10, padding: 14 },
-  columnHeaderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  columnTitle: { fontSize: 16, fontWeight: '600' },
-  columnCountBadge: { backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
-  columnCountText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  columnBudget: { fontSize: 12, opacity: 0.9 },
-  columnBody: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderTopWidth: 0,
-    borderColor: theme.colors.border,
-    borderBottomLeftRadius: 10,
-    borderBottomRightRadius: 10,
-    minHeight: 420,
-    maxHeight: 520,
-    padding: 10,
-  },
-  emptyColumn: { textAlign: 'center', color: theme.colors.textSecondary, fontSize: 13, paddingVertical: 48 },
+  deptSection: { marginHorizontal: 16, marginBottom: 16 },
+  deptSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  deptSectionTitle: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  deptSectionCount: { fontSize: 12, color: theme.colors.textSecondary },
   staffCard: {
     backgroundColor: '#fff',
     borderRadius: 8,

@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export type HiringStatus = 'to-hire' | 'interviewing' | 'offered' | 'hired';
+export type HiringStatus = 'hired';
 
 export type HiringStaffMember = {
   id: string;
@@ -15,11 +15,15 @@ export type HiringStaffMember = {
   notes?: string;
 };
 
-export function isHiredStaffStatus(status: unknown): boolean {
-  if (status == null) return true;
-  const s = String(status).trim().toLowerCase();
+export function isActiveHiredStaffRow(row: {
+  status?: unknown;
+  name?: unknown;
+}): boolean {
+  const name = String(row.name ?? '').trim();
+  if (!name || name.toLowerCase() === 'unknown') return false;
+  const s = String(row.status ?? 'active').trim().toLowerCase();
   if (!s) return true;
-  return !['inactive', 'resigned', 'dismissed', 'cancelled', 'terminated'].includes(s);
+  return s === 'active' || s !== 'inactive';
 }
 
 export async function fetchHiredStaffForHiring(
@@ -31,12 +35,15 @@ export async function fetchHiredStaffForHiring(
     .select('id, name, role, department, status, staff_type')
     .eq('company_id', companyId)
     .eq('season', season)
+    .or('status.eq.active,status.is.null,status.eq.Active')
+    .neq('name', 'Unknown')
+    .not('name', 'is', null)
     .order('name');
 
   if (error) throw error;
 
   return (data || [])
-    .filter((row) => isHiredStaffStatus(row.status))
+    .filter(isActiveHiredStaffRow)
     .map((row) => ({
       id: row.id,
       name: row.name,
@@ -48,4 +55,25 @@ export async function fetchHiredStaffForHiring(
       netBudget: 0,
       status: 'hired' as const,
     }));
+}
+
+export function mergeHiringPipelineWithSaved(
+  roster: HiringStaffMember[],
+  saved: HiringStaffMember[] | null | undefined,
+): HiringStaffMember[] {
+  if (!saved?.length) return roster;
+  const savedById = new Map(saved.map((s) => [s.id, s]));
+  return roster.map((member) => {
+    const prev = savedById.get(member.id);
+    if (!prev) return member;
+    return {
+      ...member,
+      status: 'hired' as const,
+      actualBudget: prev.actualBudget ?? member.actualBudget,
+      proposedBudget: prev.proposedBudget ?? member.proposedBudget,
+      kidCredit: prev.kidCredit ?? member.kidCredit,
+      netBudget: prev.netBudget ?? member.netBudget,
+      notes: prev.notes ?? member.notes,
+    };
+  });
 }
