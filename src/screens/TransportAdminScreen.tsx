@@ -21,7 +21,7 @@ import { FrontOfficeBackButton } from '../components/FrontOfficeBackButton';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
-import { campDateTimeToIso, swimLessonBusRun } from '../lib/campTime';
+import { campDateTimeToIso } from '../lib/campTime';
 import {
   ABSENCE_TYPE_LABELS,
   approveDismissalAbsence,
@@ -608,14 +608,6 @@ function SwimLogForm({
 
   useEffect(() => setLessonDate(defaultDate), [defaultDate]);
 
-  const busHint = useMemo(() => {
-    try {
-      return swimLessonBusRun(campDateTimeToIso(lessonDate, time)).toUpperCase();
-    } catch {
-      return 'AM/PM';
-    }
-  }, [lessonDate, time]);
-
   const submit = async () => {
     if (!camperId) return Alert.alert('Error', 'Select a camper');
     setSaving(true);
@@ -631,7 +623,7 @@ function SwimLogForm({
         transport_status: staffConfirmed ? 'submitted' : null,
       });
       if (error) throw error;
-      Alert.alert('Scheduled', `Approve to remove camper from ${busHint} bus`);
+      Alert.alert('Scheduled', 'Approve to remove camper from PM bus');
       onSaved();
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Save failed');
@@ -643,7 +635,7 @@ function SwimLogForm({
   return (
     <View style={styles.formCard}>
       <Text style={styles.formTitle}>Log swim lesson (bus exception)</Text>
-      <Text style={styles.formHint}>Skips {busHint} bus when approved</Text>
+      <Text style={styles.formHint}>Already at camp in AM — PM bus only when approved</Text>
       <CamperPicker label="Camper" campers={campers} value={camperId} onChange={setCamperId} />
       <TextInput style={styles.input} value={lessonDate} onChangeText={setLessonDate} placeholder="YYYY-MM-DD" />
       <TextInput style={styles.input} value={time} onChangeText={setTime} placeholder="HH:MM (24h)" />
@@ -703,7 +695,7 @@ function NurseLogForm({
   return (
     <View style={styles.formCard}>
       <Text style={styles.formTitle}>Nurse sent home</Text>
-      <Text style={styles.formHint}>Removes camper from AM & PM bus when approved</Text>
+      <Text style={styles.formHint}>Already at camp in AM — PM bus only when approved</Text>
       <CamperPicker label="Camper" campers={campers} value={camperId} onChange={setCamperId} />
       <TextInput style={styles.input} value={recordDate} onChangeText={setRecordDate} placeholder="YYYY-MM-DD" />
       <TextInput style={styles.input} value={reason} onChangeText={setReason} placeholder="Reason" />
