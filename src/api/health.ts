@@ -130,6 +130,13 @@ export interface HealthCenterAdmission {
     checked_out_by?: string | null;
     reason?: string | null;
     notes?: string | null;
+    treatment?: string | null;
+    incident_location?: string | null;
+    group_name?: string | null;
+    counselor_name?: string | null;
+    nurse_name?: string | null;
+    sent_home?: string | null;
+    called_home?: string | null;
     season?: string;
     created_at?: string;
     visit_type?: 'admission' | 'observation' | string | null;

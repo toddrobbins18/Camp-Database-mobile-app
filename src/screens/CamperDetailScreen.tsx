@@ -35,6 +35,7 @@ import {
     mergeCamperContact,
 } from '../lib/camperContactInfo';
 import { resolveChildForCampView } from '../lib/profileCampResolution';
+import { HealthCenterVisitDetailRows } from '../components/health/HealthCenterDayCampPanel';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -1046,16 +1047,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                     ) : (
                                         <View style={{ gap: 12 }}>
                                             {healthAdmissions.map((admission: any) => {
-                                                const inVisit = !admission.checked_out_at;
                                                 const start = new Date(admission.admitted_at);
-                                                const end = admission.checked_out_at
-                                                    ? new Date(admission.checked_out_at)
-                                                    : new Date();
-                                                const diffMs = end.getTime() - start.getTime();
-                                                const hours = Math.floor(diffMs / (1000 * 60 * 60));
-                                                const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                                                const duration =
-                                                    hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
                                                 return (
                                                     <View key={admission.id} style={styles.healthHistoryRow}>
                                                         <View style={styles.healthHistoryHeader}>
@@ -1068,24 +1060,11 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                                     minute: '2-digit',
                                                                 })}
                                                             </Text>
-                                                            <View style={styles.healthDurationBadge}>
-                                                                <Text style={styles.healthDurationBadgeText}>
-                                                                    {inVisit ? 'In visit' : duration}
-                                                                </Text>
-                                                            </View>
                                                         </View>
-                                                        {admission.checked_out_at ? (
-                                                            <Text style={styles.healthHistoryReason}>
-                                                                Out{' '}
-                                                                {new Date(admission.checked_out_at).toLocaleTimeString(
-                                                                    'en-US',
-                                                                    { hour: 'numeric', minute: '2-digit' },
-                                                                )}
-                                                            </Text>
-                                                        ) : null}
                                                         {admission.reason ? (
                                                             <Text style={styles.healthHistoryReason}>{admission.reason}</Text>
                                                         ) : null}
+                                                        <HealthCenterVisitDetailRows visit={admission} />
                                                     </View>
                                                 );
                                             })}

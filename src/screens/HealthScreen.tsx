@@ -30,6 +30,7 @@ import {
 } from '../lib/medicationMealTimeDisplay';
 import { MedicationMealTimeBadges } from '../components/nurse/MedicationMealTimeBadges';
 import { findInListByRfid, lookupChildByRfid, normalizeRfidInput, resolveCamperOrStaffByRfid } from '../lib/rfidUtils';
+import { HealthCenterDayCampPanel } from '../components/health/HealthCenterDayCampPanel';
 
 const GENDER_FILTER_OPTIONS = [
     { value: 'all' as const, label: 'All Genders' },
@@ -179,7 +180,7 @@ const isSameCalendarDay = (a: Date, b: Date) =>
 
 export const HealthScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
-    const { companyId, season } = useCompany();
+    const { companyId, season, isDayCamp } = useCompany();
     const { data: campersData, isLoading: campersLoading, isError: campersError } = useCampers(companyId, season);
     const {
         data: healthCenterStaffData = [],
@@ -1506,6 +1507,30 @@ export const HealthScreen = ({ navigation }: any) => {
                                 )}
                             </StyledCard>
                         ) : activeTab === 'Health Center' ? (
+                            isDayCamp && companyId && season ? (
+                                <HealthCenterDayCampPanel
+                                    companyId={companyId}
+                                    season={season}
+                                    children={safeCampers.map((c: any) => ({
+                                        id: c.id,
+                                        name: getChildDisplayName(c),
+                                        group_name: c.group_name,
+                                        division: c.division,
+                                        leader: c.leader,
+                                    }))}
+                                    staff={safeStaff.map((s: any) => ({
+                                        id: s.id,
+                                        name: s.name,
+                                        role: s.role,
+                                    }))}
+                                    visits={admissionHistory}
+                                    onVisitLogged={() => {
+                                        void queryClient.invalidateQueries({
+                                            queryKey: ['health_center_admissions', companyId, season],
+                                        });
+                                    }}
+                                />
+                            ) : (
                             <View style={styles.healthCenterContainer}>
                                 {/* Health Center Admissions Header */}
                                 <View style={styles.healthCenterHeader}>
@@ -1792,7 +1817,33 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </ScrollView>
                                 </View>
                             </View>
+                            )
                         ) : activeTab === 'Health Center Log' ? (
+                            isDayCamp && companyId && season ? (
+                                <HealthCenterDayCampPanel
+                                    companyId={companyId}
+                                    season={season}
+                                    children={safeCampers.map((c: any) => ({
+                                        id: c.id,
+                                        name: getChildDisplayName(c),
+                                        group_name: c.group_name,
+                                        division: c.division,
+                                        leader: c.leader,
+                                    }))}
+                                    staff={safeStaff.map((s: any) => ({
+                                        id: s.id,
+                                        name: s.name,
+                                        role: s.role,
+                                    }))}
+                                    visits={admissionHistory}
+                                    onVisitLogged={() => {
+                                        void queryClient.invalidateQueries({
+                                            queryKey: ['health_center_admissions', companyId, season],
+                                        });
+                                    }}
+                                    mode="log-only"
+                                />
+                            ) : (
                             <StyledCard style={styles.healthCenterLogCard}>
                                 <View style={styles.healthCenterLogHeader}>
                                     <Ionicons name="bar-chart-outline" size={24} color={theme.colors.text} />
@@ -1884,6 +1935,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                     </ScrollView>
                                 )}
                             </StyledCard>
+                            )
                         ) : activeTab === 'Add Medication' ? (
                             <StyledCard style={styles.addMedicationCard}>
                                 <View style={styles.addMedicationHeader}>
