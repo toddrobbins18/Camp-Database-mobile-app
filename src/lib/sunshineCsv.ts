@@ -57,4 +57,5 @@ export function pickFirst(row: Record<string, string>, keys: string[]): string {
 }
 
 export const SUNSHINE_CSV_TEMPLATE =
-  'name,parent_email,group\nJane Doe,parent@example.com,Pandas\nJohn Smith,,Bunnies\n';
+  "Child's Name,Group,Sports,Activities,Lunch,BM,Napped?,Send Email\n" +
+  'Jane Doe,Bunnies,"Swimming,Soccer","Arts + Crafts,Glow party","Pizza,Pasta,Fruit,Jelly Sandwich",No,Yes,checked\n';
