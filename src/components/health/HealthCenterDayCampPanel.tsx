@@ -326,6 +326,9 @@ export function HealthCenterDayCampPanel({
 
         <Text style={styles.fieldLabel}>
           Search {entityType === 'camper' ? 'campers' : 'staff'}
+          {filteredPeople.length > 0
+            ? ` (${filteredPeople.length}${search.trim() ? ' matches' : ' total'})`
+            : ''}
         </Text>
         <View style={styles.searchRow}>
           <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
@@ -342,7 +345,7 @@ export function HealthCenterDayCampPanel({
           {filteredPeople.length === 0 ? (
             <Text style={styles.emptyText}>No matches</Text>
           ) : (
-            filteredPeople.slice(0, 50).map((person) => (
+            filteredPeople.map((person) => (
               <TouchableOpacity
                 key={person.id}
                 style={[styles.personRow, selectedId === person.id && styles.personRowSelected]}

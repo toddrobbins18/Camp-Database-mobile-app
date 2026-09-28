@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,21 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
+import {
+  buildSwimLessonRows,
+  CAMP_WEEKDAY_OPTIONS,
+  generateRecurringSwimLessonDates,
+  resolveSwimLessonWeekCalendar,
+  swimLessonWeekOptions,
+  type CampWeekday,
+} from '../lib/swimLessonSchedule';
+import {
+  loadEnrollmentWeekCalendar,
+  type EnrollmentWeekCalendar,
+} from '../lib/enrollmentWeekCalendar';
+import { campDateTimeToIso } from '../lib/campTime';
+
+type ScheduleMode = 'once' | 'recurring';
 
 type Camper = { id: string; name: string; guardian_email: string | null };
 type Lesson = {
@@ -59,9 +74,34 @@ export function SwimLessonsScreen({ navigation }: any) {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('once');
+  const [weekCalendar, setWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
+  const [selectedWeeks, setSelectedWeeks] = useState<number[]>([]);
+  const [selectedDays, setSelectedDays] = useState<CampWeekday[]>([]);
+
+  const resolvedCalendar = useMemo(
+    () => resolveSwimLessonWeekCalendar(weekCalendar, season),
+    [weekCalendar, season],
+  );
+
+  const recurringDates = useMemo(
+    () =>
+      scheduleMode === 'recurring'
+        ? generateRecurringSwimLessonDates(resolvedCalendar, selectedWeeks, selectedDays)
+        : [],
+    [scheduleMode, resolvedCalendar, selectedWeeks, selectedDays],
+  );
+
+  const weekOptions = useMemo(
+    () => swimLessonWeekOptions(resolvedCalendar),
+    [resolvedCalendar],
+  );
 
   const resetForm = () => {
     setCamperId('');
+    setScheduleMode('once');
+    setSelectedWeeks([]);
+    setSelectedDays([]);
     setDuration('30');
     setInstructor('');
     setLocation('');
@@ -94,6 +134,27 @@ export function SwimLessonsScreen({ navigation }: any) {
     load();
   }, [companyId, season]);
 
+  useEffect(() => {
+    if (!scheduleModalOpen || !companyId) return;
+    void loadEnrollmentWeekCalendar(supabase, companyId, season).then(setWeekCalendar);
+  }, [scheduleModalOpen, companyId, season]);
+
+  const toggleWeek = (weekNumber: number) => {
+    setSelectedWeeks((prev) =>
+      prev.includes(weekNumber)
+        ? prev.filter((w) => w !== weekNumber)
+        : [...prev, weekNumber].sort((a, b) => a - b),
+    );
+  };
+
+  const toggleDay = (day: CampWeekday) => {
+    setSelectedDays((prev) =>
+      prev.includes(day)
+        ? prev.filter((d) => d !== day)
+        : [...prev, day].sort(),
+    );
+  };
+
   const camperName = (id: string) => {
     const c = campers.find(x => x.id === id);
     return c ? c.name : "—";
@@ -107,28 +168,69 @@ export function SwimLessonsScreen({ navigation }: any) {
       Alert.alert('Error', 'Please select a camper');
       return;
     }
-    
-    setSaving(true);
-    const scheduled_at = date.toISOString();
-    
-    const { error } = await supabase.from('swim_lessons').insert({
-      company_id: companyId,
-      camper_id: camperId,
-      scheduled_at,
-      duration_minutes: parseInt(duration) || 30,
-      instructor: instructor || null,
-      location: location || null,
-      cost_cents: Math.round(parseFloat(cost || "0") * 100),
-      notes: notes || null,
-    });
 
-    setSaving(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
+    const durationMinutes = parseInt(duration) || 30;
+    const costCents = Math.round(parseFloat(cost || '0') * 100);
+    const instructorVal = instructor || null;
+    const locationVal = location || null;
+    const notesVal = notes || null;
+    const timeStr = format(date, 'HH:mm');
+
+    setSaving(true);
+
+    if (scheduleMode === 'recurring') {
+      if (selectedWeeks.length === 0 || selectedDays.length === 0) {
+        setSaving(false);
+        Alert.alert('Error', 'Pick at least one week and one day');
+        return;
+      }
+      if (recurringDates.length === 0) {
+        setSaving(false);
+        Alert.alert('Error', 'No lesson dates match your selection');
+        return;
+      }
+
+      const seriesId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`;
+      const rows = buildSwimLessonRows({
+        companyId,
+        camperId,
+        dates: recurringDates,
+        time: timeStr,
+        durationMinutes,
+        instructor: instructorVal,
+        location: locationVal,
+        costCents,
+        notes: notesVal,
+        recurrenceSeriesId: seriesId,
+      });
+
+      const { error } = await supabase.from('swim_lessons').insert(rows);
+      setSaving(false);
+      if (error) {
+        Alert.alert('Error', error.message);
+        return;
+      }
+      Alert.alert('Success', `${rows.length} swim lessons scheduled`);
+    } else {
+      const scheduled_at = campDateTimeToIso(format(date, 'yyyy-MM-dd'), timeStr);
+      const { error } = await supabase.from('swim_lessons').insert({
+        company_id: companyId,
+        camper_id: camperId,
+        scheduled_at,
+        duration_minutes: durationMinutes,
+        instructor: instructorVal,
+        location: locationVal,
+        cost_cents: costCents,
+        notes: notesVal,
+      });
+      setSaving(false);
+      if (error) {
+        Alert.alert('Error', error.message);
+        return;
+      }
+      Alert.alert('Success', 'Swim lesson scheduled');
     }
 
-    Alert.alert('Success', 'Swim lesson scheduled');
     setScheduleModalOpen(false);
     resetForm();
     load();
@@ -276,57 +378,163 @@ export function SwimLessonsScreen({ navigation }: any) {
                 ))}
               </ScrollView>
 
-              <View style={styles.row}>
-                <View style={styles.flex1}>
-                  <Text style={styles.label}>Date</Text>
-                  <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
-                    <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
-                    <Text style={styles.datePickerText}>{format(date, 'MMM d, yyyy')}</Text>
-                  </TouchableOpacity>
-                  {showDatePicker && (
-                    <DateTimePicker
-                      value={date}
-                      mode="date"
-                      display="default"
-                      onChange={(_event, selectedDate) => {
-                        setShowDatePicker(false);
-                        if (selectedDate) {
-                          const newDate = new Date(date);
-                          newDate.setFullYear(
-                            selectedDate.getFullYear(),
-                            selectedDate.getMonth(),
-                            selectedDate.getDate(),
-                          );
-                          setDate(newDate);
-                        }
-                      }}
-                    />
-                  )}
-                </View>
-                <View style={{ width: 12 }} />
-                <View style={styles.flex1}>
-                  <Text style={styles.label}>Time</Text>
-                  <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowTimePicker(true)}>
-                    <Ionicons name="time-outline" size={18} color={theme.colors.textSecondary} />
-                    <Text style={styles.datePickerText}>{format(date, 'h:mm a')}</Text>
-                  </TouchableOpacity>
-                  {showTimePicker && (
-                    <DateTimePicker
-                      value={date}
-                      mode="time"
-                      display="default"
-                      onChange={(_event, selectedDate) => {
-                        setShowTimePicker(false);
-                        if (selectedDate) {
-                          const newDate = new Date(date);
-                          newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
-                          setDate(newDate);
-                        }
-                      }}
-                    />
-                  )}
-                </View>
+              <Text style={styles.label}>Schedule type</Text>
+              <View style={styles.modeRow}>
+                <TouchableOpacity
+                  style={[styles.modeChip, scheduleMode === 'once' && styles.chipActive]}
+                  onPress={() => setScheduleMode('once')}
+                >
+                  <Text style={[styles.chipText, scheduleMode === 'once' && styles.chipTextActive]}>
+                    One-time
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modeChip, scheduleMode === 'recurring' && styles.chipActive]}
+                  onPress={() => setScheduleMode('recurring')}
+                >
+                  <Text style={[styles.chipText, scheduleMode === 'recurring' && styles.chipTextActive]}>
+                    Recurring by week
+                  </Text>
+                </TouchableOpacity>
               </View>
+
+              {scheduleMode === 'once' ? (
+                <View style={styles.row}>
+                  <View style={styles.flex1}>
+                    <Text style={styles.label}>Date</Text>
+                    <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
+                      <Ionicons name="calendar-outline" size={18} color={theme.colors.textSecondary} />
+                      <Text style={styles.datePickerText}>{format(date, 'MMM d, yyyy')}</Text>
+                    </TouchableOpacity>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={date}
+                        mode="date"
+                        display="default"
+                        onChange={(_event, selectedDate) => {
+                          setShowDatePicker(false);
+                          if (selectedDate) {
+                            const newDate = new Date(date);
+                            newDate.setFullYear(
+                              selectedDate.getFullYear(),
+                              selectedDate.getMonth(),
+                              selectedDate.getDate(),
+                            );
+                            setDate(newDate);
+                          }
+                        }}
+                      />
+                    )}
+                  </View>
+                  <View style={{ width: 12 }} />
+                  <View style={styles.flex1}>
+                    <Text style={styles.label}>Time</Text>
+                    <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowTimePicker(true)}>
+                      <Ionicons name="time-outline" size={18} color={theme.colors.textSecondary} />
+                      <Text style={styles.datePickerText}>{format(date, 'h:mm a')}</Text>
+                    </TouchableOpacity>
+                    {showTimePicker && (
+                      <DateTimePicker
+                        value={date}
+                        mode="time"
+                        display="default"
+                        onChange={(_event, selectedDate) => {
+                          setShowTimePicker(false);
+                          if (selectedDate) {
+                            const newDate = new Date(date);
+                            newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
+                            setDate(newDate);
+                          }
+                        }}
+                      />
+                    )}
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.row}>
+                    <View style={styles.flex1}>
+                      <Text style={styles.label}>Time</Text>
+                      <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowTimePicker(true)}>
+                        <Ionicons name="time-outline" size={18} color={theme.colors.textSecondary} />
+                        <Text style={styles.datePickerText}>{format(date, 'h:mm a')}</Text>
+                      </TouchableOpacity>
+                      {showTimePicker && (
+                        <DateTimePicker
+                          value={date}
+                          mode="time"
+                          display="default"
+                          onChange={(_event, selectedDate) => {
+                            setShowTimePicker(false);
+                            if (selectedDate) {
+                              const newDate = new Date(date);
+                              newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
+                              setDate(newDate);
+                            }
+                          }}
+                        />
+                      )}
+                    </View>
+                  </View>
+
+                  <Text style={styles.label}>Weeks</Text>
+                  <View style={styles.weekGrid}>
+                    {weekOptions.map((week) => (
+                      <TouchableOpacity
+                        key={week.weekNumber}
+                        style={[
+                          styles.weekChip,
+                          selectedWeeks.includes(week.weekNumber) && styles.chipActive,
+                        ]}
+                        onPress={() => toggleWeek(week.weekNumber)}
+                      >
+                        <Text
+                          style={[
+                            styles.weekChipTitle,
+                            selectedWeeks.includes(week.weekNumber) && styles.chipTextActive,
+                          ]}
+                        >
+                          {week.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.weekChipRange,
+                            selectedWeeks.includes(week.weekNumber) && styles.weekChipRangeActive,
+                          ]}
+                        >
+                          {week.range}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.label}>Days</Text>
+                  <View style={styles.modeRow}>
+                    {CAMP_WEEKDAY_OPTIONS.map((day) => (
+                      <TouchableOpacity
+                        key={day.value}
+                        style={[styles.dayChip, selectedDays.includes(day.value) && styles.chipActive]}
+                        onPress={() => toggleDay(day.value)}
+                      >
+                        <Text
+                          style={[
+                            styles.chipText,
+                            selectedDays.includes(day.value) && styles.chipTextActive,
+                          ]}
+                        >
+                          {day.short}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.previewText}>
+                    {recurringDates.length > 0
+                      ? `${recurringDates.length} lesson${recurringDates.length === 1 ? '' : 's'} will be scheduled`
+                      : 'Pick at least one week and one day'}
+                  </Text>
+                </>
+              )}
 
               <View style={styles.row}>
                 <View style={styles.flex1}>
@@ -381,7 +589,13 @@ export function SwimLessonsScreen({ navigation }: any) {
                 disabled={saving}
               >
                 <Ionicons name="calendar" size={18} color="#fff" />
-                <Text style={styles.submitButtonText}>{saving ? 'Saving...' : 'Schedule'}</Text>
+                <Text style={styles.submitButtonText}>
+                  {saving
+                    ? 'Saving...'
+                    : scheduleMode === 'recurring' && recurringDates.length > 1
+                      ? `Schedule ${recurringDates.length} lessons`
+                      : 'Schedule'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -712,5 +926,63 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: '#fff',
     fontWeight: '500',
-  }
+  },
+  modeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
+  modeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  weekGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
+  weekChip: {
+    width: '48%',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  weekChipTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  weekChipRange: {
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  weekChipRangeActive: {
+    color: 'rgba(255,255,255,0.85)',
+  },
+  dayChip: {
+    minWidth: 44,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+  },
+  previewText: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginTop: 8,
+    marginBottom: 4,
+  },
 });
