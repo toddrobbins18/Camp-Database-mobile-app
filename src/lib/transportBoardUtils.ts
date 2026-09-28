@@ -53,23 +53,83 @@ const drivingMinutes = (lat1: number, lng1: number, lat2: number, lng2: number):
   return Math.round((miles / 25) * 60);
 };
 
-const assignDrivingTimes = (stops: TransportRouteStop[]): TransportRouteStop[] => {
+/** Parse route departure (e.g. "7:00 AM") to minutes since midnight. */
+export function parseDepartureToMinutes(departure: string | null | undefined): number | null {
+  if (!departure) return null;
+  const t = departure.trim();
+  if (!t || t.toUpperCase() === 'TBD') return null;
+
+  const ampmMatch = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (ampmMatch) {
+    let hour = parseInt(ampmMatch[1], 10);
+    const min = parseInt(ampmMatch[2], 10);
+    const ampm = ampmMatch[3].toUpperCase();
+    if (ampm === 'PM' && hour !== 12) hour += 12;
+    if (ampm === 'AM' && hour === 12) hour = 0;
+    return hour * 60 + min;
+  }
+
+  const h24Match = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (h24Match) {
+    const hour = parseInt(h24Match[1], 10);
+    const min = parseInt(h24Match[2], 10);
+    if (hour >= 0 && hour < 24 && min >= 0 && min < 60) {
+      return hour * 60 + min;
+    }
+  }
+
+  return null;
+}
+
+/** Format minutes since midnight as a pickup clock time (e.g. "8:02 AM"). */
+export function formatMinutesAsPickupTime(totalMinutes: number): string {
+  const normalized = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hour24 = Math.floor(normalized / 60);
+  const min = normalized % 60;
+  const ampm = hour24 >= 12 ? 'PM' : 'AM';
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${String(min).padStart(2, '0')} ${ampm}`;
+}
+
+const assignDrivingTimes = (
+  stops: TransportRouteStop[],
+  departureTime?: string | null,
+): TransportRouteStop[] => {
   if (stops.length === 0) return stops;
+  const startMinutes = parseDepartureToMinutes(departureTime);
+  const useClock = startMinutes != null;
   let cumulativeMin = 0;
+
   return stops.map((stop, i) => {
-    if (i === 0) return { ...stop, pickupTime: 'Start' };
+    if (i === 0) {
+      return {
+        ...stop,
+        pickupTime: useClock ? formatMinutesAsPickupTime(startMinutes) : 'Start',
+      };
+    }
     const prev = stops[i - 1];
     const legMin = Math.max(drivingMinutes(prev.lat, prev.lng, stop.lat, stop.lng), 2);
     cumulativeMin += legMin;
-    return { ...stop, pickupTime: `+${cumulativeMin} min` };
+    return {
+      ...stop,
+      pickupTime: useClock
+        ? formatMinutesAsPickupTime(startMinutes + cumulativeMin)
+        : `+${cumulativeMin} min`,
+    };
   });
 };
 
-export const buildAMStops = (stops: TransportRouteStop[]): TransportRouteStop[] =>
-  assignDrivingTimes([...stops, { ...CAMP_LOCATION, pickupTime: '', passengers: 0 }]);
+export const buildAMStops = (
+  stops: TransportRouteStop[],
+  departureTime?: string | null,
+): TransportRouteStop[] =>
+  assignDrivingTimes([...stops, { ...CAMP_LOCATION, pickupTime: '', passengers: 0 }], departureTime);
 
-export const buildPMStops = (stops: TransportRouteStop[]): TransportRouteStop[] =>
-  assignDrivingTimes([{ ...CAMP_LOCATION, pickupTime: '', passengers: 0 }, ...stops]);
+export const buildPMStops = (
+  stops: TransportRouteStop[],
+  departureTime?: string | null,
+): TransportRouteStop[] =>
+  assignDrivingTimes([{ ...CAMP_LOCATION, pickupTime: '', passengers: 0 }, ...stops], departureTime);
 
 export const displayStopToCoreIndex = (displayIdx: number, isAM: boolean): number =>
   isAM ? displayIdx : displayIdx - 1;

@@ -647,7 +647,8 @@ export function useDayCampTransport() {
     (tod: 'am' | 'pm'): TransportDisplayRoute[] =>
       routeMeta.map((meta) => {
         const core = getEffectiveCore(meta.id);
-        const stops = tod === 'am' ? buildAMStops(core) : buildPMStops(core);
+        const stops =
+          tod === 'am' ? buildAMStops(core, meta.departure) : buildPMStops(core, meta.departure);
         const campers = core.reduce((sum, s) => sum + s.passengers, 0);
         return {
           ...meta,
