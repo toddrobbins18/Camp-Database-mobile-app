@@ -81,12 +81,29 @@ export function BusAttendanceScreen({ navigation }: any) {
 
   const skipAttendancePersistRef = useRef(true);
   const skipCheckinsPersistRef = useRef(true);
+  const [selectedRouteIds, setSelectedRouteIds] = useState<number[]>([]);
 
   const routes = useMemo(
     () => (board ? buildRunRoutes(board, timeOfDay) : []),
     [board, timeOfDay],
   );
   const routeIdsWithRoster = useMemo(() => routes.map((r) => r.id), [routes]);
+  const routeIdsKey = routeIdsWithRoster.join(',');
+
+  useEffect(() => {
+    setSelectedRouteIds(routeIdsWithRoster);
+  }, [routeIdsKey, routeIdsWithRoster]);
+
+  const selectedRoutes = useMemo(
+    () => routes.filter((r) => selectedRouteIds.includes(r.id)),
+    [routes, selectedRouteIds],
+  );
+
+  const toggleBubbleSheetRoute = (routeId: number) => {
+    setSelectedRouteIds((prev) =>
+      prev.includes(routeId) ? prev.filter((id) => id !== routeId) : [...prev, routeId],
+    );
+  };
   const allBusesSubmitted = useMemo(
     () => allRoutesBusSubmitted(routeIdsWithRoster, busSubmissions),
     [routeIdsWithRoster, busSubmissions],
@@ -307,8 +324,8 @@ export function BusAttendanceScreen({ navigation }: any) {
   };
 
   const handleBubbleSheet = useCallback(async () => {
-    if (!board) return;
-    const sheetRoutes = routes.map((r) => ({
+    if (!board || !selectedRoutes.length) return;
+    const sheetRoutes = selectedRoutes.map((r) => ({
       bus: r.bus,
       routeName: r.name,
       campers: campersOnRoute(r.id, getEffectiveCoreStops(board, r.id, timeOfDay)).map((c) => ({
@@ -334,7 +351,7 @@ export function BusAttendanceScreen({ navigation }: any) {
     } catch {
       Alert.alert('Bubble sheet', 'Could not share PDF.');
     }
-  }, [board, routes, companyName, runDate, timeOfDay]);
+  }, [board, selectedRoutes, companyName, runDate, timeOfDay]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -353,16 +370,53 @@ export function BusAttendanceScreen({ navigation }: any) {
           </Text>
         </View>
         <TouchableOpacity
-          style={[styles.bubbleBtn, !routes.length && styles.btnDisabled]}
+          style={[styles.bubbleBtn, !selectedRoutes.length && styles.btnDisabled]}
           onPress={() => void handleBubbleSheet()}
-          disabled={!routes.length}
+          disabled={!selectedRoutes.length}
         >
           <Ionicons name="print-outline" size={14} color={theme.colors.text} />
-          <Text style={styles.bubbleBtnText}>Bubble sheet</Text>
+          <Text style={styles.bubbleBtnText}>Print</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+        {routes.length > 0 ? (
+          <View style={styles.busPickCard}>
+            <Text style={styles.busPickTitle}>Bubble sheet buses</Text>
+            <Text style={styles.busPickSub}>Select bus numbers to include in the PDF.</Text>
+            <View style={styles.busPickActions}>
+              <TouchableOpacity onPress={() => setSelectedRouteIds(routeIdsWithRoster)}>
+                <Text style={styles.busPickLink}>Select all</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setSelectedRouteIds([])}>
+                <Text style={styles.busPickLink}>Clear</Text>
+              </TouchableOpacity>
+              <Text style={styles.busPickCount}>
+                {selectedRouteIds.length}/{routes.length}
+              </Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {routes.map((r) => {
+                const checked = selectedRouteIds.includes(r.id);
+                return (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={[styles.busChip, checked && styles.busChipActive, { borderLeftColor: r.color }]}
+                    onPress={() => toggleBubbleSheetRoute(r.id)}
+                  >
+                    <Ionicons
+                      name={checked ? 'checkbox' : 'square-outline'}
+                      size={16}
+                      color={checked ? theme.colors.primary : theme.colors.textSecondary}
+                    />
+                    <Text style={[styles.busChipText, checked && styles.busChipTextActive]}>{r.bus}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
+
         <View style={styles.filtersRow}>
           <Text style={styles.filterLabel}>Run date</Text>
           <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
@@ -630,6 +684,36 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   bubbleBtnText: { fontSize: 11, fontWeight: '600', color: theme.colors.text },
+  busPickCard: {
+    margin: 12,
+    marginBottom: 0,
+    padding: 12,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  busPickTitle: { fontSize: 14, fontWeight: '700', color: theme.colors.text },
+  busPickSub: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2, marginBottom: 8 },
+  busPickActions: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 8 },
+  busPickLink: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
+  busPickCount: { fontSize: 12, color: theme.colors.textSecondary, marginLeft: 'auto' },
+  busChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderLeftWidth: 3,
+    backgroundColor: '#fafafa',
+  },
+  busChipActive: { backgroundColor: '#eff6ff', borderColor: theme.colors.primary },
+  busChipText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
+  busChipTextActive: { color: theme.colors.primary },
   btnDisabled: { opacity: 0.45 },
   content: { flex: 1, padding: 12 },
   filtersRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 },

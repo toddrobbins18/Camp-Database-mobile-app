@@ -47,7 +47,11 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
   const [rows, setRows] = useState<TransportChangeSheetRow[]>([]);
   const [loadingSheet, setLoadingSheet] = useState(false);
 
-  const allSelected = selectedRouteIds.length === 0 || selectedRouteIds.length === routeMeta.length;
+  const routeIdsKey = useMemo(() => routeMeta.map((r) => r.id).join(','), [routeMeta]);
+
+  useEffect(() => {
+    setSelectedRouteIds(routeMeta.map((r) => r.id));
+  }, [routeIdsKey, routeMeta]);
 
   const toggleRoute = (routeId: number) => {
     setSelectedRouteIds((prev) =>
@@ -55,13 +59,17 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
     );
   };
 
-  const selectAllRoutes = () => setSelectedRouteIds([]);
+  const selectAllRoutes = () => setSelectedRouteIds(routeMeta.map((r) => r.id));
   const clearRoutes = () => setSelectedRouteIds([]);
 
   const loadSheet = useCallback(async () => {
     if (!companyId || !season) return;
     setLoadingSheet(true);
     try {
+      if (!selectedRouteIds.length) {
+        setRows([]);
+        return;
+      }
       const [exceptions, manual] = await Promise.all([
         fetchTransportExceptions(supabase, companyId, sheetDate),
         loadManualOverrides(supabase, companyId, season, sheetDate),
@@ -73,39 +81,39 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
         manual,
         routeMeta,
         coreStops,
-        selectedRouteIds: allSelected ? [] : selectedRouteIds,
+        selectedRouteIds,
       });
       setRows(built.filter((r) => !r.camper.startsWith('(No transport')));
     } finally {
       setLoadingSheet(false);
     }
-  }, [
-    allSelected,
-    companyId,
-    coreStops,
-    routeMeta,
-    runPeriod,
-    season,
-    selectedRouteIds,
-    sheetDate,
-  ]);
+  }, [companyId, coreStops, routeMeta, runPeriod, season, selectedRouteIds, sheetDate]);
 
   useEffect(() => {
     if (!boardLoading) void loadSheet();
   }, [boardLoading, loadSheet]);
 
   const routeLabel = useMemo(() => {
-    if (allSelected) return 'All routes';
+    if (!selectedRouteIds.length) return 'No buses selected';
+    if (selectedRouteIds.length === routeMeta.length) return 'All buses';
     if (selectedRouteIds.length === 1) {
       const r = routeMeta.find((x) => x.id === selectedRouteIds[0]);
-      return r ? `${r.bus} · ${r.name}` : '1 route';
+      return r ? `${r.bus} · ${r.name}` : '1 bus';
     }
-    return `${selectedRouteIds.length} routes`;
-  }, [allSelected, routeMeta, selectedRouteIds]);
+    return `${selectedRouteIds.length} buses`;
+  }, [routeMeta, selectedRouteIds]);
 
   const shareSheet = async () => {
+    if (!rows.length) return;
     const csv = changeSheetRowsToCsv(rows);
-    const filename = `transport-change-sheet-${sheetDate}-${runPeriod}.csv`;
+    const busSuffix =
+      selectedRouteIds.length === routeMeta.length
+        ? 'all'
+        : routeMeta
+            .filter((r) => selectedRouteIds.includes(r.id))
+            .map((r) => r.bus.replace(/\s+/g, '-'))
+            .join('-');
+    const filename = `transport-change-sheet-${sheetDate}-${runPeriod}-${busSuffix}.csv`;
     const file = new File(Paths.cache, filename);
     if (file.exists) file.delete();
     file.create({ overwrite: true });
@@ -129,7 +137,7 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
         <TouchableOpacity
           style={[styles.shareBtn, rows.length === 0 && styles.shareBtnDisabled]}
           onPress={() => void shareSheet()}
-          disabled={rows.length === 0}
+          disabled={rows.length === 0 || selectedRouteIds.length === 0}
         >
           <Ionicons name="share-outline" size={20} color="#fff" />
         </TouchableOpacity>
@@ -181,18 +189,23 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.routeScroll}>
         {routeMeta.map((r) => {
-          const active = allSelected || selectedRouteIds.includes(r.id);
+          const checked = selectedRouteIds.includes(r.id);
           return (
             <TouchableOpacity
               key={r.id}
               style={[
                 styles.routeChip,
-                active && styles.routeChipActive,
+                checked && styles.routeChipActive,
                 { borderLeftColor: r.color },
               ]}
               onPress={() => toggleRoute(r.id)}
             >
-              <Text style={[styles.routeChipText, active && styles.routeChipTextActive]}>
+              <Ionicons
+                name={checked ? 'checkbox' : 'square-outline'}
+                size={14}
+                color={checked ? theme.colors.primary : theme.colors.textSecondary}
+              />
+              <Text style={[styles.routeChipText, checked && styles.routeChipTextActive]}>
                 {r.bus}
               </Text>
             </TouchableOpacity>
@@ -317,6 +330,9 @@ const styles = StyleSheet.create({
   linkText: { fontSize: 12, color: theme.colors.secondary, fontWeight: '600' },
   routeScroll: { maxHeight: 44, marginTop: 6, paddingHorizontal: theme.spacing.md },
   routeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
     marginRight: 6,
