@@ -182,15 +182,18 @@ export function ParentAuthScreen({
       ) : null}
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <View style={[styles.heroCard, { backgroundColor: colors.brand }]}>
-          <Text style={styles.heroEyebrow}>Family portal</Text>
+        <View style={[styles.heroCard, { shadowColor: colors.brandDark }]}>
+          <View style={[styles.heroBase, { backgroundColor: colors.brandDark }]} />
+          <View style={[styles.heroMid, { backgroundColor: colors.brand }]} />
+          <View style={styles.heroGlow} />
+          <Text style={styles.heroEyebrow}>✦ Family portal</Text>
           <Text style={styles.heroTitle}>Your family&apos;s home at {companyName}</Text>
           <Text style={styles.heroBody}>
             Manage pickups, report absences, update authorized adults, and confirm swim lessons.
           </Text>
         </View>
 
-        <View style={[styles.card, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
+        <View style={[styles.card, styles.cardShadow, { backgroundColor: colors.elevated, borderColor: colors.border, shadowColor: colors.brandDark }]}>
           <View style={styles.brandRow}>
             <View style={[styles.brandIcon, { backgroundColor: colors.brand }]}>
               <Ionicons name="shield-checkmark" size={22} color="#fff" />
@@ -272,11 +275,38 @@ const styles = StyleSheet.create({
   staffText: { fontSize: 13, lineHeight: 18 },
   staffActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   scroll: { padding: 16, paddingBottom: 32 },
-  heroCard: { borderRadius: 24, padding: 20, marginBottom: 16 },
-  heroEyebrow: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600' },
-  heroTitle: { color: '#fff', fontSize: 24, fontWeight: '700', marginTop: 8 },
-  heroBody: { color: 'rgba(255,255,255,0.9)', fontSize: 14, lineHeight: 20, marginTop: 8 },
-  card: { borderRadius: 24, borderWidth: 1, padding: 20 },
+  heroCard: {
+    borderRadius: 28,
+    padding: 22,
+    marginBottom: 18,
+    overflow: 'hidden',
+    minHeight: 150,
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  heroBase: { ...StyleSheet.absoluteFillObject },
+  heroMid: { position: 'absolute', top: 0, left: 0, right: 0, bottom: '25%', opacity: 0.85 },
+  heroGlow: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    top: -30,
+    right: -20,
+  },
+  heroEyebrow: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '700', zIndex: 1 },
+  heroTitle: { color: '#fff', fontSize: 26, fontWeight: '800', marginTop: 10, letterSpacing: -0.4, zIndex: 1 },
+  heroBody: { color: 'rgba(255,255,255,0.9)', fontSize: 14, lineHeight: 21, marginTop: 10, zIndex: 1 },
+  cardShadow: {
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  card: { borderRadius: 26, borderWidth: 1, padding: 22 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   brandIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   cardHeading: { fontSize: 16, fontWeight: '700' },

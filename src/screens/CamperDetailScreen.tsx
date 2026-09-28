@@ -36,6 +36,7 @@ import {
 } from '../lib/camperContactInfo';
 import { resolveChildForCampView } from '../lib/profileCampResolution';
 import { HealthCenterVisitDetailRows } from '../components/health/HealthCenterDayCampPanel';
+import { ParentTemplateEmailPanel } from '../components/parentEmail/ParentTemplateEmailPanel';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -830,6 +831,14 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                     ) : (
                                         <Text style={styles.enrolledWeeksSession}>No contact information available</Text>
                                     )}
+                                    {camper?.id ? (
+                                        <ParentTemplateEmailPanel
+                                            companyId={companyId}
+                                            childId={camper.id}
+                                            camperName={camper.name ?? 'Camper'}
+                                            parentEmail={contactInfo?.guardianEmail ?? camper.guardian_email}
+                                        />
+                                    ) : null}
                                 </View>
                             </StyledCard>
                         </View>

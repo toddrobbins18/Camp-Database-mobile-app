@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { WelcomeHero } from './WelcomeHero';
 import { supabase } from '../../lib/supabase';
 import { formatCampDateTime } from '../../lib/campTime';
 import {
@@ -9,7 +10,6 @@ import {
   camperInitials,
   changeTypeLabel,
   formatFriendlyDate,
-  greetingForHour,
   statusBadgeStyle,
   statusDisplayLabel,
   todayIsoDate,
@@ -74,45 +74,63 @@ function CamperCard({
   colors: ParentPortalColors;
 }) {
   const absentToday = absences.some((a) => a.camper_id === camper.id && a.absence_date === todayIso);
-  const pickupToday = pickups.some((p) => p.camper_id === camper.id && p.change_date === todayIso);
-  const swimToday = swimLessons.some((l) => l.camper_id === camper.id && l.scheduled_at.startsWith(todayIso));
+  const pickupToday = pickups.find((p) => p.camper_id === camper.id && p.change_date === todayIso);
+  const swimToday = swimLessons.find((l) => l.camper_id === camper.id && l.scheduled_at.startsWith(todayIso));
   const group = camperDisplayGroup(camper);
 
   return (
     <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.elevated, borderColor: colors.border }]}
+      style={[styles.card, styles.cardShadow, { backgroundColor: colors.elevated, borderColor: colors.border, shadowColor: colors.brandDark }]}
       onPress={onView}
       disabled={!onView}
-      activeOpacity={onView ? 0.85 : 1}
+      activeOpacity={onView ? 0.88 : 1}
     >
       <View style={styles.camperRow}>
-        <View style={[styles.avatar, { backgroundColor: colors.brandSoft }]}>
-          <Text style={[styles.avatarText, { color: colors.brandDark }]}>{camperInitials(camper.name)}</Text>
+        <View style={[styles.avatar, { backgroundColor: colors.brand }]}>
+          <Text style={styles.avatarText}>{camperInitials(camper.name)}</Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.cardTitle, { color: colors.text }]}>{camper.name}</Text>
           {group ? <Text style={[styles.cardMeta, { color: colors.textMuted }]}>{group}</Text> : null}
-          <View style={styles.statusRow}>
+          <View
+            style={[
+              styles.statusPill,
+              absentToday ? styles.statusPillWarn : styles.statusPillOk,
+            ]}
+          >
             <Ionicons
-              name={absentToday ? 'close-circle' : 'checkmark-circle'}
-              size={14}
-              color={absentToday ? '#dc2626' : '#16a34a'}
+              name={absentToday ? 'time-outline' : 'checkmark-circle'}
+              size={13}
+              color={absentToday ? '#b45309' : '#15803d'}
             />
-            <Text style={[styles.statusLine, { color: colors.textMuted }]}>
+            <Text style={[styles.statusPillText, { color: absentToday ? '#b45309' : '#15803d' }]}>
               {absentToday ? 'Absent today' : 'Expected at camp today'}
             </Text>
           </View>
-          <Text style={[styles.cardHint, { color: colors.textSubtle }]}>
-            {pickupToday
-              ? 'Pickup change on file for today'
-              : swimToday
-                ? 'Swim lesson scheduled today'
-                : 'No special schedule updates for today.'}
-          </Text>
         </View>
       </View>
+      <View style={[styles.scheduleStrip, { backgroundColor: colors.brandSubtle, borderTopColor: colors.border }]}>
+        {pickupToday ? (
+          <Text style={[styles.cardHint, { color: colors.text }]}>
+            Pickup change · {pickupToday.pickup_time || 'Time TBD'}
+            {pickupToday.pickup_person_name ? ` · ${pickupToday.pickup_person_name}` : ''}
+          </Text>
+        ) : swimToday ? (
+          <Text style={[styles.cardHint, { color: colors.text }]}>
+            Swim lesson ·{' '}
+            {new Date(swimToday.scheduled_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+          </Text>
+        ) : (
+          <Text style={[styles.cardHint, { color: colors.textMuted }]}>
+            No special schedule updates for today.
+          </Text>
+        )}
+      </View>
       {onView ? (
-        <Text style={[styles.cardLink, { color: colors.brand }]}>View camper ›</Text>
+        <View style={styles.cardFooter}>
+          <Text style={[styles.cardLink, { color: colors.brand }]}>View camper</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.brand} />
+        </View>
       ) : null}
     </TouchableOpacity>
   );
@@ -124,23 +142,44 @@ function QuickAction({
   description,
   onPress,
   colors,
+  accent,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
   onPress: () => void;
   colors: ParentPortalColors;
+  accent?: 'blue' | 'amber' | 'navy' | 'green';
 }) {
+  const accentBg =
+    accent === 'amber'
+      ? '#fef3c7'
+      : accent === 'green'
+        ? '#dcfce7'
+        : accent === 'navy'
+          ? colors.brandMuted
+          : colors.brandSoft;
+
   return (
     <TouchableOpacity
-      style={[styles.quickCard, { backgroundColor: colors.elevated, borderColor: colors.border }]}
+      style={[
+        styles.quickCard,
+        styles.cardShadow,
+        { backgroundColor: colors.elevated, borderColor: colors.border, shadowColor: colors.brandDark },
+      ]}
       onPress={onPress}
+      activeOpacity={0.88}
     >
-      <View style={[styles.quickIcon, { backgroundColor: colors.brandSubtle }]}>
-        <Ionicons name={icon} size={20} color={colors.brand} />
+      <View style={styles.quickTop}>
+        <View style={[styles.quickIcon, { backgroundColor: accentBg }]}>
+          <Ionicons name={icon} size={20} color={colors.brand} />
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />
       </View>
       <Text style={[styles.quickTitle, { color: colors.text }]}>{title}</Text>
-      <Text style={[styles.quickDesc, { color: colors.textMuted }]}>{description}</Text>
+      <Text style={[styles.quickDesc, { color: colors.textMuted }]} numberOfLines={2}>
+        {description}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -159,30 +198,30 @@ export function ParentHomeView({
   'campName' | 'contactName' | 'campers' | 'pickups' | 'absences' | 'swimLessons' | 'onNavigate' | 'colors'
 >) {
   const todayIso = todayIsoDate();
-  const hour = new Date().getHours();
-  const firstName = contactName?.split(' ')[0];
+  const todayCount =
+    pickups.filter((p) => p.change_date === todayIso).length +
+    absences.filter((a) => a.absence_date === todayIso).length +
+    swimLessons.filter((l) => l.scheduled_at.startsWith(todayIso)).length;
 
   return (
     <View style={styles.sectionGap}>
-      <View style={[styles.hero, { backgroundColor: colors.brand }]}>
-        <Text style={styles.heroDate}>{formatFriendlyDate(todayIso)}</Text>
-        <Text style={styles.heroGreeting}>
-          {greetingForHour(hour)}
-          {firstName ? `, ${firstName}` : ''} 👋
-        </Text>
-        <Text style={styles.heroSub}>
-          Here&apos;s what&apos;s happening with your family at {campName}.
-        </Text>
-      </View>
+      <WelcomeHero contactName={contactName} campName={campName} colors={colors} />
 
-      <View style={[styles.panel, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
-        <SectionEyebrow colors={colors}>Today at camp</SectionEyebrow>
+      <View
+        style={[
+          styles.panel,
+          styles.cardShadow,
+          { backgroundColor: colors.elevated, borderColor: colors.border, shadowColor: colors.brandDark },
+        ]}
+      >
+        <View style={styles.panelHeader}>
+          <Ionicons name="sparkles" size={16} color={colors.brand} />
+          <SectionEyebrow colors={colors}>Today at camp</SectionEyebrow>
+        </View>
         <Text style={[styles.panelDate, { color: colors.text }]}>{formatFriendlyDate(todayIso)}</Text>
         <Text style={[styles.panelBody, { color: colors.textMuted }]}>
-          {pickups.filter((p) => p.change_date === todayIso).length ||
-          absences.filter((a) => a.absence_date === todayIso).length ||
-          swimLessons.filter((l) => l.scheduled_at.startsWith(todayIso)).length
-            ? 'See your campers below for today\'s updates.'
+          {todayCount
+            ? `${todayCount} update${todayCount === 1 ? '' : 's'} on file for today. See details on your camper cards below.`
             : 'No schedule changes or lessons on file for today. Your campers follow the regular camp day unless you submit a pickup change or absence.'}
         </Text>
       </View>
@@ -225,10 +264,14 @@ export function ParentHomeView({
         <SectionEyebrow colors={colors}>Things you may want to do</SectionEyebrow>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick actions</Text>
         <View style={styles.quickGrid}>
-          <QuickAction icon="calendar-outline" title="Change pickup" description="Request a different pickup arrangement." onPress={() => onNavigate('pickups')} colors={colors} />
-          <QuickAction icon="time-outline" title="Report an absence" description="Let camp know about absences or late arrivals." onPress={() => onNavigate('absences')} colors={colors} />
-          <QuickAction icon="shield-checkmark-outline" title="Authorized adults" description="Manage approved pickup contacts." onPress={() => onNavigate('authorized')} colors={colors} />
-          <QuickAction icon="water-outline" title="Swim lessons" description="View and confirm swim lessons." onPress={() => onNavigate('swim')} colors={colors} />
+          <View style={styles.quickCol}>
+            <QuickAction icon="calendar-outline" title="Change pickup" description="Request a different pickup arrangement." onPress={() => onNavigate('pickups')} colors={colors} accent="blue" />
+            <QuickAction icon="shield-checkmark-outline" title="Authorized adults" description="Manage approved pickup contacts." onPress={() => onNavigate('authorized')} colors={colors} accent="navy" />
+          </View>
+          <View style={styles.quickCol}>
+            <QuickAction icon="time-outline" title="Report an absence" description="Let camp know about absences or late arrivals." onPress={() => onNavigate('absences')} colors={colors} accent="amber" />
+            <QuickAction icon="water-outline" title="Swim lessons" description="View and confirm swim lessons." onPress={() => onNavigate('swim')} colors={colors} accent="green" />
+          </View>
         </View>
       </View>
     </View>
@@ -555,44 +598,82 @@ function EmptyBlock({
   colors: ParentPortalColors;
 }) {
   return (
-    <View style={[styles.empty, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
-      <Text style={[styles.cardTitle, { color: colors.text }]}>{title}</Text>
-      <Text style={[styles.cardMeta, { color: colors.textMuted }]}>{description}</Text>
+    <View
+      style={[
+        styles.empty,
+        styles.cardShadow,
+        { backgroundColor: colors.elevated, borderColor: colors.border, shadowColor: colors.brandDark },
+      ]}
+    >
+      <View style={[styles.emptyIcon, { backgroundColor: colors.brandSoft }]}>
+        <Ionicons name="people-outline" size={28} color={colors.brand} />
+      </View>
+      <Text style={[styles.cardTitle, { color: colors.text, textAlign: 'center' }]}>{title}</Text>
+      <Text style={[styles.cardMeta, { color: colors.textMuted, textAlign: 'center' }]}>{description}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  sectionGap: { gap: 20 },
-  hero: { borderRadius: 24, padding: 20 },
-  heroDate: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' },
-  heroGreeting: { color: '#fff', fontSize: 26, fontWeight: '700', marginTop: 8 },
-  heroSub: { color: 'rgba(255,255,255,0.9)', fontSize: 14, lineHeight: 20, marginTop: 8 },
-  panel: { borderRadius: 20, borderWidth: 1, padding: 16 },
-  panelDate: { fontSize: 16, fontWeight: '600', marginTop: 4 },
-  panelBody: { fontSize: 14, lineHeight: 20, marginTop: 8 },
+  sectionGap: { gap: 22 },
+  cardShadow: Platform.select({
+    ios: {
+      shadowOpacity: 0.08,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 6 },
+    },
+    android: { elevation: 3 },
+    default: {},
+  }),
+  panel: { borderRadius: 22, borderWidth: 1, padding: 18, overflow: 'hidden' },
+  panelHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  panelDate: { fontSize: 20, fontWeight: '800', marginTop: 6, letterSpacing: -0.3 },
+  panelBody: { fontSize: 14, lineHeight: 21, marginTop: 10 },
   sectionHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 12 },
-  sectionTitle: { fontSize: 20, fontWeight: '700', marginTop: 4 },
-  eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
-  link: { fontSize: 14, fontWeight: '600' },
-  pageTitle: { fontSize: 24, fontWeight: '700' },
-  pageSub: { fontSize: 14, lineHeight: 20, marginTop: 6 },
+  sectionTitle: { fontSize: 22, fontWeight: '800', marginTop: 4, letterSpacing: -0.3 },
+  eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' },
+  link: { fontSize: 14, fontWeight: '700' },
+  pageTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.4 },
+  pageSub: { fontSize: 14, lineHeight: 21, marginTop: 6 },
   pageHeaderRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  card: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 12 },
-  cardTitle: { fontSize: 16, fontWeight: '700' },
+  card: { borderRadius: 22, borderWidth: 1, marginBottom: 14, overflow: 'hidden' },
+  cardTitle: { fontSize: 17, fontWeight: '800', letterSpacing: -0.2 },
   cardMeta: { fontSize: 13, marginTop: 4 },
-  cardHint: { fontSize: 13, marginTop: 6, lineHeight: 18 },
-  cardLink: { fontSize: 13, fontWeight: '600', marginTop: 12 },
-  camperRow: { flexDirection: 'row', gap: 12 },
-  avatar: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 16, fontWeight: '700' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  statusLine: { fontSize: 13 },
-  quickGrid: { gap: 12, marginTop: 12 },
-  quickCard: { borderRadius: 18, borderWidth: 1, padding: 16 },
-  quickIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  quickTitle: { fontSize: 15, fontWeight: '700' },
-  quickDesc: { fontSize: 13, marginTop: 4, lineHeight: 18 },
+  cardHint: { fontSize: 13, lineHeight: 19 },
+  cardLink: { fontSize: 14, fontWeight: '700' },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  scheduleStrip: { paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth },
+  camperRow: { flexDirection: 'row', gap: 14, padding: 16, paddingBottom: 14 },
+  avatar: { width: 54, height: 54, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 17, fontWeight: '800', color: '#fff' },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  statusPillOk: { backgroundColor: '#dcfce7' },
+  statusPillWarn: { backgroundColor: '#fef3c7' },
+  statusPillText: { fontSize: 12, fontWeight: '700' },
+  quickGrid: { flexDirection: 'row', gap: 12, marginTop: 14 },
+  quickCol: { flex: 1, gap: 12 },
+  quickCard: { borderRadius: 20, borderWidth: 1, padding: 14, minHeight: 130 },
+  quickTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  quickIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  quickTitle: { fontSize: 14, fontWeight: '800', letterSpacing: -0.2 },
+  quickDesc: { fontSize: 12, marginTop: 4, lineHeight: 17 },
   primaryBtn: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
@@ -600,7 +681,8 @@ const styles = StyleSheet.create({
   submissionTop: { flexDirection: 'row', gap: 10 },
   highlightPanel: { borderRadius: 18, borderWidth: 1, padding: 14, gap: 10 },
   innerCard: { borderRadius: 14, padding: 12 },
-  empty: { borderRadius: 18, borderWidth: 1, padding: 20 },
+  empty: { borderRadius: 22, borderWidth: 1, padding: 28, alignItems: 'center' },
+  emptyIcon: { width: 56, height: 56, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   swimActions: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10 },
   confirmedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#dcfce7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   confirmedText: { color: '#15803d', fontSize: 12, fontWeight: '600' },

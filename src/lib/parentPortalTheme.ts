@@ -68,7 +68,7 @@ export function buildParentPortalColors(themeColor: string): ParentPortalColors 
     brandSoft: mix(brand, '#ffffff', 0.88),
     brandMuted: mix(brand, '#ffffff', 0.78),
     brandSubtle: mix(brand, '#ffffff', 0.94),
-    bg: mix(brand, '#ffffff', 0.96),
+    bg: mix(brand, '#ffffff', 0.955),
     elevated: '#ffffff',
     text: mix(brand, '#1e293b', 0.35),
     textMuted: '#64748b',

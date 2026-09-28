@@ -64,14 +64,20 @@ export function ParentPortalShell({
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
+      <View style={styles.bgOrbA} />
+      <View style={styles.bgOrbB} />
+
       <View style={styles.header}>
         {showDrawer && onOpenDrawer ? (
           <TouchableOpacity onPress={onOpenDrawer} style={styles.menuBtn}>
             <Ionicons name="menu-outline" size={26} color={colors.text} />
           </TouchableOpacity>
         ) : null}
-        <View style={styles.brandIcon}>
-          <Ionicons name="shield-checkmark" size={20} color="#fff" />
+        <View style={styles.brandIconWrap}>
+          <View style={[styles.brandIcon, { backgroundColor: colors.brandDark }]}>
+            <View style={[styles.brandIconOverlay, { backgroundColor: colors.brand }]} />
+            <Ionicons name="shield-checkmark" size={20} color="#fff" style={styles.brandIconGlyph} />
+          </View>
         </View>
         <View style={styles.headerText}>
           <Text style={styles.campName} numberOfLines={1}>
@@ -81,9 +87,9 @@ export function ParentPortalShell({
             {familyName} Family{contactName ? ` · ${contactName}` : ''}
           </Text>
         </View>
-        <TouchableOpacity onPress={onSignOut} style={styles.signOutBtn}>
+        <TouchableOpacity onPress={onSignOut} style={[styles.signOutBtn, { backgroundColor: colors.brandSubtle }]}>
           <Ionicons name="log-out-outline" size={18} color={colors.brand} />
-          <Text style={styles.signOutText}>Sign out</Text>
+          <Text style={[styles.signOutText, { color: colors.brand }]}>Sign out</Text>
         </TouchableOpacity>
       </View>
 
@@ -91,32 +97,37 @@ export function ParentPortalShell({
         style={styles.main}
         contentContainerStyle={styles.mainContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {children}
       </ScrollView>
 
       {moreOpen ? (
-        <View style={styles.morePanel}>
+        <View style={[styles.morePanel, { backgroundColor: colors.elevated, borderTopColor: colors.border }]}>
           {MOBILE_MORE.map((viewId) => {
             const item = PARENT_PORTAL_NAV.find((n) => n.id === viewId)!;
+            const active = activeView === viewId;
             return (
               <TouchableOpacity
                 key={viewId}
-                style={styles.moreItem}
+                style={[
+                  styles.moreItem,
+                  { backgroundColor: active ? colors.brand : colors.brandSubtle },
+                ]}
                 onPress={() => {
                   onNavigate(viewId);
                   setMoreOpen(false);
                 }}
               >
-                <Ionicons name={navIcon(viewId)} size={18} color={colors.brand} />
-                <Text style={styles.moreItemText}>{item.label}</Text>
+                <Ionicons name={navIcon(viewId)} size={18} color={active ? '#fff' : colors.brand} />
+                <Text style={[styles.moreItemText, { color: active ? '#fff' : colors.text }]}>{item.label}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
       ) : null}
 
-      <SafeAreaView edges={['bottom']} style={styles.bottomNavWrap}>
+      <SafeAreaView edges={['bottom']} style={[styles.bottomNavWrap, { backgroundColor: colors.elevated, borderTopColor: colors.border }]}>
         <View style={styles.bottomNav}>
           {MOBILE_PRIMARY.map((viewId) => {
             const item = PARENT_PORTAL_NAV.find((n) => n.id === viewId)!;
@@ -129,38 +140,51 @@ export function ParentPortalShell({
                   setMoreOpen(false);
                   onNavigate(viewId);
                 }}
+                activeOpacity={0.75}
               >
-                <View style={[styles.navIconWrap, active && styles.navIconActive]}>
+                <View
+                  style={[
+                    styles.navIconWrap,
+                    active
+                      ? [styles.navIconActive, { backgroundColor: colors.brand, shadowColor: colors.brandDark }]
+                      : { backgroundColor: colors.brandSubtle },
+                  ]}
+                >
                   <Ionicons
                     name={navIcon(viewId)}
-                    size={18}
+                    size={19}
                     color={active ? '#fff' : colors.textSubtle}
                   />
                 </View>
-                <Text style={[styles.navLabel, active && styles.navLabelActive]}>{item.mobileLabel}</Text>
+                <Text style={[styles.navLabel, active && { color: colors.brand, fontWeight: '700' }]}>
+                  {item.mobileLabel}
+                </Text>
               </TouchableOpacity>
             );
           })}
           <TouchableOpacity
             style={styles.navItem}
             onPress={() => setMoreOpen((v) => !v)}
+            activeOpacity={0.75}
           >
             <View
               style={[
                 styles.navIconWrap,
-                (moreOpen || MOBILE_MORE.includes(activeView)) && styles.navIconActive,
+                moreOpen || MOBILE_MORE.includes(activeView)
+                  ? [styles.navIconActive, { backgroundColor: colors.brand, shadowColor: colors.brandDark }]
+                  : { backgroundColor: colors.brandSubtle },
               ]}
             >
               <Ionicons
                 name="ellipsis-horizontal"
-                size={18}
+                size={19}
                 color={moreOpen || MOBILE_MORE.includes(activeView) ? '#fff' : colors.textSubtle}
               />
             </View>
             <Text
               style={[
                 styles.navLabel,
-                (moreOpen || MOBILE_MORE.includes(activeView)) && styles.navLabelActive,
+                (moreOpen || MOBILE_MORE.includes(activeView)) && { color: colors.brand, fontWeight: '700' },
               ]}
             >
               More
@@ -175,92 +199,139 @@ export function ParentPortalShell({
 function createStyles(colors: ParentPortalColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
+    bgOrbA: {
+      position: 'absolute',
+      width: 220,
+      height: 220,
+      borderRadius: 110,
+      backgroundColor: colors.brandSoft,
+      opacity: 0.55,
+      top: -60,
+      right: -70,
+    },
+    bgOrbB: {
+      position: 'absolute',
+      width: 180,
+      height: 180,
+      borderRadius: 90,
+      backgroundColor: colors.brandMuted,
+      opacity: 0.4,
+      top: 180,
+      left: -80,
+    },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
       backgroundColor: colors.elevated,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+      zIndex: 2,
       ...Platform.select({
         ios: {
-          shadowColor: '#000',
-          shadowOpacity: 0.04,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: 2 },
+          shadowColor: colors.brandDark,
+          shadowOpacity: 0.06,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 4 },
         },
-        android: { elevation: 2 },
+        android: { elevation: 3 },
       }),
     },
     menuBtn: { padding: 4, marginRight: 4 },
+    brandIconWrap: { marginRight: 10 },
     brandIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 14,
-      backgroundColor: colors.brand,
+      width: 42,
+      height: 42,
+      borderRadius: 15,
+      overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: 10,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.brandDark,
+          shadowOpacity: 0.25,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
+        },
+        android: { elevation: 4 },
+      }),
     },
+    brandIconOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      opacity: 0.75,
+      left: '15%',
+    },
+    brandIconGlyph: { zIndex: 1 },
     headerText: { flex: 1, minWidth: 0 },
-    campName: { fontSize: 15, fontWeight: '700', color: colors.text },
+    campName: { fontSize: 16, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
     familyLine: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
     signOutBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      paddingHorizontal: 10,
+      paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 999,
-      backgroundColor: colors.brandSubtle,
     },
-    signOutText: { fontSize: 12, fontWeight: '600', color: colors.brand },
-    main: { flex: 1 },
-    mainContent: { padding: 16, paddingBottom: 24 },
+    signOutText: { fontSize: 12, fontWeight: '700' },
+    main: { flex: 1, zIndex: 1 },
+    mainContent: { padding: 16, paddingBottom: 28 },
     morePanel: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      backgroundColor: colors.elevated,
+      gap: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
       borderTopWidth: 1,
-      borderTopColor: colors.border,
     },
     moreItem: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderRadius: 12,
-      backgroundColor: colors.brandSubtle,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 14,
       minWidth: '46%',
     },
-    moreItemText: { fontSize: 13, fontWeight: '600', color: colors.text },
+    moreItemText: { fontSize: 13, fontWeight: '700' },
     bottomNavWrap: {
-      backgroundColor: colors.elevated,
       borderTopWidth: 1,
-      borderTopColor: colors.border,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.brandDark,
+          shadowOpacity: 0.1,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: -6 },
+        },
+        android: { elevation: 12 },
+      }),
     },
     bottomNav: {
       flexDirection: 'row',
-      paddingHorizontal: 4,
-      paddingTop: 6,
+      paddingHorizontal: 6,
+      paddingTop: 8,
       paddingBottom: 4,
     },
-    navItem: { flex: 1, alignItems: 'center', gap: 4 },
+    navItem: { flex: 1, alignItems: 'center', gap: 5 },
     navIconWrap: {
-      width: 36,
-      height: 36,
-      borderRadius: 14,
+      width: 40,
+      height: 40,
+      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    navIconActive: { backgroundColor: colors.brand },
-    navLabel: { fontSize: 10, fontWeight: '500', color: colors.textSubtle },
-    navLabelActive: { color: colors.brand, fontWeight: '700' },
+    navIconActive: {
+      ...Platform.select({
+        ios: {
+          shadowOpacity: 0.35,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
+        },
+        android: { elevation: 4 },
+      }),
+    },
+    navLabel: { fontSize: 10, fontWeight: '600', color: colors.textSubtle },
   });
 }
 
