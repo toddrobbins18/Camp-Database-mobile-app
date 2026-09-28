@@ -21,6 +21,7 @@ import { campDateStringInSeason } from '../lib/campSeasonDate';
 import { DAY_CAMP_ENROLLMENT_WEEKS } from '../lib/enrolledWeeks';
 import {
   buildMonFriEnrollmentWeeks,
+  enrollmentWeekDayColumns,
   enrollmentWeekForDate,
   formatEnrollmentWeekLabel,
   formatEnrollmentWeekRange,
@@ -139,6 +140,7 @@ export function GroupBubbleSheetsScreen({ navigation }: any) {
         companyName,
         enrollmentWeek: selectedWeek,
         weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
+        weekDays: enrollmentWeekDayColumns(weekRow),
         groups,
       });
       if (!built) {

@@ -35,6 +35,7 @@ import { loadGroupRoster, type GroupRosterCamper } from '../lib/transportGroupAt
 import {
   camperEnrolledInWeek,
   enrollmentWeekForDate,
+  enrollmentWeekDayColumns,
   formatEnrollmentWeekRange,
   getEnrollmentWeekRow,
   loadEnrollmentWeekCalendar,
@@ -1804,6 +1805,7 @@ export function useDayCampTransport() {
           runPeriod: timeOfDay,
           enrollmentWeek: enrollmentWeekForReport ?? undefined,
           weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
+          weekDays: enrollmentWeekDayColumns(weekRow),
           busRoutes: sheetRoutes,
           groups,
         });
