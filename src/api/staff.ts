@@ -24,7 +24,35 @@ export interface StaffMember {
     created_at?: string;
 }
 
+const STAFF_PAGE_SIZE = 1000;
+
 const staffCacheKey = (companyId: string, season: string) => `staff:${companyId}:${season}`;
+
+async function fetchStaffRosterPaginated(companyId: string, season: string): Promise<StaffMember[]> {
+    const rows: StaffMember[] = [];
+    let from = 0;
+
+    for (;;) {
+        const to = from + STAFF_PAGE_SIZE - 1;
+        const { data, error } = await supabase
+            .from('staff')
+            .select('*')
+            .eq('company_id', companyId)
+            .eq('season', season)
+            .neq('status', 'inactive')
+            .order('name', { ascending: true })
+            .range(from, to);
+
+        if (error) throw error;
+
+        const batch = (data as StaffMember[]) ?? [];
+        rows.push(...batch);
+        if (batch.length < STAFF_PAGE_SIZE) break;
+        from += STAFF_PAGE_SIZE;
+    }
+
+    return filterActiveRoster(rows);
+}
 
 async function applyQueuedStaffOps(base: StaffMember[], companyId: string, season: string): Promise<StaffMember[]> {
     const out = [...base];
@@ -60,16 +88,7 @@ export const useStaff = (companyId: string | null, season: string) => {
         queryFn: async () => {
             if (!companyId) return [];
             try {
-                const { data, error } = await supabase
-                    .from('staff')
-                    .select('*')
-                    .eq('company_id', companyId)
-                    .eq('season', season)
-                    .neq('status', 'inactive')
-                    .order('name', { ascending: true });
-
-                if (error) throw error;
-                const rows = filterActiveRoster((data as StaffMember[]) || []);
+                const rows = await fetchStaffRosterPaginated(companyId, season);
                 await setCachedJson(staffCacheKey(companyId, season), rows);
                 return await applyQueuedStaffOps(rows, companyId, season);
             } catch (err) {
