@@ -472,9 +472,9 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
 
                     {activeTab === 'Overview' && showTimeClockQr ? (
                         <View style={styles.infoCard}>
-                            <Text style={styles.cardTitle}>HootTrack QR Badge</Text>
+                            <Text style={styles.cardTitle}>Owl Time QR Badge</Text>
                             <Text style={styles.cardSubtitle}>
-                                Share or save for HootTrack sign-in and sign-out
+                                Share or save for Owl Time sign-in and sign-out
                             </Text>
                             {qrToken && displayStaff?.name ? (
                                 <StaffQrBadge staffName={displayStaff.name} qrToken={qrToken} />
@@ -585,7 +585,7 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                                 />
                                 {showTimeClockQr && qrToken && editForm.name ? (
                                     <View style={{ marginTop: 16 }}>
-                                        <Text style={styles.inputLabel}>HootTrack QR Badge</Text>
+                                        <Text style={styles.inputLabel}>Owl Time QR Badge</Text>
                                         <StaffQrBadge staffName={editForm.name} qrToken={qrToken} />
                                     </View>
                                 ) : null}

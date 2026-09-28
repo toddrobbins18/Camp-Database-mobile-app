@@ -45,7 +45,7 @@ export function getDayCampNestCarryoverMenuItems(): MobileDrawerMenuItem[] {
     {
       key: 'staff-time-clock',
       menuId: 'staff-time-clock',
-      label: 'HootTrack',
+      label: 'Owl Time',
       icon: 'time-outline',
       screen: 'StaffTimeClock',
     },

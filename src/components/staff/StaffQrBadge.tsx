@@ -27,7 +27,7 @@ export function StaffQrBadge({ staffName, qrToken }: Props) {
 
   const saveAndShareImage = () => {
     if (!qrRef.current?.toDataURL) {
-      void Share.share({ message: `${staffName} — HootTrack QR: ${payload}` });
+      void Share.share({ message: `${staffName} — Owl Time QR: ${payload}` });
       return;
     }
 
@@ -48,7 +48,7 @@ export function StaffQrBadge({ staffName, qrToken }: Props) {
         await Share.share({
           url: file.uri,
           title: `${staffName} QR Badge`,
-          message: `Scan at HootTrack — ${payload}`,
+          message: `Scan at Owl Time — ${payload}`,
         });
       } catch (error) {
         Alert.alert(
@@ -61,7 +61,7 @@ export function StaffQrBadge({ staffName, qrToken }: Props) {
 
   const shareCodeText = async () => {
     await Share.share({
-      message: `${staffName} — HootTrack QR code: ${payload}`,
+      message: `${staffName} — Owl Time QR code: ${payload}`,
     });
   };
 

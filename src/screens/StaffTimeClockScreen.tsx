@@ -24,7 +24,7 @@ import {
 
 export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
   const { companyId, companySlug, isDayCamp, season } = useCompany();
-  const hootTrackEnabled = staffTimeClockEnabledForCompany({
+  const owlTimeEnabled = staffTimeClockEnabledForCompany({
     slug: companySlug,
     camp_type: isDayCamp ? 'day_camp' : 'overnight',
   });
@@ -47,18 +47,18 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
   }, [refresh]);
 
   useEffect(() => {
-    if (!scannerMode || !hootTrackEnabled) return;
+    if (!scannerMode || !owlTimeEnabled) return;
     const t = setTimeout(() => inputRef.current?.focus(), 300);
     return () => clearTimeout(t);
-  }, [scannerMode, hootTrackEnabled]);
+  }, [scannerMode, owlTimeEnabled]);
 
   useEffect(() => {
-    if (!scannerMode || !hootTrackEnabled) return;
+    if (!scannerMode || !owlTimeEnabled) return;
     const id = setInterval(() => {
       if (!scanning) inputRef.current?.focus();
     }, 500);
     return () => clearInterval(id);
-  }, [scannerMode, scanning, hootTrackEnabled]);
+  }, [scannerMode, scanning, owlTimeEnabled]);
 
   const handleScan = async (value?: string) => {
     const raw = (value ?? scanInput).trim();
@@ -97,7 +97,7 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
   const completed = rows.filter((r) => r.signed_in_at && r.signed_out_at).length;
   const formattedDate = format(new Date(`${workDate}T12:00:00`), 'EEEE, MMMM d, yyyy');
 
-  if (!hootTrackEnabled) {
+  if (!owlTimeEnabled) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
@@ -105,8 +105,8 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
             <Ionicons name="menu" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <View style={styles.headerText}>
-            <Text style={styles.title}>HootTrack</Text>
-            <Text style={styles.subtitle}>HootTrack is only available for day camps.</Text>
+            <Text style={styles.title}>Owl Time</Text>
+            <Text style={styles.subtitle}>Owl Time is only available for day camps.</Text>
           </View>
         </View>
       </SafeAreaView>
@@ -120,7 +120,7 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
           <Ionicons name="menu" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerText}>
-          <Text style={styles.title}>HootTrack</Text>
+          <Text style={styles.title}>Owl Time</Text>
           <Text style={styles.subtitle}>
             Scan QR badge or wristband · {formattedDate} · auto sign-out 4:15 PM
           </Text>
