@@ -157,6 +157,7 @@ export function SwimProgramScreen({ navigation }: any) {
   const [levelData, setLevelData] = useState<LevelRecord[]>([]);
   const [selectedBracelet, setSelectedBracelet] = useState<BraceletRecord | null>(null);
   const [selectedLevel, setSelectedLevel] = useState<LevelRecord | null>(null);
+  const [inactiveHidden, setInactiveHidden] = useState(0);
 
   useEffect(() => {
     setViewSeason(season);
@@ -173,13 +174,16 @@ export function SwimProgramScreen({ navigation }: any) {
     if (!companyId || !viewSeason) {
       setBraceletData([]);
       setLevelData([]);
+      setInactiveHidden(0);
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
       const { bracelets, levels } = await loadSwimProgramDataForCompany(companyId, viewSeason);
-      const children = await fetchSwimRosterChildrenForCompany(companyId, viewSeason);
+      const { children, inactiveHidden: hiddenInactive } =
+        await fetchSwimRosterChildrenForCompany(companyId, viewSeason);
+      setInactiveHidden(hiddenInactive);
       setBraceletData(mergeBracelets(bracelets, children));
       setLevelData(mergeLevels(levels, children));
     } catch (err) {
@@ -315,7 +319,11 @@ export function SwimProgramScreen({ navigation }: any) {
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Swim Program</Text>
           <Text style={styles.headerSubtitle}>
-            {loading ? 'Loading…' : `${braceletData.length} campers`} · season {viewSeason}
+            {loading
+              ? 'Loading…'
+              : `${braceletData.length} active camper${braceletData.length === 1 ? '' : 's'}`}
+            {!loading && inactiveHidden > 0 ? ` · ${inactiveHidden} inactive hidden` : ''}
+            {!loading ? ` · season ${viewSeason}` : ''}
           </Text>
         </View>
       </View>

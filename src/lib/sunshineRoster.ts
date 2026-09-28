@@ -18,6 +18,7 @@ export type SunshineRosterSyncResult = {
   groups: number;
   campers: number;
   skippedNoGroup: number;
+  totalRoster: number;
 };
 
 const normalizeGroupName = (value: string) => value.trim().toLowerCase();
@@ -156,5 +157,6 @@ export async function syncSunshineFromRoster(
     groups: groupNames.length,
     campers: camperPayload.length,
     skippedNoGroup,
+    totalRoster: roster.length,
   };
 }
