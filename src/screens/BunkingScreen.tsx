@@ -91,12 +91,15 @@ export function BunkingScreen({ navigation }: any) {
   useEffect(() => {
     let cancelled = false;
     const fetchBoard = async () => {
-      if (!companyId) return;
+      if (!companyId || !season) return;
       setLoading(true);
+      setCabins([]);
+      lastWrittenRef.current = "";
       const { data, error } = await supabase
         .from("bunking_boards")
         .select("data")
         .eq("company_id", companyId)
+        .eq("season", season)
         .maybeSingle();
 
       if (cancelled) return;
@@ -111,7 +114,7 @@ export function BunkingScreen({ navigation }: any) {
     };
     fetchBoard();
     return () => { cancelled = true; };
-  }, [companyId]);
+  }, [companyId, season]);
 
   useEffect(() => {
     if (!companyId || !season) return;
@@ -407,7 +410,8 @@ export function BunkingScreen({ navigation }: any) {
         "postgres_changes",
         { event: "*", schema: "public", table: "bunking_boards", filter: `company_id=eq.${companyId}` },
         (payload) => {
-          const newRow = (payload.new ?? {}) as { data?: unknown };
+          const newRow = (payload.new ?? {}) as { data?: unknown; season?: string };
+          if (newRow.season && newRow.season !== season) return;
           if (!newRow.data || !Array.isArray(newRow.data)) return;
           if (!(newRow.data as unknown[]).every(isCabin)) return;
           const incoming = JSON.stringify(newRow.data);
@@ -418,10 +422,10 @@ export function BunkingScreen({ navigation }: any) {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [companyId]);
+  }, [companyId, season]);
 
   const saveBoard = async (newCabins: Cabin[]) => {
-    if (!companyId) return;
+    if (!companyId || !season) return;
     setCabins(newCabins);
     const serialized = JSON.stringify(newCabins);
     lastWrittenRef.current = serialized;
@@ -431,8 +435,13 @@ export function BunkingScreen({ navigation }: any) {
     const { error } = await supabase
       .from("bunking_boards")
       .upsert(
-        { company_id: companyId, data: newCabins as unknown as never, updated_by: userData.user?.id },
-        { onConflict: "company_id" }
+        {
+          company_id: companyId,
+          season,
+          data: newCabins as unknown as never,
+          updated_by: userData.user?.id,
+        },
+        { onConflict: "company_id,season" }
       );
     if (error) console.error("Failed to save bunking board:", error);
   };

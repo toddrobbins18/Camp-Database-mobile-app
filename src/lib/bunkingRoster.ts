@@ -1,4 +1,7 @@
 import { supabase } from './supabase';
+import { filterActiveRoster } from './rosterStatus';
+
+const ROSTER_PAGE_SIZE = 1000;
 
 type RosterChildRow = {
   id: string;
@@ -6,7 +9,6 @@ type RosterChildRow = {
   gender: string | null;
   grade: string | null;
   group_name: string | null;
-  category: string | null;
   status: string | null;
   division: { name: string } | null;
 };
@@ -21,49 +23,55 @@ export type BunkingRosterCamper = {
   disrequests?: string[];
 };
 
-function isActiveRosterStatus(status: unknown): boolean {
-  if (status == null) return true;
-  const s = String(status).trim().toLowerCase();
-  if (!s) return true;
-  return s !== 'inactive' && s !== 'withdrawn';
+function mapBunkingRosterChild(child: RosterChildRow): BunkingRosterCamper {
+  return {
+    id: child.id,
+    name: child.name,
+    gender: child.gender || undefined,
+    division:
+      child.division?.name?.trim() ||
+      child.grade?.trim() ||
+      child.group_name?.trim() ||
+      '',
+    town: '',
+    requests: [],
+    disrequests: [],
+  };
 }
 
 export async function fetchBunkingCampersFromRoster(
   companyId: string,
   season: string,
 ): Promise<BunkingRosterCamper[]> {
-  const { data, error } = await supabase
-    .from('children')
-    .select(`
-      id,
-      name,
-      gender,
-      grade,
-      group_name,
-      category,
-      status,
-      division:division_id(name)
-    `)
-    .eq('company_id', companyId)
-    .eq('season', season)
-    .order('name');
+  const rows: RosterChildRow[] = [];
+  let from = 0;
 
-  if (error) throw error;
+  for (;;) {
+    const to = from + ROSTER_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('children')
+      .select(`
+        id,
+        name,
+        gender,
+        grade,
+        group_name,
+        status,
+        division:division_id(name)
+      `)
+      .eq('company_id', companyId)
+      .eq('season', season)
+      .neq('status', 'inactive')
+      .order('name')
+      .range(from, to);
 
-  return (data as RosterChildRow[] | null || [])
-    .filter((child) => isActiveRosterStatus(child.status))
-    .map((child) => ({
-      id: child.id,
-      name: child.name,
-      gender: child.gender || undefined,
-      division:
-        child.division?.name?.trim() ||
-        child.grade?.trim() ||
-        child.group_name?.trim() ||
-        child.category?.trim() ||
-        '',
-      town: '',
-      requests: [],
-      disrequests: [],
-    }));
+    if (error) throw error;
+
+    const batch = (data as RosterChildRow[] | null) ?? [];
+    rows.push(...batch);
+    if (batch.length < ROSTER_PAGE_SIZE) break;
+    from += ROSTER_PAGE_SIZE;
+  }
+
+  return filterActiveRoster(rows).map(mapBunkingRosterChild);
 }

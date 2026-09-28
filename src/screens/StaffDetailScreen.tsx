@@ -5,6 +5,7 @@ import { staffTimeClockEnabledForCompany } from '../constants/camps';
 import { resolveStaffForCampView } from '../lib/profileCampResolution';
 import { ensureStaffQrToken } from '../lib/staffTimeClock';
 import { StaffQrBadge } from '../components/staff/StaffQrBadge';
+import { normalizeRfidInput } from '../lib/rfidUtils';
 import {
     View,
     Text,
@@ -155,6 +156,7 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
         email: route?.params?.staff?.email || '',
         phone: route?.params?.staff?.phone || '',
         staff_type: route?.params?.staff?.staff_type || '',
+        rfid: route?.params?.staff?.rfid || '',
     });
 
     const displayStaff = loadedStaff ?? staff;
@@ -233,12 +235,14 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
             email: displayStaff?.email || staff?.email || '',
             phone: displayStaff?.phone || staff?.phone || '',
             staff_type: displayStaff?.staff_type || staff?.staff_type || '',
+            rfid: displayStaff?.rfid || staff?.rfid || '',
         });
         setEditVisible(true);
     };
 
     const saveProfile = async () => {
-        if (!staff?.id) {
+        const staffRecordId = resolvedStaffId || displayStaff?.id || staff?.id;
+        if (!staffRecordId) {
             Alert.alert('Error', 'Missing staff record id.');
             return;
         }
@@ -256,12 +260,13 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                 email: editForm.email.trim() || null,
                 phone: editForm.phone.trim() || null,
                 staff_type: editForm.staff_type.trim() || null,
+                rfid: normalizeRfidInput(editForm.rfid) || null,
             };
 
             const { data, error } = await supabase
                 .from('staff')
                 .update(payload)
-                .eq('id', staff.id)
+                .eq('id', staffRecordId)
                 .select('*')
                 .single();
 
@@ -458,11 +463,18 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                         </View>
                     </View>
 
+                    {displayStaff?.rfid ? (
+                        <View style={styles.infoCard}>
+                            <Text style={styles.cardTitle}>RFID Wristband</Text>
+                            <Text style={styles.fieldValue}>{displayStaff.rfid}</Text>
+                        </View>
+                    ) : null}
+
                     {activeTab === 'Overview' && showTimeClockQr ? (
                         <View style={styles.infoCard}>
-                            <Text style={styles.cardTitle}>Time Clock QR Badge</Text>
+                            <Text style={styles.cardTitle}>HootTrack QR Badge</Text>
                             <Text style={styles.cardSubtitle}>
-                                Share or save for Staff Time Clock sign-in and sign-out
+                                Share or save for HootTrack sign-in and sign-out
                             </Text>
                             {qrToken && displayStaff?.name ? (
                                 <StaffQrBadge staffName={displayStaff.name} qrToken={qrToken} />
@@ -562,9 +574,18 @@ export const StaffDetailScreen = ({ route, navigation }: any) => {
                                     style={styles.input}
                                     placeholder="general_counselor / specialist / both / not_specified"
                                 />
+                                <Text style={styles.inputLabel}>RFID Wristband</Text>
+                                <TextInput
+                                    value={editForm.rfid}
+                                    onChangeText={(text) => setEditForm((prev) => ({ ...prev, rfid: text }))}
+                                    style={styles.input}
+                                    placeholder="Scan wristband or enter RFID..."
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                />
                                 {showTimeClockQr && qrToken && editForm.name ? (
                                     <View style={{ marginTop: 16 }}>
-                                        <Text style={styles.inputLabel}>Time Clock QR Badge</Text>
+                                        <Text style={styles.inputLabel}>HootTrack QR Badge</Text>
                                         <StaffQrBadge staffName={editForm.name} qrToken={qrToken} />
                                     </View>
                                 ) : null}

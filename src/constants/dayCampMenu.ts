@@ -42,6 +42,13 @@ export function getDayCampNestCarryoverMenuItems(): MobileDrawerMenuItem[] {
     { key: 'rainy-day-schedule', menuId: 'rainy-day', label: 'Rainy Day Schedule', icon: 'rainy-outline', screen: 'RainyDaySchedule' },
     { key: 'special-events', menuId: 'special-events', label: 'Special Events', icon: 'calendar-outline', screen: 'SpecialEvents' },
     { key: 'staff', menuId: 'staff', label: 'Staff', icon: 'person-outline', screen: 'Staff' },
+    {
+      key: 'staff-time-clock',
+      menuId: 'staff-time-clock',
+      label: 'HootTrack',
+      icon: 'time-outline',
+      screen: 'StaffTimeClock',
+    },
   ];
 }
 

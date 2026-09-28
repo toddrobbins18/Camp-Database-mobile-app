@@ -15,6 +15,7 @@ import { format } from 'date-fns';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
+import { staffTimeClockEnabledForCompany } from '../constants/camps';
 import {
   loadStaffTimeClockForDate,
   processStaffTimeClockScan,
@@ -22,7 +23,12 @@ import {
 } from '../lib/staffTimeClock';
 
 export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
-  const { companyId, season } = useCompany();
+  const { companyId, companySlug, isDayCamp, season } = useCompany();
+  const hootTrackEnabled = staffTimeClockEnabledForCompany({
+    slug: companySlug,
+    camp_type: isDayCamp ? 'day_camp' : 'overnight',
+  });
+  const [scannerMode, setScannerMode] = useState(true);
   const [scanInput, setScanInput] = useState('');
   const [scanning, setScanning] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
@@ -41,9 +47,18 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
   }, [refresh]);
 
   useEffect(() => {
+    if (!scannerMode || !hootTrackEnabled) return;
     const t = setTimeout(() => inputRef.current?.focus(), 300);
     return () => clearTimeout(t);
-  }, []);
+  }, [scannerMode, hootTrackEnabled]);
+
+  useEffect(() => {
+    if (!scannerMode || !hootTrackEnabled) return;
+    const id = setInterval(() => {
+      if (!scanning) inputRef.current?.focus();
+    }, 500);
+    return () => clearInterval(id);
+  }, [scannerMode, scanning, hootTrackEnabled]);
 
   const handleScan = async (value?: string) => {
     const raw = (value ?? scanInput).trim();
@@ -57,6 +72,7 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
         season,
         userId: userRes.user?.id,
         workDate,
+        company: { slug: companySlug, camp_type: isDayCamp ? 'day_camp' : 'overnight' },
       });
       if (!result.ok) {
         Alert.alert('Scan failed', result.message);
@@ -81,6 +97,22 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
   const completed = rows.filter((r) => r.signed_in_at && r.signed_out_at).length;
   const formattedDate = format(new Date(`${workDate}T12:00:00`), 'EEEE, MMMM d, yyyy');
 
+  if (!hootTrackEnabled) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.openDrawer()}>
+            <Ionicons name="menu" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>HootTrack</Text>
+            <Text style={styles.subtitle}>HootTrack is only available for day camps.</Text>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -88,14 +120,29 @@ export function StaffTimeClockScreen({ navigation }: { navigation: any }) {
           <Ionicons name="menu" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Staff Time Clock</Text>
+          <Text style={styles.title}>HootTrack</Text>
           <Text style={styles.subtitle}>
             Scan QR badge or wristband · {formattedDate} · auto sign-out 4:15 PM
           </Text>
         </View>
-        <TouchableOpacity onPress={() => void refresh()}>
-          <Ionicons name="refresh" size={22} color={theme.colors.secondary} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => void refresh()} style={styles.headerActionBtn}>
+            <Ionicons name="refresh" size={22} color={theme.colors.secondary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setScannerMode((v) => !v)}
+            style={[styles.headerActionBtn, scannerMode && styles.scannerOnBtn]}
+          >
+            <Ionicons
+              name={scannerMode ? 'radio-button-on' : 'radio-button-off'}
+              size={18}
+              color={scannerMode ? '#fff' : theme.colors.secondary}
+            />
+            <Text style={[styles.scannerOnText, scannerMode && styles.scannerOnTextActive]}>
+              {scannerMode ? 'Scanner on' : 'Scanner off'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.statsRow}>
@@ -203,6 +250,20 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   headerText: { flex: 1 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  scannerOnBtn: { backgroundColor: theme.colors.secondary, borderColor: theme.colors.secondary },
+  scannerOnText: { fontSize: 11, fontWeight: '600', color: theme.colors.secondary },
+  scannerOnTextActive: { color: '#fff' },
   title: { ...theme.typography.h2, fontSize: 20 },
   subtitle: { ...theme.typography.bodySmall, color: theme.colors.textSecondary },
   statsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: theme.spacing.md, marginBottom: 8 },

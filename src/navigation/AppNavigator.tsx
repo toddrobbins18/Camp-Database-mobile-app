@@ -5,7 +5,6 @@ import { NavigationContainer, useNavigationContainerRef } from '@react-navigatio
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Pressable, ScrollView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCompany } from '../contexts/CompanyContext';
-import { staffTimeClockEnabledForCompany } from '../constants/camps';
 import { LoginScreen } from '../screens/LoginScreen';
 import { SignUpScreen } from '../screens/SignUpScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
@@ -302,11 +301,6 @@ const CustomDrawerContent = (props: any) => {
     if (hasMenuAccess('od-management')) {
         mainMenuItems.push(
             { key: 'od-management', label: 'OD Management', icon: 'clipboard-outline', onPress: () => props.navigation.navigate('ODManagement') }
-        );
-    }
-    if (staffTimeClockEnabledForCompany({ slug: companySlug }) && hasMenuAccess('staff-time-clock')) {
-        mainMenuItems.push(
-            { key: 'staff-time-clock', label: 'Staff Time Clock', icon: 'time-outline', onPress: () => props.navigation.navigate('StaffTimeClock') }
         );
     }
     if (hasMenuAccess('special-events')) {

@@ -84,6 +84,12 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
     setFamilyName(fam.family_name);
     setContactName(fam.primary_contact_name);
 
+    try {
+      await supabase.rpc('link_family_children_by_guardian_email', { _family_id: fam.id });
+    } catch (err) {
+      console.warn('[ParentPortal] auto-link by guardian email failed:', err);
+    }
+
     const { data: fc } = await supabase
       .from('family_children')
       .select('child_id, children:child_id(id, name, grade, group_name, photo_url, status)')

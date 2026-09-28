@@ -5,7 +5,6 @@ import {
   isTimberLakeCamp,
   isTimberLakeWest,
   isTylerHillCamp,
-  staffTimeClockEnabledForCompany,
 } from '../constants/camps';
 import {
   getDayCampNestCarryoverMenuItems,
@@ -78,7 +77,6 @@ function getAllowedScreensForCompany(company: CampLike): Set<string> {
   ];
   overnightScreens.forEach((screen) => screens.add(screen));
 
-  if (staffTimeClockEnabledForCompany(company)) screens.add('StaffTimeClock');
   if (appointmentsEnabledForCompany(company)) screens.add('Appointments');
   if (isTylerHillCamp(company?.slug)) screens.add('OwlPay');
   if (isTimberLakeCamp(company?.slug)) {
