@@ -30,7 +30,6 @@ import {
   approveDismissalSwim,
   DISMISSAL_REALTIME_TABLES,
   fetchDismissalDashboard,
-  lookupFamilyIdForCamper,
   PICKUP_CHANGE_LABELS,
   type DismissalDashboardData,
 } from '../lib/dismissalDashboard';
@@ -39,6 +38,7 @@ import {
   type TransportException,
 } from '../lib/transportDailyOverrides';
 import { submitNurseSentHomeTransportException } from '../lib/nurseTransportException';
+import { useTransportFamilySiblings } from '../hooks/useTransportFamilySiblings';
 import { ABSENCE_TYPES, CHANGE_TYPES } from '../constants/parentPortalConstants';
 
 type TabId = 'pending' | 'exceptions' | 'log';
@@ -443,6 +443,66 @@ function PendingCard({
   );
 }
 
+function TransportLogFamilyField({
+  familyId,
+  familyName,
+  siblings,
+  camperId,
+  applyToSiblings,
+  onApplyToSiblingsChange,
+  loading,
+  requireFamily,
+}: {
+  familyId: string | null;
+  familyName: string | null;
+  siblings: Camper[];
+  camperId: string;
+  applyToSiblings: boolean;
+  onApplyToSiblingsChange: (checked: boolean) => void;
+  loading: boolean;
+  requireFamily?: boolean;
+}) {
+  if (!camperId) return null;
+
+  const others = siblings.filter((s) => s.id !== camperId);
+
+  if (loading) {
+    return <Text style={styles.formHint}>Loading family…</Text>;
+  }
+
+  if (!familyId) {
+    return (
+      <Text style={[styles.formHint, requireFamily && styles.formHintWarn]}>
+        {requireFamily
+          ? 'No family link — link this camper in Portal Dashboard first.'
+          : 'No family link — sibling apply unavailable.'}
+      </Text>
+    );
+  }
+
+  return (
+    <View style={styles.familyBox}>
+      <Text style={styles.familyIdLabel}>
+        Family ID: <Text style={styles.familyIdValue}>{familyId}</Text>
+      </Text>
+      {familyName ? <Text style={styles.formHint}>{familyName}</Text> : null}
+      {others.length > 0 ? (
+        <View style={styles.switchRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.fieldLabel}>
+              Apply to all enrolled siblings ({siblings.length} campers)
+            </Text>
+            <Text style={styles.formHint}>{siblings.map((s) => s.name).join(', ')}</Text>
+          </View>
+          <Switch value={applyToSiblings} onValueChange={onApplyToSiblingsChange} />
+        </View>
+      ) : (
+        <Text style={styles.formHint}>No other enrolled siblings in this family.</Text>
+      )}
+    </View>
+  );
+}
+
 function LogForms({
   companyId,
   campers,
@@ -480,29 +540,37 @@ function PickupLogForm({
   const [changeType, setChangeType] = useState('early_pickup');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const family = useTransportFamilySiblings(companyId, camperId, campers);
 
   useEffect(() => setChangeDate(defaultDate), [defaultDate]);
 
   const submit = async () => {
     if (!camperId) return Alert.alert('Error', 'Select a camper');
+    if (!family.familyId) {
+      Alert.alert('Error', 'Camper not linked to a family — link in Portal Dashboard first');
+      return;
+    }
     setSaving(true);
     try {
-      const familyId = await lookupFamilyIdForCamper(supabase, companyId, camperId);
-      if (!familyId) {
-        Alert.alert('Error', 'Camper not linked to a family — link in Portal Dashboard first');
-        return;
-      }
-      const { error } = await supabase.from('pickup_changes').insert({
-        company_id: companyId,
-        family_id: familyId,
-        camper_id: camperId,
-        change_date: changeDate,
-        change_type: changeType,
-        notes: notes || null,
-        status: 'submitted',
-      });
+      const targets = family.logTargets;
+      const { error } = await supabase.from('pickup_changes').insert(
+        targets.map((t) => ({
+          company_id: companyId,
+          family_id: family.familyId,
+          camper_id: t.id,
+          change_date: changeDate,
+          change_type: changeType,
+          notes: notes || null,
+          status: 'submitted',
+        })),
+      );
       if (error) throw error;
-      Alert.alert('Submitted', 'Approve in Pending tab to update routes');
+      Alert.alert(
+        'Submitted',
+        targets.length > 1
+          ? `Logged for ${targets.length} campers — approve in Pending tab`
+          : 'Approve in Pending tab to update routes',
+      );
       setNotes('');
       onSaved();
     } catch (e: any) {
@@ -516,6 +584,16 @@ function PickupLogForm({
     <View style={styles.formCard}>
       <Text style={styles.formTitle}>Log pickup change</Text>
       <CamperPicker label="Camper" campers={campers} value={camperId} onChange={setCamperId} />
+      <TransportLogFamilyField
+        familyId={family.familyId}
+        familyName={family.familyName}
+        siblings={family.siblings}
+        camperId={camperId}
+        applyToSiblings={family.applyToSiblings}
+        onApplyToSiblingsChange={family.setApplyToSiblings}
+        loading={family.loading}
+        requireFamily
+      />
       <TextInput style={styles.input} value={changeDate} onChangeText={setChangeDate} placeholder="YYYY-MM-DD" />
       <OptionPicker label="Type" value={changeType} options={CHANGE_TYPES} onChange={setChangeType} />
       <TextInput style={styles.input} value={notes} onChangeText={setNotes} placeholder="Notes" multiline />
@@ -542,29 +620,37 @@ function AbsenceLogForm({
   const [absenceType, setAbsenceType] = useState('absent');
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
+  const family = useTransportFamilySiblings(companyId, camperId, campers);
 
   useEffect(() => setAbsenceDate(defaultDate), [defaultDate]);
 
   const submit = async () => {
     if (!camperId) return Alert.alert('Error', 'Select a camper');
+    if (!family.familyId) {
+      Alert.alert('Error', 'Camper not linked to a family');
+      return;
+    }
     setSaving(true);
     try {
-      const familyId = await lookupFamilyIdForCamper(supabase, companyId, camperId);
-      if (!familyId) {
-        Alert.alert('Error', 'Camper not linked to a family');
-        return;
-      }
-      const { error } = await supabase.from('absences').insert({
-        company_id: companyId,
-        family_id: familyId,
-        camper_id: camperId,
-        absence_date: absenceDate,
-        absence_type: absenceType,
-        reason: reason || null,
-        status: 'submitted',
-      });
+      const targets = family.logTargets;
+      const { error } = await supabase.from('absences').insert(
+        targets.map((t) => ({
+          company_id: companyId,
+          family_id: family.familyId,
+          camper_id: t.id,
+          absence_date: absenceDate,
+          absence_type: absenceType,
+          reason: reason || null,
+          status: 'submitted',
+        })),
+      );
       if (error) throw error;
-      Alert.alert('Submitted', 'Approve in Pending tab');
+      Alert.alert(
+        'Submitted',
+        targets.length > 1
+          ? `Logged for ${targets.length} campers — approve in Pending tab`
+          : 'Approve in Pending tab',
+      );
       setReason('');
       onSaved();
     } catch (e: any) {
@@ -578,6 +664,16 @@ function AbsenceLogForm({
     <View style={styles.formCard}>
       <Text style={styles.formTitle}>Log absence</Text>
       <CamperPicker label="Camper" campers={campers} value={camperId} onChange={setCamperId} />
+      <TransportLogFamilyField
+        familyId={family.familyId}
+        familyName={family.familyName}
+        siblings={family.siblings}
+        camperId={camperId}
+        applyToSiblings={family.applyToSiblings}
+        onApplyToSiblingsChange={family.setApplyToSiblings}
+        loading={family.loading}
+        requireFamily
+      />
       <TextInput style={styles.input} value={absenceDate} onChangeText={setAbsenceDate} placeholder="YYYY-MM-DD" />
       <OptionPicker label="Type" value={absenceType} options={ABSENCE_TYPES} onChange={setAbsenceType} />
       <TextInput style={styles.input} value={reason} onChangeText={setReason} placeholder="Reason" />
@@ -605,6 +701,7 @@ function SwimLogForm({
   const [staffConfirmed, setStaffConfirmed] = useState(true);
   const [instructor, setInstructor] = useState('');
   const [saving, setSaving] = useState(false);
+  const family = useTransportFamilySiblings(companyId, camperId, campers);
 
   useEffect(() => setLessonDate(defaultDate), [defaultDate]);
 
@@ -612,18 +709,26 @@ function SwimLogForm({
     if (!camperId) return Alert.alert('Error', 'Select a camper');
     setSaving(true);
     try {
-      const { error } = await supabase.from('swim_lessons').insert({
-        company_id: companyId,
-        camper_id: camperId,
-        scheduled_at: campDateTimeToIso(lessonDate, time),
-        duration_minutes: 30,
-        instructor: instructor || null,
-        parent_confirmed: staffConfirmed,
-        parent_confirmed_at: staffConfirmed ? new Date().toISOString() : null,
-        transport_status: staffConfirmed ? 'submitted' : null,
-      });
+      const targets = family.logTargets;
+      const { error } = await supabase.from('swim_lessons').insert(
+        targets.map((t) => ({
+          company_id: companyId,
+          camper_id: t.id,
+          scheduled_at: campDateTimeToIso(lessonDate, time),
+          duration_minutes: 30,
+          instructor: instructor || null,
+          parent_confirmed: staffConfirmed,
+          parent_confirmed_at: staffConfirmed ? new Date().toISOString() : null,
+          transport_status: staffConfirmed ? 'submitted' : null,
+        })),
+      );
       if (error) throw error;
-      Alert.alert('Scheduled', 'Approve to remove camper from PM bus');
+      Alert.alert(
+        'Scheduled',
+        targets.length > 1
+          ? `Logged for ${targets.length} campers — approve to remove from PM bus`
+          : 'Approve to remove camper from PM bus',
+      );
       onSaved();
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Save failed');
@@ -637,6 +742,15 @@ function SwimLogForm({
       <Text style={styles.formTitle}>Log swim lesson (bus exception)</Text>
       <Text style={styles.formHint}>Already at camp in AM — PM bus only when approved</Text>
       <CamperPicker label="Camper" campers={campers} value={camperId} onChange={setCamperId} />
+      <TransportLogFamilyField
+        familyId={family.familyId}
+        familyName={family.familyName}
+        siblings={family.siblings}
+        camperId={camperId}
+        applyToSiblings={family.applyToSiblings}
+        onApplyToSiblingsChange={family.setApplyToSiblings}
+        loading={family.loading}
+      />
       <TextInput style={styles.input} value={lessonDate} onChangeText={setLessonDate} placeholder="YYYY-MM-DD" />
       <TextInput style={styles.input} value={time} onChangeText={setTime} placeholder="HH:MM (24h)" />
       <TextInput style={styles.input} value={instructor} onChangeText={setInstructor} placeholder="Instructor" />
@@ -666,23 +780,30 @@ function NurseLogForm({
   const [recordDate, setRecordDate] = useState(defaultDate);
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
+  const family = useTransportFamilySiblings(companyId, camperId, campers);
 
   useEffect(() => setRecordDate(defaultDate), [defaultDate]);
 
-  const camper = campers.find((c) => c.id === camperId);
-
   const submit = async () => {
-    if (!camper) return Alert.alert('Error', 'Select a camper');
+    if (!camperId) return Alert.alert('Error', 'Select a camper');
     setSaving(true);
     try {
-      await submitNurseSentHomeTransportException(supabase, {
-        companyId,
-        date: recordDate,
-        camperName: camper.name,
-        groupName: camper.group_name,
-        reason: reason || null,
-      });
-      Alert.alert('Logged', 'Approve in Pending tab to remove from bus');
+      const targets = family.logTargets;
+      for (const target of targets) {
+        await submitNurseSentHomeTransportException(supabase, {
+          companyId,
+          date: recordDate,
+          camperName: target.name,
+          groupName: target.group_name,
+          reason: reason || null,
+        });
+      }
+      Alert.alert(
+        'Logged',
+        targets.length > 1
+          ? `Logged for ${targets.length} campers — approve in Pending tab`
+          : 'Approve in Pending tab to remove from PM bus',
+      );
       setReason('');
       onSaved();
     } catch (e: any) {
@@ -697,6 +818,15 @@ function NurseLogForm({
       <Text style={styles.formTitle}>Nurse sent home</Text>
       <Text style={styles.formHint}>Already at camp in AM — PM bus only when approved</Text>
       <CamperPicker label="Camper" campers={campers} value={camperId} onChange={setCamperId} />
+      <TransportLogFamilyField
+        familyId={family.familyId}
+        familyName={family.familyName}
+        siblings={family.siblings}
+        camperId={camperId}
+        applyToSiblings={family.applyToSiblings}
+        onApplyToSiblingsChange={family.setApplyToSiblings}
+        loading={family.loading}
+      />
       <TextInput style={styles.input} value={recordDate} onChangeText={setRecordDate} placeholder="YYYY-MM-DD" />
       <TextInput style={styles.input} value={reason} onChangeText={setReason} placeholder="Reason" />
       <TouchableOpacity style={styles.submitBtn} onPress={() => void submit()} disabled={saving}>
@@ -809,6 +939,17 @@ const styles = StyleSheet.create({
   },
   formTitle: { fontSize: 15, fontWeight: '600', color: theme.colors.text, marginBottom: 4 },
   formHint: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 10 },
+  formHintWarn: { color: '#b45309' },
+  familyBox: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+    backgroundColor: theme.colors.surface,
+  },
+  familyIdLabel: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 },
+  familyIdValue: { fontSize: 11, color: theme.colors.text, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
   fieldBlock: { marginBottom: 10 },
   fieldLabel: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 },
   pickerBtn: {
