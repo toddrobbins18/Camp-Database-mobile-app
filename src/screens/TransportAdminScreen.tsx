@@ -38,6 +38,7 @@ import {
   fetchTransportExceptionsForReport,
   type TransportException,
 } from '../lib/transportDailyOverrides';
+import { submitNurseSentHomeTransportException } from '../lib/nurseTransportException';
 import { ABSENCE_TYPES, CHANGE_TYPES } from '../constants/parentPortalConstants';
 
 type TabId = 'pending' | 'exceptions' | 'log';
@@ -682,16 +683,13 @@ function NurseLogForm({
     if (!camper) return Alert.alert('Error', 'Select a camper');
     setSaving(true);
     try {
-      const { error } = await supabase.from('nurse_records').insert({
-        company_id: companyId,
+      await submitNurseSentHomeTransportException(supabase, {
+        companyId,
         date: recordDate,
-        camper_name: camper.name,
-        group_name: camper.group_name,
+        camperName: camper.name,
+        groupName: camper.group_name,
         reason: reason || null,
-        sent_home: true,
-        transport_status: 'submitted',
       });
-      if (error) throw error;
       Alert.alert('Logged', 'Approve in Pending tab to remove from bus');
       setReason('');
       onSaved();

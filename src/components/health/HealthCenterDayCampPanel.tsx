@@ -19,6 +19,11 @@ import {
   type HealthCenterVisitFormState,
 } from './HealthCenterVisitFormFields';
 import type { HealthCenterVisitExtraFields } from '../../lib/healthCenterVisitOptions';
+import {
+  healthVisitCalledHomeToBoolean,
+  isHealthVisitSentHome,
+  submitNurseSentHomeTransportException,
+} from '../../lib/nurseTransportException';
 
 type CamperRow = {
   id: string;
@@ -235,11 +240,49 @@ export function HealthCenterDayCampPanel({
       const { error } = await supabase.from('health_center_admissions').insert(insertData);
       if (error) throw error;
 
+      const selectedCamper =
+        entityType === 'camper' ? children.find((c) => c.id === selectedId) : undefined;
+      const camperSentHome =
+        entityType === 'camper' && isHealthVisitSentHome(form.sent_home);
+
       setForm(emptyHealthCenterVisitForm());
       setSelectedId(null);
       setSearch('');
       onVisitLogged();
-      Alert.alert('Visit logged');
+
+      if (camperSentHome && selectedCamper) {
+        try {
+          const transport = await submitNurseSentHomeTransportException(supabase, {
+            companyId,
+            date: visitDate,
+            camperName: selectedCamper.name,
+            groupName: form.group_name || selectedCamper.group_name,
+            reason: form.reason.trim(),
+            nurseName: form.nurse_name,
+            counselorName: form.counselor_name,
+            calledHome: healthVisitCalledHomeToBoolean(form.called_home),
+          });
+          if (transport.skipped) {
+            Alert.alert(
+              'Visit logged',
+              'Transport already approved this camper for today.',
+            );
+          } else {
+            Alert.alert(
+              'Visit logged — sent to transport',
+              'Pending approval in Transport Admin. No need to re-enter under Log change.',
+            );
+          }
+        } catch (transportErr) {
+          console.error(transportErr);
+          Alert.alert(
+            'Visit logged',
+            'Could not queue transport exception. Ask transport staff to log sent home under Transport Admin.',
+          );
+        }
+      } else {
+        Alert.alert('Visit logged');
+      }
     } catch (err) {
       console.error(err);
       Alert.alert(
