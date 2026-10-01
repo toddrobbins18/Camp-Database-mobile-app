@@ -1390,8 +1390,8 @@ async function performFullSync(
       });
 
       const gradeMap: Record<number, string> = {
-        0: 'Pre-K', 1: 'K', 2: '1st', 3: '2nd', 4: '3rd', 5: '4th',
-        6: '5th', 7: '6th', 8: '7th', 9: '8th', 10: '9th', 11: '10th', 12: '11th', 13: '12th'
+        0: 'Pre-K', 1: 'Pre-K', 2: 'K', 3: '1st', 4: '2nd', 5: '3rd', 6: '4th',
+        7: '5th', 8: '6th', 9: '7th', 10: '8th', 11: '9th', 12: '10th', 13: '11th', 14: '12th',
       };
 
     // Note: camperData is declared in initialization section

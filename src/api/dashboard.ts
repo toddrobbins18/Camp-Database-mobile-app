@@ -1,7 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { dedupeMenuItemsForDisplay } from '../lib/csvRosterSync';
 import { supabase } from '../lib/supabase';
-import { ageOnLocalDate, isActiveRosterStatus, parseBirthdayCalendarParts } from '../lib/birthdayDate';
+import {
+    ageOnLocalDate,
+    filterEnrolledCampers,
+    filterHiredStaffForBirthday,
+    parseBirthdayCalendarParts,
+} from '../lib/birthdayDate';
 import { expandDivisionIdsForRosterFilter } from '../lib/divisionFilterUtils';
 import { mergeActivityDivisions, mergeSportsDivisions } from '../lib/dailyWolfPrintableUtils';
 import { getCachedJson, setCachedJson } from '../offline/engine';
@@ -98,6 +103,7 @@ export const useTodayBirthdays = (
                     .from('children')
                     .select('id, name, date_of_birth, division_id, status')
                     .eq('company_id', companyId)
+                    .eq('status', 'active')
                     .not('date_of_birth', 'is', null);
 
                 if (season != null && String(season).trim() !== '') {
@@ -112,14 +118,15 @@ export const useTodayBirthdays = (
                 if (childrenError) {
                     console.warn('Birthday children query failed:', childrenError.message);
                 }
-                const childrenData = (childrenRaw ?? []).filter((c: { status?: string | null }) =>
-                    isActiveRosterStatus(c.status),
-                );
+                const childrenData = filterEnrolledCampers(childrenRaw);
 
                 let staffQuery = supabase
                     .from('staff')
                     .select('id, name, date_of_birth, status')
                     .eq('company_id', companyId)
+                    .eq('status', 'active')
+                    .neq('name', 'Unknown')
+                    .not('name', 'is', null)
                     .not('date_of_birth', 'is', null);
 
                 if (season != null && String(season).trim() !== '') {
@@ -131,9 +138,7 @@ export const useTodayBirthdays = (
                 if (staffError) {
                     console.warn('Birthday staff query failed:', staffError.message);
                 }
-                const staffData = (staffRaw ?? []).filter((s: { status?: string | null }) =>
-                    isActiveRosterStatus(s.status),
-                );
+                const staffData = filterHiredStaffForBirthday(staffRaw);
 
                 const now = new Date();
                 const birthdays: any[] = [];

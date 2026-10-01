@@ -21,7 +21,6 @@ import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import {
   allRoutesBusSubmitted,
   busSubmissionKey,
-  campersOnRoute,
   isRouteBusSubmitted,
   loadBusAttendance,
   saveBusAttendance,
@@ -29,14 +28,10 @@ import {
   type BusAttendanceStatus,
   type BusSubmissionsMap,
 } from '../lib/transportBusAttendance';
-import {
-  busCheckinKey,
-  formatCheckinTime,
-  loadBusCheckins,
-  saveBusCheckins,
-  type BusCheckinMap,
-} from '../lib/transportBusCheckins';
-import { buildRunRoutes, getEffectiveCoreStops, loadTransportRunBoard, type TransportRunBoard } from '../lib/transportRunBoard';
+import { campersOnRouteForWeek, weekContextForNumber } from '../lib/transportBusRunContext';
+import { formatEnrollmentWeekLabel } from '../lib/enrollmentWeekCalendar';
+import { getEffectiveCoreStops } from '../lib/transportRunBoard';
+import { useFilteredBusRoutes } from '../hooks/useFilteredBusRoutes';
 import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
 import { FrontOfficeBackButton } from '../components/FrontOfficeBackButton';
 
@@ -57,10 +52,8 @@ async function shareTransportPdf(pdf: { filename: string; bytes: Uint8Array }) {
 }
 
 export function BusAttendanceScreen({ navigation }: any) {
-  const { companyId, season, availableCompanies } = useCompany();
+  const { availableCompanies } = useCompany();
   const { operationalDateString } = useCampOperationalDate();
-  const companyName =
-    availableCompanies.find((c) => c.id === companyId)?.name ?? 'Day Camp';
 
   const [runDate, setRunDate] = useState(operationalDateString);
 
@@ -70,22 +63,51 @@ export function BusAttendanceScreen({ navigation }: any) {
   const [timeOfDay, setTimeOfDay] = useState<'am' | 'pm'>('am');
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const [board, setBoard] = useState<TransportRunBoard | null>(null);
-  const [boardLoading, setBoardLoading] = useState(true);
+  const {
+    companyId,
+    season,
+    board,
+    boardLoading,
+    routes,
+    enrollmentCtx,
+    busScopeLabel,
+  } = useFilteredBusRoutes(runDate, timeOfDay);
+
+  const companyName =
+    availableCompanies.find((c) => c.id === companyId)?.name ?? 'Day Camp';
+
   const [busAttendance, setBusAttendance] = useState<BusAttendanceMap>({});
   const [busSubmissions, setBusSubmissions] = useState<BusSubmissionsMap>({});
   const [attendanceSubmittedAt, setAttendanceSubmittedAt] = useState<string | null>(null);
   const [attendanceLoading, setAttendanceLoading] = useState(true);
-  const [busCheckins, setBusCheckins] = useState<BusCheckinMap>({});
-  const [checkinsLoading, setCheckinsLoading] = useState(true);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   const skipAttendancePersistRef = useRef(true);
-  const skipCheckinsPersistRef = useRef(true);
   const [selectedRouteIds, setSelectedRouteIds] = useState<number[]>([]);
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
 
-  const routes = useMemo(
-    () => (board ? buildRunRoutes(board, timeOfDay) : []),
-    [board, timeOfDay],
+  useEffect(() => {
+    if (!enrollmentCtx?.defaultWeek) return;
+    setSelectedWeek(enrollmentCtx.defaultWeek);
+  }, [enrollmentCtx?.defaultWeek, runDate]);
+
+  const activeWeek = selectedWeek ?? enrollmentCtx?.defaultWeek ?? null;
+  const activeWeekContext = useMemo(() => {
+    if (!enrollmentCtx || activeWeek == null) return null;
+    return weekContextForNumber(enrollmentCtx.calendar, activeWeek);
+  }, [enrollmentCtx, activeWeek]);
+
+  const campersForRoute = useCallback(
+    (routeId: number) => {
+      if (!board || !enrollmentCtx) return [];
+      return campersOnRouteForWeek(
+        routeId,
+        getEffectiveCoreStops(board, routeId, timeOfDay),
+        activeWeek,
+        enrollmentCtx.enrollmentLookup,
+      );
+    },
+    [board, enrollmentCtx, timeOfDay, activeWeek],
   );
   const routeIdsWithRoster = useMemo(() => routes.map((r) => r.id), [routes]);
   const routeIdsKey = routeIdsWithRoster.join(',');
@@ -114,25 +136,6 @@ export function BusAttendanceScreen({ navigation }: any) {
   useEffect(() => {
     if (!companyId || !season) return;
     let cancelled = false;
-    setBoardLoading(true);
-    void (async () => {
-      try {
-        const loaded = await loadTransportRunBoard(supabase, companyId, season, runDate);
-        if (!cancelled) setBoard(loaded);
-      } catch (err) {
-        console.error('[BusAttendance] Load board error:', err);
-      } finally {
-        if (!cancelled) setBoardLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [companyId, season, runDate]);
-
-  useEffect(() => {
-    if (!companyId || !season) return;
-    let cancelled = false;
     skipAttendancePersistRef.current = true;
     setAttendanceLoading(true);
     void (async () => {
@@ -157,40 +160,19 @@ export function BusAttendanceScreen({ navigation }: any) {
   }, [companyId, season, runDate, timeOfDay]);
 
   useEffect(() => {
-    if (!companyId || !season) return;
-    let cancelled = false;
-    skipCheckinsPersistRef.current = true;
-    setCheckinsLoading(true);
-    void (async () => {
-      try {
-        const loaded = await loadBusCheckins(supabase, companyId, season, runDate, timeOfDay);
-        if (!cancelled) setBusCheckins(loaded);
-      } catch (err) {
-        console.error('[BusAttendance] Load check-ins error:', err);
-      } finally {
-        if (!cancelled) {
-          skipCheckinsPersistRef.current = false;
-          setCheckinsLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [companyId, season, runDate, timeOfDay]);
-
-  useEffect(() => {
     if (!companyId || !season || skipAttendancePersistRef.current || attendanceLoading) return;
+    setSaveState('saving');
     const handle = setTimeout(() => {
       void (async () => {
         const { data: userRes } = await supabase.auth.getUser();
-        await saveBusAttendance(supabase, companyId, season, runDate, timeOfDay, busAttendance, {
+        const ok = await saveBusAttendance(supabase, companyId, season, runDate, timeOfDay, busAttendance, {
           busSubmissions,
           allRoutesSubmitted: allBusesSubmitted,
           userId: userRes.user?.id,
         });
+        setSaveState(ok ? 'saved' : 'idle');
       })();
-    }, 600);
+    }, 300);
     return () => clearTimeout(handle);
   }, [
     busAttendance,
@@ -204,15 +186,10 @@ export function BusAttendanceScreen({ navigation }: any) {
   ]);
 
   useEffect(() => {
-    if (!companyId || !season || skipCheckinsPersistRef.current || checkinsLoading) return;
-    const handle = setTimeout(() => {
-      void (async () => {
-        const { data: userRes } = await supabase.auth.getUser();
-        await saveBusCheckins(supabase, companyId, season, runDate, timeOfDay, busCheckins, userRes.user?.id);
-      })();
-    }, 600);
-    return () => clearTimeout(handle);
-  }, [busCheckins, companyId, season, runDate, timeOfDay, checkinsLoading]);
+    if (saveState !== 'saved') return;
+    const t = setTimeout(() => setSaveState('idle'), 2000);
+    return () => clearTimeout(t);
+  }, [saveState]);
 
   const setCamperAttendance = (routeId: number, key: string, status: BusAttendanceStatus) => {
     setBusAttendance((prev) => ({ ...prev, [key]: status }));
@@ -240,8 +217,7 @@ export function BusAttendanceScreen({ navigation }: any) {
 
   const handleSubmitBus = async (routeId: number, busLabel: string) => {
     if (!companyId || !season || !board) return;
-    const core = getEffectiveCoreStops(board, routeId, timeOfDay);
-    const campers = campersOnRoute(routeId, core);
+    const campers = campersForRoute(routeId);
     if (!campers.length) return;
 
     const { data: userRes } = await supabase.auth.getUser();
@@ -290,45 +266,22 @@ export function BusAttendanceScreen({ navigation }: any) {
     );
   };
 
-  const markBusArrived = async (routeId: number) => {
-    const key = busCheckinKey(routeId);
-    const now = new Date().toISOString();
-    const { data: userRes } = await supabase.auth.getUser();
-    setBusCheckins((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], arrivedAt: now, arrivedBy: userRes.user?.id ?? null },
-    }));
-    Alert.alert('Bus marked arrived', formatCheckinTime(now));
-  };
-
-  const markBusReadyToDepart = async (routeId: number, busLabel: string) => {
-    if (!isRouteBusSubmitted(routeId, busSubmissions)) {
+  const handleBubbleSheet = useCallback(async () => {
+    if (!board || !selectedRoutes.length) {
+      Alert.alert('No buses selected');
+      return;
+    }
+    if (activeWeek == null || !activeWeekContext) {
       Alert.alert(
-        'Submit this bus first',
-        `Mark attendance for ${busLabel}, then submit before departing.`,
+        'Enrollment week calendar required',
+        'Set week start/end dates under Group Bubble Sheets, then pick a week.',
       );
       return;
     }
-    const key = busCheckinKey(routeId);
-    if (!busCheckins[key]?.arrivedAt) {
-      Alert.alert('Mark bus arrived first', `${busLabel} must be checked in before ready to depart.`);
-      return;
-    }
-    const now = new Date().toISOString();
-    const { data: userRes } = await supabase.auth.getUser();
-    setBusCheckins((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], departedAt: now, departedBy: userRes.user?.id ?? null },
-    }));
-    Alert.alert('Bus ready to depart', `${busLabel} · ${formatCheckinTime(now)}`);
-  };
-
-  const handleBubbleSheet = useCallback(async () => {
-    if (!board || !selectedRoutes.length) return;
     const sheetRoutes = selectedRoutes.map((r) => ({
       bus: r.bus,
       routeName: r.name,
-      campers: campersOnRoute(r.id, getEffectiveCoreStops(board, r.id, timeOfDay)).map((c) => ({
+      campers: campersForRoute(r.id).map((c) => ({
         name: c.name,
         detail: c.stopName,
       })),
@@ -339,19 +292,25 @@ export function BusAttendanceScreen({ navigation }: any) {
       const { buildBusBubbleSheetsPdf } = await import('../lib/transportBubbleSheetPdf');
       const built = await buildBusBubbleSheetsPdf({
         companyName,
-        date: runDate,
-        runPeriod: timeOfDay,
+        enrollmentWeek: activeWeek,
+        weekDateRange: activeWeekContext.weekDateRange ?? undefined,
+        weekDays: activeWeekContext.weekDays,
         routes: sheetRoutes,
       });
       if (!built) {
-        Alert.alert('No campers to print', 'No campers scheduled on buses for this run.');
+        Alert.alert('No campers to print', 'No enrolled campers on selected buses this week.');
         return;
       }
       await shareTransportPdf(built);
     } catch {
       Alert.alert('Bubble sheet', 'Could not share PDF.');
     }
-  }, [board, selectedRoutes, companyName, runDate, timeOfDay]);
+  }, [board, selectedRoutes, activeWeek, activeWeekContext, campersForRoute, companyName]);
+
+  const runDateOutsideWeek =
+    enrollmentCtx?.enrollmentWeek == null &&
+    activeWeek != null &&
+    (enrollmentCtx?.configuredWeeks.length ?? 0) > 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -366,7 +325,7 @@ export function BusAttendanceScreen({ navigation }: any) {
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Bus Attendance</Text>
           <Text style={styles.headerSubtitle}>
-            Take attendance by bus — submit each bus when done.
+            Present / Absent per camper (siblings separate). Saves live when you tap P or A.
           </Text>
         </View>
         <TouchableOpacity
@@ -415,6 +374,36 @@ export function BusAttendanceScreen({ navigation }: any) {
               })}
             </ScrollView>
           </View>
+        ) : null}
+
+        {enrollmentCtx && enrollmentCtx.configuredWeeks.length > 0 ? (
+          <View style={styles.weekRow}>
+            <Text style={styles.filterLabel}>Enrollment week</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+              {enrollmentCtx.configuredWeeks.map((row) => {
+                const active = activeWeek === row.weekNumber;
+                return (
+                  <TouchableOpacity
+                    key={row.weekNumber}
+                    style={[styles.weekChip, active && styles.weekChipActive]}
+                    onPress={() => setSelectedWeek(row.weekNumber)}
+                  >
+                    <Text style={[styles.weekChipText, active && styles.weekChipTextActive]}>
+                      {formatEnrollmentWeekLabel(row.weekNumber, enrollmentCtx.calendar)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
+        {activeWeekContext?.weekLabel ? (
+          <Text style={styles.weekNote}>Roster: {activeWeekContext.weekLabel}</Text>
+        ) : null}
+        {runDateOutsideWeek ? (
+          <Text style={styles.weekWarning}>
+            Run date outside week — using selected week for roster &amp; print
+          </Text>
         ) : null}
 
         <View style={styles.filtersRow}>
@@ -499,57 +488,13 @@ export function BusAttendanceScreen({ navigation }: any) {
           </View>
         ) : null}
 
-        <View style={styles.checkinSection}>
-          <View style={styles.sectionTitleRow}>
-            <Ionicons name="time-outline" size={16} color={theme.colors.text} />
-            <Text style={styles.sectionTitle}>Bus check-in / check-out</Text>
-          </View>
-          <Text style={styles.sectionSubtitle}>Per bus — submit attendance before ready to depart.</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.checkinScroll}>
-            {routes.map((r) => {
-              const rec = busCheckins[busCheckinKey(r.id)];
-              const submitted = isRouteBusSubmitted(r.id, busSubmissions);
-              return (
-                <View key={`checkin-${r.id}`} style={styles.checkinCard}>
-                  <View style={styles.checkinCardHeader}>
-                    <Ionicons name="bus-outline" size={14} color={theme.colors.textSecondary} />
-                    <Text style={styles.checkinBusName}>{r.bus}</Text>
-                    {submitted ? (
-                      <View style={styles.miniBadge}>
-                        <Text style={styles.miniBadgeText}>Submitted</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  {rec?.arrivedAt ? (
-                    <Text style={styles.checkinTimeText}>Arrived {formatCheckinTime(rec.arrivedAt)}</Text>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.smallOutlineBtn}
-                      onPress={() => void markBusArrived(r.id)}
-                      disabled={checkinsLoading}
-                    >
-                      <Text style={styles.smallOutlineBtnText}>Mark arrived</Text>
-                    </TouchableOpacity>
-                  )}
-                  {rec?.departedAt ? (
-                    <Text style={styles.checkinTimeText}>Departed {formatCheckinTime(rec.departedAt)}</Text>
-                  ) : (
-                    <TouchableOpacity
-                      style={[
-                        styles.smallPrimaryBtn,
-                        (!rec?.arrivedAt || !submitted) && styles.btnDisabled,
-                      ]}
-                      onPress={() => void markBusReadyToDepart(r.id, r.bus)}
-                      disabled={checkinsLoading || !rec?.arrivedAt || !submitted}
-                    >
-                      <Text style={styles.smallPrimaryBtnText}>Ready to depart</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              );
-            })}
-          </ScrollView>
-        </View>
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => navigation.navigate('DayCampModule', { moduleId: 'bus-check-ins' })}
+        >
+          <Text style={styles.linkText}>Bus arrived / depart → Bus Check-ins</Text>
+          <Ionicons name="chevron-forward" size={16} color={theme.colors.secondary} />
+        </TouchableOpacity>
 
         {!boardLoading && !routes.length ? (
           <Text style={styles.emptyText}>No campers scheduled on buses for this date and run.</Text>
@@ -557,8 +502,7 @@ export function BusAttendanceScreen({ navigation }: any) {
 
         {routes.map((r) => {
           if (!board) return null;
-          const core = getEffectiveCoreStops(board, r.id, timeOfDay);
-          const campers = campersOnRoute(r.id, core);
+          const campers = campersForRoute(r.id);
           const submitted = isRouteBusSubmitted(r.id, busSubmissions);
           let present = 0;
           let absent = 0;
@@ -574,7 +518,7 @@ export function BusAttendanceScreen({ navigation }: any) {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.routeBusTitle}>{r.bus}</Text>
                   <Text style={styles.routeMeta}>
-                    {r.name} · {campers.length} campers
+                    {r.name} · {campers.length} campers this week
                   </Text>
                 </View>
                 <View style={styles.countBadges}>
@@ -588,24 +532,21 @@ export function BusAttendanceScreen({ navigation }: any) {
                   <View style={styles.submittedPill}>
                     <Text style={styles.submittedPillText}>Submitted</Text>
                   </View>
-                ) : (
-                  <>
-                    <TouchableOpacity
-                      style={styles.outlineActionBtn}
-                      onPress={() => markBusPresent(r.id, campers.map((c) => c.key))}
-                      disabled={!campers.length}
-                    >
-                      <Text style={styles.outlineActionBtnText}>Mark all present</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.primaryActionBtn}
-                      onPress={() => void handleSubmitBus(r.id, r.bus)}
-                      disabled={!campers.length || attendanceLoading}
-                    >
-                      <Text style={styles.primaryActionBtnText}>Submit {r.bus}</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
+                ) : null}
+                <TouchableOpacity
+                  style={styles.outlineActionBtn}
+                  onPress={() => markBusPresent(r.id, campers.map((c) => c.key))}
+                  disabled={!campers.length}
+                >
+                  <Text style={styles.outlineActionBtnText}>Mark all present</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.primaryActionBtn}
+                  onPress={() => void handleSubmitBus(r.id, r.bus)}
+                  disabled={!campers.length || attendanceLoading}
+                >
+                  <Text style={styles.primaryActionBtnText}>Submit {r.bus}</Text>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.camperGrid}>
@@ -625,14 +566,12 @@ export function BusAttendanceScreen({ navigation }: any) {
                         <TouchableOpacity
                           style={[styles.paBtn, status === 'present' && styles.paBtnPresent]}
                           onPress={() => setCamperAttendance(r.id, c.key, 'present')}
-                          disabled={submitted}
                         >
                           <Text style={[styles.paBtnText, status === 'present' && styles.paBtnTextActive]}>P</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.paBtn, status === 'absent' && styles.paBtnAbsent]}
                           onPress={() => setCamperAttendance(r.id, c.key, 'absent')}
-                          disabled={submitted}
                         >
                           <Text style={[styles.paBtnText, status === 'absent' && styles.paBtnTextAbsent]}>A</Text>
                         </TouchableOpacity>
@@ -684,6 +623,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   bubbleBtnText: { fontSize: 11, fontWeight: '600', color: theme.colors.text },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  linkText: { fontSize: 13, color: theme.colors.secondary, fontWeight: '500' },
   busPickCard: {
     margin: 12,
     marginBottom: 0,
@@ -716,6 +667,21 @@ const styles = StyleSheet.create({
   busChipTextActive: { color: theme.colors.primary },
   btnDisabled: { opacity: 0.45 },
   content: { flex: 1, padding: 12 },
+  weekRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  weekNote: { fontSize: 11, color: theme.colors.textSecondary, marginBottom: 6 },
+  weekWarning: { fontSize: 11, color: '#92400e', marginBottom: 8 },
+  weekChip: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+    backgroundColor: '#fff',
+  },
+  weekChipActive: { borderColor: theme.colors.primary, backgroundColor: '#eff6ff' },
+  weekChipText: { fontSize: 11, fontWeight: '600', color: theme.colors.textSecondary },
+  weekChipTextActive: { color: theme.colors.primary },
   filtersRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   filterLabel: { fontSize: 12, color: theme.colors.textSecondary },
   dateBtn: {

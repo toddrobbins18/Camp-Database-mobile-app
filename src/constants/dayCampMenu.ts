@@ -15,6 +15,7 @@ export type MobileDrawerMenuItem = {
 export const FRONT_OFFICE_TRANSPORT_MENU_IDS = new Set([
   'transport-admin',
   'bus-attendance',
+  'bus-check-ins',
   'change-sheets',
   'pending-transport-changes',
   'group-bubble-sheets',
@@ -85,6 +86,14 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
       icon: 'clipboard-outline',
       screen: 'DayCampModule',
       params: { moduleId: 'bus-attendance' },
+    },
+    {
+      key: 'bus-check-ins',
+      menuId: 'bus-check-ins',
+      label: 'Bus Check-ins',
+      icon: 'time-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'bus-check-ins' },
     },
     {
       key: 'group-bubble-sheets',

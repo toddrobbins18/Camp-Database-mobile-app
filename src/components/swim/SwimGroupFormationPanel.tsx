@@ -27,8 +27,12 @@ type Props = {
 export function SwimGroupFormationPanel({ companyId, season }: Props) {
   const [loading, setLoading] = useState(true);
   const [building, setBuilding] = useState(false);
-  const [criteria, setCriteria] = useState<SwimFormationCriterion[]>(['division', 'swimLevel']);
-  const [maxPerGroup, setMaxPerGroup] = useState('8');
+  const [criteria, setCriteria] = useState<SwimFormationCriterion[]>([
+    'division',
+    'divisionLeader',
+    'swimLevel',
+  ]);
+  const [instructorCount, setInstructorCount] = useState('3');
   const [groups, setGroups] = useState<SwimFormationGroup[]>([]);
   const [rosterCount, setRosterCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -63,10 +67,10 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
     try {
       const campers = await fetchSwimFormationCampers(supabase, companyId, season);
       setRosterCount(campers.length);
-      const max = Math.max(1, Math.min(99, parseInt(maxPerGroup, 10) || 8));
+      const instructors = Math.max(1, Math.min(20, parseInt(instructorCount, 10) || 1));
       const built = buildSwimFormationGroups(campers, {
         criteria,
-        maxCampersPerGroup: max,
+        instructorCount: instructors,
       });
       setGroups(built);
     } catch (err) {
@@ -100,8 +104,8 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
             <Text style={styles.cardTitle}>Swim group formation</Text>
           </View>
           <Text style={styles.cardSubtitle}>
-            Pick how groups should be formed, set a max size, then build groups for season {season}.{' '}
-            {rosterCount} active campers on roster.
+            Choose who mixes together, set instructor count, and build balanced groups for season {season}.{' '}
+            {rosterCount} active campers. Division leaders are never combined.
           </Text>
         </View>
 
@@ -126,23 +130,23 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
           );
         })}
 
-        <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Max campers per group</Text>
+        <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Number of instructors</Text>
         <TextInput
           style={styles.maxInput}
-          value={maxPerGroup}
-          onChangeText={setMaxPerGroup}
+          value={instructorCount}
+          onChangeText={setInstructorCount}
           keyboardType="number-pad"
           maxLength={2}
-          placeholder="8"
+          placeholder="3"
         />
         <Text style={styles.hint}>
-          When a bucket has more campers than this, it splits into Group 1, Group 2, etc.
+          Splits each cohort into balanced groups so each instructor gets roughly the same number of campers.
         </Text>
 
         {criteria.length === 0 ? (
           <View style={styles.alert}>
             <Text style={styles.alertText}>
-              No criteria selected — all campers will be mixed and split only by max group size.
+              No criteria selected — campers split only by division leader and instructor count.
             </Text>
           </View>
         ) : null}

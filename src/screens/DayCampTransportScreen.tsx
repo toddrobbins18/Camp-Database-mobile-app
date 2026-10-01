@@ -17,8 +17,16 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { theme } from '../theme/theme';
-import { CAMP_LOCATION, ROUTE_COLORS, getRouteStopLabel, isCampStop } from '../lib/transportBoardUtils';
+import {
+  CAMP_LOCATION,
+  ROUTE_COLORS,
+  getRouteStopLabel,
+  isCampStop,
+  routeStopListLines,
+} from '../lib/transportBoardUtils';
 import { todayDateString } from '../lib/transportDailyOverrides';
+import { formatEnrollmentWeekLabel } from '../lib/enrollmentWeekCalendar';
+import { DAY_CAMP_ENROLLMENT_WEEKS } from '../lib/enrolledWeeks';
 import { TransportRouteMapNative } from '../components/TransportRouteMapNative';
 import { DAY_CAMP_REPORTS, useDayCampTransport } from '../hooks/useDayCampTransport';
 
@@ -42,7 +50,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: 'map', label: 'Route Map' },
-    { id: 'unplotted', label: 'Unplotted', badge: t.unplottedCampers.length || undefined },
+    { id: 'unplotted', label: 'Unplotted', badge: t.unplottedForWeek.length || undefined },
     { id: 'reports', label: 'Reports' },
   ];
 
@@ -170,6 +178,30 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
           <Text style={styles.optimizeBtnText}>{t.optimizing ? 'Optimizing…' : 'Optimize'}</Text>
         </TouchableOpacity>
       </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.weekPickerRow} contentContainerStyle={styles.weekPickerContent}>
+        <TouchableOpacity
+          style={[styles.weekChip, t.routeEnrollmentWeek === 'all' && styles.weekChipActive]}
+          onPress={() => t.setRouteEnrollmentWeek('all')}
+        >
+          <Text style={[styles.weekChipText, t.routeEnrollmentWeek === 'all' && styles.weekChipTextActive]}>All</Text>
+        </TouchableOpacity>
+        {Array.from({ length: DAY_CAMP_ENROLLMENT_WEEKS }, (_, i) => i + 1).map((week) => (
+          <TouchableOpacity
+            key={week}
+            style={[styles.weekChip, t.routeEnrollmentWeek === week && styles.weekChipActive]}
+            onPress={() => t.setRouteEnrollmentWeek(week)}
+          >
+            <Text style={[styles.weekChipText, t.routeEnrollmentWeek === week && styles.weekChipTextActive]}>
+              W{week}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      {t.activeRouteEnrollmentWeek != null && (
+        <Text style={styles.weekHint}>
+          {formatEnrollmentWeekLabel(t.activeRouteEnrollmentWeek, t.enrollmentWeekCalendar)} · week riders only
+        </Text>
+      )}
 
       {t.transportExceptions.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.exceptionsScroll}>
@@ -192,7 +224,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
           <TransportRouteMapNative
             routes={t.displayedRoutes}
             allRoutes={t.allRoutes}
-            unplottedCampers={t.unplottedCampers}
+            unplottedCampers={t.unplottedForWeek}
             campAddress={CAMP_LOCATION.address}
             onStopPress={(routeId, stopIndex, stop) => t.setStopAction({ routeId, stopIndex, stop })}
             onUnplottedPress={(camperId) => {
@@ -251,26 +283,49 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                   <Text style={styles.routeMeta}>{core.length} stops · {r.campers}/{r.capacity}</Text>
                   {isVisible && r.stops.length > 0 && (
                     <ScrollView style={styles.stopList} nestedScrollEnabled>
-                      {r.stops.map((stop, i) => (
-                        <TouchableOpacity
-                          key={i}
-                          style={styles.stopRow}
-                          onPress={() => !isCampStop(stop) && t.setStopAction({ routeId: r.id, stopIndex: i, stop })}
-                        >
-                          <View
-                            style={[
-                              styles.stopNumber,
-                              { backgroundColor: isCampStop(stop) ? '#16a34a' : r.color },
-                            ]}
+                      {r.stops.map((stop, i) => {
+                        const isCamp = isCampStop(stop);
+                        const stopLines = routeStopListLines(stop, { isCamp });
+                        return (
+                          <TouchableOpacity
+                            key={i}
+                            style={styles.stopRow}
+                            onPress={() => !isCamp && t.setStopAction({ routeId: r.id, stopIndex: i, stop })}
                           >
-                            <Text style={styles.stopNumberText}>{getRouteStopLabel(r.stops, i)}</Text>
-                          </View>
-                          <Text style={styles.stopName} numberOfLines={1}>
-                            {isCampStop(stop) ? stop.name : stop.camperNames?.join(', ') || stop.name}
-                          </Text>
-                          {stop.pickupTime ? <Text style={styles.stopTime}>{stop.pickupTime}</Text> : null}
-                        </TouchableOpacity>
-                      ))}
+                            <View
+                              style={[
+                                styles.stopNumber,
+                                { backgroundColor: isCamp ? '#16a34a' : r.color },
+                              ]}
+                            >
+                              <Text style={styles.stopNumberText}>{getRouteStopLabel(r.stops, i)}</Text>
+                            </View>
+                            <View style={styles.stopTextCol}>
+                              <Text
+                                style={[
+                                  styles.stopName,
+                                  stopLines.isOpenStop && stopLines.camperNames.length === 0 && styles.stopNameMuted,
+                                ]}
+                                numberOfLines={2}
+                              >
+                                {stopLines.title}
+                              </Text>
+                              {stopLines.subtitle ? (
+                                <Text
+                                  style={[
+                                    styles.stopSubtitle,
+                                    stopLines.isOpenStop && styles.stopSubtitleOpen,
+                                  ]}
+                                  numberOfLines={2}
+                                >
+                                  {stopLines.subtitle}
+                                </Text>
+                              ) : null}
+                            </View>
+                            {stop.pickupTime ? <Text style={styles.stopTime}>{stop.pickupTime}</Text> : null}
+                          </TouchableOpacity>
+                        );
+                      })}
                     </ScrollView>
                   )}
                 </TouchableOpacity>
@@ -294,12 +349,21 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
           <Text style={styles.toolChipPrimaryText}>Add Camper</Text>
         </TouchableOpacity>
       </View>
-      {t.unplottedCampers.length === 0 ? (
+      {t.activeRouteEnrollmentWeek != null && (
+        <Text style={styles.weekHint}>
+          Unplotted campers for {formatEnrollmentWeekLabel(t.activeRouteEnrollmentWeek, t.enrollmentWeekCalendar)}
+        </Text>
+      )}
+      {t.unplottedForWeek.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>All campers have been assigned to routes!</Text>
+          <Text style={styles.emptyText}>
+            {t.unplottedCampers.length === 0
+              ? 'All campers have been assigned to routes!'
+              : 'No unplotted campers for this enrollment week.'}
+          </Text>
         </View>
       ) : (
-        t.unplottedCampers.map((c) => (
+        t.unplottedForWeek.map((c) => (
           <View key={c.id} style={styles.camperCard}>
             <View style={styles.camperCardHeader}>
               <View style={styles.camperIcon}>
@@ -344,8 +408,20 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
           <Ionicons name="calendar-outline" size={16} color={theme.colors.secondary} />
           <Text style={styles.dateBtnText}>{t.overrideDate}</Text>
         </TouchableOpacity>
-        <Text style={styles.reportHint}>Season {t.season} · {t.timeOfDay.toUpperCase()} run for attendance PDF</Text>
+        <Text style={styles.reportHint}>Season {t.season} · {t.timeOfDay.toUpperCase()} run</Text>
       </View>
+      <TouchableOpacity
+        style={styles.digitalAttendanceCard}
+        onPress={() => navigation.navigate('DayCampModule', { moduleId: 'bus-attendance' })}
+      >
+        <View style={styles.digitalAttendanceText}>
+          <Text style={styles.digitalAttendanceTitle}>Digital bus attendance (required)</Text>
+          <Text style={styles.digitalAttendanceDesc}>
+            Mark Present / Absent on each bus — saves to the system. Bubble sheet print below is optional backup.
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={theme.colors.secondary} />
+      </TouchableOpacity>
       {DAY_CAMP_REPORTS.map((r) => (
         <TouchableOpacity key={r.name} style={styles.reportCard} onPress={() => t.handleGenerateReport(r.name)}>
           <Text style={styles.reportTitle}>{r.name}</Text>
@@ -671,6 +747,20 @@ const styles = StyleSheet.create({
   tabPanel: { flex: 1, marginTop: theme.spacing.sm },
   mapTab: { flex: 1 },
   mapControls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingHorizontal: theme.spacing.md, marginBottom: 8 },
+  weekPickerRow: { marginBottom: 6, maxHeight: 36 },
+  weekPickerContent: { paddingHorizontal: theme.spacing.md, gap: 6, alignItems: 'center' },
+  weekChip: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: theme.colors.surface,
+  },
+  weekChipActive: { backgroundColor: theme.colors.secondary, borderColor: theme.colors.secondary },
+  weekChipText: { fontSize: 11, fontWeight: '600', color: theme.colors.textSecondary },
+  weekChipTextActive: { color: '#fff' },
+  weekHint: { fontSize: 11, color: theme.colors.textSecondary, paddingHorizontal: theme.spacing.md, marginBottom: 6 },
   dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: theme.colors.border },
   dateBtnText: { fontSize: 12, color: theme.colors.text, fontWeight: '500' },
   todayBadge: { backgroundColor: theme.colors.secondary + '20', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
@@ -707,8 +797,9 @@ const styles = StyleSheet.create({
   routeBus: { flex: 1, fontSize: 13, fontWeight: '600', color: theme.colors.text },
   routeName: { fontSize: 10, color: theme.colors.textSecondary, marginTop: 2 },
   routeMeta: { fontSize: 10, color: theme.colors.textSecondary, marginTop: 2 },
-  stopList: { maxHeight: 80, marginTop: 6 },
-  stopRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
+  stopList: { maxHeight: 110, marginTop: 6 },
+  stopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingVertical: 3 },
+  stopTextCol: { flex: 1, minWidth: 0 },
   stopNumber: {
     minWidth: 16,
     height: 16,
@@ -718,8 +809,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   stopNumberText: { fontSize: 9, fontWeight: '700', color: '#fff' },
-  stopName: { flex: 1, fontSize: 10, color: theme.colors.text },
-  stopTime: { fontSize: 9, color: theme.colors.textSecondary, marginLeft: 4 },
+  stopName: { fontSize: 10, fontWeight: '600', color: theme.colors.text },
+  stopNameMuted: { fontWeight: '400', color: theme.colors.textSecondary },
+  stopSubtitle: { fontSize: 9, color: theme.colors.textSecondary, marginTop: 1 },
+  stopSubtitleOpen: { color: '#b45309', fontStyle: 'italic' },
+  stopTime: { fontSize: 9, color: theme.colors.textSecondary, marginLeft: 4, marginTop: 2 },
   tabContent: { flex: 1 },
   unplottedContent: { padding: theme.spacing.md, gap: 10 },
   unplottedToolbar: { flexDirection: 'row', gap: 8, marginBottom: 4 },
@@ -742,6 +836,20 @@ const styles = StyleSheet.create({
   reportsContent: { padding: theme.spacing.md, gap: 10 },
   reportDateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 },
   reportHint: { fontSize: 10, color: theme.colors.textSecondary, flex: 1 },
+  digitalAttendanceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: theme.colors.secondary + '12',
+    borderRadius: theme.borderRadius.lg,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.secondary + '40',
+    marginBottom: 12,
+  },
+  digitalAttendanceText: { flex: 1 },
+  digitalAttendanceTitle: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  digitalAttendanceDesc: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4, lineHeight: 17 },
   reportCard: { backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.lg, padding: 14, borderWidth: 1, borderColor: theme.colors.border },
   reportTitle: { fontSize: 14, fontWeight: '600', color: theme.colors.secondary },
   reportDesc: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4, paddingRight: 24 },

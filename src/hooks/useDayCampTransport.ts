@@ -28,9 +28,10 @@ import {
   attendanceRecordKey,
   attendanceStatusLabel,
   campersOnRoute,
+  buildDigitalBusAttendanceCsvRows,
   loadBusAttendance,
-  type BusAttendanceMap,
 } from '../lib/transportBusAttendance';
+import { campersOnRouteForWeek } from '../lib/transportBusRunContext';
 import { loadGroupRoster, type GroupRosterCamper } from '../lib/transportGroupAttendance';
 import {
   camperEnrolledInWeek,
@@ -41,6 +42,16 @@ import {
   loadEnrollmentWeekCalendar,
   type EnrollmentWeekCalendar,
 } from '../lib/enrollmentWeekCalendar';
+import {
+  applyEnrollmentWeekToRoutes,
+  buildCamperEnrollmentLookup,
+  filterUnplottedForWeek,
+} from '../lib/transportWeekView';
+import {
+  buildCarSeatCountByBusCsvRows,
+  loadCamperCarSeatLookup,
+  summarizeCarSeatsByBus,
+} from '../lib/transportCarSeatReport';
 import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
 import {
   build2026MappointRouteTemplate,
@@ -91,9 +102,11 @@ import type { GeocodeResult } from '../lib/transportBoardCache';
 
 export const DAY_CAMP_REPORTS = [
   { name: 'Transport Exceptions', desc: 'Absences, swim, office changes, and manual route edits for this date' },
-  { name: 'Attendance', desc: 'Bubble sheet PDF backup (bus + group)' },
+  { name: 'Attendance', desc: 'Weekly bubble sheet — AM & PM Mon–Fri (paper backup)' },
+  { name: 'Digital Attendance Log', desc: 'Export Present/Absent saved in Bus Attendance for this date & run' },
   { name: 'Bus Report', desc: 'Day camp bus assignments' },
   { name: 'Bus Route Summary', desc: 'Route overview with stops' },
+  { name: 'Car Seat Count by Bus', desc: 'Nursery & Pre-K riders per bus (car seats required)' },
   { name: 'Car Report', desc: 'Car pickup/dropoff log' },
   { name: 'Daily Passenger Update', desc: 'Real-time passenger counts' },
   { name: 'Extended Care', desc: 'Before/after care transport' },
@@ -227,6 +240,8 @@ export function useDayCampTransport() {
   const [overridesLoading, setOverridesLoading] = useState(true);
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
   const [enrollmentWeekCalendar, setEnrollmentWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
+  const [routeEnrollmentWeek, setRouteEnrollmentWeek] = useState<number | 'all'>('all');
+  const routeWeekInitRef = useRef(false);
   const [boardLoading, setBoardLoading] = useState(true);
   const [persistLoaded, setPersistLoaded] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
@@ -585,6 +600,18 @@ export function useDayCampTransport() {
   }, [companyId, season]);
 
   useEffect(() => {
+    routeWeekInitRef.current = false;
+    setRouteEnrollmentWeek('all');
+  }, [companyId, season]);
+
+  useEffect(() => {
+    if (routeWeekInitRef.current || enrollmentWeekCalendar.length === 0) return;
+    const w = enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate);
+    if (w != null) setRouteEnrollmentWeek(w);
+    routeWeekInitRef.current = true;
+  }, [enrollmentWeekCalendar, overrideDate]);
+
+  useEffect(() => {
     if (!persistLoaded || !companyId || skipPersistRef.current || importInProgressRef.current) return;
     const stopCount = countBoardStops(coreStops);
     const payload = buildBoardPayload();
@@ -661,15 +688,31 @@ export function useDayCampTransport() {
   );
 
   const routes = buildRoutes(timeOfDay);
-  const displayedRoutes = routes.filter((r) => visibleRoutes.includes(r.id));
+
+  const camperEnrollmentLookup = useMemo(
+    () => buildCamperEnrollmentLookup(groupRoster),
+    [groupRoster],
+  );
+
+  const activeRouteEnrollmentWeek =
+    routeEnrollmentWeek === 'all' ? null : routeEnrollmentWeek;
+
+  const displayRoutes = useMemo(
+    () => applyEnrollmentWeekToRoutes(routes, activeRouteEnrollmentWeek, camperEnrollmentLookup),
+    [routes, activeRouteEnrollmentWeek, camperEnrollmentLookup],
+  );
+
+  const displayedRoutes = displayRoutes.filter((r) => visibleRoutes.includes(r.id));
+
+  const unplottedForWeek = useMemo(
+    () => filterUnplottedForWeek(unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup),
+    [unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup],
+  );
 
   const totalCampers = useMemo(() => {
-    const assigned = Object.values(coreStops).reduce(
-      (sum, stops) => sum + stops.reduce((s, st) => s + (st.passengers || 0), 0),
-      0,
-    );
-    return { total: assigned + unplottedCampers.length, assigned, unplotted: unplottedCampers.length };
-  }, [coreStops, unplottedCampers]);
+    const assigned = displayRoutes.reduce((sum, r) => sum + r.campers, 0);
+    return { total: assigned + unplottedForWeek.length, assigned, unplotted: unplottedForWeek.length };
+  }, [displayRoutes, unplottedForWeek]);
 
   const enrollmentWeekForReport = useMemo(
     () => enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate),
@@ -1779,12 +1822,21 @@ export function useDayCampTransport() {
       return;
     }
     if (reportName === 'Attendance') {
+      if (enrollmentWeekForReport == null) {
+        toast('Enrollment week required', 'Set enrollment week calendar dates first.', true);
+        return;
+      }
       try {
-        const sheetRoutes = routes
+        const sheetRoutes = displayRoutes
           .map((r) => ({
             bus: r.bus,
             routeName: r.name,
-            campers: campersOnRoute(r.id, getEffectiveCore(r.id)).map((c) => ({
+            campers: campersOnRouteForWeek(
+              r.id,
+              getEffectiveCore(r.id),
+              enrollmentWeekForReport,
+              camperEnrollmentLookup,
+            ).map((c) => ({
               name: c.name,
               detail: c.stopName,
             })),
@@ -1821,14 +1873,54 @@ export function useDayCampTransport() {
       }
       return;
     }
+    if (reportName === 'Car Seat Count by Bus') {
+      if (!companyId) {
+        toast('Company not loaded', undefined, true);
+        return;
+      }
+      const lookup = await loadCamperCarSeatLookup(supabase, companyId, season);
+      const reportRoutes = displayRoutes;
+      const coreForRoute = (routeId: number) => {
+        const route = reportRoutes.find((r) => r.id === routeId);
+        if (!route) return [];
+        return route.stops
+          .filter((s) => s.address !== CAMP_LOCATION.address)
+          .map((s) => ({ name: s.name, camperNames: s.camperNames }));
+      };
+      const summaries = summarizeCarSeatsByBus(
+        reportRoutes.map((r) => ({ id: r.id, bus: r.bus, name: r.name })),
+        coreForRoute,
+        lookup,
+        { includeEmptyBuses: true },
+      );
+      const rows = buildCarSeatCountByBusCsvRows(summaries, {
+        date: overrideDate,
+        runPeriod: timeOfDay,
+      });
+      const filename = `daycamp-car-seats-by-bus-${overrideDate}-${timeOfDay}.csv`;
+      await shareCsv(rows, filename);
+      return;
+    }
+    if (reportName === 'Digital Attendance Log') {
+      if (!companyId) {
+        toast('Company not loaded', undefined, true);
+        return;
+      }
+      const loaded = await loadBusAttendance(supabase, companyId, season, overrideDate, timeOfDay);
+      const rows = buildDigitalBusAttendanceCsvRows(
+        displayRoutes,
+        CAMP_LOCATION.address,
+        loaded.records,
+        loaded.busSubmissions,
+        { date: overrideDate, runPeriod: timeOfDay },
+      );
+      const filename = `daycamp-digital-attendance-${overrideDate}-${timeOfDay}.csv`;
+      await shareCsv(rows, filename);
+      return;
+    }
     const today = overrideDate;
     const safeName = reportName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const filename = `daycamp-${safeName}-${today}.csv`;
-    let reportBusAttendance: BusAttendanceMap = {};
-    if (reportName === 'Attendance' && companyId) {
-      const loaded = await loadBusAttendance(supabase, companyId, season, overrideDate, timeOfDay);
-      reportBusAttendance = loaded.records;
-    }
     let rows: (string | number)[][] = [];
     switch (reportName) {
       case 'Bus Report':
@@ -1924,9 +2016,14 @@ export function useDayCampTransport() {
     },
     transportExceptions,
     todayOverrides,
-    routes,
+    routes: displayRoutes,
     displayedRoutes,
     allRoutes: routes,
+    unplottedForWeek,
+    routeEnrollmentWeek,
+    setRouteEnrollmentWeek,
+    enrollmentWeekCalendar,
+    activeRouteEnrollmentWeek,
     routeMeta,
     coreStops,
     unplottedCampers,

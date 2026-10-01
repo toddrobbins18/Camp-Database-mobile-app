@@ -54,6 +54,7 @@ import { SwimLessonsScreen } from '../screens/SwimLessonsScreen';
 import { SwimProgramScreen } from '../screens/SwimProgramScreen';
 import { NurseScreen } from '../screens/NurseScreen';
 import { BusAttendanceScreen } from '../screens/BusAttendanceScreen';
+import { BusCheckInsScreen } from '../screens/BusCheckInsScreen';
 import { TransportChangeSheetsScreen } from '../screens/TransportChangeSheetsScreen';
 import { PendingTransportChangesScreen } from '../screens/PendingTransportChangesScreen';
 
@@ -110,6 +111,9 @@ function DayCampModuleRouter({ route, navigation }: any) {
     }
     if (moduleId === 'bus-attendance') {
         return <BusAttendanceScreen navigation={navigation} />;
+    }
+    if (moduleId === 'bus-check-ins') {
+        return <BusCheckInsScreen navigation={navigation} />;
     }
     if (moduleId === 'group-bubble-sheets') {
         return <GroupBubbleSheetsScreen navigation={navigation} />;

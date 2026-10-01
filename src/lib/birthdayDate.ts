@@ -74,4 +74,10 @@ export function formatBirthdayDisplay(
     return date.toLocaleDateString('en-US', options || defaultOptions);
 }
 
-export { isActiveRosterStatus } from './rosterStatus';
+export {
+    isActiveRosterStatus,
+    isEnrolledCamperStatus,
+    isHiredStaffForBirthday,
+    filterEnrolledCampers,
+    filterHiredStaffForBirthday,
+} from './rosterStatus';

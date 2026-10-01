@@ -48,9 +48,10 @@ export const haversineMiles = (lat1: number, lng1: number, lat2: number, lng2: n
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const drivingMinutes = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+const drivingLegMinutes = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
   const miles = haversineMiles(lat1, lng1, lat2, lng2) * 1.4;
-  return Math.round((miles / 25) * 60);
+  if (miles <= 0.001) return 0;
+  return (miles / 25) * 60;
 };
 
 /** Parse route departure (e.g. "7:00 AM") to minutes since midnight. */
@@ -108,13 +109,15 @@ const assignDrivingTimes = (
       };
     }
     const prev = stops[i - 1];
-    const legMin = Math.max(drivingMinutes(prev.lat, prev.lng, stop.lat, stop.lng), 2);
-    cumulativeMin += legMin;
+    cumulativeMin += drivingLegMinutes(prev.lat, prev.lng, stop.lat, stop.lng);
+    const displayMinutes = useClock
+      ? Math.round(startMinutes + cumulativeMin)
+      : Math.round(cumulativeMin);
     return {
       ...stop,
       pickupTime: useClock
-        ? formatMinutesAsPickupTime(startMinutes + cumulativeMin)
-        : `+${cumulativeMin} min`,
+        ? formatMinutesAsPickupTime(displayMinutes)
+        : `+${displayMinutes} min`,
     };
   });
 };
@@ -217,6 +220,56 @@ export const isCampStop = (stop: TransportRouteStop) =>
   normAddr(stop.address) === normAddr(CAMP_LOCATION.address);
 
 /** Stop label for route lists: 1, 2, 3… or C for camp. */
+export function shortStopStreet(address: string): string {
+  const first = address.split(',')[0]?.trim();
+  return first || address.trim() || '—';
+}
+
+export type RouteStopListLines = {
+  title: string;
+  subtitle: string | null;
+  isOpenStop: boolean;
+  camperNames: string[];
+};
+
+export function routeStopListLines(
+  stop: { name: string; address: string; passengers?: number; camperNames?: string[] },
+  options: { isCamp: boolean; pendingNames?: string[] },
+): RouteStopListLines {
+  if (options.isCamp) {
+    return { title: stop.name, subtitle: null, isOpenStop: false, camperNames: [] };
+  }
+
+  const street = shortStopStreet(stop.address);
+  const names = (stop.camperNames ?? []).filter(Boolean);
+  const pending = (options.pendingNames ?? []).filter(Boolean);
+
+  if (pending.length > 0) {
+    return {
+      title: pending.join(', '),
+      subtitle: `${street} · not on route yet`,
+      isOpenStop: true,
+      camperNames: pending,
+    };
+  }
+
+  if (names.length > 0) {
+    return {
+      title: names.join(', '),
+      subtitle: street,
+      isOpenStop: false,
+      camperNames: names,
+    };
+  }
+
+  return {
+    title: street,
+    subtitle: 'Open stop · no campers assigned',
+    isOpenStop: true,
+    camperNames: [],
+  };
+}
+
 export function getRouteStopLabel(
   stops: Pick<TransportRouteStop, 'address'>[],
   index: number,

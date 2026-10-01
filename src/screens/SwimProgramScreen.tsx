@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -31,7 +31,6 @@ import {
   type SkillStatus,
   fetchSwimHistoryReportForCompany,
   fetchSwimRosterChildrenForCompany,
-  fetchSwimSeasonsForCompany,
   loadSwimProgramDataForCompany,
   saveSwimBraceletForCompany,
   saveSwimLevelForCompany,
@@ -41,6 +40,7 @@ import {
   type SwimHistoryReportRow,
 } from '../lib/swimProgram';
 import { SwimGroupFormationPanel } from '../components/swim/SwimGroupFormationPanel';
+import { supabase } from '../lib/supabase';
 
 const BRACELET_COLORS: Record<BraceletColor, { bg: string; text: string; border: string }> = {
   Red: { bg: '#fee2e2', text: '#ef4444', border: '#fca5a5' },
@@ -147,8 +147,6 @@ function DateField({
 
 export function SwimProgramScreen({ navigation }: any) {
   const { companyId, season } = useCompany();
-  const [viewSeason, setViewSeason] = useState(season);
-  const [seasonOptions, setSeasonOptions] = useState<string[]>([season]);
   const [activeTab, setActiveTab] = useState<'bracelets' | 'levels' | 'formation' | 'history'>('bracelets');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -160,40 +158,35 @@ export function SwimProgramScreen({ navigation }: any) {
   const [selectedLevel, setSelectedLevel] = useState<LevelRecord | null>(null);
   const [inactiveHidden, setInactiveHidden] = useState(0);
 
-  useEffect(() => {
-    setViewSeason(season);
-  }, [season]);
-
-  useEffect(() => {
-    if (!companyId) return;
-    fetchSwimSeasonsForCompany(companyId)
-      .then((seasons) => setSeasonOptions(seasons.length ? seasons : [season]))
-      .catch(console.error);
-  }, [companyId, season]);
-
-  const loadRoster = useCallback(async () => {
-    if (!companyId || !viewSeason) {
-      setBraceletData([]);
-      setLevelData([]);
-      setInactiveHidden(0);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const { bracelets, levels } = await loadSwimProgramDataForCompany(companyId, viewSeason);
-      const { children, inactiveHidden: hiddenInactive } =
-        await fetchSwimRosterChildrenForCompany(companyId, viewSeason);
-      setInactiveHidden(hiddenInactive);
-      setBraceletData(mergeBracelets(bracelets, children));
-      setLevelData(mergeLevels(levels, children));
-    } catch (err) {
-      console.error('[SwimProgram] roster load error:', err);
-      Alert.alert('Error', 'Could not load swim roster.');
-    } finally {
-      setLoading(false);
-    }
-  }, [companyId, viewSeason]);
+  const loadRoster = useCallback(
+    async (options?: { showLoading?: boolean }) => {
+      const showLoading = options?.showLoading ?? false;
+      if (!companyId || !season) {
+        setBraceletData([]);
+        setLevelData([]);
+        setInactiveHidden(0);
+        setLoading(false);
+        return;
+      }
+      if (showLoading) setLoading(true);
+      try {
+        const { bracelets, levels } = await loadSwimProgramDataForCompany(companyId, season);
+        const { children, inactiveHidden: hiddenInactive } =
+          await fetchSwimRosterChildrenForCompany(companyId, season);
+        setInactiveHidden(hiddenInactive);
+        setBraceletData(mergeBracelets(bracelets, children));
+        setLevelData(mergeLevels(levels, children));
+      } catch (err) {
+        console.error('[SwimProgram] roster load error:', err);
+        if (showLoading) {
+          Alert.alert('Error', 'Could not load swim roster.');
+        }
+      } finally {
+        if (showLoading) setLoading(false);
+      }
+    },
+    [companyId, season],
+  );
 
   const loadHistory = useCallback(async () => {
     if (!companyId) {
@@ -210,9 +203,41 @@ export function SwimProgramScreen({ navigation }: any) {
     }
   }, [companyId]);
 
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    void loadRoster();
+    void loadRoster({ showLoading: true });
   }, [loadRoster]);
+
+  useEffect(() => {
+    if (!companyId || !season) return;
+
+    const channel = supabase
+      .channel(`swim-program-records-${companyId}-${season}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'swim_program_records',
+          filter: `company_id=eq.${companyId}`,
+        },
+        (payload) => {
+          const row = (payload.new ?? payload.old) as { season?: string } | null;
+          if (row?.season && row.season !== season) return;
+          if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+          realtimeDebounceRef.current = setTimeout(() => {
+            void loadRoster({ showLoading: false });
+          }, 350);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+      void supabase.removeChannel(channel);
+    };
+  }, [companyId, season, loadRoster]);
 
   useEffect(() => {
     void loadHistory();
@@ -256,8 +281,8 @@ export function SwimProgramScreen({ navigation }: any) {
     setBraceletData((prev) => {
       const next = prev.map((b) => (b.id === id ? { ...b, ...patch } : b));
       const record = next.find((b) => b.id === id);
-      if (record && companyId && viewSeason) {
-        void saveSwimBraceletForCompany(companyId, viewSeason, record).catch(console.error);
+      if (record && companyId && season) {
+        void saveSwimBraceletForCompany(companyId, season, record).catch(console.error);
       }
       return next;
     });
@@ -272,8 +297,8 @@ export function SwimProgramScreen({ navigation }: any) {
         return { ...r, ...p, lastModified: 'Just now' };
       });
       const record = next.find((r) => r.id === id);
-      if (record && companyId && viewSeason) {
-        void saveSwimLevelForCompany(companyId, viewSeason, record).catch(console.error);
+      if (record && companyId && season) {
+        void saveSwimLevelForCompany(companyId, season, record).catch(console.error);
       }
       return next;
     });
@@ -324,18 +349,9 @@ export function SwimProgramScreen({ navigation }: any) {
               ? 'Loading…'
               : `${braceletData.length} active camper${braceletData.length === 1 ? '' : 's'}`}
             {!loading && inactiveHidden > 0 ? ` · ${inactiveHidden} inactive hidden` : ''}
-            {!loading ? ` · season ${viewSeason}` : ''}
+            {!loading ? ` · season ${season}` : ''}
           </Text>
         </View>
-      </View>
-
-      <View style={styles.seasonRow}>
-        <OptionPicker
-          label="Season"
-          value={viewSeason}
-          options={seasonOptions}
-          onChange={setViewSeason}
-        />
       </View>
 
       <View style={styles.searchContainer}>
@@ -409,7 +425,7 @@ export function SwimProgramScreen({ navigation }: any) {
         <ScrollView style={styles.content}>
           {activeTab === 'formation' ? (
             companyId ? (
-              <SwimGroupFormationPanel companyId={companyId} season={viewSeason} />
+              <SwimGroupFormationPanel companyId={companyId} season={season} />
             ) : (
               <Text style={styles.emptyState}>Select a camp to build swim groups.</Text>
             )

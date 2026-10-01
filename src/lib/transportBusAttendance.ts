@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { stopRiderNames } from './transportWeekView';
 
 export type BusAttendanceStatus = "present" | "absent";
 
@@ -185,15 +186,15 @@ export async function saveBusAttendance(
   return true;
 }
 
-/** Campers scheduled on a route for attendance (from effective core stops). */
+/** Campers scheduled on a route for attendance — each sibling is a separate row. */
 export function campersOnRoute(
   routeId: number,
-  coreStops: { name: string; camperNames?: string[] }[],
+  coreStops: { name: string; camperNames?: string[]; passengers?: number }[],
 ): { key: string; name: string; stopName: string }[] {
   const out: { key: string; name: string; stopName: string }[] = [];
   const seen = new Set<string>();
   for (const stop of coreStops) {
-    const names = stop.camperNames?.length ? stop.camperNames : [stop.name];
+    const names = stopRiderNames(stop);
     for (const name of names) {
       const key = attendanceRecordKey(routeId, name);
       if (seen.has(key)) continue;
@@ -206,4 +207,66 @@ export function campersOnRoute(
 
 export function compareBusLabels(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+export type DigitalBusAttendanceRoute = {
+  id: number;
+  name: string;
+  bus: string;
+  stops: {
+    address: string;
+    name: string;
+    pickupTime?: string;
+    camperNames?: string[];
+  }[];
+};
+
+export function buildDigitalBusAttendanceCsvRows(
+  routes: DigitalBusAttendanceRoute[],
+  campAddress: string,
+  attendance: BusAttendanceMap,
+  busSubmissions: BusSubmissionsMap,
+  options: { date: string; runPeriod: "am" | "pm" },
+): (string | number)[][] {
+  const rows: (string | number)[][] = [
+    [
+      "Date",
+      "Run",
+      "Bus",
+      "Route",
+      "Bus Submitted",
+      "Camper Name",
+      "Pickup Stop",
+      "Pickup Time",
+      "Status",
+    ],
+  ];
+
+  for (const route of routes) {
+    const busSubmitted = isRouteBusSubmitted(route.id, busSubmissions) ? "Yes" : "No";
+    for (const stop of route.stops) {
+      if (stop.address === campAddress) continue;
+      const names = stop.camperNames?.length ? stop.camperNames : [stop.name];
+      for (const name of names) {
+        const label = attendanceStatusLabel(attendanceRecordKey(route.id, name), attendance);
+        rows.push([
+          options.date,
+          options.runPeriod.toUpperCase(),
+          route.bus,
+          route.name,
+          busSubmitted,
+          name,
+          stop.name,
+          stop.pickupTime ?? "",
+          label,
+        ]);
+      }
+    }
+  }
+
+  if (rows.length === 1) {
+    rows.push(["(No scheduled riders for this date/run)", "", "", "", "", "", "", "", ""]);
+  }
+
+  return rows;
 }
