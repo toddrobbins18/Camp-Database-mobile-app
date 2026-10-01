@@ -40,6 +40,7 @@ import {
   type EnrollmentWeekCalendar,
 } from '../lib/enrollmentWeekCalendar';
 import { campDateTimeToIso } from '../lib/campTime';
+import { approveSwimLessonRequest, rejectSwimLessonRequest } from '../lib/swimLessonApproval';
 
 type ScheduleMode = 'once' | 'recurring';
 
@@ -56,6 +57,7 @@ type Lesson = {
   parent_confirmed: boolean;
   parent_confirmed_at: string | null;
   reminder_sent_at: string | null;
+  rejection_reason: string | null;
   notes: string | null;
 };
 
@@ -82,6 +84,8 @@ export function SwimLessonsScreen({ navigation }: any) {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [phoneModalOpen, setPhoneModalOpen] = useState(false);
+  const [phoneNotes, setPhoneNotes] = useState('');
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('once');
   const [weekCalendar, setWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
   const [selectedWeeks, setSelectedWeeks] = useState<number[]>([]);
@@ -229,6 +233,7 @@ export function SwimLessonsScreen({ navigation }: any) {
         instructor: instructorVal,
         cost_cents: costCents,
         notes: notesVal,
+        status: 'scheduled',
       });
       setSaving(false);
       if (error) {
@@ -240,6 +245,61 @@ export function SwimLessonsScreen({ navigation }: any) {
 
     setScheduleModalOpen(false);
     resetForm();
+    load();
+  };
+
+  const pendingLessons = useMemo(() => lessons.filter((l) => l.status === 'pending'), [lessons]);
+  const activeLessons = useMemo(
+    () => lessons.filter((l) => l.status !== 'pending' && l.status !== 'rejected' && l.status !== 'cancelled'),
+    [lessons],
+  );
+
+  const approveRequest = async (id: string) => {
+    const { data: userRes } = await supabase.auth.getUser();
+    const { error } = await approveSwimLessonRequest(supabase, id, userRes.user?.id);
+    if (error) Alert.alert('Error', error.message);
+    else load();
+  };
+
+  const rejectRequest = (id: string) => {
+    Alert.alert('Reject request?', 'The family will see this as declined.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject',
+        style: 'destructive',
+        onPress: async () => {
+          const { data: userRes } = await supabase.auth.getUser();
+          const { error } = await rejectSwimLessonRequest(supabase, id, null, userRes.user?.id);
+          if (error) Alert.alert('Error', error.message);
+          else load();
+        },
+      },
+    ]);
+  };
+
+  const submitPhoneRequest = async () => {
+    if (!companyId || !camperId) {
+      Alert.alert('Error', 'Pick a camper');
+      return;
+    }
+    setSaving(true);
+    const scheduled_at = campDateTimeToIso(format(date, 'yyyy-MM-dd'), lessonTime);
+    const { error } = await supabase.from('swim_lessons').insert({
+      company_id: companyId,
+      camper_id: camperId,
+      scheduled_at,
+      duration_minutes: 30,
+      cost_cents: 0,
+      status: 'pending',
+      notes: phoneNotes.trim() ? `Phone request: ${phoneNotes.trim()}` : 'Phone request',
+    });
+    setSaving(false);
+    if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    setPhoneModalOpen(false);
+    setPhoneNotes('');
     load();
   };
 
@@ -288,26 +348,55 @@ export function SwimLessonsScreen({ navigation }: any) {
           <Text style={styles.headerTitle}>Swim Lessons</Text>
           <Text style={styles.headerSubtitle}>Schedule private swim lessons for eligible camp families</Text>
         </View>
+        <TouchableOpacity style={styles.scheduleHeaderBtn} onPress={() => setPhoneModalOpen(true)}>
+          <Ionicons name="call-outline" size={16} color={theme.colors.text} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.scheduleHeaderBtn} onPress={() => setScheduleModalOpen(true)}>
           <Ionicons name="add" size={16} color="#fff" />
-          <Text style={styles.scheduleHeaderBtnText}>Schedule lesson</Text>
+          <Text style={styles.scheduleHeaderBtnText}>Schedule</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content}>
+        {pendingLessons.length > 0 ? (
+          <View style={[styles.card, styles.pendingCard]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="time-outline" size={18} color="#92400E" />
+              <Text style={styles.cardTitle}>Pending requests ({pendingLessons.length})</Text>
+            </View>
+            {pendingLessons.map((l) => (
+              <View key={l.id} style={styles.listItem}>
+                <View style={styles.listContent}>
+                  <Text style={styles.listName}>{camperName(l.camper_id)}</Text>
+                  <Text style={styles.listDate}>{format(new Date(l.scheduled_at), 'MMM d, h:mm a')}</Text>
+                  {l.notes ? <Text style={styles.listGroup}>{l.notes}</Text> : null}
+                  <View style={styles.pendingActions}>
+                    <TouchableOpacity style={styles.approveBtn} onPress={() => void approveRequest(l.id)}>
+                      <Text style={styles.approveBtnText}>Approve</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.rejectBtn} onPress={() => rejectRequest(l.id)}>
+                      <Text style={styles.rejectBtnText}>Reject</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="list" size={18} color={theme.colors.text} />
-            <Text style={styles.cardTitle}>All scheduled lessons</Text>
+            <Text style={styles.cardTitle}>Approved lessons</Text>
           </View>
           <Text style={styles.cardDescription}>
-            Parents see these in their Parent Portal and confirm attendance.
+            Parents confirm attendance in the Parent Portal after approval.
           </Text>
           <View style={styles.listContainer}>
-            {lessons.length === 0 ? (
-              <Text style={styles.emptyText}>No lessons scheduled yet.</Text>
+            {activeLessons.length === 0 ? (
+              <Text style={styles.emptyText}>No approved lessons yet.</Text>
             ) : (
-              lessons.map(l => (
+              activeLessons.map(l => (
                 <View key={l.id} style={styles.listItem}>
                   <View style={styles.listContent}>
                     <View style={styles.listHeaderRow}>
@@ -617,6 +706,49 @@ export function SwimLessonsScreen({ navigation }: any) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={phoneModalOpen} animationType="slide" transparent onRequestClose={() => setPhoneModalOpen(false)}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Log phone request</Text>
+              <TouchableOpacity onPress={() => setPhoneModalOpen(false)}>
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.label}>Camper</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.camperChips}>
+                {campers.slice(0, 20).map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.chip, camperId === c.id && styles.chipActive]}
+                    onPress={() => setCamperId(c.id)}
+                  >
+                    <Text style={[styles.chipText, camperId === c.id && styles.chipTextActive]}>{c.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <Text style={styles.label}>Notes</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={phoneNotes}
+                onChangeText={setPhoneNotes}
+                placeholder="Who called, preferred time…"
+                multiline
+              />
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setPhoneModalOpen(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.submitButton} onPress={() => void submitPhoneRequest()} disabled={saving}>
+                <Text style={styles.submitButtonText}>{saving ? 'Saving…' : 'Log request'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -679,6 +811,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  pendingCard: {
+    borderColor: '#FCD34D',
+    backgroundColor: '#FFFBEB',
+  },
+  pendingActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  approveBtn: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  approveBtnText: { color: '#fff', fontWeight: '600', fontSize: 12 },
+  rejectBtn: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+  },
+  rejectBtnText: { color: theme.colors.text, fontWeight: '600', fontSize: 12 },
   cardDescription: {
     fontSize: 13,
     color: theme.colors.textSecondary,

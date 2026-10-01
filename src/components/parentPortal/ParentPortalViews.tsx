@@ -27,6 +27,7 @@ import {
   AbsenceForm,
   AuthorizedPickupForm,
   PickupChangeForm,
+  SwimLessonRequestForm,
 } from './ParentPortalForms';
 
 export type SharedViewProps = {
@@ -529,21 +530,37 @@ export function ParentSwimView({
   swimLessons,
   onSaved,
   camperName,
+  companyId,
+  campers,
   colors,
-}: Pick<SharedViewProps, 'swimLessons' | 'onSaved' | 'camperName' | 'colors'>) {
+}: Pick<SharedViewProps, 'swimLessons' | 'onSaved' | 'camperName' | 'companyId' | 'campers' | 'colors'>) {
+  const [requestOpen, setRequestOpen] = useState(false);
+  const visible = swimLessons.filter((l) => l.status !== 'cancelled');
+
   return (
     <View style={styles.page}>
       <PageIntro
         title="Swim lessons"
-        subtitle="Camp schedules these — tap confirm when you get a reminder."
+        subtitle="Request a lesson or confirm once camp approves your schedule."
+        colors={colors}
+      />
+      <TouchableOpacity style={[ppPrimaryBtn(colors), { marginBottom: PP.lg }]} onPress={() => setRequestOpen(true)}>
+        <Text style={[ppFont.bodyMedium, { color: '#fff' }]}>Request lesson</Text>
+      </TouchableOpacity>
+      <SwimLessonRequestForm
+        visible={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        companyId={companyId}
+        campers={campers}
+        onSaved={onSaved}
         colors={colors}
       />
 
-      {swimLessons.length === 0 ? (
-        <EmptyBlock icon="water-outline" title="No swim lessons yet" description="When camp schedules a lesson, it will show up here." colors={colors} />
+      {visible.length === 0 ? (
+        <EmptyBlock icon="water-outline" title="No swim lessons yet" description="Submit a request above or wait for camp to schedule one." colors={colors} />
       ) : (
         <View style={styles.stack}>
-          {swimLessons.map((lesson) => (
+          {visible.map((lesson) => (
             <View key={lesson.id} style={[ppCard(colors), styles.swimCard]}>
               <Text style={[ppFont.bodyMedium, { color: colors.text }]}>{camperName(lesson.camper_id)}</Text>
               <Text style={[ppFont.caption, { color: colors.textMuted, marginTop: PP.xs }]}>
@@ -553,9 +570,20 @@ export function ParentSwimView({
                 {lesson.duration_minutes} min
                 {lesson.instructor ? ` · ${lesson.instructor}` : ''}
                 {lesson.location ? ` · ${lesson.location}` : ''}
-                {' · '}${(lesson.cost_cents / 100).toFixed(2)}
+                {lesson.cost_cents > 0 ? ` · $${(lesson.cost_cents / 100).toFixed(2)}` : ''}
               </Text>
-              {lesson.parent_confirmed ? (
+              {lesson.status === 'pending' ? (
+                <View style={[styles.confirmedBadge, { backgroundColor: '#FEF3C7', marginTop: PP.md }]}>
+                  <Ionicons name="time-outline" size={14} color="#92400E" />
+                  <Text style={[ppFont.caption, { color: '#92400E', fontWeight: '500', marginLeft: 4 }]}>
+                    Awaiting camp approval
+                  </Text>
+                </View>
+              ) : lesson.status === 'rejected' ? (
+                <Text style={[ppFont.caption, { color: colors.error, marginTop: PP.md }]}>
+                  Declined{lesson.rejection_reason ? `: ${lesson.rejection_reason}` : ''}
+                </Text>
+              ) : lesson.parent_confirmed ? (
                 <View style={styles.swimActions}>
                   <View style={[styles.confirmedBadge, { backgroundColor: colors.successBg }]}>
                     <Ionicons name="checkmark-circle" size={14} color={colors.success} />
@@ -586,7 +614,8 @@ export function ParentSwimView({
                         parent_confirmed_at: new Date().toISOString(),
                         transport_status: 'submitted',
                       })
-                      .eq('id', lesson.id);
+                      .eq('id', lesson.id)
+                      .eq('status', 'scheduled');
                     onSaved();
                   }}
                 >

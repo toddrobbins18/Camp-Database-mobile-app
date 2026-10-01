@@ -717,6 +717,7 @@ function SwimLogForm({
           scheduled_at: campDateTimeToIso(lessonDate, time),
           duration_minutes: 30,
           instructor: instructor || null,
+          status: 'scheduled',
           parent_confirmed: staffConfirmed,
           parent_confirmed_at: staffConfirmed ? new Date().toISOString() : null,
           transport_status: staffConfirmed ? 'submitted' : null,

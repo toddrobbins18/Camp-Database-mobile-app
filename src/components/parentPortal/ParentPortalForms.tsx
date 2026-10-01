@@ -22,6 +22,7 @@ import {
   isSameDayRequestBlocked,
   SAME_DAY_CUTOFF_MESSAGE,
 } from '../../lib/parentPortalCutoff';
+import { campDateTimeToIso } from '../../lib/campTime';
 import type { ParentPortalColors } from '../../lib/parentPortalTheme';
 
 type FormProps = {
@@ -347,6 +348,104 @@ function FormModal({
             disabled={saving}
           >
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={formStyles.submitText}>Submit</Text>}
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+export function SwimLessonRequestForm({
+  visible,
+  onClose,
+  companyId,
+  campers,
+  onSaved,
+  colors,
+}: Omit<FormProps, 'familyId'>) {
+  const [camperId, setCamperId] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [time, setTime] = useState('15:45');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (!camperId) {
+      Alert.alert('Error', 'Pick a camper');
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from('swim_lessons').insert({
+      company_id: companyId,
+      camper_id: camperId,
+      scheduled_at: campDateTimeToIso(date, time),
+      duration_minutes: 30,
+      cost_cents: 0,
+      status: 'pending',
+      notes: notes.trim() || null,
+    });
+    setSaving(false);
+    if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    Alert.alert('Submitted', 'Camp will review your swim lesson request.');
+    onClose();
+    onSaved();
+    setCamperId('');
+    setNotes('');
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={[formStyles.modalRoot, { backgroundColor: colors.pageBg }]}>
+        <View style={[formStyles.modalHeader, { borderBottomColor: colors.border }]}>
+          <Text style={[formStyles.modalTitle, { color: colors.text }]}>Request swim lesson</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close" size={24} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={formStyles.modalBody} keyboardShouldPersistTaps="handled">
+          <Text style={[formStyles.label, { color: colors.text }]}>Camper</Text>
+          {campers.map((c) => (
+            <OptionRow
+              key={c.id}
+              label={c.name}
+              selected={camperId === c.id}
+              onPress={() => setCamperId(c.id)}
+              colors={colors}
+            />
+          ))}
+          <Text style={[formStyles.label, { color: colors.text }]}>Preferred date</Text>
+          <TextInput
+            style={[formStyles.input, { borderColor: colors.border, color: colors.text }]}
+            value={date}
+            onChangeText={setDate}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={colors.textMuted}
+          />
+          <Text style={[formStyles.label, { color: colors.text }]}>Preferred time</Text>
+          <OptionRow label="3:45 PM" selected={time === '15:45'} onPress={() => setTime('15:45')} colors={colors} />
+          <OptionRow label="4:15 PM" selected={time === '16:15'} onPress={() => setTime('16:15')} colors={colors} />
+          <Text style={[formStyles.label, { color: colors.text }]}>Notes</Text>
+          <TextInput
+            style={[formStyles.input, { borderColor: colors.border, color: colors.text }]}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Optional"
+            placeholderTextColor={colors.textMuted}
+            multiline
+          />
+          <TouchableOpacity
+            style={[formStyles.submitBtn, { backgroundColor: colors.brand }]}
+            onPress={() => void submit()}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={formStyles.submitText}>Submit request</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
