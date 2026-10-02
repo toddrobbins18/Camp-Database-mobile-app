@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -34,6 +35,7 @@ import { getEffectiveCoreStops } from '../lib/transportRunBoard';
 import { useFilteredBusRoutes } from '../hooks/useFilteredBusRoutes';
 import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
 import { FrontOfficeBackButton } from '../components/FrontOfficeBackButton';
+import { BusLocationSharingSection } from '../components/BusLocationSharingSection';
 
 function ymdFromDate(d: Date): string {
   return format(d, 'yyyy-MM-dd');
@@ -62,6 +64,7 @@ export function BusAttendanceScreen({ navigation }: any) {
   }, [operationalDateString]);
   const [timeOfDay, setTimeOfDay] = useState<'am' | 'pm'>('am');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [screenFocused, setScreenFocused] = useState(true);
 
   const {
     companyId,
@@ -71,7 +74,15 @@ export function BusAttendanceScreen({ navigation }: any) {
     routes,
     enrollmentCtx,
     busScopeLabel,
+    assignedBus,
   } = useFilteredBusRoutes(runDate, timeOfDay);
+
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true);
+      return () => setScreenFocused(false);
+    }, []),
+  );
 
   const companyName =
     availableCompanies.find((c) => c.id === companyId)?.name ?? 'Day Camp';
@@ -405,6 +416,16 @@ export function BusAttendanceScreen({ navigation }: any) {
             Run date outside week — using selected week for roster &amp; print
           </Text>
         ) : null}
+
+        <BusLocationSharingSection
+          companyId={companyId}
+          season={season}
+          runDate={runDate}
+          timeOfDay={timeOfDay}
+          routes={routes}
+          assignedBus={assignedBus}
+          screenFocused={screenFocused}
+        />
 
         <View style={styles.filtersRow}>
           <Text style={styles.filterLabel}>Run date</Text>

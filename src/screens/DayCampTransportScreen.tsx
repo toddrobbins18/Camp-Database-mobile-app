@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -28,7 +29,10 @@ import { todayDateString } from '../lib/transportDailyOverrides';
 import { formatEnrollmentWeekLabel } from '../lib/enrollmentWeekCalendar';
 import { DAY_CAMP_ENROLLMENT_WEEKS } from '../lib/enrolledWeeks';
 import { TransportRouteMapNative } from '../components/TransportRouteMapNative';
+import { BusLocationSharingSection } from '../components/BusLocationSharingSection';
 import { DAY_CAMP_REPORTS, useDayCampTransport } from '../hooks/useDayCampTransport';
+import { useLiveBusLocations } from '../hooks/useLiveBusLocations';
+import { useCompany } from '../contexts/CompanyContext';
 
 type Tab = 'map' | 'unplotted' | 'reports';
 
@@ -42,11 +46,36 @@ function dateFromYmd(ymd: string) {
 
 export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   const t = useDayCampTransport();
+  const { companyId } = useCompany();
   const [activeTab, setActiveTab] = useState<Tab>('map');
+  const [screenFocused, setScreenFocused] = useState(true);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showRouteSheet, setShowRouteSheet] = useState(true);
   const [showOverflow, setShowOverflow] = useState(false);
   const isToday = t.overrideDate === todayDateString();
+
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true);
+      return () => setScreenFocused(false);
+    }, []),
+  );
+
+  const { locations: liveBusLocations } = useLiveBusLocations(
+    companyId,
+    t.overrideDate,
+    t.timeOfDay,
+    activeTab === 'map',
+  );
+
+  const liveBuses = liveBusLocations.map((row) => ({
+    id: row.id,
+    busLabel: row.bus_label,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    userName: row.user_name,
+    updatedAt: row.updated_at,
+  }));
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: 'map', label: 'Route Map' },
@@ -213,6 +242,16 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
         </ScrollView>
       )}
 
+      <BusLocationSharingSection
+        companyId={companyId}
+        season={t.season}
+        runDate={t.overrideDate}
+        timeOfDay={t.timeOfDay}
+        routes={t.routes}
+        assignedBus={null}
+        screenFocused={screenFocused}
+      />
+
       <View style={styles.mapRow}>
         <View style={[styles.mapContainer, !showRouteSheet && styles.mapContainerFull]}>
           {(t.boardLoading || t.mappointImporting) && (
@@ -225,6 +264,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
             routes={t.displayedRoutes}
             allRoutes={t.allRoutes}
             unplottedCampers={t.unplottedForWeek}
+            liveBuses={liveBuses}
             campAddress={CAMP_LOCATION.address}
             onStopPress={(routeId, stopIndex, stop) => t.setStopAction({ routeId, stopIndex, stop })}
             onUnplottedPress={(camperId) => {

@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -24,6 +25,7 @@ import {
   type BusCheckinMap,
 } from '../lib/transportBusCheckins';
 import { FrontOfficeBackButton } from '../components/FrontOfficeBackButton';
+import { BusLocationSharingSection } from '../components/BusLocationSharingSection';
 
 function ymdFromDate(d: Date) {
   return format(d, 'yyyy-MM-dd');
@@ -38,6 +40,7 @@ export function BusCheckInsScreen({ navigation }: any) {
   const [runDate, setRunDate] = useState(operationalDateString);
   const [timeOfDay, setTimeOfDay] = useState<'am' | 'pm'>('am');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [screenFocused, setScreenFocused] = useState(true);
   const [busCheckins, setBusCheckins] = useState<BusCheckinMap>({});
   const [busSubmissions, setBusSubmissions] = useState<BusSubmissionsMap>({});
   const [checkinsLoading, setCheckinsLoading] = useState(true);
@@ -48,8 +51,15 @@ export function BusCheckInsScreen({ navigation }: any) {
     setRunDate(operationalDateString);
   }, [operationalDateString]);
 
-  const { companyId, season, boardLoading, routes, enrollmentCtx, busScopeLabel } =
+  const { companyId, season, boardLoading, routes, enrollmentCtx, busScopeLabel, assignedBus } =
     useFilteredBusRoutes(runDate, timeOfDay);
+
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true);
+      return () => setScreenFocused(false);
+    }, []),
+  );
 
   useEffect(() => {
     if (!companyId || !season) return;
@@ -182,6 +192,16 @@ export function BusCheckInsScreen({ navigation }: any) {
           {busScopeLabel ? <Text style={styles.scopeText}>{busScopeLabel} only</Text> : null}
           {weekNote ? <Text style={styles.scopeText}>{weekNote}</Text> : null}
         </View>
+
+        <BusLocationSharingSection
+          companyId={companyId}
+          season={season}
+          runDate={runDate}
+          timeOfDay={timeOfDay}
+          routes={routes}
+          assignedBus={assignedBus}
+          screenFocused={screenFocused}
+        />
 
         <TouchableOpacity
           style={styles.linkRow}

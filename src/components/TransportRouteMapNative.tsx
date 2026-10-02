@@ -27,10 +27,20 @@ export type MapUnplottedCamper = {
   session: string;
 };
 
+export type LiveBusMarker = {
+  id: string;
+  busLabel: string;
+  latitude: number;
+  longitude: number;
+  userName?: string | null;
+  updatedAt?: string;
+};
+
 export type TransportRouteMapNativeProps = {
   routes: MapRoute[];
   allRoutes?: MapRoute[];
   unplottedCampers?: MapUnplottedCamper[];
+  liveBuses?: LiveBusMarker[];
   campAddress?: string;
   onMoveStop?: (fromRouteId: number, stopIndex: number, toRouteId: number) => void;
   onRemoveStop?: (routeId: number, stopIndex: number) => void;
@@ -77,9 +87,19 @@ function StopMarker({
   );
 }
 
+function LiveBusMarkerView({ label }: { label: string }) {
+  return (
+    <View style={styles.liveBusMarker}>
+      <Ionicons name="bus" size={14} color="#fff" />
+      <Text style={styles.liveBusLabel} numberOfLines={1}>{label}</Text>
+    </View>
+  );
+}
+
 export function TransportRouteMapNative({
   routes,
   unplottedCampers = [],
+  liveBuses = [],
   campAddress = CAMP_LOCATION.address,
   onStopPress,
   onUnplottedPress,
@@ -91,8 +111,9 @@ export function TransportRouteMapNative({
   const allPoints = useMemo(() => {
     const routePoints = routes.flatMap((r) => r.stops.map((s) => ({ lat: s.lat, lng: s.lng })));
     const camperPoints = unplottedCampers.map((c) => ({ lat: c.lat, lng: c.lng }));
-    return [...routePoints, ...camperPoints, { lat: CAMP_LOCATION.lat, lng: CAMP_LOCATION.lng }];
-  }, [routes, unplottedCampers]);
+    const busPoints = liveBuses.map((b) => ({ lat: b.latitude, lng: b.longitude }));
+    return [...routePoints, ...camperPoints, ...busPoints, { lat: CAMP_LOCATION.lat, lng: CAMP_LOCATION.lng }];
+  }, [routes, unplottedCampers, liveBuses]);
 
   const initialRegion: Region = useMemo(() => {
     if (allPoints.length === 0) {
@@ -227,6 +248,18 @@ export function TransportRouteMapNative({
           </Marker>
         ) : null,
       )}
+
+      {liveBuses.map((bus) => (
+        <Marker
+          key={`live-bus-${bus.id}`}
+          coordinate={{ latitude: bus.latitude, longitude: bus.longitude }}
+          anchor={{ x: 0.5, y: 0.5 }}
+          title={bus.busLabel}
+          description={bus.userName ? `Driver: ${bus.userName}` : 'Live bus location'}
+        >
+          <LiveBusMarkerView label={bus.busLabel} />
+        </Marker>
+      ))}
     </MapView>
     <View style={styles.zoomControls}>
       <TouchableOpacity style={styles.zoomBtn} onPress={zoomIn} accessibilityLabel="Zoom in">
@@ -303,5 +336,27 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  liveBusMarker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#0f766e',
+    borderWidth: 2,
+    borderColor: '#fff',
+    maxWidth: 120,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  liveBusLabel: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

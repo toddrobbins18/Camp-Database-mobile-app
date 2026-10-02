@@ -39,7 +39,15 @@
       "expo-secure-store",
       "expo-notifications",
       "expo-sqlite",
-      "expo-updates"
+      "expo-updates",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "The Nest uses your location to show live bus position on your route while you choose to share it.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ]
     ],
     "extra": {
       "eas": {
