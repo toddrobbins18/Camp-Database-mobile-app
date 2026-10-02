@@ -17,6 +17,7 @@ import { formatSportsAcademySessionDate } from '../lib/sportsAcademyUtils';
 import { PersonThreeDayOutlook } from '../components/PersonThreeDayOutlook';
 import { ProfileQuickSearch } from '../components/ProfileQuickSearch';
 import { CamperSwimHistoryTab } from '../components/CamperSwimHistoryTab';
+import { CamperParentContactLogTab } from '../components/CamperParentContactLogTab';
 import { formatIsoDateToUs, toIsoDateOrNull } from '../api/staffPayload';
 import {
     getCamperEffectiveDivision,
@@ -53,6 +54,7 @@ type TabType =
     | 'incidents'
     | 'appointments'
     | 'tutoring-therapy'
+    | 'parent-contact'
     | 'swim';
 type BirthdaySubTabType = 'info' | 'party';
 
@@ -547,6 +549,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             { key: 'incidents', label: 'Incident Reports' },
             { key: 'appointments', label: 'Appointments' },
             { key: 'tutoring-therapy', label: 'Tutoring & Therapy' },
+            { key: 'parent-contact', label: 'Parent Contact Log' },
         ];
         let filtered = all;
         if (isDayCamp) {
@@ -554,7 +557,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                 (t) => !['achievements', 'sports-academy', 'appointments'].includes(t.key),
             );
         } else {
-            filtered = filtered.filter((t) => t.key !== 'tutoring-therapy');
+            filtered = filtered.filter((t) => !['tutoring-therapy', 'parent-contact'].includes(t.key));
             if (!showAppointmentsTab) {
                 filtered = filtered.filter((t) => t.key !== 'appointments');
             }
@@ -573,10 +576,12 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
         if (isTimberLakeWest) hiddenTabs.push('sports-academy');
         if (isDayCamp) {
             hiddenTabs.push('achievements', 'sports-academy', 'appointments');
-        } else if (!showAppointmentsTab) {
-            hiddenTabs.push('appointments');
+        } else {
+            hiddenTabs.push('tutoring-therapy', 'parent-contact');
+            if (!showAppointmentsTab) {
+                hiddenTabs.push('appointments');
+            }
         }
-        if (!isDayCamp) hiddenTabs.push('tutoring-therapy');
         if (hiddenTabs.includes(activeTab)) {
             setActiveTab('overview');
         }
@@ -1667,6 +1672,16 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                 })}
                             </View>
                         )}
+                    </View>
+                )}
+
+                {activeTab === 'parent-contact' && camper?.id && (
+                    <View style={styles.tabContent}>
+                        <CamperParentContactLogTab
+                            childId={camper.id}
+                            companyId={companyId}
+                            season={season}
+                        />
                     </View>
                 )}
 
