@@ -28,6 +28,7 @@ export type TransportEnrolledCamper = {
   session: string | null;
   grade: string | null;
   groupName: string | null;
+  homeAddress: string | null;
 };
 
 export type TransportUnplottedCamper = {
@@ -180,7 +181,7 @@ export async function loadEnrolledCampersForTransport(
 ): Promise<TransportEnrolledCamper[]> {
   const { data, error } = await supabase
     .from("children")
-    .select("id, name, age, date_of_birth, session, grade, group_name")
+    .select("id, name, age, date_of_birth, session, grade, group_name, home_address")
     .eq("company_id", companyId)
     .eq("season", season)
     .neq("status", "inactive")
@@ -198,6 +199,7 @@ export async function loadEnrolledCampersForTransport(
     session: row.session as string | null,
     grade: row.grade as string | null,
     groupName: row.group_name as string | null,
+    homeAddress: (row.home_address as string | null)?.trim() || null,
   })).filter((c) => c.name);
 }
 
@@ -275,22 +277,30 @@ export function buildUnplottedFromEnrollment(options: {
 
     const resolvedAge = child.age ?? null;
     const kept = existingByName.get(key);
+    const hint = addressHints?.get(key);
+    const syncedAddress = child.homeAddress?.trim() || "";
     if (kept) {
+      const address = kept.address?.trim() || syncedAddress || hint?.address || "";
+      const bundled = address ? resolveBundledGeocodeResult(address) : null;
       out.push({
         ...kept,
+        address,
+        lat: kept.lat || bundled?.lat || hint?.lat || 0,
+        lng: kept.lng || bundled?.lng || hint?.lng || 0,
         age: resolvedAge ?? kept.age,
         session: child.session ?? child.grade ?? kept.session,
       });
       return;
     }
 
-    const hint = addressHints?.get(key);
+    const address = syncedAddress || hint?.address || "";
+    const bundled = address ? resolveBundledGeocodeResult(address) : null;
     out.push({
       id: stableUnplottedId(child.id, index + 1),
       name: child.name,
-      address: hint?.address ?? "",
-      lat: hint?.lat ?? 0,
-      lng: hint?.lng ?? 0,
+      address,
+      lat: bundled?.lat ?? hint?.lat ?? 0,
+      lng: bundled?.lng ?? hint?.lng ?? 0,
       age: resolvedAge ?? 10,
       session: child.session ?? child.grade ?? "",
     });
