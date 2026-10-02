@@ -35,6 +35,7 @@ import {
     mergeCamperContact,
 } from '../lib/camperContactInfo';
 import { resolveChildForCampView } from '../lib/profileCampResolution';
+import { appointmentsEnabledForCompany } from '../constants/camps';
 import { HealthCenterVisitDetailRows } from '../components/health/HealthCenterDayCampPanel';
 import { ParentTemplateEmailPanel } from '../components/parentEmail/ParentTemplateEmailPanel';
 
@@ -51,6 +52,7 @@ type TabType =
     | 'sports-academy'
     | 'incidents'
     | 'appointments'
+    | 'tutoring-therapy'
     | 'swim';
 type BirthdaySubTabType = 'info' | 'party';
 
@@ -58,7 +60,8 @@ type BirthdaySubTabType = 'info' | 'party';
 
 export const CamperDetailScreen = ({ route, navigation }: any) => {
     const { camper: camperParam } = route.params || {};
-    const { companyId, season, isTimberLakeWest, isDayCamp, availableCompanies } = useCompany();
+    const { companyId, season, companySlug, isTimberLakeWest, isDayCamp, availableCompanies } = useCompany();
+    const showAppointmentsTab = appointmentsEnabledForCompany({ slug: companySlug, camp_type: isDayCamp ? 'day_camp' : null });
     const [resolvedCamperId, setResolvedCamperId] = useState<string | undefined>(camperParam?.id);
     const [campCheckDone, setCampCheckDone] = useState(false);
     const openSeasonRef = useRef(season);
@@ -252,7 +255,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                     : '',
             }));
         },
-        enabled: !!camper?.id && !!companyId,
+        enabled: !!camper?.id && !!companyId && !isDayCamp,
     });
 
     /** Align with web ChildProfile: sports_academy by child + company (no season filter on profile). */
@@ -269,7 +272,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             if (error) throw error;
             return data || [];
         },
-        enabled: !!camper?.id && !!companyId,
+        enabled: !!camper?.id && !!companyId && !isDayCamp,
     });
 
     /**
@@ -329,7 +332,25 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             if (error) throw error;
             return data || [];
         },
-        enabled: !!camper?.id && !!companyId,
+        enabled: !!camper?.id && !!companyId && showAppointmentsTab,
+    });
+
+    /** Day camp: tutoring & therapy enrollments for this camper (current season). */
+    const { data: tutoringTherapyEnrollments = [], isLoading: tutoringTherapyLoading } = useQuery({
+        queryKey: ['camper_tutoring_therapy', camper?.id, companyId, season],
+        queryFn: async () => {
+            if (!camper?.id || !companyId || !season) return [];
+            const { data, error } = await supabase
+                .from('tutoring_therapy')
+                .select('*')
+                .eq('child_id', camper.id)
+                .eq('company_id', companyId)
+                .eq('season', season)
+                .order('service_type', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!camper?.id && !!companyId && !!season && isDayCamp,
     });
 
     /** Web HealthCenterTab parity: admissions + recent medications for this child. */
@@ -525,22 +546,41 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
             { key: 'sports-academy', label: 'Sports Academy' },
             { key: 'incidents', label: 'Incident Reports' },
             { key: 'appointments', label: 'Appointments' },
+            { key: 'tutoring-therapy', label: 'Tutoring & Therapy' },
         ];
         let filtered = all;
-        if (isTimberLakeWest) {
-            filtered = filtered.filter((t) => t.key !== 'sports-academy');
+        if (isDayCamp) {
+            filtered = filtered.filter(
+                (t) => !['achievements', 'sports-academy', 'appointments'].includes(t.key),
+            );
+        } else {
+            filtered = filtered.filter((t) => t.key !== 'tutoring-therapy');
+            if (!showAppointmentsTab) {
+                filtered = filtered.filter((t) => t.key !== 'appointments');
+            }
+            if (isTimberLakeWest) {
+                filtered = filtered.filter((t) => t.key !== 'sports-academy');
+            }
         }
         if (isDayCamp && (camper as any)?.person_id) {
             filtered = [...filtered, { key: 'swim' as const, label: 'Swim' }];
         }
         return filtered;
-    }, [isTimberLakeWest, isDayCamp, camper]);
+    }, [isTimberLakeWest, isDayCamp, showAppointmentsTab, camper]);
 
     useEffect(() => {
-        if (isTimberLakeWest && activeTab === 'sports-academy') {
+        const hiddenTabs: TabType[] = [];
+        if (isTimberLakeWest) hiddenTabs.push('sports-academy');
+        if (isDayCamp) {
+            hiddenTabs.push('achievements', 'sports-academy', 'appointments');
+        } else if (!showAppointmentsTab) {
+            hiddenTabs.push('appointments');
+        }
+        if (!isDayCamp) hiddenTabs.push('tutoring-therapy');
+        if (hiddenTabs.includes(activeTab)) {
             setActiveTab('overview');
         }
-    }, [isTimberLakeWest, activeTab]);
+    }, [isTimberLakeWest, isDayCamp, showAppointmentsTab, activeTab]);
 
     if (!camperParam) {
         return (
@@ -1619,6 +1659,110 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                                 )}
                                                             </Text>
                                                         </View>
+                                                    ) : null}
+                                                </View>
+                                            </View>
+                                        </StyledCard>
+                                    );
+                                })}
+                            </View>
+                        )}
+                    </View>
+                )}
+
+                {activeTab === 'tutoring-therapy' && (
+                    <View style={styles.tabContent}>
+                        <View style={styles.achievementsHeader}>
+                            <Text style={styles.achievementsCountText}>
+                                {tutoringTherapyLoading
+                                    ? 'Loading...'
+                                    : `${tutoringTherapyEnrollments.length} total ${
+                                          tutoringTherapyEnrollments.length === 1 ? 'enrollment' : 'enrollments'
+                                      }`}
+                            </Text>
+                        </View>
+
+                        {tutoringTherapyLoading ? (
+                            <View style={{ padding: 20, alignItems: 'center' }}>
+                                <ActivityIndicator size="small" color={theme.colors.secondary} />
+                            </View>
+                        ) : tutoringTherapyEnrollments.length === 0 ? (
+                            <StyledCard style={styles.emptyCard}>
+                                <Text style={styles.emptyText}>No tutoring or therapy enrollments recorded</Text>
+                            </StyledCard>
+                        ) : (
+                            <View style={styles.achievementsList}>
+                                {tutoringTherapyEnrollments.map((enrollment: any) => {
+                                    const periods: string[] = Array.isArray(enrollment.schedule_periods)
+                                        ? enrollment.schedule_periods
+                                        : [];
+                                    const weekdays: string[] = Array.isArray(enrollment.weekdays)
+                                        ? enrollment.weekdays
+                                        : [];
+                                    const startDate = enrollment.start_date
+                                        ? new Date(`${enrollment.start_date}T00:00:00`).toLocaleDateString('en-US', {
+                                              month: 'short',
+                                              day: 'numeric',
+                                          })
+                                        : '';
+                                    const endDate = enrollment.end_date
+                                        ? new Date(`${enrollment.end_date}T00:00:00`).toLocaleDateString('en-US', {
+                                              month: 'short',
+                                              day: 'numeric',
+                                              year: 'numeric',
+                                          })
+                                        : '';
+                                    const dateLine =
+                                        startDate && endDate
+                                            ? `${startDate} - ${endDate}`
+                                            : startDate || endDate;
+
+                                    return (
+                                        <StyledCard key={enrollment.id} style={styles.achievementCard}>
+                                            <View style={styles.achievementContent}>
+                                                <View style={styles.achievementIconContainer}>
+                                                    <Ionicons name="book-outline" size={24} color="#2563eb" />
+                                                </View>
+                                                <View style={styles.achievementDetails}>
+                                                    <View style={styles.achievementTag}>
+                                                        <Text style={styles.achievementTagText}>
+                                                            {enrollment.service_type}
+                                                        </Text>
+                                                    </View>
+                                                    {enrollment.instructor ? (
+                                                        <Text style={[styles.achievementType, { marginTop: 8 }]}>
+                                                            Instructor: {enrollment.instructor}
+                                                        </Text>
+                                                    ) : null}
+                                                    {periods.length > 0 ? (
+                                                        <View style={[styles.achievementFooter, { marginTop: 8 }]}>
+                                                            {periods.map((period: string, idx: number) => (
+                                                                <View
+                                                                    key={`${enrollment.id}-p-${idx}`}
+                                                                    style={styles.achievementTagOutline}
+                                                                >
+                                                                    <Text style={styles.achievementTagOutlineText}>
+                                                                        {period}
+                                                                    </Text>
+                                                                </View>
+                                                            ))}
+                                                        </View>
+                                                    ) : null}
+                                                    {weekdays.length > 0 ? (
+                                                        <Text style={[styles.achievementType, { marginTop: 8 }]}>
+                                                            {weekdays.join(', ')}
+                                                        </Text>
+                                                    ) : null}
+                                                    {dateLine ? (
+                                                        <View style={[styles.achievementDateContainer, { marginTop: 8 }]}>
+                                                            <Ionicons name="calendar-outline" size={12} color="#6b7280" />
+                                                            <Text style={styles.achievementDate}>{dateLine}</Text>
+                                                        </View>
+                                                    ) : null}
+                                                    {enrollment.notes ? (
+                                                        <Text style={[styles.achievementType, { marginTop: 8 }]}>
+                                                            {enrollment.notes}
+                                                        </Text>
                                                     ) : null}
                                                 </View>
                                             </View>

@@ -103,6 +103,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
             home_away: toHomeAway(data.home_away),
             meal_options,
             meal_notes: toNullableString(data.meal_notes),
+            file_url: toNullableString(data.file_url),
+            file_name: toNullableString(data.file_name),
             season: selectedYear,
             company_id: companyId,
         };
@@ -296,6 +298,46 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
         });
         setSelectedStaffIds([]);
         setStaffSearchQuery('');
+        setFileUrl('');
+        setFileName('');
+    };
+
+    const handleAttachFile = async () => {
+        if (!companyId) {
+            Alert.alert('Missing context', 'Company is not available yet.');
+            return;
+        }
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                copyToCacheDirectory: true,
+                type: ['application/pdf', 'image/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+            });
+            const file = result.assets?.[0];
+            if (!file) return;
+
+            setIsUploadingAttachment(true);
+            const ext = (file.name?.split('.').pop() || 'bin').toLowerCase();
+            const storagePath = `${companyId}/field-trips/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+            const response = await fetch(file.uri);
+            const blob = await response.blob();
+
+            const { error: uploadError } = await supabase.storage
+                .from('rainy-day-documents')
+                .upload(storagePath, blob, { upsert: false });
+            if (uploadError) throw uploadError;
+
+            const { data: signed, error: signedError } = await supabase.storage
+                .from('rainy-day-documents')
+                .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
+            if (signedError) throw signedError;
+
+            setFileUrl(signed?.signedUrl || '');
+            setFileName(file.name || 'Attachment');
+        } catch (error: any) {
+            Alert.alert('Upload failed', error?.message || 'Could not upload attachment');
+        } finally {
+            setIsUploadingAttachment(false);
+        }
     };
 
     const selectedYear = season || '2026';
@@ -467,6 +509,9 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
     });
     const [csvUploading, setCsvUploading] = useState(false);
     const [csvUploadError, setCsvUploadError] = useState<string | null>(null);
+    const [fileUrl, setFileUrl] = useState('');
+    const [fileName, setFileName] = useState('');
+    const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
 
     const handleDeleteActivity = async () => {
         if (!activityToDelete?.id) {
@@ -1084,6 +1129,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 const matchedIds = staffData.filter((staff: any) => chaperoneNames.includes(staff.name)).map((staff: any) => staff.id);
                                 setSelectedStaffIds(matchedIds);
                                 setStaffSearchQuery('');
+                                setFileUrl(activity.file_url || '');
+                                setFileName(activity.file_name || '');
                                 setIsEditModalOpen(true);
                             }
                         }}
@@ -1146,6 +1193,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                                             const matchedIds = staffData.filter((staff: any) => chaperoneNames.includes(staff.name)).map((staff: any) => staff.id);
                                                             setSelectedStaffIds(matchedIds);
                                                             setStaffSearchQuery('');
+                                                            setFileUrl(activity.file_url || '');
+                                                            setFileName(activity.file_name || '');
                                                             setIsEditModalOpen(true);
                                                         }}
                                                     >
@@ -1219,6 +1268,14 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             ) : null}
                                             {activity.description ? (
                                                 <Text style={styles.activityCardNotes} numberOfLines={3}>{activity.description}</Text>
+                                            ) : null}
+                                            {activity.file_url ? (
+                                                <View style={styles.activityCardDetailRow}>
+                                                    <Ionicons name="attach-outline" size={16} color={theme.colors.secondary} style={styles.detailIcon} />
+                                                    <Text style={[styles.activityCardDetailText, { color: theme.colors.secondary }]}>
+                                                        {activity.file_name || 'Attachment'}
+                                                    </Text>
+                                                </View>
                                             ) : null}
                                         </StyledCard>
                                     ))}
@@ -1700,6 +1757,35 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                     />
                                 </View>
 
+                                <View style={styles.formField}>
+                                    <Text style={styles.formLabel}>Attachment (optional)</Text>
+                                    <Text style={styles.attachmentHint}>Receipt, invoice, or other document</Text>
+                                    {fileName ? (
+                                        <View style={styles.attachmentRow}>
+                                            <Ionicons name="document-text-outline" size={18} color={theme.colors.textSecondary} />
+                                            <Text style={styles.attachmentName} numberOfLines={1}>{fileName}</Text>
+                                            <TouchableOpacity onPress={() => { setFileUrl(''); setFileName(''); }}>
+                                                <Ionicons name="close-circle" size={20} color={theme.colors.textSecondary} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity
+                                            style={[styles.attachButton, isUploadingAttachment && { opacity: 0.7 }]}
+                                            onPress={() => void handleAttachFile()}
+                                            disabled={isUploadingAttachment}
+                                        >
+                                            {isUploadingAttachment ? (
+                                                <ActivityIndicator size="small" color={theme.colors.secondary} />
+                                            ) : (
+                                                <Ionicons name="attach-outline" size={18} color={theme.colors.text} />
+                                            )}
+                                            <Text style={styles.attachButtonText}>
+                                                {isUploadingAttachment ? 'Uploading...' : 'Attach file'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+
                                 <View style={styles.mealOptionsSection}>
                                     <Text style={styles.mealOptionsTitle}>Meal Options</Text>
                                     {MEAL_OPTIONS.map((meal) => {
@@ -1765,7 +1851,12 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
 
                                             try {
                                                 const selectedNames = selectedStaff.map((s: any) => s.name).join(', ');
-                                                await addActivityMutation.mutateAsync({ ...formData, chaperone: selectedNames } as any);
+                                                await addActivityMutation.mutateAsync({
+                                                    ...formData,
+                                                    chaperone: selectedNames,
+                                                    file_url: fileUrl,
+                                                    file_name: fileName,
+                                                } as any);
                                             } catch (error: any) {
                                                 Alert.alert('Error', formatSupabaseWriteError(error) || 'Failed to add activity');
                                             }
@@ -2172,6 +2263,35 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                 />
                             </View>
 
+                            <View style={styles.formField}>
+                                <Text style={styles.formLabel}>Attachment (optional)</Text>
+                                <Text style={styles.attachmentHint}>Receipt, invoice, or other document</Text>
+                                {fileName ? (
+                                    <View style={styles.attachmentRow}>
+                                        <Ionicons name="document-text-outline" size={18} color={theme.colors.textSecondary} />
+                                        <Text style={styles.attachmentName} numberOfLines={1}>{fileName}</Text>
+                                        <TouchableOpacity onPress={() => { setFileUrl(''); setFileName(''); }}>
+                                            <Ionicons name="close-circle" size={20} color={theme.colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : (
+                                    <TouchableOpacity
+                                        style={[styles.attachButton, isUploadingAttachment && { opacity: 0.7 }]}
+                                        onPress={() => void handleAttachFile()}
+                                        disabled={isUploadingAttachment}
+                                    >
+                                        {isUploadingAttachment ? (
+                                            <ActivityIndicator size="small" color={theme.colors.secondary} />
+                                        ) : (
+                                            <Ionicons name="attach-outline" size={18} color={theme.colors.text} />
+                                        )}
+                                        <Text style={styles.attachButtonText}>
+                                            {isUploadingAttachment ? 'Uploading...' : 'Attach file'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
                             <View style={styles.mealOptionsSection}>
                                 <Text style={styles.mealOptionsTitle}>Meal Options</Text>
                                 {MEAL_OPTIONS.map((meal) => {
@@ -2242,6 +2362,8 @@ export const ActivitiesFieldTripsScreen = ({ navigation }: any) => {
                                             updateActivityMutation.mutate({
                                                 ...formData,
                                                 chaperone: selectedNames,
+                                                file_url: fileUrl,
+                                                file_name: fileName,
                                                 id: editingActivity.id,
                                                 previous_title: editingActivity.title,
                                                 previous_event_date: editingActivity.event_date,
@@ -3174,6 +3296,44 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '500',
         marginBottom: theme.spacing.xs,
+        color: theme.colors.text,
+    },
+    attachmentHint: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.xs,
+    },
+    attachButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: theme.spacing.sm,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        minHeight: 44,
+        paddingHorizontal: theme.spacing.md,
+        backgroundColor: theme.colors.surface,
+    },
+    attachButtonText: {
+        ...theme.typography.body,
+        color: theme.colors.text,
+        fontWeight: '600',
+    },
+    attachmentRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.borderRadius.md,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        backgroundColor: theme.colors.background,
+    },
+    attachmentName: {
+        flex: 1,
+        fontSize: 14,
         color: theme.colors.text,
     },
     tripNameHelpText: {

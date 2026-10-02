@@ -33,6 +33,7 @@ import { showAppAlert } from '../utils/showAppAlert';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 import { formatIsoDateToUs, toIsoDateOrNull } from '../api/staffPayload';
 import { lookupChildByRfid, normalizeRfidInput } from '../lib/rfidUtils';
+import { formatEnrolledWeeksLabel, resolveEnrolledWeeks } from '../lib/enrolledWeeks';
 
 type BulkAssignRowResult = {
     name: string;
@@ -3005,6 +3006,11 @@ export const CamperScreen = ({ navigation }: any) => {
                         const effectiveDivision = getCamperEffectiveDivision(camper as any);
                         const gradeDisplay = getCamperGradeDisplay((camper as any).grade, effectiveDivision.name);
                         const divisionDisplay = getDivisionDropdownLabel(effectiveDivision.name) || 'N/A';
+                        const enrolledWeeks = resolveEnrolledWeeks(
+                            (camper as any).enrolled_weeks,
+                            (camper as any).session,
+                        );
+                        const enrolledWeeksLabel = formatEnrolledWeeksLabel(enrolledWeeks);
                         return (
                         <TouchableOpacity
                             key={startIndex + index}
@@ -3079,7 +3085,17 @@ export const CamperScreen = ({ navigation }: any) => {
                                 </View>
 
                                 <View style={styles.cardFooter}>
-                                    {divisionDisplay !== 'N/A' ? (
+                                    {isDayCamp ? (
+                                        enrolledWeeksLabel ? (
+                                            <Text style={styles.divisionText}>
+                                                Weeks enrolled: {enrolledWeeksLabel}
+                                            </Text>
+                                        ) : (camper as any).session?.trim() ? (
+                                            <Text style={styles.divisionText}>
+                                                Weeks enrolled: {(camper as any).session.trim()}
+                                            </Text>
+                                        ) : null
+                                    ) : divisionDisplay !== 'N/A' ? (
                                         <Text style={styles.divisionText}>
                                             Division: {divisionDisplay}
                                         </Text>
