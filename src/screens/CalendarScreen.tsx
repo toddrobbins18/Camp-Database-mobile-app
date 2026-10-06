@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { campDateInSeason } from '../lib/campSeasonDate';
+import { campDateInSeason, campSeasonDefaultCalendarDate } from '../lib/campSeasonDate';
 import { DEFAULT_SEASON } from '../constants/seasonConstants';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
+import { EventAttachmentBlock } from '../components/EventAttachmentBlock';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
@@ -65,7 +66,7 @@ function formatTime12Hour(timeStr?: string): string {
 }
 
 export const CalendarScreen = ({ navigation }: any) => {
-    const { companyId, season, companySlug, availableCompanies, isTimberLakeWest } = useCompany();
+    const { companyId, season, companySlug, availableCompanies, isTimberLakeWest, isDayCamp } = useCompany();
     const activeCompany = React.useMemo(
         () => availableCompanies.find((c) => c.id === companyId) ?? { slug: companySlug, name: isTimberLakeWest ? 'Timber Lake West' : undefined },
         [availableCompanies, companyId, companySlug, isTimberLakeWest],
@@ -84,14 +85,17 @@ export const CalendarScreen = ({ navigation }: any) => {
             void queryClient.invalidateQueries({ queryKey: ['calendar_events', companyId] });
         }, [companyId, queryClient]),
     );
-    const [currentDate, setCurrentDate] = useState(() => campDateInSeason(season || DEFAULT_SEASON));
-    const [selectedDate, setSelectedDate] = useState(() => campDateInSeason(season || DEFAULT_SEASON));
+    const defaultCalendarDate = (s: string) =>
+        isDayCamp ? campSeasonDefaultCalendarDate(s) : campDateInSeason(s);
+
+    const [currentDate, setCurrentDate] = useState(() => defaultCalendarDate(season || DEFAULT_SEASON));
+    const [selectedDate, setSelectedDate] = useState(() => defaultCalendarDate(season || DEFAULT_SEASON));
 
     useEffect(() => {
-        const aligned = campDateInSeason(season || DEFAULT_SEASON);
+        const aligned = defaultCalendarDate(season || DEFAULT_SEASON);
         setCurrentDate(aligned);
         setSelectedDate(aligned);
-    }, [season]);
+    }, [season, isDayCamp]);
     const [showEventList, setShowEventList] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
@@ -673,6 +677,14 @@ export const CalendarScreen = ({ navigation }: any) => {
                                 <View style={styles.eventDetailDescription}>
                                     <Text style={styles.eventDetailDescriptionText}>{selectedEvent.description}</Text>
                                 </View>
+                            )}
+                            {(selectedEvent?.source === 'special_events_activities' ||
+                                selectedEvent?.source === 'activities_field_trips') &&
+                                selectedEvent?.originalData?.file_url && (
+                                <EventAttachmentBlock
+                                    fileUrl={selectedEvent.originalData.file_url}
+                                    fileName={selectedEvent.originalData.file_name}
+                                />
                             )}
                         </ScrollView>
                     </Pressable>

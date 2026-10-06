@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,10 @@ import {
   emptyHealthCenterVisitForm,
   type HealthCenterVisitFormState,
 } from './HealthCenterVisitFormFields';
-import type { HealthCenterVisitExtraFields } from '../../lib/healthCenterVisitOptions';
+import {
+  healthVisitGroupForCamper,
+  type HealthCenterVisitExtraFields,
+} from '../../lib/healthCenterVisitOptions';
 import {
   healthVisitCalledHomeToBoolean,
   isHealthVisitSentHome,
@@ -31,6 +34,7 @@ type CamperRow = {
   group_name?: string | null;
   division?: { name?: string | null } | null;
   leader?: { name?: string | null } | null;
+  bunk?: { bunk_name?: string | null; bunk_number?: number | null } | null;
 };
 
 type StaffRow = {
@@ -138,7 +142,9 @@ export function HealthCenterDayCampPanel({
   const [saving, setSaving] = useState(false);
 
   const groupOptions = useMemo(() => {
-    const names = children.map((c) => c.group_name?.trim()).filter((n): n is string => Boolean(n));
+    const names = children
+      .map((c) => healthVisitGroupForCamper(c, true))
+      .filter(Boolean);
     return [...new Set(names)].sort((a, b) => a.localeCompare(b));
   }, [children]);
 
@@ -162,7 +168,7 @@ export function HealthCenterDayCampPanel({
         ? children.map((c) => ({
             id: c.id,
             name: c.name,
-            subtitle: c.group_name || c.division?.name || '',
+            subtitle: healthVisitGroupForCamper(c, true),
           }))
         : staff.map((s) => ({
             id: s.id,
@@ -184,12 +190,27 @@ export function HealthCenterDayCampPanel({
       if (camper) {
         setForm((prev) => ({
           ...prev,
-          group_name: camper.group_name || camper.division?.name || prev.group_name,
-          counselor_name: camper.leader?.name || prev.counselor_name,
+          group_name: healthVisitGroupForCamper(camper, true),
+          counselor_name: camper.leader?.name?.trim() || '',
         }));
       }
+    } else {
+      setForm((prev) => ({ ...prev, group_name: '' }));
     }
   };
+
+  useEffect(() => {
+    if (entityType !== 'camper' || !selectedId) return;
+    const camper = children.find((c) => c.id === selectedId);
+    if (!camper) return;
+    const group_name = healthVisitGroupForCamper(camper, true);
+    const counselor_name = camper.leader?.name?.trim() || '';
+    setForm((prev) =>
+      prev.group_name === group_name && prev.counselor_name === counselor_name
+        ? prev
+        : { ...prev, group_name, counselor_name },
+    );
+  }, [entityType, selectedId, children]);
 
   const logVisit = async () => {
     if (!selectedId) {

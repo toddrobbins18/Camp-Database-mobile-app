@@ -30,6 +30,18 @@ export function useMenuAccess() {
                     perm.menu_item === menuItem,
             );
             if (hasPerm) return true;
+            // Legacy North Shore swim menu IDs → unified Swim Program.
+            if (menuItem === 'swim' || menuItem === 'swim-bracelets' || menuItem === 'swim-progress') {
+                return rolePermissions.some(
+                    (perm) =>
+                        perm.company_id === companyId &&
+                        perm.can_access === true &&
+                        menuRoles.includes(String(perm.role)) &&
+                        (perm.menu_item === 'swim' ||
+                            perm.menu_item === 'swim-bracelets' ||
+                            perm.menu_item === 'swim-progress'),
+                );
+            }
             // Match web ProtectedRoute: Portal Dashboard uses parent-portal permission.
             if (menuItem === 'parent-portal-dashboard') {
                 return rolePermissions.some(

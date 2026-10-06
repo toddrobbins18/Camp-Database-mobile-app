@@ -103,8 +103,11 @@ function DayCampModuleRouter({ route, navigation }: any) {
     if (moduleId === 'swim-lessons') {
         return <SwimLessonsScreen navigation={navigation} />;
     }
-    if (moduleId === 'swim') {
-        return <SwimProgramScreen navigation={navigation} />;
+    if (moduleId === 'swim' || moduleId === 'swim-bracelets') {
+        return <SwimProgramScreen navigation={navigation} initialTab="bracelets" />;
+    }
+    if (moduleId === 'swim-progress') {
+        return <SwimProgramScreen navigation={navigation} initialTab="levels" />;
     }
     if (moduleId === 'nurse') {
         return <NurseScreen navigation={navigation} />;
@@ -252,6 +255,7 @@ const CustomDrawerContent = (props: any) => {
         icon: keyof typeof Ionicons.glyphMap;
         onPress: () => void;
     }> = [];
+
     const parentPortalMenuItems: Array<{
         key: string;
         label: string;
@@ -260,11 +264,9 @@ const CustomDrawerContent = (props: any) => {
     }> = [];
 
     if (isDayCamp) {
+        const company = { slug: companySlug, camp_type: 'day_camp' as const };
         const carryover = filterDayCampMenu(getDayCampNestCarryoverMenuItems(), hasMenuAccess);
-        const poc = filterDayCampMenu(
-            getDayCampSidebarPocItems({ slug: companySlug, camp_type: 'day_camp' }),
-            hasMenuAccess,
-        );
+        const poc = filterDayCampMenu(getDayCampSidebarPocItems(company), hasMenuAccess);
         const parentPortal = filterDayCampMenu(getParentPortalMenuItems(), hasMenuAccess);
         mainMenuItems.push(...carryover.map((item) => toDrawerMenuItem(item, props.navigation)));
         dayCampMenuItems.push(...poc.map((item) => toDrawerMenuItem(item, props.navigation)));

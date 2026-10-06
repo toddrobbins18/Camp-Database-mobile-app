@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
+import { CampUpdatesEditor } from '../components/parentPortal/CampUpdatesEditor';
 import {
   ABSENCE_TYPES,
   CHANGE_TYPES,
@@ -58,7 +59,7 @@ const changeTypeLabel = (v: string) => CHANGE_TYPES.find((t) => t.v === v)?.l ??
 const absenceTypeLabel = (v: string) => ABSENCE_TYPES.find((t) => t.v === v)?.l ?? v;
 
 export function ParentPortalDashboardScreen({ navigation }: { navigation: any }) {
-  const { companyId } = useCompany();
+  const { companyId, season } = useCompany();
   const [activeTab, setActiveTab] = useState<TabId>('pickups');
   const [loading, setLoading] = useState(true);
   const [pickups, setPickups] = useState<PickupRow[]>([]);
@@ -228,6 +229,8 @@ export function ParentPortalDashboardScreen({ navigation }: { navigation: any })
           <Text style={styles.subtitle}>Approve parent notes before routes & paperwork</Text>
         </View>
       </View>
+
+      {companyId ? <CampUpdatesEditor companyId={companyId} season={season} /> : null}
 
       <View style={styles.statsRow}>
         <View style={styles.statCard}>

@@ -29,6 +29,7 @@ import {
   PickupChangeForm,
   SwimLessonRequestForm,
 } from './ParentPortalForms';
+import { CampAnnouncement, type CampAnnouncementContent } from './CampAnnouncement';
 
 export type SharedViewProps = {
   campName: string;
@@ -40,6 +41,7 @@ export type SharedViewProps = {
   absences: Absence[];
   authPickups: AuthorizedPickup[];
   swimLessons: SwimLesson[];
+  campUpdate?: CampAnnouncementContent | null;
   onSaved: () => void;
   onNavigate: (view: ParentPortalView) => void;
   camperName: (id: string) => string;
@@ -171,16 +173,26 @@ function CamperCard({
 }
 
 export function ParentHomeView({
+  campName,
   contactName,
   campers,
   pickups,
   absences,
   swimLessons,
+  campUpdate,
   onNavigate,
   colors,
 }: Pick<
   SharedViewProps,
-  'contactName' | 'campers' | 'pickups' | 'absences' | 'swimLessons' | 'onNavigate' | 'colors'
+  | 'campName'
+  | 'contactName'
+  | 'campers'
+  | 'pickups'
+  | 'absences'
+  | 'swimLessons'
+  | 'campUpdate'
+  | 'onNavigate'
+  | 'colors'
 >) {
   const todayIso = todayIsoDate();
   const camperName = (id: string) => campers.find((c) => c.id === id)?.name?.split(/\s+/)[0] ?? 'Your child';
@@ -188,6 +200,8 @@ export function ParentHomeView({
   return (
     <View style={styles.page}>
       <WelcomeHero contactName={contactName} colors={colors} />
+
+      <CampAnnouncement campName={campName} update={campUpdate} colors={colors} />
 
       <TodayAtCampBanner
         todayIso={todayIso}

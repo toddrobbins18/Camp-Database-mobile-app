@@ -21,6 +21,12 @@ export const FRONT_OFFICE_TRANSPORT_MENU_IDS = new Set([
   'group-bubble-sheets',
 ]);
 
+/** Front Office child modules — hidden from drawer, opened from Front Office dashboard. */
+export const FRONT_OFFICE_ONLY_MENU_IDS = new Set([
+  ...FRONT_OFFICE_TRANSPORT_MENU_IDS,
+  'office-changes',
+]);
+
 /** Bus transport modules — gated when North Shore bus transport is disabled. */
 const BUS_TRANSPORT_MENU_IDS = new Set(['transportation', ...FRONT_OFFICE_TRANSPORT_MENU_IDS]);
 
@@ -75,7 +81,7 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
     { key: 'bunking', menuId: 'bunking', label: 'Bunking', icon: 'bed-outline', screen: 'DayCampModule', params: { moduleId: 'bunking' } },
     { key: 'hiring', menuId: 'hiring', label: 'Hiring', icon: 'briefcase-outline', screen: 'DayCampModule', params: { moduleId: 'hiring' } },
     { key: 'media', menuId: 'media', label: 'Media', icon: 'camera-outline', screen: 'DayCampModule', params: { moduleId: 'media' } },
-    { key: 'swim', menuId: 'swim', label: 'Swim', icon: 'water-outline', screen: 'DayCampModule', params: { moduleId: 'swim' } },
+    { key: 'swim', menuId: 'swim', label: 'Swim Program', icon: 'water-outline', screen: 'DayCampModule', params: { moduleId: 'swim' } },
     { key: 'swim-lessons', menuId: 'swim-lessons', label: 'Swim Lessons', icon: 'water-outline', screen: 'DayCampModule', params: { moduleId: 'swim-lessons' } },
     { key: 'sunshine-report', menuId: 'sunshine-report', label: 'Sunshine Report', icon: 'sunny-outline', screen: 'DayCampModule', params: { moduleId: 'sunshine-report' } },
     { key: 'transportation', menuId: 'transportation', label: 'Transportation', icon: 'car-outline', screen: 'Transport' },
@@ -120,8 +126,6 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
       params: { moduleId: 'pending-transport-changes' },
     },
     { key: 'office-changes', menuId: 'office-changes', label: 'Office Changes', icon: 'create-outline', screen: 'DayCampModule', params: { moduleId: 'office-changes' } },
-    { key: 'swim-bracelets', menuId: 'swim-bracelets', label: 'Swim Bracelets', icon: 'water-outline', screen: 'DayCampModule', params: { moduleId: 'swim-bracelets' } },
-    { key: 'swim-progress', menuId: 'swim-progress', label: 'Swim Progress', icon: 'stats-chart-outline', screen: 'DayCampModule', params: { moduleId: 'swim-progress' } },
     { key: 'parent-portal', menuId: 'parent-portal', label: 'Parent Portal', icon: 'people-circle-outline', screen: 'DayCampModule', params: { moduleId: 'parent-portal' } },
     {
       key: 'parent-portal-dashboard',
@@ -153,11 +157,11 @@ export function getDayCampPocItemsForCompany(company: CampLike): MobileDrawerMen
   });
 }
 
-/** Day Camp drawer — excludes Front Office transport links and Parent Portal items. */
+/** Day Camp drawer — excludes Front Office child links and Parent Portal items. */
 export function getDayCampSidebarPocItems(company: CampLike): MobileDrawerMenuItem[] {
   return getDayCampPocItemsForCompany(company).filter(
     (item) =>
-      !FRONT_OFFICE_TRANSPORT_MENU_IDS.has(item.menuId) &&
+      !FRONT_OFFICE_ONLY_MENU_IDS.has(item.menuId) &&
       !PARENT_PORTAL_MENU_IDS.has(item.menuId),
   );
 }

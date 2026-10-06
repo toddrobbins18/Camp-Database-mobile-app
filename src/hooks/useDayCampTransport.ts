@@ -8,9 +8,6 @@ import { DEFAULT_SEASON } from '../constants/seasonConstants';
 import { parseCSV, pickFirst } from '../lib/sunshineCsv';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import {
-  getBundledMappointRoutesCsv2026,
-  mappointRoutesSummary,
-  parseMappointRoutesCsv,
   resolveBundledGeocodeResult,
 } from '../lib/mappointTransportImport';
 import {
@@ -66,11 +63,10 @@ import {
 import {
   applyHistoricalAssignments,
   getReferenceDatasetStatus,
-  importMapPointCsvToWarehouse,
   loadCamperPriorMap,
   pickHistoricalBusForCamper,
   reorderStopsByHistoricalPriors,
-  syncBundledMapPointToWarehouse,
+  syncTransportBoardToRoutingWarehouse,
   type ReferenceDatasetStatus,
 } from '../lib/historicalRouteLearning';
 import type { CamperRoutingPrior } from '../lib/routeReferenceWarehouse';
@@ -245,10 +241,8 @@ export function useDayCampTransport() {
   const [boardLoading, setBoardLoading] = useState(true);
   const [persistLoaded, setPersistLoaded] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
-  const [mappointImporting, setMappointImporting] = useState(false);
   const [applyingHistorical, setApplyingHistorical] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
-  const [importingReference, setImportingReference] = useState(false);
   const [referenceStatus, setReferenceStatus] = useState<ReferenceDatasetStatus | null>(null);
   const [regeocoding, setRegeocoding] = useState(false);
 
@@ -297,6 +291,7 @@ export function useDayCampTransport() {
   const importInProgressRef = useRef(false);
   const loadedScopeRef = useRef<string | null>(null);
   const lastKnownStopCountRef = useRef(0);
+  const refreshReferenceStatusRef = useRef<(() => Promise<void>) | null>(null);
   const groupLoadedKeyRef = useRef<string | null>(null);
   const geocodeCacheRef = useRef(new TransportGeocodeCache());
   const priorMapRef = useRef<Map<string, CamperRoutingPrior> | null>(null);
@@ -315,13 +310,14 @@ export function useDayCampTransport() {
   }, []);
 
   const refreshReferenceStatus = useCallback(async () => {
-    if (!companyId) return;
-    const status = await getReferenceDatasetStatus(supabase, companyId, '2026');
+    if (!companyId || !season) return;
+    const status = await getReferenceDatasetStatus(supabase, companyId, season);
     setReferenceStatus(status);
-    priorMapRef.current = await loadCamperPriorMap(supabase, companyId, '2026');
-  }, [companyId]);
+    priorMapRef.current = await loadCamperPriorMap(supabase, companyId, season);
+  }, [companyId, season]);
 
   useEffect(() => {
+    refreshReferenceStatusRef.current = refreshReferenceStatus;
     void refreshReferenceStatus();
   }, [refreshReferenceStatus]);
 
@@ -366,6 +362,26 @@ export function useDayCampTransport() {
           console.error('[Transport] Save board failed:', error.message);
           return false;
         }
+
+        if (
+          marked.routesConfigured &&
+          marked.routeMeta.length > 0 &&
+          countBoardStops(marked.coreStops) > 0
+        ) {
+          try {
+            await syncTransportBoardToRoutingWarehouse(supabase, companyId, {
+              referenceSeason: season,
+              coreStops: marked.coreStops,
+              routeMeta: marked.routeMeta,
+              userId: userRes.user?.id,
+              excludeAddress: CAMP_LOCATION.address,
+            });
+          } catch (learnErr) {
+            console.warn('[Transport] Routing learn sync failed:', learnErr);
+          }
+          void refreshReferenceStatusRef.current?.();
+        }
+
         return true;
       } catch (err) {
         console.error('[Transport] Save board error:', err);
@@ -1118,122 +1134,6 @@ export function useDayCampTransport() {
     }
   };
 
-  const handleLoadMappointRoutes = async () => {
-    setMappointImporting(true);
-    importInProgressRef.current = true;
-    skipPersistRef.current = true;
-    try {
-      const csv = await getBundledMappointRoutesCsv2026();
-      const routes = parseMappointRoutesCsv(csv, { direction: 'AM' });
-      const summary = mappointRoutesSummary(routes);
-      if (!routes.length) {
-        toast('No routes found', 'MapPoint CSV had no AM routes.', true);
-        return;
-      }
-      const uniqueAddresses = Array.from(new Set(routes.flatMap((r) => r.stops.map((s) => s.address))));
-      const cache = geocodeCacheRef.current;
-      const geos: (GeocodeResult | null)[] = uniqueAddresses.map((addr) => {
-        const bundled = resolveBundledGeocodeResult(addr);
-        if (isGeocodePoint(bundled)) {
-          cache.set(addr, bundled);
-          return bundled;
-        }
-        return cache.get(addr) ?? null;
-      });
-      const stillMissing = uniqueAddresses
-        .map((addr, i) => ({ addr, i }))
-        .filter(({ i }) => !isGeocodePoint(geos[i]));
-      if (stillMissing.length > 0) {
-        const missResults = await geocodeBatch(
-          stillMissing.map((m) => m.addr),
-          2,
-          cache,
-        );
-        stillMissing.forEach(({ i }, j) => {
-          geos[i] = missResults[j] ?? null;
-        });
-      }
-      const geoByAddress = new Map<string, (typeof geos)[0]>();
-      uniqueAddresses.forEach((addr, i) => geoByAddress.set(addr, geos[i] ?? null));
-      const geocodedCount = geos.filter(isGeocodePoint).length;
-      const nextCore: Record<number, TransportRouteStop[]> = {};
-      const nextMeta: TransportRouteMeta[] = [];
-      let geocodeFailed = 0;
-      for (const route of routes) {
-        const stops: TransportRouteStop[] = [];
-        for (const stop of route.stops) {
-          const geo = geoByAddress.get(stop.address) ?? null;
-          if (!isGeocodePoint(geo)) {
-            geocodeFailed++;
-            continue;
-          }
-          stops.push({
-            name: stop.label,
-            address: stop.address,
-            lat: geo.lat,
-            lng: geo.lng,
-            pickupTime: '',
-            passengers: stop.camperNames.length,
-            camperNames: stop.camperNames,
-          });
-        }
-        if (!stops.length) continue;
-        nextCore[route.busNumber] = stops;
-        nextMeta.push({
-          id: route.busNumber,
-          name: `${route.routeName} · Bus ${route.busNumber}`,
-          bus: route.busCounselor ? `Bus ${route.busNumber} (${route.busCounselor})` : `Bus ${route.busNumber}`,
-          departure: '7:00 AM',
-          status: 'Confirmed',
-          color: ROUTE_COLORS[(route.busNumber - 1) % ROUTE_COLORS.length],
-          capacity: Math.max(22, stops.reduce((n, s) => n + (s.passengers || 0), 0)),
-        });
-      }
-      const importPayload: TransportBoardPayload = {
-        coreStops: nextCore,
-        routeMeta: nextMeta,
-        unplottedCampers: [],
-        routesConfigured: true,
-        routesSeason: season,
-        routesSource: 'mappoint2026',
-      };
-      const saved = await persistBoard(importPayload);
-      if (saved) {
-        lastKnownStopCountRef.current = countBoardStops(nextCore);
-        loadedScopeRef.current = companyId ? `${companyId}:${season}` : null;
-      }
-      await finalizeBoardForSeason(importPayload);
-      setTodayOverrides(emptyManualOverrides());
-      overrideLoadedKeyRef.current = null;
-
-      if (companyId) {
-        const { data: userRes } = await supabase.auth.getUser();
-        const synced = await syncBundledMapPointToWarehouse(supabase, companyId, {
-          userId: userRes.user?.id,
-          referenceSeason: '2026',
-        });
-        if (!synced.ok) {
-          console.warn('[Transport] MapPoint warehouse sync failed:', synced.error);
-        }
-        await refreshReferenceStatus();
-      }
-
-      toast(
-        geocodeFailed ? '2026 MapPoint routes applied (partial)' : '2026 MapPoint routes applied',
-        geocodeFailed
-          ? `${nextMeta.length} buses · ${geocodedCount}/${uniqueAddresses.length} geocoded · ${geocodeFailed} stops skipped`
-          : `${nextMeta.length} buses from 2026 · ${summary.camperCount} historical camper assignments`,
-        !!(geocodeFailed || !saved),
-      );
-    } catch (e: unknown) {
-      toast('MapPoint import failed', e instanceof Error ? e.message : String(e), true);
-    } finally {
-      importInProgressRef.current = false;
-      skipPersistRef.current = false;
-      setMappointImporting(false);
-    }
-  };
-
   const handleApplyRouteTemplate = async () => {
     if (!companyId) return;
     setApplyingTemplate(true);
@@ -1269,7 +1169,7 @@ export function useDayCampTransport() {
     if (!companyId) return;
     setApplyingHistorical(true);
     try {
-      const priorMap = priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, '2026'));
+      const priorMap = priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, season));
       priorMapRef.current = priorMap;
 
       const result = applyHistoricalAssignments({
@@ -1297,7 +1197,7 @@ export function useDayCampTransport() {
       await finalizeBoardForSeason(payload);
 
       toast(
-        'Historical assignments applied',
+        'Learned assignments applied',
         `${result.placed.length} campers placed on prior buses · ${result.unplottedCampers.length} still unplotted${result.skippedNoBus.length ? ` · ${result.skippedNoBus.length} prior bus not on board` : ''}`,
         result.placed.length === 0,
       );
@@ -1306,43 +1206,6 @@ export function useDayCampTransport() {
     } finally {
       setApplyingHistorical(false);
     }
-  };
-
-  const handleImportMapPointReference = async (csvText: string, label?: string) => {
-    if (!companyId) return;
-    setImportingReference(true);
-    try {
-      const { data: userRes } = await supabase.auth.getUser();
-      const result = await importMapPointCsvToWarehouse(supabase, companyId, csvText, {
-        referenceSeason: '2026',
-        label: label ?? 'MapPoint reference import',
-        userId: userRes.user?.id,
-      });
-
-      if (!result.ok) {
-        toast('Reference import failed', result.error ?? 'Unknown error', true);
-        return;
-      }
-
-      await refreshReferenceStatus();
-      toast(
-        'MapPoint reference dataset updated',
-        `${result.stats?.assignmentCount ?? 0} assignments · ${result.stats?.busCount ?? 0} buses stored for learning`,
-      );
-    } catch (e: unknown) {
-      toast('Reference import failed', e instanceof Error ? e.message : String(e), true);
-    } finally {
-      setImportingReference(false);
-    }
-  };
-
-  const pickMapPointReferenceCsv = async () => {
-    const picked = await pickAndReadCsvText();
-    if (!picked.ok) {
-      if (picked.error !== 'canceled') toast('Import error', picked.message, true);
-      return;
-    }
-    await handleImportMapPointReference(picked.text, picked.fileName);
   };
 
   const handleRegeocodeAll = async () => {
@@ -1999,10 +1862,8 @@ export function useDayCampTransport() {
   return {
     season,
     boardLoading,
-    mappointImporting,
     applyingHistorical,
     applyingTemplate,
-    importingReference,
     referenceStatus,
     regeocoding,
     optimizing,
@@ -2056,10 +1917,8 @@ export function useDayCampTransport() {
     handleAssignCamperToRoute,
     handleAddUnplottedCamper,
     handleRemoveUnplotted,
-    handleLoadMappointRoutes,
     handleApplyRouteTemplate,
     handleApplyHistoricalAssignments,
-    pickMapPointReferenceCsv,
     handleRegeocodeAll,
     handleMoveStop,
     handleRemoveStop,

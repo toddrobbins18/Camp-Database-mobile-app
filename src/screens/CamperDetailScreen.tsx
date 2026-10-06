@@ -31,9 +31,8 @@ import {
     resolveEnrolledWeeks,
 } from '../lib/enrolledWeeks';
 import {
-    fetchCamperFamilyContact,
     hasCamperContactInfo,
-    mergeCamperContact,
+    resolveCamperContactInfo,
 } from '../lib/camperContactInfo';
 import { resolveChildForCampView } from '../lib/profileCampResolution';
 import { appointmentsEnabledForCompany } from '../constants/camps';

@@ -8,10 +8,14 @@ import {
   buildCamperPriorMap,
   buildRouteReferenceFromMappointCsv,
   importRouteReference,
-  loadCamperRoutingPriors,
+  isLikelyCamperName,
+  loadCamperRoutingPriorsForImport,
   loadRouteReferenceImport,
   normCamperNameKey,
+  rosterNameLookupKeys,
   type CamperRoutingPrior,
+  type RouteReferenceAssignment,
+  type RouteReferenceImportPayload,
   type RouteReferenceImportStats,
 } from './routeReferenceWarehouse';
 import type {
@@ -34,7 +38,7 @@ export type ApplyHistoricalResult = {
 export type ReferenceDatasetStatus = {
   referenceSeason: string;
   loaded: boolean;
-  source: "warehouse" | "bundled";
+  source: "nest" | "mappoint" | "bundled";
   stats: RouteReferenceImportStats | null;
   priorCount: number;
 };
@@ -45,6 +49,19 @@ export function normAddressKey(address: string): string {
 
 export function normCamperName(name: string): string {
   return normCamperNameKey(name);
+}
+
+/** Match roster names to MapPoint priors (middle names, hyphens, Last/First). */
+export function lookupCamperPrior(
+  priorMap: Map<string, CamperRoutingPrior>,
+  camperName: string,
+  direction: "AM" | "PM" = "AM",
+): CamperRoutingPrior | undefined {
+  for (const key of rosterNameLookupKeys(camperName)) {
+    const prior = priorMap.get(`${key}|${direction}`);
+    if (prior) return prior;
+  }
+  return undefined;
 }
 
 /** Build priors from bundled MapPoint CSV when warehouse is empty. */
@@ -78,51 +95,206 @@ export function buildPriorsFromBundledMappoint(
   return priors;
 }
 
+async function loadPriorsForSeasonSource(
+  supabase: SupabaseClient,
+  companyId: string,
+  referenceSeason: string,
+  source: "nest" | "mappoint",
+): Promise<CamperRoutingPrior[]> {
+  const importRecord = await loadRouteReferenceImport(supabase, companyId, referenceSeason, source);
+  if (!importRecord) return [];
+  return loadCamperRoutingPriorsForImport(supabase, companyId, importRecord.id, "AM");
+}
+
+function filterLearnedCamperPriors(priors: CamperRoutingPrior[]): CamperRoutingPrior[] {
+  return priors.filter((prior) => isLikelyCamperName(prior.camperName));
+}
+
+function mergePriorMaps(
+  base: Map<string, CamperRoutingPrior>,
+  overlay: Map<string, CamperRoutingPrior>,
+): Map<string, CamperRoutingPrior> {
+  const merged = new Map(base);
+  for (const [key, prior] of overlay) merged.set(key, prior);
+  return merged;
+}
+
+async function loadHistoricalPriorMap(
+  supabase: SupabaseClient,
+  companyId: string,
+  historicalSeason = DEFAULT_REFERENCE_SEASON,
+): Promise<Map<string, CamperRoutingPrior>> {
+  for (const source of ["mappoint", "nest"] as const) {
+    const priors = await loadPriorsForSeasonSource(supabase, companyId, historicalSeason, source);
+    if (priors.length > 0) {
+      return buildCamperPriorMap(priors);
+    }
+  }
+
+  return buildCamperPriorMap(buildPriorsFromBundledMappoint(historicalSeason));
+}
+
 export async function loadCamperPriorMap(
   supabase: SupabaseClient,
   companyId: string,
-  referenceSeason = DEFAULT_REFERENCE_SEASON,
+  currentSeason = DEFAULT_REFERENCE_SEASON,
 ): Promise<Map<string, CamperRoutingPrior>> {
-  const priors = await loadCamperRoutingPriors(supabase, companyId, {
-    referenceSeason,
-    direction: "AM",
-  });
+  const historicalSeason = DEFAULT_REFERENCE_SEASON;
+  const historicalMap = await loadHistoricalPriorMap(supabase, companyId, historicalSeason);
 
-  if (priors.length > 0) {
-    return buildCamperPriorMap(priors);
+  if (currentSeason === historicalSeason) {
+    return historicalMap;
   }
 
-  return buildCamperPriorMap(buildPriorsFromBundledMappoint(referenceSeason));
+  const learned = filterLearnedCamperPriors(
+    await loadPriorsForSeasonSource(supabase, companyId, currentSeason, "nest"),
+  );
+  if (learned.length === 0) {
+    return historicalMap;
+  }
+
+  return mergePriorMaps(historicalMap, buildCamperPriorMap(learned));
 }
 
 export async function getReferenceDatasetStatus(
   supabase: SupabaseClient,
   companyId: string,
-  referenceSeason = DEFAULT_REFERENCE_SEASON,
+  _currentSeason = DEFAULT_REFERENCE_SEASON,
 ): Promise<ReferenceDatasetStatus> {
-  const importRecord = await loadRouteReferenceImport(supabase, companyId, referenceSeason);
-  const priors = importRecord
-    ? await loadCamperRoutingPriors(supabase, companyId, { referenceSeason, direction: "AM" })
-    : [];
+  const historicalSeason = DEFAULT_REFERENCE_SEASON;
 
-  if (importRecord && priors.length > 0) {
-    return {
-      referenceSeason,
-      loaded: true,
-      source: "warehouse",
-      stats: importRecord.stats,
-      priorCount: priors.length,
-    };
+  for (const source of ["mappoint", "nest"] as const) {
+    const importRecord = await loadRouteReferenceImport(supabase, companyId, historicalSeason, source);
+    if (!importRecord) continue;
+    const priors = await loadCamperRoutingPriorsForImport(
+      supabase,
+      companyId,
+      importRecord.id,
+      "AM",
+    );
+    if (priors.length > 0) {
+      return {
+        referenceSeason: historicalSeason,
+        loaded: true,
+        source,
+        stats: importRecord.stats,
+        priorCount: priors.length,
+      };
+    }
   }
 
-  const bundled = buildPriorsFromBundledMappoint(referenceSeason);
+  const bundled = buildPriorsFromBundledMappoint(historicalSeason);
   return {
-    referenceSeason,
+    referenceSeason: historicalSeason,
     loaded: bundled.length > 0,
     source: "bundled",
     stats: null,
     priorCount: bundled.length,
   };
+}
+
+export function buildRouteReferenceFromTransportBoard(options: {
+  referenceSeason: string;
+  coreStops: Record<number, TransportRouteStop[]>;
+  routeMeta: TransportRouteMeta[];
+  excludeAddress?: string;
+}): RouteReferenceImportPayload {
+  const { referenceSeason, coreStops, routeMeta, excludeAddress } = options;
+  const excludeKey = excludeAddress?.trim().toLowerCase() ?? "";
+  const assignments: RouteReferenceAssignment[] = [];
+
+  for (const meta of routeMeta) {
+    const stops = coreStops[meta.id] ?? [];
+    stops.forEach((stop, stopIdx) => {
+      const address = stop.address?.trim();
+      if (!address) return;
+      if (excludeKey && address.toLowerCase() === excludeKey) return;
+
+      const camperNames = (stop.camperNames ?? []).filter(Boolean);
+      if (camperNames.length === 0) return;
+
+      const street = address.split(",")[0]?.trim() || address;
+      for (const camperName of camperNames) {
+        if (!isLikelyCamperName(camperName)) continue;
+        assignments.push({
+          routeFile: `nest-${referenceSeason}`,
+          busNumber: meta.id,
+          routeName: meta.name,
+          direction: "AM",
+          stopOrder: stopIdx + 1,
+          camperName,
+          camperNameKey: normCamperNameKey(camperName),
+          street,
+          city: "",
+          zip: "",
+          address,
+          lat: stop.lat ?? null,
+          lng: stop.lng ?? null,
+          geocodeProvider: "nest",
+          busCounselor: meta.bus ?? "",
+        });
+      }
+    });
+  }
+
+  assignments.sort(
+    (a, b) =>
+      a.busNumber - b.busNumber ||
+      a.stopOrder - b.stopOrder ||
+      a.camperName.localeCompare(b.camperName),
+  );
+
+  const routeKeys = new Set(
+    assignments.map((a) => `${a.routeFile}|${a.busNumber}|${a.direction}`),
+  );
+  const busKeys = new Set(assignments.map((a) => `${a.busNumber}|${a.direction}`));
+
+  const stats: RouteReferenceImportStats = {
+    referenceSeason,
+    assignmentCount: assignments.length,
+    routeCount: routeKeys.size,
+    busCount: busKeys.size,
+    amAssignmentCount: assignments.length,
+    pmAssignmentCount: 0,
+    geocodedCount: assignments.filter((a) => a.lat != null && a.lng != null).length,
+    missingAddressCount: 0,
+  };
+
+  return {
+    referenceSeason,
+    source: "nest",
+    label: `Nest transport ${referenceSeason}`,
+    assignments,
+    stats,
+  };
+}
+
+export async function syncTransportBoardToRoutingWarehouse(
+  supabase: SupabaseClient,
+  companyId: string,
+  options: {
+    referenceSeason: string;
+    coreStops: Record<number, TransportRouteStop[]>;
+    routeMeta: TransportRouteMeta[];
+    userId?: string | null;
+    excludeAddress?: string;
+  },
+): Promise<{ ok: boolean; error?: string; stats?: RouteReferenceImportStats }> {
+  const payload = buildRouteReferenceFromTransportBoard(options);
+  if (payload.assignments.length === 0) {
+    return { ok: true, stats: payload.stats };
+  }
+
+  const { importId, error } = await importRouteReference(supabase, companyId, payload, {
+    userId: options.userId,
+    replace: true,
+  });
+
+  if (error || !importId) {
+    return { ok: false, error: error ?? "Import failed" };
+  }
+
+  return { ok: true, stats: payload.stats };
 }
 
 export async function syncBundledMapPointToWarehouse(
@@ -235,7 +407,7 @@ export function applyHistoricalAssignments(options: {
   const remaining: TransportUnplottedCamper[] = [];
 
   for (const camper of unplottedCampers) {
-    const prior = priorMap.get(`${normCamperNameKey(camper.name)}|AM`);
+    const prior = lookupCamperPrior(priorMap, camper.name, "AM");
     if (!prior) {
       skippedNoPrior.push(camper.name);
       remaining.push(camper);
@@ -296,7 +468,7 @@ export function pickHistoricalBusForCamper(
   priorMap: Map<string, CamperRoutingPrior>,
   routeMeta: TransportRouteMeta[],
 ): number | undefined {
-  const prior = priorMap.get(`${normCamperNameKey(camper.name)}|AM`);
+  const prior = lookupCamperPrior(priorMap, camper.name, "AM");
   if (!prior) return undefined;
   if (!routeMeta.some((r) => r.id === prior.busNumber)) return undefined;
   return prior.busNumber;
@@ -315,8 +487,8 @@ export function reorderStopsByHistoricalPriors(
 
     const orderForStop = (stop: TransportRouteStop): number => {
       let best = Number.MAX_SAFE_INTEGER;
-      for (const name of stop.camperNames?.length ? stop.camperNames : [stop.name]) {
-        const prior = priorMap.get(`${normCamperNameKey(name)}|AM`);
+      for (const name of stop.camperNames ?? []) {
+        const prior = lookupCamperPrior(priorMap, name, "AM");
         if (prior && prior.busNumber === busNumber && prior.stopOrder > 0) {
           best = Math.min(best, prior.stopOrder);
         }

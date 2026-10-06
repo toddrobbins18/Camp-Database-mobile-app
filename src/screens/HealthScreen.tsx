@@ -1517,6 +1517,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                         group_name: c.group_name,
                                         division: c.division,
                                         leader: c.leader,
+                                        bunk: c.bunk,
                                     }))}
                                     staff={safeStaff.map((s: any) => ({
                                         id: s.id,
@@ -1829,6 +1830,7 @@ export const HealthScreen = ({ navigation }: any) => {
                                         group_name: c.group_name,
                                         division: c.division,
                                         leader: c.leader,
+                                        bunk: c.bunk,
                                     }))}
                                     staff={safeStaff.map((s: any) => ({
                                         id: s.id,

@@ -146,7 +146,7 @@ export function ParentAuthScreen({
           <View style={[styles.card, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
             <Text style={[styles.cardHeading, { color: colors.text }]}>Camp not found</Text>
             <Text style={[styles.muted, { color: colors.textMuted }]}>
-              Open Parent Portal from Parent Facing → Login / Signup in the menu.
+              Open Parent Portal from Login / Signup in the menu.
             </Text>
           </View>
         </View>

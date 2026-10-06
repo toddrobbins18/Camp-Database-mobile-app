@@ -84,9 +84,8 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   ];
 
   const toolbarItems = [
-    { key: 'mappoint', label: 'Apply MapPoint', icon: 'git-network-outline' as const, onPress: t.handleLoadMappointRoutes, loading: t.mappointImporting },
     { key: 'template', label: 'Route Template', icon: 'layers-outline' as const, onPress: t.handleApplyRouteTemplate, loading: t.applyingTemplate },
-    { key: 'history', label: 'Historical', icon: 'time-outline' as const, onPress: t.handleApplyHistoricalAssignments, loading: t.applyingHistorical, disabled: t.unplottedCampers.length === 0 },
+    { key: 'history', label: 'Learned Routes', icon: 'time-outline' as const, onPress: t.handleApplyHistoricalAssignments, loading: t.applyingHistorical, disabled: t.unplottedCampers.length === 0 },
     { key: 'bulk', label: 'Bulk Upload', icon: 'cloud-upload-outline' as const, onPress: t.openBulkImport },
     { key: 'camper', label: 'Add Camper', icon: 'person-add-outline' as const, onPress: () => t.setAddCamperOpen(true) },
     { key: 'regeo', label: 'Re-geocode', icon: 'location-outline' as const, onPress: t.handleRegeocodeAll, loading: t.regeocoding },
@@ -254,10 +253,10 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
 
       <View style={styles.mapRow}>
         <View style={[styles.mapContainer, !showRouteSheet && styles.mapContainerFull]}>
-          {(t.boardLoading || t.mappointImporting) && (
+          {t.boardLoading && (
             <View style={styles.mapLoading}>
               <ActivityIndicator color={theme.colors.secondary} />
-              <Text style={styles.mapLoadingText}>{t.mappointImporting ? 'Loading MapPoint…' : 'Loading board…'}</Text>
+              <Text style={styles.mapLoadingText}>Loading board…</Text>
             </View>
           )}
           <TransportRouteMapNative
@@ -725,19 +724,6 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
       <Modal visible={showOverflow} transparent animationType="fade">
         <Pressable style={styles.modalBackdrop} onPress={() => setShowOverflow(false)}>
           <Pressable style={styles.overflowMenu} onPress={(e) => e.stopPropagation()}>
-            <TouchableOpacity
-              style={styles.overflowItem}
-              onPress={() => {
-                setShowOverflow(false);
-                void t.pickMapPointReferenceCsv();
-              }}
-              disabled={t.importingReference}
-            >
-              <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.secondary} />
-              <Text style={styles.overflowText}>
-                {t.importingReference ? 'Importing reference…' : 'Import MapPoint Reference'}
-              </Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={styles.overflowItem}
               onPress={() => {

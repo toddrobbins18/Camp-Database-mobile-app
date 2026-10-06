@@ -154,3 +154,24 @@ export type HealthCenterVisitExtraFields = {
   sent_home?: string | null;
   called_home?: string | null;
 };
+
+type HealthVisitCamper = {
+  group_name?: string | null;
+  division?: { name?: string | null } | null;
+  bunk?: { bunk_name?: string | null; bunk_number?: number | null } | null;
+};
+
+/** Group/bunk for health center visit log — roster group first, then division. */
+export function healthVisitGroupForCamper(
+  camper: HealthVisitCamper,
+  isDayCamp: boolean,
+): string {
+  const fromGroup = camper.group_name?.trim();
+  if (fromGroup) return fromGroup;
+  const fromBunkName = camper.bunk?.bunk_name?.trim();
+  if (fromBunkName) return fromBunkName;
+  if (!isDayCamp && camper.bunk?.bunk_number != null) {
+    return `Bunk ${camper.bunk.bunk_number}`;
+  }
+  return camper.division?.name?.trim() || '';
+}

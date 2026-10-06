@@ -207,25 +207,33 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
                     </View>
                 </View>
 
-                {showTransport && frontOfficeTransportLinks.length > 0 ? (
-                    <View style={styles.linkRow}>
-                        {frontOfficeTransportLinks.map((item) => (
-                            <TouchableOpacity
-                                key={item.key}
-                                style={styles.linkBtn}
-                                onPress={() => {
-                                    if (item.params) {
-                                        navigation.navigate(item.screen, item.params);
-                                    } else {
-                                        navigation.navigate(item.screen);
-                                    }
-                                }}
-                            >
-                                <Text style={styles.linkBtnText}>{item.label}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                ) : null}
+                <View style={styles.linkRow}>
+                    {showTransport
+                        ? frontOfficeTransportLinks.map((item) => (
+                              <TouchableOpacity
+                                  key={item.key}
+                                  style={styles.linkBtn}
+                                  onPress={() => {
+                                      if (item.params) {
+                                          navigation.navigate(item.screen, item.params);
+                                      } else {
+                                          navigation.navigate(item.screen);
+                                      }
+                                  }}
+                              >
+                                  <Text style={styles.linkBtnText}>{item.label}</Text>
+                              </TouchableOpacity>
+                          ))
+                        : null}
+                    <TouchableOpacity
+                        style={styles.linkBtn}
+                        onPress={() =>
+                            navigation.navigate('DayCampModule', { moduleId: 'office-changes' })
+                        }
+                    >
+                        <Text style={styles.linkBtnText}>+ Log office change</Text>
+                    </TouchableOpacity>
+                </View>
 
                 <Text style={styles.sectionTitle}>Incoming — needs approval</Text>
                 {!data?.pendingPickups.length &&

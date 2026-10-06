@@ -22,7 +22,10 @@ import {
   DATE_FMT,
   LEVEL_OPTIONS,
   PASS_OPTIONS,
-  PROCTORS,
+  fetchSwimProctorOptionsForCompany,
+  mergePassOptions,
+  mergeProctorOptions,
+  normalizePassStatus,
   SKILL_OPTIONS,
   type BraceletColor,
   type BraceletRecord,
@@ -69,6 +72,10 @@ function OptionPicker({
   options: readonly string[];
   onChange: (v: string) => void;
 }) {
+  const mergedOptions = useMemo(
+    () => mergeProctorOptions([...options], value ? [value] : []),
+    [options, value],
+  );
   const [open, setOpen] = useState(false);
   return (
     <View style={styles.fieldBlock}>
@@ -86,7 +93,7 @@ function OptionPicker({
               <TouchableOpacity style={styles.pickerOption} onPress={() => { onChange(''); setOpen(false); }}>
                 <Text style={styles.pickerOptionText}>—</Text>
               </TouchableOpacity>
-              {options.map((opt) => (
+              {mergedOptions.map((opt) => (
                 <TouchableOpacity
                   key={opt}
                   style={[styles.pickerOption, value === opt && styles.pickerOptionActive]}
@@ -145,9 +152,15 @@ function DateField({
   );
 }
 
-export function SwimProgramScreen({ navigation }: any) {
+type SwimProgramScreenProps = {
+  navigation: any;
+  initialTab?: 'bracelets' | 'levels' | 'formation' | 'history';
+};
+
+export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: SwimProgramScreenProps) {
   const { companyId, season } = useCompany();
-  const [activeTab, setActiveTab] = useState<'bracelets' | 'levels' | 'formation' | 'history'>('bracelets');
+  const [activeTab, setActiveTab] = useState<'bracelets' | 'levels' | 'formation' | 'history'>(initialTab);
+  const [proctorOptions, setProctorOptions] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -176,6 +189,7 @@ export function SwimProgramScreen({ navigation }: any) {
         setInactiveHidden(hiddenInactive);
         setBraceletData(mergeBracelets(bracelets, children));
         setLevelData(mergeLevels(levels, children));
+        setProctorOptions(await fetchSwimProctorOptionsForCompany(companyId, season));
       } catch (err) {
         console.error('[SwimProgram] roster load error:', err);
         if (showLoading) {
@@ -609,7 +623,7 @@ export function SwimProgramScreen({ navigation }: any) {
                     <OptionPicker
                       label="Proctor"
                       value={selectedBracelet[pk]}
-                      options={PROCTORS}
+                      options={proctorOptions}
                       onChange={(v) => updateBracelet(selectedBracelet.id, { [pk]: v })}
                     />
                     <DateField
@@ -620,7 +634,9 @@ export function SwimProgramScreen({ navigation }: any) {
                     <OptionPicker
                       label="Result"
                       value={selectedBracelet[nk]}
-                      options={PASS_OPTIONS}
+                      options={mergePassOptions(
+                        selectedBracelet[nk] ? [normalizePassStatus(selectedBracelet[nk]) || selectedBracelet[nk]] : [],
+                      )}
                       onChange={(v) => updateBracelet(selectedBracelet.id, { [nk]: v })}
                     />
                   </View>

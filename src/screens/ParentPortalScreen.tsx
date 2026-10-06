@@ -29,6 +29,8 @@ import {
   ParentSwimView,
 } from '../components/parentPortal/ParentPortalViews';
 import { ParentAuthScreen } from './ParentAuthScreen';
+import { fetchPublishedCampUpdate } from '../lib/parentPortalCampUpdates';
+import type { CampAnnouncementContent } from '../components/parentPortal/CampAnnouncement';
 
 export function ParentPortalScreen({ navigation }: { navigation: any }) {
   const { companyId, companySlug, companyName, themeColor, loading: companyLoading } = useParentCompany();
@@ -45,6 +47,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [authPickups, setAuthPickups] = useState<AuthorizedPickup[]>([]);
   const [swimLessons, setSwimLessons] = useState<SwimLesson[]>([]);
+  const [campUpdate, setCampUpdate] = useState<CampAnnouncementContent | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -106,11 +109,12 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
         ? supabase.from('swim_lessons').select('*').in('camper_id', ids).order('scheduled_at', { ascending: true })
         : Promise.resolve({ data: [] as SwimLesson[] });
 
-    const [{ data: p }, { data: a }, { data: ap }, { data: sl }] = await Promise.all([
+    const [{ data: p }, { data: a }, { data: ap }, { data: sl }, publishedUpdate] = await Promise.all([
       supabase.from('pickup_changes').select('*').eq('family_id', fam.id).order('change_date', { ascending: false }),
       supabase.from('absences').select('*').eq('family_id', fam.id).order('absence_date', { ascending: false }),
       supabase.from('authorized_pickups').select('*').eq('family_id', fam.id).order('full_name'),
       swimPromise,
+      fetchPublishedCampUpdate(supabase, companyId).catch(() => null),
     ]);
 
     setCampers(linked);
@@ -118,6 +122,15 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
     setAbsences((a ?? []) as Absence[]);
     setAuthPickups((ap ?? []) as AuthorizedPickup[]);
     setSwimLessons((sl ?? []) as SwimLesson[]);
+    setCampUpdate(
+      publishedUpdate?.body?.trim()
+        ? {
+            title: publishedUpdate.title,
+            body: publishedUpdate.body,
+            publishedAt: publishedUpdate.published_at,
+          }
+        : null,
+    );
     setLoading(false);
   }, [companyId]);
 
@@ -210,6 +223,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
     absences,
     authPickups,
     swimLessons,
+    campUpdate,
     onSaved: loadAll,
     onNavigate: setActiveView,
     camperName,
