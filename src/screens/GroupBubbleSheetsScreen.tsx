@@ -157,7 +157,7 @@ export function GroupBubbleSheetsScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <FrontOfficeBackButton navigation={navigation} />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
@@ -280,6 +280,7 @@ export function GroupBubbleSheetsScreen({ navigation }: any) {
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },

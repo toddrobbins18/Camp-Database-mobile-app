@@ -45,7 +45,14 @@ import {
   type SwimHistoryReportRow,
   importSwimProgramCsv,
   type SwimImportProgress,
+  SWIM_LEVEL_REPORT_VIEWS,
+  swimLevelColumnVisible,
+  type SwimLevelReportView,
+  EXIT_SKILL_COUNT,
 } from '../lib/swimProgram';
+import { sendSwimProgressEmail } from '../lib/swimProgressApi';
+import { buildSwimProgressPdf } from '../lib/swimProgressPdf';
+import { swimProgressEmailSupported, type SwimProgressReportLevel } from '../lib/swimProgressSkills';
 import { SwimGroupFormationPanel } from '../components/swim/SwimGroupFormationPanel';
 import { supabase } from '../lib/supabase';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
@@ -183,6 +190,8 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
   const [inactiveHidden, setInactiveHidden] = useState(0);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<SwimImportProgress | null>(null);
+  const [levelReportView, setLevelReportView] = useState<SwimLevelReportView>('red-cross-1');
+  const [progressEmailSendingId, setProgressEmailSendingId] = useState<string | null>(null);
 
   const loadRoster = useCallback(
     async (options?: { showLoading?: boolean }) => {
@@ -345,9 +354,58 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
     });
   };
 
+  const updateExitSkill = (id: string, idx: number, value: SkillStatus) => {
+    updateLevel(id, (r) => {
+      const base = r.exitSkills?.length === EXIT_SKILL_COUNT ? [...r.exitSkills] : Array.from({ length: EXIT_SKILL_COUNT }, () => '—' as SkillStatus);
+      base[idx] = value;
+      return { exitSkills: base };
+    });
+  };
+
   const sendEmail = (record: BraceletRecord) => {
     updateBracelet(record.id, { emailSent: true });
     Alert.alert('Email queued', `Bracelet notice to ${record.name}'s family.`);
+  };
+
+  const handleSendProgressEmail = async (record: LevelRecord) => {
+    if (!companyId || progressEmailSendingId) return;
+    if (levelReportView === 'all' || !swimProgressEmailSupported(levelReportView as SwimProgressReportLevel)) {
+      Alert.alert(
+        'Progress email',
+        'Select Red Cross 1 in the level report view to send the skills chart email.',
+      );
+      return;
+    }
+    setProgressEmailSendingId(record.id);
+    try {
+      const pdf = await buildSwimProgressPdf({
+        levelId: levelReportView as SwimProgressReportLevel,
+        levels: record,
+        childName: record.name,
+      });
+      const result = await sendSwimProgressEmail({
+        companyId,
+        childId: record.id,
+        season,
+        levelId: levelReportView as SwimProgressReportLevel,
+        pdfBase64: pdf.ready ? pdf.base64 : undefined,
+        pdfFilename: pdf.ready ? pdf.filename : undefined,
+      });
+      if (!result.success) {
+        Alert.alert('Email not sent', result.error);
+        return;
+      }
+      Alert.alert(
+        'Progress email sent',
+        result.pdfAttached
+          ? `Sent to ${result.recipient} with skills chart attached.`
+          : `Sent to ${result.recipient}.`,
+      );
+    } catch (err) {
+      Alert.alert('Email not sent', err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setProgressEmailSendingId(null);
+    }
   };
 
   const handleCsvImport = async () => {
@@ -583,6 +641,27 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                 <Text style={styles.cardTitle}>Skill checklist by level</Text>
                 <Text style={styles.cardHint}>Tap a row for full breakdown</Text>
               </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.levelViewRow}>
+                {SWIM_LEVEL_REPORT_VIEWS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.levelViewChip,
+                      levelReportView === opt.value && { backgroundColor: brand, borderColor: brand },
+                    ]}
+                    onPress={() => setLevelReportView(opt.value)}
+                  >
+                    <Text
+                      style={[
+                        styles.levelViewChipText,
+                        levelReportView === opt.value && { color: '#fff' },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
               {filteredLevels.length === 0 ? (
                 <Text style={styles.emptyState}>No campers on roster for this season.</Text>
               ) : (
@@ -593,24 +672,70 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                       <Text style={styles.camperGroup}>{l.group}</Text>
                     </View>
                     <View style={styles.listSubInfoLevels}>
-                      <View style={styles.levelBlock}>
-                        <Text style={styles.infoLabel}>Goldfish</Text>
-                        <Text style={l.goldfishLevel === 'Complete' ? styles.levelComplete : styles.levelIncomplete}>
-                          {l.goldfishLevel}
-                        </Text>
-                      </View>
-                      <View style={styles.levelBlock}>
-                        <Text style={styles.infoLabel}>Minnow</Text>
-                        <Text style={l.minnowLevel === 'Complete' ? styles.levelComplete : styles.levelIncomplete}>
-                          {l.minnowLevel}
-                        </Text>
-                      </View>
-                      <View style={styles.levelBlock}>
-                        <Text style={styles.infoLabel}>Tadpole</Text>
-                        <Text style={l.tadpoleLevel === 'Complete' ? styles.levelComplete : styles.levelIncomplete}>
-                          {l.tadpoleLevel}
-                        </Text>
-                      </View>
+                      {swimLevelColumnVisible(levelReportView, 'goldfishLevel') ? (
+                        <View style={styles.levelBlock}>
+                          <Text style={styles.infoLabel}>Goldfish</Text>
+                          <Text
+                            style={
+                              l.goldfishLevel === 'Complete' ? styles.levelComplete : styles.levelIncomplete
+                            }
+                          >
+                            {l.goldfishLevel}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, 'minnowLevel') ? (
+                        <View style={styles.levelBlock}>
+                          <Text style={styles.infoLabel}>Minnow</Text>
+                          <Text
+                            style={l.minnowLevel === 'Complete' ? styles.levelComplete : styles.levelIncomplete}
+                          >
+                            {l.minnowLevel}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, 'tadpoleLevel') ? (
+                        <View style={styles.levelBlock}>
+                          <Text style={styles.infoLabel}>Tadpole</Text>
+                          <Text
+                            style={
+                              l.tadpoleLevel === 'Complete' ? styles.levelComplete : styles.levelIncomplete
+                            }
+                          >
+                            {l.tadpoleLevel}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, 'redCross') ? (
+                        <View style={styles.levelBlock}>
+                          <Text style={styles.infoLabel}>RC L1</Text>
+                          <Text style={styles.infoValue}>{l.redCross}</Text>
+                        </View>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, 'redCross2') ? (
+                        <View style={styles.levelBlock}>
+                          <Text style={styles.infoLabel}>RC L2</Text>
+                          <Text style={styles.infoValue}>{l.redCross2}</Text>
+                        </View>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, 'redCross3') ? (
+                        <View style={styles.levelBlock}>
+                          <Text style={styles.infoLabel}>RC L3</Text>
+                          <Text style={styles.infoValue}>{l.redCross3}</Text>
+                        </View>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, 'redCross4') ? (
+                        <View style={styles.levelBlock}>
+                          <Text style={styles.infoLabel}>RC L4</Text>
+                          <Text style={styles.infoValue}>{l.redCross4}</Text>
+                        </View>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, 'frog') ? (
+                        <View style={styles.levelBlock}>
+                          <Text style={styles.infoLabel}>Frog</Text>
+                          <Text style={styles.infoValue}>{l.frog}</Text>
+                        </View>
+                      ) : null}
                     </View>
                     <Text style={styles.lastModified}>Last modified {l.lastModified}</Text>
                   </TouchableOpacity>
@@ -737,13 +862,31 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
           </View>
           {selectedLevel && (
             <ScrollView style={styles.detailBody}>
+              {levelReportView !== 'all' &&
+              swimProgressEmailSupported(levelReportView as SwimProgressReportLevel) ? (
+                <TouchableOpacity
+                  style={[styles.emailBtn, { backgroundColor: brand, marginBottom: 16 }]}
+                  onPress={() => void handleSendProgressEmail(selectedLevel)}
+                  disabled={progressEmailSendingId === selectedLevel.id}
+                >
+                  {progressEmailSendingId === selectedLevel.id ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="mail" size={16} color="#fff" />
+                  )}
+                  <Text style={styles.emailBtnTextPrimary}>Send progress email</Text>
+                </TouchableOpacity>
+              ) : null}
+
               {(
                 [
                   { label: 'Goldfish', code: '1A', key: 'goldfish' as const, levelKey: 'goldfishLevel' as const },
                   { label: 'Minnow', code: '1B', key: 'minnow' as const, levelKey: 'minnowLevel' as const },
                   { label: 'Tadpole', code: '1C', key: 'tadpole' as const, levelKey: 'tadpoleLevel' as const },
                 ] as const
-              ).map((group) => (
+              )
+                .filter((group) => swimLevelColumnVisible(levelReportView, `${group.key}Level`))
+                .map((group) => (
                 <View key={group.key} style={styles.levelSection}>
                   <View style={styles.levelSectionHeader}>
                     <Text style={styles.sectionHeading}>{group.label}</Text>
@@ -756,17 +899,37 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                       }
                     />
                   </View>
-                  {selectedLevel[group.key].map((skill, i) => (
-                    <OptionPicker
-                      key={`${group.key}-${i}`}
-                      label={`${group.code}${i + 1}`}
-                      value={skill}
-                      options={SKILL_OPTIONS}
-                      onChange={(v) => updateSkill(selectedLevel.id, group.key, i, v as SkillStatus)}
-                    />
-                  ))}
+                  {selectedLevel[group.key].map((skill, i) =>
+                    swimLevelColumnVisible(levelReportView, `${group.key}-${i}`) ? (
+                      <OptionPicker
+                        key={`${group.key}-${i}`}
+                        label={`${group.code}${i + 1}`}
+                        value={skill}
+                        options={SKILL_OPTIONS}
+                        onChange={(v) => updateSkill(selectedLevel.id, group.key, i, v as SkillStatus)}
+                      />
+                    ) : null,
+                  )}
                 </View>
               ))}
+
+              {swimLevelColumnVisible(levelReportView, 'exit-0') ||
+              swimLevelColumnVisible(levelReportView, 'exit-1') ? (
+                <View style={styles.levelSection}>
+                  <Text style={styles.sectionHeading}>Exit skills (Red Cross 1)</Text>
+                  {Array.from({ length: EXIT_SKILL_COUNT }, (_, i) => i).map((i) =>
+                    swimLevelColumnVisible(levelReportView, `exit-${i}`) ? (
+                      <OptionPicker
+                        key={`exit-${i}`}
+                        label={`Exit ${i + 1}`}
+                        value={selectedLevel.exitSkills?.[i] ?? '—'}
+                        options={SKILL_OPTIONS}
+                        onChange={(v) => updateExitSkill(selectedLevel.id, i, v as SkillStatus)}
+                      />
+                    ) : null,
+                  )}
+                </View>
+              ) : null}
 
               {(
                 [
@@ -776,7 +939,9 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                   ['Red Cross L4', 'redCross4'],
                   ['Frog Level', 'frog'],
                 ] as const
-              ).map(([label, key]) => (
+              )
+                .filter(([, key]) => swimLevelColumnVisible(levelReportView, key))
+                .map(([label, key]) => (
                 <OptionPicker
                   key={key}
                   label={label}
@@ -825,6 +990,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 4,
   },
+  levelViewRow: { marginBottom: 12, paddingHorizontal: 4 },
+  levelViewChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginRight: 8,
+    backgroundColor: '#fff',
+  },
+  levelViewChipText: { fontSize: 11, fontWeight: '600', color: theme.colors.textSecondary },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: theme.colors.text },
   headerSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
   seasonRow: {

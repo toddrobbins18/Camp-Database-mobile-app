@@ -11,8 +11,8 @@ import {
     Platform,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { format } from 'date-fns';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { format } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
@@ -168,14 +168,14 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
 
     if (loading && !data) {
         return (
-            <View style={styles.centered}>
+            <SafeAreaView style={styles.centered} edges={['top', 'left', 'right']}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
-            </View>
+            </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
             <ScrollView
                 contentContainerStyle={styles.scroll}
                 refreshControl={

@@ -27,6 +27,10 @@ async function createJsPDF(options?: ConstructorParameters<JsPDFConstructor>[0])
 export type BubbleSheetCamper = {
   name: string;
   detail?: string;
+  /** Bus bubble sheet: scheduled for AM run (false = X on AM bubble). */
+  ridesAm?: boolean;
+  /** Bus bubble sheet: scheduled for PM run (false = X on PM bubble). */
+  ridesPm?: boolean;
 };
 
 export type BubbleSheetSection = {
@@ -51,6 +55,9 @@ const WEEKLY_GROUP_INSTRUCTION =
 
 const COMBINED_SHEET_INSTRUCTION =
   "Bus sections: mark Present (P) or Absent (A) for today. Group sections: mark Present (P) for each weekday.";
+
+const DAY_BUS_INSTRUCTION =
+  "Mark Present (P) for each AM and PM run. An X means the camper is not scheduled for that run (mini day, PM-only, or today's exception).";
 
 const FOOTER_BLOCK = 12;
 const WEEKLY_HEADER_HEIGHT = 10;
@@ -325,6 +332,24 @@ function drawBubble(doc: jsPDF, cx: number, cy: number, label: "P" | "A") {
   doc.setFont("helvetica", "normal");
 }
 
+function drawPresentOrCrossedBubble(doc: jsPDF, cx: number, cy: number, scheduled: boolean) {
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.circle(cx, cy, 2.8, "S");
+  if (!scheduled) {
+    const r = 2.15;
+    doc.setLineWidth(0.45);
+    doc.line(cx - r, cy - r, cx + r, cy + r);
+    doc.line(cx - r, cy + r, cx + r, cy - r);
+    doc.setLineWidth(0.5);
+    return;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.5);
+  doc.text("P", cx, cy + 0.7, { align: "center" });
+  doc.setFont("helvetica", "normal");
+}
+
 function drawTableRow(
   doc: jsPDF,
   layout: SheetLayout,
@@ -427,9 +452,18 @@ function drawWeeklyTableRow(
   doc.text(camper.name.slice(0, 36), layout.textName, textY);
 
   const bubbleCy = rowTop + ROW_HEIGHT / 2;
+  const amPmPair =
+    weekDays.length === 2 && weekDays[0]?.label === "AM" && weekDays[1]?.label === "PM";
+
   weekDays.forEach((_, dayIndex) => {
     const cx = layout.dayColumnCenters[dayIndex];
-    if (cx) drawBubble(doc, cx, bubbleCy, "P");
+    if (!cx) return;
+    if (amPmPair) {
+      const scheduled = dayIndex === 0 ? camper.ridesAm === true : camper.ridesPm === true;
+      drawPresentOrCrossedBubble(doc, cx, bubbleCy, scheduled);
+    } else {
+      drawPresentOrCrossedBubble(doc, cx, bubbleCy, true);
+    }
   });
 }
 
@@ -679,6 +713,47 @@ export async function downloadBusBubbleSheetsPdf(options: {
   if (!built) return false;
   triggerBlobDownload(pdfBytesToBlob(built.bytes), built.filename);
   return true;
+}
+
+const BUS_AM_PM_COLUMNS: WeekDayColumn[] = [{ label: "AM" }, { label: "PM" }];
+
+export async function buildDayBusBubbleSheetPdf(options: {
+  companyName: string;
+  date: string;
+  enrollmentWeek?: number;
+  weekDateRange?: string;
+  routes: {
+    bus: string;
+    routeName: string;
+    campers: BubbleSheetCamper[];
+  }[];
+}): Promise<TransportReportPdf | null> {
+  const sections = options.routes
+    .filter((r) => r.campers.length > 0)
+    .map((r) => ({
+      title: `${r.bus} · ${r.routeName}`,
+      subtitle: `${r.campers.length} campers · mark AM and PM`,
+      campers: r.campers,
+    }));
+
+  if (!sections.length) return null;
+
+  const metaLines = [`Date: ${options.date}`];
+  if (options.enrollmentWeek != null) metaLines.push(`Enrollment week: ${options.enrollmentWeek}`);
+  if (options.weekDateRange) metaLines.push(`Week dates: ${options.weekDateRange}`);
+
+  const doc = await createJsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+  renderBubbleDocument(
+    doc,
+    options.companyName,
+    "Bus Bubble Sheet",
+    metaLines,
+    [{ layout: "weekly", sections, weekDays: BUS_AM_PM_COLUMNS }],
+    DAY_BUS_INSTRUCTION,
+  );
+
+  const safeDate = options.date.replace(/[^0-9-]/g, "");
+  return docToPdfResult(doc, `bus-bubble-sheet-${safeDate}.pdf`);
 }
 
 export async function buildGroupBubbleSheetPdf(options: {

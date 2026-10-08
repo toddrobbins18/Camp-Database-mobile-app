@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
@@ -12,8 +12,14 @@ import {
   Pressable,
   FlatList,
   Alert,
+  Switch,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  initialWindowMetrics,
+  SafeAreaProvider,
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
@@ -26,7 +32,11 @@ import {
   routeStopListLines,
 } from '../lib/transportBoardUtils';
 import { todayDateString } from '../lib/transportDailyOverrides';
-import { formatEnrollmentWeekLabel } from '../lib/enrollmentWeekCalendar';
+import {
+  configuredEnrollmentWeekRows,
+  formatEnrollmentWeekLabel,
+} from '../lib/enrollmentWeekCalendar';
+import { normalizeTransportBoardSettings } from '../lib/transportBoardSettings';
 import { DAY_CAMP_ENROLLMENT_WEEKS } from '../lib/enrolledWeeks';
 import { TransportRouteMapNative } from '../components/TransportRouteMapNative';
 import { BusLocationSharingSection } from '../components/BusLocationSharingSection';
@@ -36,6 +46,8 @@ import { useCompany } from '../contexts/CompanyContext';
 import {
   formatParentTransportSchedule,
   parentTransportBusLabel,
+  PARENT_TRANSPORT_WEEKDAYS,
+  type ParentTransportWeekday,
 } from '../lib/transportParentTransport';
 
 type Tab = 'map' | 'unplotted' | 'pt' | 'reports';
@@ -48,6 +60,69 @@ function dateFromYmd(ymd: string) {
   return new Date(`${ymd}T12:00:00`);
 }
 
+type RouteMapFullscreenProps = {
+  visible: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+};
+
+/** Modal is a separate window — SafeAreaProvider must live *inside* the Modal. */
+function RouteMapFullscreen({ visible, onClose, children }: RouteMapFullscreenProps) {
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+      statusBarTranslucent={false}
+    >
+      <StatusBar style="dark" />
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <SafeAreaView style={routeMapFullscreenStyles.root} edges={['top', 'left', 'right', 'bottom']}>
+          <View style={routeMapFullscreenStyles.header}>
+            <Text style={routeMapFullscreenStyles.title}>Route map</Text>
+            <TouchableOpacity
+              style={routeMapFullscreenStyles.closeBtn}
+              onPress={onClose}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityLabel="Close map"
+            >
+              <Ionicons name="close" size={28} color={theme.colors.text} />
+            </TouchableOpacity>
+          </View>
+          <View style={routeMapFullscreenStyles.body}>{children}</View>
+        </SafeAreaView>
+      </SafeAreaProvider>
+    </Modal>
+  );
+}
+
+const routeMapFullscreenStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  title: { fontSize: 17, fontWeight: '600', color: theme.colors.text },
+  closeBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -8,
+  },
+  body: { flex: 1 },
+});
+
 export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   const t = useDayCampTransport();
   const { companyId } = useCompany();
@@ -55,8 +130,93 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   const [screenFocused, setScreenFocused] = useState(true);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showRouteSheet, setShowRouteSheet] = useState(true);
+  const [mapExpanded, setMapExpanded] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
+  const [ptModalOpen, setPtModalOpen] = useState(false);
+  const [busRunModalOpen, setBusRunModalOpen] = useState(false);
+  const [busRunSearch, setBusRunSearch] = useState('');
+  const [ptCamperSearch, setPtCamperSearch] = useState('');
+  const [newPt, setNewPt] = useState<{
+    childId: string;
+    routeId: number | null;
+    am: boolean;
+    pm: boolean;
+    weekdays: ParentTransportWeekday[];
+    notes: string;
+  }>({
+    childId: '',
+    routeId: null,
+    am: true,
+    pm: true,
+    weekdays: [],
+    notes: '',
+  });
   const isToday = t.overrideDate === todayDateString();
+
+  const ptRosterOptions = useMemo(() => {
+    const q = ptCamperSearch.trim().toLowerCase();
+    const onPt = new Set(t.parentTransportCampers.map((c) => c.name.trim().toLowerCase()));
+    return t.groupRoster
+      .filter((c) => !onPt.has(c.name.trim().toLowerCase()))
+      .filter((c) => !q || c.name.toLowerCase().includes(q))
+      .slice(0, 80);
+  }, [ptCamperSearch, t.groupRoster, t.parentTransportCampers]);
+
+  const filteredBusRunEntries = useMemo(() => {
+    const q = busRunSearch.trim().toLowerCase();
+    if (!q) return t.busRunScheduleEntries;
+    return t.busRunScheduleEntries.filter(
+      (row) =>
+        row.name.toLowerCase().includes(q)
+        || row.bus.toLowerCase().includes(q)
+        || row.stopName.toLowerCase().includes(q),
+    );
+  }, [busRunSearch, t.busRunScheduleEntries]);
+
+  const resetNewPtForm = () => {
+    setNewPt({
+      childId: '',
+      routeId: null,
+      am: true,
+      pm: true,
+      weekdays: [],
+      notes: '',
+    });
+    setPtCamperSearch('');
+  };
+
+  const togglePtWeekday = (day: ParentTransportWeekday) => {
+    setNewPt((prev) => ({
+      ...prev,
+      weekdays: prev.weekdays.includes(day)
+        ? prev.weekdays.filter((d) => d !== day)
+        : [...prev.weekdays, day],
+    }));
+  };
+
+  const confirmRemovePt = (id: number, name: string) => {
+    Alert.alert('Remove parent transport?', `${name} will be removed from the PT list.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => t.handleRemoveParentTransport(id) },
+    ]);
+  };
+
+  const submitNewPt = () => {
+    const ok = t.handleAddParentTransport({
+      childId: newPt.childId,
+      routeId: newPt.routeId,
+      am: newPt.am,
+      pm: newPt.pm,
+      weekdays: newPt.weekdays,
+      notes: newPt.notes,
+    });
+    if (ok) {
+      setPtModalOpen(false);
+      resetNewPtForm();
+    }
+  };
+
+  const attendanceWeekRows = configuredEnrollmentWeekRows(t.enrollmentWeekCalendar);
 
   useFocusEffect(
     useCallback(() => {
@@ -110,6 +270,24 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
     { key: 'camper', label: 'Add Camper', icon: 'person-add-outline' as const, onPress: () => t.setAddCamperOpen(true) },
     { key: 'regeo', label: 'Re-geocode', icon: 'location-outline' as const, onPress: t.handleRegeocodeAll, loading: t.regeocoding },
     { key: 'route', label: 'Add Route', icon: 'add-circle-outline' as const, onPress: () => t.setAddRouteOpen(true) },
+    {
+      key: 'pt',
+      label: 'Add PT',
+      icon: 'car-outline' as const,
+      onPress: () => {
+        resetNewPtForm();
+        setPtModalOpen(true);
+      },
+    },
+    {
+      key: 'busrun',
+      label: 'AM/PM schedule',
+      icon: 'bus-outline' as const,
+      onPress: () => {
+        setBusRunSearch('');
+        setBusRunModalOpen(true);
+      },
+    },
     ...(t.draftModeAvailable && !t.routesDraftMode
       ? [
           {
@@ -164,12 +342,58 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
     if (!t.stopAction) return null;
     const { routeId, stopIndex, stop } = t.stopAction;
     if (isCampStop(stop)) return null;
+    const pinned = t.isStopPinnedForOptimize(routeId, stop.address);
+    const isAM = t.timeOfDay === 'am';
+    const coreLen = (t.getEffectiveCore(routeId) || []).length;
+    const canMoveUp =
+      (isAM && stopIndex > 0) || (!isAM && stopIndex > 1);
+    const canMoveDown =
+      (isAM && stopIndex < coreLen - 1) || (!isAM && stopIndex < coreLen);
     return (
       <Modal visible transparent animationType="slide">
         <Pressable style={styles.modalBackdrop} onPress={() => t.setStopAction(null)}>
           <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>{stop.camperNames?.join(', ') || stop.name}</Text>
             <Text style={styles.modalDesc}>{stop.address}</Text>
+            {stop.pickupTime ? (
+              <Text style={styles.modalDesc}>Pickup {stop.pickupTime}</Text>
+            ) : null}
+            <TouchableOpacity
+              style={styles.sheetBtn}
+              onPress={() => {
+                t.toggleStopPinForOptimize(routeId, stop.address);
+                t.setStopAction(null);
+              }}
+            >
+              <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={18} color={theme.colors.secondary} />
+              <Text style={styles.sheetBtnText}>
+                {pinned ? 'Unpin for optimize' : 'Pin stop for optimize'}
+              </Text>
+            </TouchableOpacity>
+            {canMoveUp && (
+              <TouchableOpacity
+                style={styles.sheetBtn}
+                onPress={() => {
+                  t.handleReorderStop(routeId, stopIndex, stopIndex - 1);
+                  t.setStopAction(null);
+                }}
+              >
+                <Ionicons name="arrow-up" size={18} color={theme.colors.secondary} />
+                <Text style={styles.sheetBtnText}>Move earlier on route</Text>
+              </TouchableOpacity>
+            )}
+            {canMoveDown && (
+              <TouchableOpacity
+                style={styles.sheetBtn}
+                onPress={() => {
+                  t.handleReorderStop(routeId, stopIndex, stopIndex + 1);
+                  t.setStopAction(null);
+                }}
+              >
+                <Ionicons name="arrow-down" size={18} color={theme.colors.secondary} />
+                <Text style={styles.sheetBtnText}>Move later on route</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.sheetBtn}
               onPress={() => {
@@ -322,6 +546,9 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
               ]);
             }}
           />
+          <TouchableOpacity style={styles.mapExpandBtn} onPress={() => setMapExpanded(true)}>
+            <Ionicons name="expand-outline" size={18} color={theme.colors.text} />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.routeSheetToggle} onPress={() => setShowRouteSheet((v) => !v)}>
             <Ionicons name={showRouteSheet ? 'chevron-down' : 'chevron-up'} size={18} color={theme.colors.text} />
             <Text style={styles.routeSheetToggleText}>{showRouteSheet ? 'Hide routes' : 'Show routes'}</Text>
@@ -363,9 +590,20 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                     <TouchableOpacity onPress={() => t.handleOptimizeRoutes(r.id)} disabled={t.optimizing}>
                       <Ionicons name="sparkles-outline" size={16} color={theme.colors.icon} />
                     </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => void t.handleOptimizeRouteFromFirstStop(r.id)}
+                      disabled={t.optimizing}
+                    >
+                      <Ionicons name="navigate-outline" size={16} color={theme.colors.icon} />
+                    </TouchableOpacity>
                   </View>
                   <Text style={styles.routeName} numberOfLines={1}>{r.name}</Text>
-                  <Text style={styles.routeMeta}>{core.length} stops · {r.campers}/{r.capacity}</Text>
+                  <Text style={styles.routeMeta}>
+                    {core.length} stops · {r.campers}/{r.capacity}
+                    {t.pinnedKeysForRoute(r.id).length > 0
+                      ? ` · ${t.pinnedKeysForRoute(r.id).length} pinned`
+                      : ''}
+                  </Text>
                   {isVisible && r.stops.length > 0 && (
                     <ScrollView style={styles.stopList} nestedScrollEnabled>
                       {r.stops.map((stop, i) => {
@@ -385,6 +623,9 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                             >
                               <Text style={styles.stopNumberText}>{getRouteStopLabel(r.stops, i)}</Text>
                             </View>
+                            {!isCamp && t.isStopPinnedForOptimize(r.id, stop.address) ? (
+                              <Ionicons name="pin" size={12} color={theme.colors.secondary} style={styles.stopPinIcon} />
+                            ) : null}
                             <View style={styles.stopTextCol}>
                               <Text
                                 style={[
@@ -488,8 +729,18 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
 
   const renderPtTab = () => (
     <ScrollView style={styles.tabContent} contentContainerStyle={styles.unplottedContent}>
+      <TouchableOpacity
+        style={styles.ptAddBtn}
+        onPress={() => {
+          resetNewPtForm();
+          setPtModalOpen(true);
+        }}
+      >
+        <Ionicons name="add-circle-outline" size={18} color={theme.colors.secondary} />
+        <Text style={styles.ptAddBtnText}>Add parent transport camper</Text>
+      </TouchableOpacity>
       <Text style={styles.weekHint}>
-        Parent drop-off / pick-up campers. Edit full PT roster on web; mobile shows saved board data.
+        Parent drop-off / pick-up. Optional bus ties PT into that bus attendance; PT only appears on Car Report.
       </Text>
       {t.activeRouteEnrollmentWeek != null && (
         <Text style={styles.weekHint}>
@@ -508,7 +759,12 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
           )}
           {t.parentTransportNoBusForWeek.map((c) => (
             <View key={`pt-nobus-${c.id}`} style={styles.ptCard}>
-              <Text style={styles.camperName}>{c.name}</Text>
+              <View style={styles.ptCardHeader}>
+                <Text style={[styles.camperName, styles.ptCardTitle]}>{c.name}</Text>
+                <TouchableOpacity onPress={() => confirmRemovePt(c.id, c.name)} hitSlop={8}>
+                  <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                </TouchableOpacity>
+              </View>
               <Text style={styles.ptMeta}>{parentTransportBusLabel(c, t.routeMeta)}</Text>
               <Text style={styles.ptSchedule}>{formatParentTransportSchedule(c)}</Text>
               {c.notes ? <Text style={styles.ptNotes}>{c.notes}</Text> : null}
@@ -522,7 +778,12 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                 <Text style={styles.ptSectionTitle}>{route.bus}</Text>
                 {assigned.map((c) => (
                   <View key={`pt-${c.id}`} style={styles.ptCard}>
-                    <Text style={styles.camperName}>{c.name}</Text>
+                    <View style={styles.ptCardHeader}>
+                      <Text style={[styles.camperName, styles.ptCardTitle]}>{c.name}</Text>
+                      <TouchableOpacity onPress={() => confirmRemovePt(c.id, c.name)} hitSlop={8}>
+                        <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                      </TouchableOpacity>
+                    </View>
                     <Text style={styles.ptSchedule}>{formatParentTransportSchedule(c)}</Text>
                     {c.notes ? <Text style={styles.ptNotes}>{c.notes}</Text> : null}
                   </View>
@@ -544,6 +805,37 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
         </TouchableOpacity>
         <Text style={styles.reportHint}>Season {t.season} · {t.timeOfDay.toUpperCase()} run</Text>
       </View>
+      {attendanceWeekRows.length > 0 ? (
+        <View style={styles.attendanceWeekBlock}>
+          <Text style={styles.attendanceWeekLabel}>Attendance week (bubble sheets)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {attendanceWeekRows.map((row) => {
+              const selected =
+                (t.attendanceWeekOverride ?? t.enrollmentWeekForReport) === row.weekNumber;
+              return (
+                <TouchableOpacity
+                  key={row.weekNumber}
+                  style={[styles.weekChip, selected && styles.weekChipActive]}
+                  onPress={() => t.setAttendanceWeekOverride(row.weekNumber)}
+                >
+                  <Text style={[styles.weekChipText, selected && styles.weekChipTextActive]}>
+                    {formatEnrollmentWeekLabel(row.weekNumber, t.enrollmentWeekCalendar)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          {t.enrollmentWeekForReport != null && (
+            <Text style={styles.reportHint}>
+              Reports use {formatEnrollmentWeekLabel(t.enrollmentWeekForReport, t.enrollmentWeekCalendar)}
+            </Text>
+          )}
+        </View>
+      ) : (
+        <Text style={styles.reportWeekWarning}>
+          Enrollment weeks not configured — set dates on Group Bubble Sheets first.
+        </Text>
+      )}
       <TouchableOpacity
         style={styles.digitalAttendanceCard}
         onPress={() => navigation.navigate('DayCampModule', { moduleId: 'bus-attendance' })}
@@ -567,7 +859,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuBtn}>
           <Ionicons name="menu" size={24} color={theme.colors.text} />
@@ -831,10 +1123,208 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
         </Pressable>
       </Modal>
 
+      {/* Add Parent Transport */}
+      <Modal visible={ptModalOpen} transparent animationType="slide">
+        <Pressable style={styles.modalBackdrop} onPress={() => setPtModalOpen(false)}>
+          <Pressable style={[styles.modalCard, styles.modalCardTall]} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Add parent transport</Text>
+            <Text style={styles.modalDesc}>
+              AM/PM and weekdays. Bus optional — PT only for Car Report without a bus.
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Search roster…"
+              value={ptCamperSearch}
+              onChangeText={setPtCamperSearch}
+            />
+            <Text style={styles.fieldLabel}>Camper</Text>
+            <ScrollView style={styles.ptRosterList} nestedScrollEnabled>
+              {ptRosterOptions.length === 0 ? (
+                <Text style={styles.emptyText}>No matching campers (or already on PT).</Text>
+              ) : (
+                ptRosterOptions.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.ptRosterRow, newPt.childId === c.id && styles.ptRosterRowActive]}
+                    onPress={() => setNewPt((p) => ({ ...p, childId: c.id }))}
+                  >
+                    <Text style={styles.ptRosterName}>{c.name}</Text>
+                    {newPt.childId === c.id ? (
+                      <Ionicons name="checkmark-circle" size={18} color={theme.colors.secondary} />
+                    ) : null}
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+            <Text style={styles.fieldLabel}>Bus (optional)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.routePickRow}>
+              <TouchableOpacity
+                style={[styles.routePickChip, newPt.routeId === null && styles.routePickChipActive]}
+                onPress={() => setNewPt((p) => ({ ...p, routeId: null }))}
+              >
+                <Text style={styles.routePickText}>{t.PARENT_TRANSPORT_NO_BUS_LABEL}</Text>
+              </TouchableOpacity>
+              {t.routeMeta.map((r) => (
+                <TouchableOpacity
+                  key={r.id}
+                  style={[styles.routePickChip, newPt.routeId === r.id && styles.routePickChipActive]}
+                  onPress={() => setNewPt((p) => ({ ...p, routeId: r.id }))}
+                >
+                  <Text style={styles.routePickText}>{r.bus}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <View style={styles.ptToggleRow}>
+              <TouchableOpacity
+                style={[styles.segmentBtn, newPt.am && styles.segmentBtnActive]}
+                onPress={() => setNewPt((p) => ({ ...p, am: !p.am }))}
+              >
+                <Text style={[styles.segmentText, newPt.am && styles.segmentTextActive]}>AM drop-off</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.segmentBtn, newPt.pm && styles.segmentBtnActive]}
+                onPress={() => setNewPt((p) => ({ ...p, pm: !p.pm }))}
+              >
+                <Text style={[styles.segmentText, newPt.pm && styles.segmentTextActive]}>PM pick-up</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.fieldLabel}>Weekdays (none = every day)</Text>
+            <View style={styles.ptWeekdayRow}>
+              {PARENT_TRANSPORT_WEEKDAYS.map((day) => (
+                <TouchableOpacity
+                  key={day}
+                  style={[styles.weekdayChip, newPt.weekdays.includes(day) && styles.weekdayChipActive]}
+                  onPress={() => togglePtWeekday(day)}
+                >
+                  <Text
+                    style={[
+                      styles.weekdayChipText,
+                      newPt.weekdays.includes(day) && styles.weekdayChipTextActive,
+                    ]}
+                  >
+                    {day}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Notes (optional)"
+              value={newPt.notes}
+              onChangeText={(notes) => setNewPt((p) => ({ ...p, notes }))}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalBtnOutline}
+                onPress={() => {
+                  setPtModalOpen(false);
+                  resetNewPtForm();
+                }}
+              >
+                <Text style={styles.modalBtnOutlineText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnPrimary} onPress={submitNewPt}>
+                <Text style={styles.modalBtnPrimaryText}>Add to PT</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* AM/PM bus schedule */}
+      <Modal visible={busRunModalOpen} transparent animationType="slide">
+        <Pressable style={styles.modalBackdrop} onPress={() => setBusRunModalOpen(false)}>
+          <Pressable style={[styles.modalCard, styles.modalCardTall]} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>AM / PM bus schedule</Text>
+            <Text style={styles.modalDesc}>
+              Mini-day and PM-only riders — affects bubble sheet X marks and attendance exports.
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Search name, bus, stop…"
+              value={busRunSearch}
+              onChangeText={setBusRunSearch}
+            />
+            <ScrollView style={styles.busRunList}>
+              {filteredBusRunEntries.length === 0 ? (
+                <Text style={styles.emptyText}>No routed campers yet.</Text>
+              ) : (
+                filteredBusRunEntries.map((row) => {
+                  const mode = t.getCamperBusRunMode(t.camperBusRunSchedules, row.name);
+                  return (
+                    <View key={`${row.name}-${row.bus}`} style={styles.busRunRow}>
+                      <View style={styles.busRunRowText}>
+                        <Text style={styles.busRunName}>{row.name}</Text>
+                        <Text style={styles.busRunSub}>
+                          {row.bus} · {row.stopName}
+                        </Text>
+                      </View>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        {t.CAMPER_BUS_RUN_MODE_OPTIONS.map((opt) => (
+                          <TouchableOpacity
+                            key={opt}
+                            style={[styles.busRunChip, mode === opt && styles.busRunChipActive]}
+                            onPress={() => t.setCamperBusRunMode(row.name, opt)}
+                          >
+                            <Text style={[styles.busRunChipText, mode === opt && styles.busRunChipTextActive]}>
+                              {opt === 'both' ? 'Full' : opt === 'am_only' ? 'AM' : 'PM'}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                      <Text style={styles.busRunModeLabel}>{t.CAMPER_BUS_RUN_MODE_LABELS[mode]}</Text>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalBtnPrimary} onPress={() => setBusRunModalOpen(false)}>
+                <Text style={styles.modalBtnPrimaryText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Overflow menu */}
       <Modal visible={showOverflow} transparent animationType="fade">
         <Pressable style={styles.modalBackdrop} onPress={() => setShowOverflow(false)}>
           <Pressable style={styles.overflowMenu} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.overflowSettings}>
+              <Text style={styles.overflowSettingsTitle}>Stop pickup time</Text>
+              <View style={styles.overflowSwitchRow}>
+                <Text style={styles.overflowText}>Include dwell at stops</Text>
+                <Switch
+                  value={t.boardSettings.stopPickupEnabled}
+                  onValueChange={(stopPickupEnabled) =>
+                    t.setBoardSettings((prev) =>
+                      normalizeTransportBoardSettings({ ...prev, stopPickupEnabled }),
+                    )
+                  }
+                />
+              </View>
+              <View style={styles.pickupMinutesRow}>
+                {[0, 1, 2, 3, 5].map((m) => (
+                  <TouchableOpacity
+                    key={m}
+                    style={[
+                      styles.pickupMinuteChip,
+                      t.boardSettings.stopPickupMinutes === m && styles.pickupMinuteChipActive,
+                      !t.boardSettings.stopPickupEnabled && styles.pickupMinuteChipDisabled,
+                    ]}
+                    disabled={!t.boardSettings.stopPickupEnabled}
+                    onPress={() =>
+                      t.setBoardSettings((prev) =>
+                        normalizeTransportBoardSettings({ ...prev, stopPickupMinutes: m }),
+                      )
+                    }
+                  >
+                    <Text style={styles.pickupMinuteText}>{m}m</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
             <TouchableOpacity
               style={styles.overflowItem}
               onPress={() => {
@@ -848,6 +1338,30 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <RouteMapFullscreen visible={mapExpanded} onClose={() => setMapExpanded(false)}>
+        <TransportRouteMapNative
+          routes={t.displayedRoutes}
+          allRoutes={t.allRoutes}
+          unplottedCampers={t.unplottedForWeek}
+          liveBuses={liveBuses}
+          campAddress={CAMP_LOCATION.address}
+          onStopPress={(routeId, stopIndex, stop) => {
+            setMapExpanded(false);
+            t.setStopAction({ routeId, stopIndex, stop });
+          }}
+          onUnplottedPress={(camperId) => {
+            setMapExpanded(false);
+            Alert.alert('Assign camper', 'Choose a route', [
+              { text: 'Cancel', style: 'cancel' },
+              ...t.routeMeta.map((route) => ({
+                text: route.bus,
+                onPress: () => t.handleAssignCamperToRoute(camperId, route.id),
+              })),
+            ]);
+          }}
+        />
+      </RouteMapFullscreen>
 
       {renderScopeDialog()}
       {renderStopActionModal()}
@@ -915,8 +1429,29 @@ const styles = StyleSheet.create({
   exceptionChip: { backgroundColor: '#fef3c7', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, marginRight: 6, maxWidth: 180 },
   exceptionChipText: { fontSize: 10, color: '#92400e' },
   mapRow: { flex: 1, paddingHorizontal: theme.spacing.md },
-  mapContainer: { flex: 1, minHeight: 220, borderRadius: theme.borderRadius.lg, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+  mapContainer: {
+    flex: 1,
+    minHeight: 220,
+    borderRadius: theme.borderRadius.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    position: 'relative',
+  },
   mapContainerFull: { flex: 1 },
+  mapExpandBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 2,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 8,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  stopPinIcon: { marginRight: 4, alignSelf: 'center' },
   mapLoading: { ...StyleSheet.absoluteFillObject, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center', gap: 8 },
   mapLoadingText: { fontSize: 12, color: theme.colors.textSecondary },
   routeSheetToggle: { position: 'absolute', top: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: theme.colors.border },
@@ -991,6 +1526,86 @@ const styles = StyleSheet.create({
   ptMeta: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
   ptSchedule: { fontSize: 11, color: theme.colors.secondary, marginTop: 4 },
   ptNotes: { fontSize: 11, color: theme.colors.textSecondary, fontStyle: 'italic', marginTop: 4 },
+  ptAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.secondary + '50',
+    backgroundColor: theme.colors.secondary + '10',
+    marginBottom: 8,
+  },
+  ptAddBtnText: { fontSize: 13, fontWeight: '600', color: theme.colors.secondary },
+  ptCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+  ptCardTitle: { flex: 1 },
+  fieldLabel: { fontSize: 12, fontWeight: '600', color: theme.colors.text, marginTop: 4 },
+  ptRosterList: { maxHeight: 140, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md },
+  ptRosterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  ptRosterRowActive: { backgroundColor: theme.colors.secondary + '12' },
+  ptRosterName: { fontSize: 14, color: theme.colors.text },
+  ptToggleRow: { flexDirection: 'row', gap: 8 },
+  ptWeekdayRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  weekdayChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  weekdayChipActive: { borderColor: theme.colors.secondary, backgroundColor: theme.colors.secondary + '15' },
+  weekdayChipText: { fontSize: 11, color: theme.colors.textSecondary, textTransform: 'capitalize' },
+  weekdayChipTextActive: { color: theme.colors.secondary, fontWeight: '600' },
+  busRunList: { maxHeight: 360, marginVertical: 4 },
+  busRunRow: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    gap: 6,
+  },
+  busRunRowText: { gap: 2 },
+  busRunName: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  busRunSub: { fontSize: 11, color: theme.colors.textSecondary },
+  busRunChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginRight: 6,
+  },
+  busRunChipActive: { borderColor: theme.colors.secondary, backgroundColor: theme.colors.secondary + '15' },
+  busRunChipText: { fontSize: 11, color: theme.colors.textSecondary },
+  busRunChipTextActive: { color: theme.colors.secondary, fontWeight: '600' },
+  busRunModeLabel: { fontSize: 10, color: theme.colors.textSecondary },
+  attendanceWeekBlock: { gap: 6, marginBottom: 8 },
+  attendanceWeekLabel: { fontSize: 12, fontWeight: '600', color: theme.colors.text },
+  reportWeekWarning: { fontSize: 11, color: theme.colors.danger, marginBottom: 8 },
+  overflowSettings: { padding: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border, gap: 8 },
+  overflowSettingsTitle: { fontSize: 12, fontWeight: '700', color: theme.colors.text },
+  overflowSwitchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pickupMinutesRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  pickupMinuteChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  pickupMinuteChipActive: { borderColor: theme.colors.secondary, backgroundColor: theme.colors.secondary + '12' },
+  pickupMinuteChipDisabled: { opacity: 0.4 },
+  pickupMinuteText: { fontSize: 12, color: theme.colors.text },
   unplottedToolbar: { flexDirection: 'row', gap: 8, marginBottom: 4 },
   toolChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.surface, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: theme.colors.border },
   toolChipText: { fontSize: 12, color: theme.colors.text },

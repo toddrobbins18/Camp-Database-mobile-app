@@ -52,8 +52,12 @@ export interface LevelRecord {
   redCross3: LevelStatus;
   redCross4: LevelStatus;
   frog: LevelStatus;
+  /** Red Cross 1 exit skills (2 required assessments). */
+  exitSkills: SkillStatus[];
   lastModified: string;
 }
+
+export const EXIT_SKILL_COUNT = 2;
 
 export interface SwimSeasonHistory {
   season: string;
@@ -67,6 +71,65 @@ export const PROCTORS = ["MF", "JT", "VS", "KL", "AR"];
 export const BRACELETS: BraceletColor[] = ["Red", "Orange", "Yellow", "Green", "Blue"];
 export const PASS_OPTIONS = ["Passed", "Did Not Pass", "Retest"] as const;
 export type PassStatus = (typeof PASS_OPTIONS)[number];
+
+/** Airtable Swim Records views — column sets mirror Red Cross 1–6 + ALL KIDS. */
+export type SwimLevelReportView =
+  | 'all'
+  | 'red-cross-1'
+  | 'red-cross-2'
+  | 'red-cross-3'
+  | 'red-cross-4'
+  | 'red-cross-5'
+  | 'red-cross-6';
+
+export const SWIM_LEVEL_REPORT_VIEWS: { value: SwimLevelReportView; label: string }[] = [
+  { value: 'red-cross-1', label: 'Red Cross 1' },
+  { value: 'red-cross-2', label: 'Red Cross 2' },
+  { value: 'red-cross-3', label: 'Red Cross 3' },
+  { value: 'red-cross-4', label: 'Red Cross 4' },
+  { value: 'red-cross-5', label: 'Red Cross 5' },
+  { value: 'red-cross-6', label: 'Red Cross 6' },
+  { value: 'all', label: 'ALL KIDS' },
+];
+
+const SWIM_LEVEL_VIEW_COLUMNS: Record<Exclude<SwimLevelReportView, 'all'>, Set<string>> = {
+  'red-cross-1': new Set([
+    'goldfish-0',
+    'goldfish-1',
+    'goldfish-2',
+    'goldfish-3',
+    'goldfishLevel',
+    'exit-0',
+    'exit-1',
+  ]),
+  'red-cross-2': new Set([
+    'minnow-0',
+    'minnow-1',
+    'minnow-2',
+    'minnow-3',
+    'minnow-4',
+    'minnow-5',
+    'minnowLevel',
+  ]),
+  'red-cross-3': new Set([
+    'tadpole-0',
+    'tadpole-1',
+    'tadpole-2',
+    'tadpole-3',
+    'tadpoleLevel',
+    'redCross',
+    'frog',
+  ]),
+  'red-cross-4': new Set(['redCross2']),
+  'red-cross-5': new Set(['redCross3']),
+  'red-cross-6': new Set(['redCross4']),
+};
+
+export function swimLevelColumnVisible(view: SwimLevelReportView, column: string): boolean {
+  if (view === 'all') return true;
+  if (column === 'name' || column === 'group' || column === 'lastModified') return true;
+  return SWIM_LEVEL_VIEW_COLUMNS[view].has(column);
+}
 
 export function staffNameToInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -113,6 +176,8 @@ export const CAMPERS_PAGE_SIZE = 1000;
 
 const emptySkills4 = (): SkillStatus[] => ["—", "—", "—", "—"];
 const emptySkills6 = (): SkillStatus[] => ["—", "—", "—", "—", "—", "—"];
+const emptyExitSkills = (): SkillStatus[] =>
+  Array.from({ length: EXIT_SKILL_COUNT }, () => "—" as SkillStatus);
 
 export function normalizeSkillStatus(raw: unknown): SkillStatus {
   const s = String(raw ?? "").trim();
@@ -194,6 +259,7 @@ export function levelFromChild(child: RosterChild): LevelRecord {
     redCross3: "—",
     redCross4: "—",
     frog: "—",
+    exitSkills: emptyExitSkills(),
     lastModified: "—",
   };
 }
@@ -251,6 +317,7 @@ function levelFromJson(child: RosterChild, raw: Record<string, unknown>, updated
     redCross3: normalizeLevelStatus(raw.redCross3),
     redCross4: normalizeLevelStatus(raw.redCross4),
     frog: normalizeLevelStatus(raw.frog),
+    exitSkills: parseSkillArray(raw.exitSkills, EXIT_SKILL_COUNT),
     lastModified: updatedAt ? formatSwimTimestamp(updatedAt) : String(raw.lastModified ?? "—"),
   };
 }
@@ -286,6 +353,7 @@ export function levelToJson(record: LevelRecord): Record<string, unknown> {
     redCross3: record.redCross3,
     redCross4: record.redCross4,
     frog: record.frog,
+    exitSkills: record.exitSkills,
   };
 }
 
@@ -331,7 +399,10 @@ export function mergeLevels(saved: Map<string, LevelRecord>, children: RosterChi
       personId: child.person_id,
       group: resolveDisplayGroup(rosterGroup(child), prev?.group),
     };
-    return prev ? { ...prev, ...rosterFields } : levelFromChild(child);
+    if (!prev) return levelFromChild(child);
+    const exitSkills =
+      prev.exitSkills?.length === EXIT_SKILL_COUNT ? prev.exitSkills : emptyExitSkills();
+    return { ...prev, ...rosterFields, exitSkills };
   });
 }
 
@@ -801,6 +872,22 @@ const LEVEL_HEADER_MAP: Partial<Record<string, keyof LevelRecord>> = {
   frog_level: "frog",
 };
 
+const EXIT_SKILL_HEADER_MAP: Record<string, number> = {
+  exit_skill_1: 0,
+  exit_skill_2: 1,
+  exit_skills_1: 0,
+  exit_skills_2: 1,
+  exit1: 0,
+  exit2: 1,
+};
+
+function resolveExitSkillHeader(h: string): number | null {
+  if (h in EXIT_SKILL_HEADER_MAP) return EXIT_SKILL_HEADER_MAP[h]!;
+  const m = h.match(/^exit(?:_skill)?s?[_ ]?([12])$/);
+  if (m) return Number(m[1]) - 1;
+  return null;
+}
+
 function buildSwimChildIndex(children: RosterChild[], defaultSeason: string) {
   const byId = new Map<string, RosterChild>();
   const bySeasonName = new Map<string, RosterChild>();
@@ -924,11 +1011,20 @@ export function parseSwimProgramCsv(
     const goldfish = emptySkills4();
     const minnow = emptySkills6();
     const tadpole = emptySkills4();
+    const exitSkills = emptyExitSkills();
     const levelFields: Partial<LevelRecord> = {};
     let hasSkill = false;
     let hasLevelField = false;
 
     headers.forEach((h, idx) => {
+      const exitIdx = resolveExitSkillHeader(h);
+      if (exitIdx !== null && exitIdx >= 0 && exitIdx < EXIT_SKILL_COUNT) {
+        const val = normalizeSkillStatus(cols[idx]);
+        if (val !== "—") hasSkill = true;
+        exitSkills[exitIdx] = val;
+        return;
+      }
+
       const skillMap = resolveSkillHeader(h);
       if (skillMap) {
         const val = normalizeSkillStatus(cols[idx]);
@@ -966,6 +1062,7 @@ export function parseSwimProgramCsv(
         redCross3: levelFields.redCross3 ?? "—",
         redCross4: levelFields.redCross4 ?? "—",
         frog: levelFields.frog ?? "—",
+        exitSkills,
         ...(csvGroup ? { group: csvGroup } : {}),
       };
     }

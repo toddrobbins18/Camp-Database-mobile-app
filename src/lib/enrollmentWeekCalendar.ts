@@ -69,6 +69,21 @@ export function getEnrollmentWeekRow(
   return calendar.find((row) => row.weekNumber === weekNumber) ?? null;
 }
 
+/** Week for attendance bubble sheets — explicit pick wins, else week for run date. */
+export function attendanceEnrollmentWeek(
+  calendar: EnrollmentWeekCalendar,
+  runDate: string,
+  selectedWeek?: number | null,
+): number | null {
+  if (selectedWeek != null) {
+    const row = getEnrollmentWeekRow(calendar, selectedWeek);
+    if (row?.startDate && row?.endDate && row.endDate >= row.startDate) {
+      return selectedWeek;
+    }
+  }
+  return defaultEnrollmentWeekForDate(calendar, runDate);
+}
+
 export function resolveEnrollmentWeekRow(
   saved: EnrollmentWeekCalendar,
   draft: EnrollmentWeekCalendar,

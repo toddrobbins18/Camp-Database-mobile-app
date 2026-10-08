@@ -27,19 +27,22 @@ import {
   campersOnRoute,
   buildDigitalBusAttendanceCsvRows,
   loadBusAttendance,
+  type DigitalBusAttendanceRider,
 } from '../lib/transportBusAttendance';
-import { campersOnRouteForWeek } from '../lib/transportBusRunContext';
 import { loadGroupRoster, type GroupRosterCamper } from '../lib/transportGroupAttendance';
 import {
   camperEnrolledInWeek,
   defaultEnrollmentWeekForDate,
+  attendanceEnrollmentWeek,
   enrollmentWeekForDate,
   enrollmentWeekDayColumns,
+  formatEnrollmentWeekLabel,
   formatEnrollmentWeekRange,
   getEnrollmentWeekRow,
   loadEnrollmentWeekCalendar,
   type EnrollmentWeekCalendar,
 } from '../lib/enrollmentWeekCalendar';
+import { buildBusBubbleSheetRoutes } from '../lib/transportCamperBusRun';
 import {
   applyEnrollmentWeekToRoutes,
   buildCamperEnrollmentLookup,
@@ -48,11 +51,31 @@ import {
 } from '../lib/transportWeekView';
 import {
   DEFAULT_TRANSPORT_BOARD_SETTINGS,
+  effectiveStopDwellMinutes,
   normalizeTransportBoardSettings,
   type TransportBoardSettings,
 } from '../lib/transportBoardSettings';
-import type { CamperBusRunSchedules } from '../lib/transportCamperBusRun';
-import { type ParentTransportCamper, isParentTransportBusAssigned } from '../lib/transportParentTransport';
+import { consolidateRouteStopsByAddress, sanitizeRouteStops } from '../lib/transportRouteStops';
+import { reorderRouteForOptimize } from '../lib/transportRouteOptimize';
+import {
+  type CamperBusRunMode,
+  type CamperBusRunSchedules,
+  CAMPER_BUS_RUN_MODE_LABELS,
+  CAMPER_BUS_RUN_MODE_OPTIONS,
+  getCamperBusRunMode,
+  normCamperBusRunKey,
+} from '../lib/transportCamperBusRun';
+import {
+  type ParentTransportCamper,
+  type ParentTransportWeekday,
+  isParentTransportBusAssigned,
+  countParentTransportOnRoute,
+  formatParentTransportSchedule,
+  parentTransportBusLabel,
+  parentTransportRidersForRoute,
+  stableParentTransportId,
+  PARENT_TRANSPORT_NO_BUS_LABEL,
+} from '../lib/transportParentTransport';
 import {
   loadConfirmedBoardSnapshot,
   persistConfirmedBoardSnapshot,
@@ -103,7 +126,6 @@ import {
   buildPMStops,
   displayStopToCoreIndex,
   routeMiles,
-  nearestNeighborOrder,
   countBoardStops,
   normalizeAddress,
   type TransportDisplayRoute,
@@ -119,12 +141,16 @@ import type { GeocodeResult } from '../lib/transportBoardCache';
 export const DAY_CAMP_REPORTS = [
   { name: 'Transport Exceptions', desc: 'Absences, swim, office changes, and manual route edits for this date' },
   { name: 'Master Change Sheet', desc: 'Approved pickup/absence/swim changes by bus for this date & run' },
-  { name: 'Attendance', desc: 'Weekly bubble sheet — AM & PM Mon–Fri (paper backup)' },
+  {
+    name: 'Bus Bubble Sheet',
+    desc: 'Per bus: AM & PM bubbles per camper. X = not on that run (mini day, PM-only, or exception)',
+  },
+  { name: 'Group Bubble Sheet', desc: 'Group attendance bubbles Mon–Fri for enrolled campers' },
   { name: 'Digital Attendance Log', desc: 'Export Present/Absent saved in Bus Attendance for this date & run' },
   { name: 'Bus Report', desc: 'Day camp bus assignments' },
   { name: 'Bus Route Summary', desc: 'Route overview with stops' },
   { name: 'Car Seat Count by Bus', desc: 'Nursery & Pre-K riders per bus (car seats required)' },
-  { name: 'Car Report', desc: 'Car pickup/dropoff log' },
+  { name: 'Car Report', desc: 'All parent transport (PT) campers — with or without a bus assignment' },
   { name: 'Daily Passenger Update', desc: 'Real-time passenger counts' },
   { name: 'Extended Care', desc: 'Before/after care transport' },
 ] as const;
@@ -265,6 +291,7 @@ export function useDayCampTransport() {
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
   const [enrollmentWeekCalendar, setEnrollmentWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
   const [routeEnrollmentWeek, setRouteEnrollmentWeek] = useState<number | 'all'>('all');
+  const [attendanceWeekOverride, setAttendanceWeekOverride] = useState<number | null>(null);
   const routeWeekInitRef = useRef(false);
   const [boardLoading, setBoardLoading] = useState(true);
   const [persistLoaded, setPersistLoaded] = useState(false);
@@ -788,12 +815,49 @@ export function useDayCampTransport() {
     [coreStops, todayOverrides, excludedCampers],
   );
 
+  const stopDwellMinutes = effectiveStopDwellMinutes(boardSettings);
+
+  const pinnedKeysForRoute = useCallback(
+    (routeId: number) => boardSettings.pinnedStopsByRoute?.[routeId] ?? [],
+    [boardSettings.pinnedStopsByRoute],
+  );
+
+  const isStopPinnedForOptimize = useCallback(
+    (routeId: number, address: string) => {
+      const key = normalizeAddress(address);
+      return pinnedKeysForRoute(routeId).some((p) => normalizeAddress(p) === key);
+    },
+    [pinnedKeysForRoute],
+  );
+
+  const toggleStopPinForOptimize = useCallback((routeId: number, address: string) => {
+    const key = normalizeAddress(address);
+    if (!key) return;
+    setBoardSettings((prev) => {
+      const byRoute = { ...(prev.pinnedStopsByRoute ?? {}) };
+      const list = [...(byRoute[routeId] ?? [])];
+      const idx = list.findIndex((p) => normalizeAddress(p) === key);
+      if (idx >= 0) list.splice(idx, 1);
+      else list.push(key);
+      if (list.length === 0) delete byRoute[routeId];
+      else byRoute[routeId] = list;
+      return normalizeTransportBoardSettings({
+        ...prev,
+        pinnedStopsByRoute: Object.keys(byRoute).length > 0 ? byRoute : undefined,
+      });
+    });
+    markRoutesConfigured('manual');
+  }, [markRoutesConfigured]);
+
   const buildRoutes = useCallback(
     (tod: 'am' | 'pm'): TransportDisplayRoute[] =>
       routeMeta.map((meta) => {
         const core = getEffectiveCore(meta.id);
+        const timeOpts = { dwellMinutesPerStop: stopDwellMinutes };
         const stops =
-          tod === 'am' ? buildAMStops(core, meta.departure) : buildPMStops(core, meta.departure);
+          tod === 'am'
+            ? buildAMStops(core, meta.departure, timeOpts)
+            : buildPMStops(core, meta.departure, timeOpts);
         const campers = core.reduce((sum, s) => sum + s.passengers, 0);
         return {
           ...meta,
@@ -802,7 +866,7 @@ export function useDayCampTransport() {
           direction: tod === 'am' ? 'Inbound' : 'Outbound',
         };
       }),
-    [getEffectiveCore, routeMeta],
+    [getEffectiveCore, routeMeta, stopDwellMinutes],
   );
 
   const routes = buildRoutes(timeOfDay);
@@ -885,6 +949,131 @@ export function useDayCampTransport() {
     toast('Draft mode OFF', 'Restored routes from before draft mode.');
   }, [companyId, season, applyBoardPayload, persistBoard]);
 
+  const busRunScheduleEntries = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: { name: string; bus: string; stopName: string }[] = [];
+    for (const route of routeMeta) {
+      for (const camper of campersOnRoute(route.id, coreStops[route.id] || [])) {
+        const key = normCamperBusRunKey(camper.name);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        rows.push({ name: camper.name, bus: route.bus, stopName: camper.stopName });
+      }
+    }
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
+  }, [routeMeta, coreStops]);
+
+  const setCamperBusRunMode = useCallback((name: string, mode: CamperBusRunMode) => {
+    const key = normCamperBusRunKey(name);
+    setCamperBusRunSchedules((prev) => {
+      if (mode === 'both') {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: mode };
+    });
+  }, []);
+
+  const handleReorderStop = useCallback(
+    (routeId: number, fromDisplayIdx: number, toDisplayIdx: number) => {
+      if (fromDisplayIdx === toDisplayIdx) return;
+      const effective = getEffectiveCore(routeId);
+      if (!effective.length) return;
+      const isAM = timeOfDay === 'am';
+      const fromCore = displayStopToCoreIndex(fromDisplayIdx, isAM);
+      const toCore = displayStopToCoreIndex(toDisplayIdx, isAM);
+      if (fromCore < 0 || fromCore >= effective.length || toCore < 0 || toCore >= effective.length) return;
+
+      const next = [...effective];
+      const [moved] = next.splice(fromCore, 1);
+      next.splice(toCore, 0, moved);
+
+      markRoutesConfigured('manual');
+      setCoreStops((prev) => ({ ...prev, [routeId]: next }));
+      setTodayOverrides((prev) => ({
+        excluded: { ...prev.excluded, [routeId]: [] },
+        added: { ...prev.added, [routeId]: [] },
+      }));
+      toast(
+        'Stop reordered',
+        `Moved "${moved.camperNames?.join(', ') || moved.name}" on this route.`,
+      );
+    },
+    [getEffectiveCore, timeOfDay, markRoutesConfigured],
+  );
+
+  const handleRemoveParentTransport = useCallback(
+    (id: number) => {
+      setParentTransportCampers((prev) => prev.filter((c) => c.id !== id));
+      markRoutesConfigured('manual');
+    },
+    [markRoutesConfigured],
+  );
+
+  const handleAddParentTransport = useCallback(
+    (input: {
+      childId: string;
+      routeId: number | null;
+      am: boolean;
+      pm: boolean;
+      weekdays: ParentTransportWeekday[];
+      notes: string;
+    }) => {
+      const child = groupRoster.find((c) => c.id === input.childId);
+      if (!child) {
+        toast('Pick a camper', undefined, true);
+        return false;
+      }
+      if (input.routeId != null && !routeMeta.some((r) => r.id === input.routeId)) {
+        toast('Invalid bus', 'Choose a bus from the list or PT only.', true);
+        return false;
+      }
+      if (!input.am && !input.pm) {
+        toast('Pick AM and/or PM', undefined, true);
+        return false;
+      }
+      if (
+        parentTransportCampers.some(
+          (c) => c.name.trim().toLowerCase() === child.name.trim().toLowerCase(),
+        )
+      ) {
+        toast('Already on Parent Transport', `${child.name} is already listed.`, true);
+        return false;
+      }
+
+      const id = stableParentTransportId(
+        child.id,
+        Math.max(500, ...parentTransportCampers.map((c) => c.id), 0) + 1,
+      );
+      setParentTransportCampers((prev) => [
+        ...prev,
+        {
+          id,
+          childId: child.id,
+          name: child.name,
+          routeId: input.routeId,
+          am: input.am,
+          pm: input.pm,
+          weekdays: input.weekdays,
+          notes: input.notes.trim() || null,
+        },
+      ]);
+      setUnplottedCampers((prev) =>
+        prev.filter((c) => c.name.trim().toLowerCase() !== child.name.trim().toLowerCase()),
+      );
+      markRoutesConfigured('manual');
+      const busLabel =
+        input.routeId == null
+          ? 'PT only (Car Report, no bus)'
+          : (routeMeta.find((r) => r.id === input.routeId)?.bus ?? `Bus ${input.routeId}`);
+      toast('Parent transport added', `${child.name} · ${busLabel}`);
+      return true;
+    },
+    [groupRoster, parentTransportCampers, routeMeta, markRoutesConfigured],
+  );
+
   const confirmRoutesBoard = useCallback(async () => {
     if (!companyId || !season) return;
     const payload = buildBoardPayload({ routesDraftMode: false, routesConfirmed: true });
@@ -901,8 +1090,8 @@ export function useDayCampTransport() {
   }, [displayRoutes, unplottedForWeek]);
 
   const enrollmentWeekForReport = useMemo(
-    () => defaultEnrollmentWeekForDate(enrollmentWeekCalendar, overrideDate),
-    [enrollmentWeekCalendar, overrideDate],
+    () => attendanceEnrollmentWeek(enrollmentWeekCalendar, overrideDate, attendanceWeekOverride),
+    [enrollmentWeekCalendar, overrideDate, attendanceWeekOverride],
   );
 
   const groupRosterForReport = useMemo(() => {
@@ -1561,6 +1750,60 @@ export function useDayCampTransport() {
     });
   };
 
+  const finalizeProposedCore = useCallback(
+    (proposedCore: Record<number, TransportRouteStop[]>, routeIds: number[]) => {
+      routeIds.forEach((id) => {
+        proposedCore[id] = reorderRouteForOptimize(proposedCore[id] ?? [], {
+          pinnedKeys: pinnedKeysForRoute(id),
+        });
+      });
+    },
+    [pinnedKeysForRoute],
+  );
+
+  const handleOptimizeRouteFromFirstStop = async (targetRouteId: number) => {
+    setOptimizing(true);
+    try {
+      const before = coreStops[targetRouteId] || [];
+      const beforeConsolidated = consolidateRouteStopsByAddress(before);
+      const optimized = reorderRouteForOptimize(beforeConsolidated, {
+        fromFirstStop: true,
+        pinnedKeys: pinnedKeysForRoute(targetRouteId),
+      });
+      const meta = routeMeta.find((r) => r.id === targetRouteId);
+      const beforeMi = routeMiles(before);
+      const afterMi = routeMiles(optimized);
+      const beforeSeq = beforeConsolidated.map((s) => s.address).join('|');
+      const afterSeq = optimized.map((s) => s.address).join('|');
+      const reordered = beforeSeq !== afterSeq && beforeConsolidated.length > 1;
+      setOptimizePreview({
+        open: true,
+        proposedCore: { [targetRouteId]: optimized },
+        proposedUnplotted: [],
+        beforeMiles: beforeMi,
+        afterMiles: afterMi,
+        reassignments: [],
+        reorderedRoutes: reordered ? 1 : 0,
+        perRoute: [
+          {
+            id: targetRouteId,
+            name: meta?.name || `Route ${targetRouteId}`,
+            bus: meta?.bus || `Bus ${targetRouteId}`,
+            beforeMi,
+            afterMi,
+            changed: reordered || beforeMi !== afterMi,
+            addedCampers: [],
+          },
+        ],
+        selectedRouteIds: [targetRouteId],
+      });
+    } catch (e: unknown) {
+      toast('Optimization failed', e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
   const handleOptimizeRoutes = async (targetRouteId?: number) => {
     setOptimizing(true);
     try {
@@ -1640,6 +1883,10 @@ export function useDayCampTransport() {
           targetRoutes.forEach((r) => {
             if (!proposedCore[r.id]) proposedCore[r.id] = [];
           });
+          finalizeProposedCore(
+            proposedCore,
+            targetRoutes.map((r) => r.id),
+          );
         }
       }
       let remainingUnplotted: TransportUnplottedCamper[] = [];
@@ -1686,10 +1933,18 @@ export function useDayCampTransport() {
           });
         }
         targetRoutes.forEach((r) => {
-          proposedCore[r.id] = nearestNeighborOrder(proposedCore[r.id]);
+          proposedCore[r.id] = consolidateRouteStopsByAddress(proposedCore[r.id] ?? []);
         });
+        finalizeProposedCore(
+          proposedCore,
+          targetRoutes.map((r) => r.id),
+        );
         if (priorMap.size > 0) {
           Object.assign(proposedCore, reorderStopsByHistoricalPriors(proposedCore, priorMap));
+          finalizeProposedCore(
+            proposedCore,
+            targetRoutes.map((r) => r.id),
+          );
         }
       }
       let beforeMiles = 0;
@@ -1756,7 +2011,9 @@ export function useDayCampTransport() {
     optimizePreview.perRoute.forEach((p) => {
       if (!selected.has(p.id)) return;
       const proposed = optimizePreview.proposedCore[p.id];
-      if (proposed && proposed.length > 0) nextCore[p.id] = proposed;
+      if (proposed && proposed.length > 0) {
+        nextCore[p.id] = sanitizeRouteStops(proposed);
+      }
       savedMi += Math.max(0, p.beforeMi - p.afterMi);
       appliedReassignments += p.addedCampers.length;
     });
@@ -1911,46 +2168,93 @@ export function useDayCampTransport() {
       await shareCsv(rows, filename);
       return;
     }
-    if (reportName === 'Attendance') {
-      if (enrollmentWeekForReport == null) {
-        toast('Enrollment week required', 'Set enrollment week calendar dates first.', true);
+    if (reportName === 'Bus Bubble Sheet' || reportName === 'Group Bubble Sheet') {
+      let calendar = enrollmentWeekCalendar;
+      let week = attendanceEnrollmentWeek(calendar, overrideDate, attendanceWeekOverride);
+      if (week == null && companyId) {
+        calendar = await loadEnrollmentWeekCalendar(supabase, companyId, season);
+        setEnrollmentWeekCalendar(calendar);
+        groupLoadedKeyRef.current = `${companyId}:${season}`;
+        week = attendanceEnrollmentWeek(calendar, overrideDate, attendanceWeekOverride);
+      }
+      if (week == null) {
+        toast(
+          'Enrollment week required',
+          'Set enrollment week calendar dates on Group Bubble Sheets first.',
+          true,
+        );
         return;
       }
+      const weekRow = getEnrollmentWeekRow(calendar, week);
+      const weekLabel = formatEnrollmentWeekLabel(week, calendar);
+
       try {
-        const sheetRoutes = displayRoutes
-          .map((r) => ({
-            bus: r.bus,
-            routeName: r.name,
-            campers: campersOnRouteForWeek(
-              r.id,
-              getEffectiveCore(r.id),
-              enrollmentWeekForReport,
-              camperEnrollmentLookup,
-            ).map((c) => ({
-              name: c.name,
-              detail: c.stopName,
-            })),
-          }))
-          .filter((r) => r.campers.length > 0);
-        const groups = groupRosterByGroup.map(([groupName, campers]) => ({
-          groupName,
-          campers: campers.map((c) => ({ name: c.name, detail: groupName })),
-        }));
-        const weekRow =
-          enrollmentWeekForReport != null
-            ? getEnrollmentWeekRow(enrollmentWeekCalendar, enrollmentWeekForReport)
-            : null;
         installTextCodecPolyfill();
-        const { buildCombinedAttendanceBubbleSheetPdf } = await import('../lib/transportBubbleSheetPdf');
-        const built = await buildCombinedAttendanceBubbleSheetPdf({
+        if (reportName === 'Group Bubble Sheet') {
+          const rosterForWeek = groupRoster.filter((c) =>
+            camperEnrolledInWeek(c.enrolledWeeks, c.session, week),
+          );
+          const groupMap = new Map<string, GroupRosterCamper[]>();
+          for (const camper of rosterForWeek) {
+            const list = groupMap.get(camper.groupName) ?? [];
+            list.push(camper);
+            groupMap.set(camper.groupName, list);
+          }
+          const groups = Array.from(groupMap.entries())
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([groupName, campers]) => ({
+              groupName,
+              campers: campers.map((c) => ({ name: c.name, detail: groupName })),
+            }));
+          const { buildGroupBubbleSheetPdf } = await import('../lib/transportBubbleSheetPdf');
+          const built = await buildGroupBubbleSheetPdf({
+            companyName,
+            enrollmentWeek: week,
+            weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
+            weekDays: enrollmentWeekDayColumns(weekRow),
+            groups,
+          });
+          if (!built) {
+            toast('No campers to print', undefined, true);
+          } else {
+            await shareTransportPdf(built);
+          }
+          return;
+        }
+
+        const coreForRun = (routeId: number, period: 'am' | 'pm') =>
+          consolidateRouteStopsByAddress(
+            applyRouteOverrides(
+              coreStops[routeId] || [],
+              routeId,
+              todayOverrides,
+              excludedCamperSet(transportExceptions, period),
+            ),
+          );
+
+        const mergedBusRoutes = buildBusBubbleSheetRoutes({
+          routes: routeMeta.map((route) => ({
+            id: route.id,
+            bus: route.bus,
+            routeName: route.name,
+          })),
+          baseCoreByRoute: (routeId) => consolidateRouteStopsByAddress(coreStops[routeId] || []),
+          coreForRun,
+          schedules: camperBusRunSchedules,
+          runDate: overrideDate,
+          parentTransportCampers,
+          enrollmentWeek: week,
+          enrollmentLookup: camperEnrollmentLookup,
+          includeCamper: (name) => camperEnrolledInWeekByLookup(camperEnrollmentLookup, name, week),
+        });
+
+        const { buildDayBusBubbleSheetPdf } = await import('../lib/transportBubbleSheetPdf');
+        const built = await buildDayBusBubbleSheetPdf({
           companyName,
           date: overrideDate,
-          runPeriod: timeOfDay,
-          enrollmentWeek: enrollmentWeekForReport ?? undefined,
+          enrollmentWeek: week,
           weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
-          weekDays: enrollmentWeekDayColumns(weekRow),
-          busRoutes: sheetRoutes,
-          groups,
+          routes: mergedBusRoutes,
         });
         if (!built) {
           toast('No campers to print', undefined, true);
@@ -1958,8 +2262,8 @@ export function useDayCampTransport() {
           await shareTransportPdf(built);
         }
       } catch (err) {
-        console.error('[Transport] Attendance PDF failed', err);
-        toast('PDF failed', 'Could not generate attendance bubble sheet.', true);
+        console.error('[Transport] Bubble sheet PDF failed', err);
+        toast('PDF failed', 'Could not generate bubble sheet.', true);
       }
       return;
     }
@@ -1997,12 +2301,28 @@ export function useDayCampTransport() {
         return;
       }
       const loaded = await loadBusAttendance(supabase, companyId, season, overrideDate, timeOfDay);
+      const ptRiders: DigitalBusAttendanceRider[] = displayRoutes.flatMap((route) =>
+        parentTransportRidersForRoute(route.id, parentTransportCampers, {
+          runDate: overrideDate,
+          runPeriod: timeOfDay,
+          enrollmentWeek: activeRouteEnrollmentWeek,
+          enrollmentLookup: camperEnrollmentLookup,
+        }).map((rider) => ({
+          routeId: route.id,
+          bus: route.bus,
+          routeName: route.name,
+          camperName: rider.name,
+          stopName: rider.stopName,
+          transportMode: 'parent' as const,
+        })),
+      );
       const rows = buildDigitalBusAttendanceCsvRows(
         displayRoutes,
         CAMP_LOCATION.address,
         loaded.records,
         loaded.busSubmissions,
         { date: overrideDate, runPeriod: timeOfDay },
+        ptRiders,
       );
       const filename = `daycamp-digital-attendance-${overrideDate}-${timeOfDay}.csv`;
       await shareCsv(rows, filename);
@@ -2014,9 +2334,36 @@ export function useDayCampTransport() {
     let rows: (string | number)[][] = [];
     switch (reportName) {
       case 'Bus Report':
-        rows.push(['Bus', 'Route', 'Direction', 'Departure', 'Total Stops', 'Total Campers', 'Status']);
+        rows.push([
+          'Bus',
+          'Route',
+          'Direction',
+          'Departure',
+          'Total Stops',
+          'Bus Campers',
+          'Parent Transport',
+          'Total Campers',
+          'Status',
+        ]);
         routes.forEach((r) => {
-          rows.push([r.bus, r.name, r.direction, r.departure, (coreStops[r.id] || []).length, r.campers, r.status]);
+          const ptCount = countParentTransportOnRoute(r.id, parentTransportCampers, {
+            runDate: overrideDate,
+            runPeriod: timeOfDay,
+            enrollmentWeek: activeRouteEnrollmentWeek,
+            enrollmentLookup: camperEnrollmentLookup,
+          });
+          const busCount = Math.max(0, r.campers - ptCount);
+          rows.push([
+            r.bus,
+            r.name,
+            r.direction,
+            r.departure,
+            (coreStops[r.id] || []).length,
+            busCount,
+            ptCount,
+            r.campers,
+            r.status,
+          ]);
         });
         break;
       case 'Bus Route Summary':
@@ -2028,11 +2375,18 @@ export function useDayCampTransport() {
         });
         break;
       case 'Car Report':
-        rows.push(['Camper Name', 'Address', 'Age', 'Session', 'Notes']);
-        unplottedCampers.forEach((c) => {
-          rows.push([c.name, c.address, c.age, c.session, 'Private car / unassigned']);
+        rows.push(['Camper Name', 'Bus assignment', 'Schedule', 'AM', 'PM', 'Notes']);
+        parentTransportCampers.forEach((c) => {
+          rows.push([
+            c.name,
+            parentTransportBusLabel(c, routeMeta),
+            formatParentTransportSchedule(c),
+            c.am ? 'Yes' : 'No',
+            c.pm ? 'Yes' : 'No',
+            c.notes ?? '',
+          ]);
         });
-        if (rows.length === 1) rows.push(['(No private car / unassigned campers today)', '', '', '', '']);
+        if (rows.length === 1) rows.push(['(No parent transport campers)', '', '', '', '', '']);
         break;
       case 'Daily Passenger Update':
         rows.push(['Date', 'Route', 'Bus', 'Direction', 'Passengers', 'Capacity Used']);
@@ -2170,5 +2524,25 @@ export function useDayCampTransport() {
     enterRoutesDraftMode,
     discardRoutesDraft,
     confirmRoutesBoard,
+    groupRoster,
+    camperBusRunSchedules,
+    busRunScheduleEntries,
+    setCamperBusRunMode,
+    getCamperBusRunMode,
+    CAMPER_BUS_RUN_MODE_OPTIONS,
+    CAMPER_BUS_RUN_MODE_LABELS,
+    handleAddParentTransport,
+    handleRemoveParentTransport,
+    PARENT_TRANSPORT_NO_BUS_LABEL,
+    attendanceWeekOverride,
+    setAttendanceWeekOverride,
+    enrollmentWeekForReport,
+    boardSettings,
+    setBoardSettings,
+    pinnedKeysForRoute,
+    isStopPinnedForOptimize,
+    toggleStopPinForOptimize,
+    handleReorderStop,
+    handleOptimizeRouteFromFirstStop,
   };
 }

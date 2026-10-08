@@ -221,12 +221,23 @@ export type DigitalBusAttendanceRoute = {
   }[];
 };
 
+export type DigitalBusAttendanceRider = {
+  routeId: number;
+  bus: string;
+  routeName: string;
+  camperName: string;
+  stopName: string;
+  pickupTime?: string;
+  transportMode?: "bus" | "parent";
+};
+
 export function buildDigitalBusAttendanceCsvRows(
   routes: DigitalBusAttendanceRoute[],
   campAddress: string,
   attendance: BusAttendanceMap,
   busSubmissions: BusSubmissionsMap,
   options: { date: string; runPeriod: "am" | "pm" },
+  extraRiders: DigitalBusAttendanceRider[] = [],
 ): (string | number)[][] {
   const rows: (string | number)[][] = [
     [
@@ -238,6 +249,7 @@ export function buildDigitalBusAttendanceCsvRows(
       "Camper Name",
       "Pickup Stop",
       "Pickup Time",
+      "Transport Mode",
       "Status",
     ],
   ];
@@ -258,14 +270,35 @@ export function buildDigitalBusAttendanceCsvRows(
           name,
           stop.name,
           stop.pickupTime ?? "",
+          "Bus",
           label,
         ]);
       }
     }
   }
 
+  for (const rider of extraRiders) {
+    const busSubmitted = isRouteBusSubmitted(rider.routeId, busSubmissions) ? "Yes" : "No";
+    const label = attendanceStatusLabel(
+      attendanceRecordKey(rider.routeId, rider.camperName),
+      attendance,
+    );
+    rows.push([
+      options.date,
+      options.runPeriod.toUpperCase(),
+      rider.bus,
+      rider.routeName,
+      busSubmitted,
+      rider.camperName,
+      rider.stopName,
+      rider.pickupTime ?? "",
+      rider.transportMode === "parent" ? "Parent transport" : "Bus",
+      label,
+    ]);
+  }
+
   if (rows.length === 1) {
-    rows.push(["(No scheduled riders for this date/run)", "", "", "", "", "", "", "", ""]);
+    rows.push(["(No scheduled riders for this date/run)", "", "", "", "", "", "", "", "", ""]);
   }
 
   return rows;

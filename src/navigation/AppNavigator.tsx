@@ -153,6 +153,7 @@ import { theme } from '../theme/theme';
 import { getMenuDrawerThemeFromCompany } from '../theme/menuDrawerTheme';
 import { isScreenAllowedForCompany } from '../lib/campScreenAccess';
 import { getActiveRoute } from '../lib/navigationRouteUtils';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
@@ -213,6 +214,7 @@ function drawerItemIsActive(
 
 // Custom Drawer Content with Role-Based Visibility
 const CustomDrawerContent = (props: any) => {
+    const insets = useSafeAreaInsets();
     const [searchText, setSearchText] = useState('');
     const [parentPortalOpen, setParentPortalOpen] = useState(true);
     const { data: roleData } = useRole();
@@ -483,7 +485,13 @@ const CustomDrawerContent = (props: any) => {
                     </TouchableOpacity>
                 </View>
             ) : null}
-            <DrawerContentScrollView {...props} contentContainerStyle={styles.drawerContent}>
+            <DrawerContentScrollView
+                {...props}
+                contentContainerStyle={[
+                    styles.drawerContent,
+                    { paddingTop: theme.spacing.lg + insets.top },
+                ]}
+            >
                 {/* Header / Logo */}
                 <View style={styles.header}>
                     <Text style={[styles.logoText, { color: menuTheme.menuItemInactive }]}>The Nest</Text>
@@ -960,7 +968,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     drawerContent: {
-        paddingTop: theme.spacing.lg,
         paddingHorizontal: theme.spacing.md,
     },
     header: {

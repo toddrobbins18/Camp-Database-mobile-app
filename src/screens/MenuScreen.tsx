@@ -219,7 +219,7 @@ export const MenuScreen = ({ navigation }: any) => {
     }, [menuItemsList, calendarSelectedDate]);
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 {/* Header */}
                 <View style={styles.header}>
