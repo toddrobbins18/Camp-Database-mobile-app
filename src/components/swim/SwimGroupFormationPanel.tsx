@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../theme/theme';
+import { useCampBrandTheme } from '../../hooks/useCampBrandTheme';
 import { supabase } from '../../lib/supabase';
 import {
   SWIM_FORMATION_CRITERIA,
@@ -25,6 +26,7 @@ type Props = {
 };
 
 export function SwimGroupFormationPanel({ companyId, season }: Props) {
+  const { brand, brandSoft } = useCampBrandTheme();
   const [loading, setLoading] = useState(true);
   const [building, setBuilding] = useState(false);
   const [criteria, setCriteria] = useState<SwimFormationCriterion[]>([
@@ -89,7 +91,7 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
   if (loading) {
     return (
       <View style={styles.loadingWrap}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <ActivityIndicator size="large" color={brand} />
         <Text style={styles.loadingText}>Loading campers…</Text>
       </View>
     );
@@ -100,7 +102,7 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.titleRow}>
-            <Ionicons name="people-outline" size={18} color={theme.colors.primary} />
+            <Ionicons name="people-outline" size={18} color={brand} />
             <Text style={styles.cardTitle}>Swim group formation</Text>
           </View>
           <Text style={styles.cardSubtitle}>
@@ -115,11 +117,19 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
           return (
             <TouchableOpacity
               key={item.id}
-              style={[styles.criterionRow, checked && styles.criterionRowActive]}
+              style={[
+                styles.criterionRow,
+                checked && { borderColor: brand, backgroundColor: brandSoft },
+              ]}
               onPress={() => toggleCriterion(item.id)}
               activeOpacity={0.7}
             >
-              <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+              <View
+                style={[
+                  styles.checkbox,
+                  checked && { backgroundColor: brand, borderColor: brand },
+                ]}
+              >
                 {checked ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
               </View>
               <View style={styles.criterionText}>
@@ -158,7 +168,11 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
         ) : null}
 
         <TouchableOpacity
-          style={[styles.buildBtn, (building || rosterCount === 0) && styles.buildBtnDisabled]}
+          style={[
+            styles.buildBtn,
+            { backgroundColor: brand },
+            (building || rosterCount === 0) && styles.buildBtnDisabled,
+          ]}
           onPress={handleBuild}
           disabled={building || rosterCount === 0}
         >

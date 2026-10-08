@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
+import { useCampBrandTheme } from '../hooks/useCampBrandTheme';
+import { BrandPrimaryButton } from '../components/BrandPrimaryButton';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 
@@ -114,6 +116,8 @@ function recordSummary(record: NurseRecord): string {
 
 export function NurseScreen({ navigation }: any) {
   const { companyId } = useCompany();
+  const { brand, brandSoft, brandMuted } = useCampBrandTheme();
+  const dynamicStyles = useMemo(() => createDynamicStyles(brand, brandSoft, brandMuted), [brand, brandSoft, brandMuted]);
   const [records, setRecords] = useState<NurseRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -236,7 +240,7 @@ export function NurseScreen({ navigation }: any) {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Health Center</Text>
         </View>
-        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 24 }} />
+        <ActivityIndicator size="large" color={brand} style={{ marginTop: 24 }} />
       </SafeAreaView>
     );
   }
@@ -247,7 +251,7 @@ export function NurseScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
           <Ionicons name="menu-outline" size={28} color={theme.colors.text} />
         </TouchableOpacity>
-        <View style={styles.headerIcon}>
+        <View style={[styles.headerIcon, dynamicStyles.headerIcon]}>
           <Ionicons name="medical" size={24} color="#fff" />
         </View>
         <View style={styles.headerTextContainer}>
@@ -256,17 +260,20 @@ export function NurseScreen({ navigation }: any) {
         </View>
       </View>
 
-      <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderLeft}>
               <Ionicons name="list" size={18} color={theme.colors.text} />
-              <Text style={styles.cardTitle}>Incident & Treatment Records</Text>
+              <Text style={styles.cardTitle} numberOfLines={2}>
+                Incident & Treatment Records
+              </Text>
             </View>
-            <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
-              <Ionicons name="add" size={16} color="#fff" />
-              <Text style={styles.addButtonText}>Add record</Text>
-            </TouchableOpacity>
+            <BrandPrimaryButton label="Add record" icon="add" onPress={openAddModal} compact style={styles.addButtonWrap} />
           </View>
 
           <View style={styles.listContainer}>
@@ -311,7 +318,7 @@ export function NurseScreen({ navigation }: any) {
                     onPress={() => deleteRecord(r.id)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+                    <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
                   </TouchableOpacity>
                 </View>
               ))
@@ -430,7 +437,7 @@ export function NurseScreen({ navigation }: any) {
                   <Ionicons
                     name={form.sent_home ? 'checkbox' : 'square-outline'}
                     size={20}
-                    color={form.sent_home ? theme.colors.primary : theme.colors.textSecondary}
+                    color={form.sent_home ? brand : theme.colors.textSecondary}
                   />
                   <Text style={styles.checkboxLabel}>Sent Home</Text>
                 </TouchableOpacity>
@@ -442,7 +449,7 @@ export function NurseScreen({ navigation }: any) {
                   <Ionicons
                     name={form.called_home ? 'checkbox' : 'square-outline'}
                     size={20}
-                    color={form.called_home ? theme.colors.primary : theme.colors.textSecondary}
+                    color={form.called_home ? brand : theme.colors.textSecondary}
                   />
                   <Text style={styles.checkboxLabel}>Called Home</Text>
                 </TouchableOpacity>
@@ -453,7 +460,7 @@ export function NurseScreen({ navigation }: any) {
               <TouchableOpacity style={styles.cancelBtn} onPress={closeModal} disabled={saving}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
+              <TouchableOpacity style={[styles.saveBtn, dynamicStyles.saveBtn]} onPress={handleSave} disabled={saving}>
                 {saving ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
@@ -471,7 +478,7 @@ export function NurseScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   loadingContainer: {
     flex: 1,
@@ -493,7 +500,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 8,
-    backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -513,10 +519,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 16,
+  },
+  contentContainer: {
+    padding: theme.spacing.md,
+    paddingBottom: theme.spacing.xl,
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -525,18 +534,24 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
     padding: 14,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
-    backgroundColor: '#fafafa',
+    backgroundColor: theme.colors.background,
   },
   cardHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    marginRight: 8,
+    minWidth: '55%',
+  },
+  addButtonWrap: {
+    flexGrow: 1,
+    minWidth: 140,
   },
   cardTitle: {
     fontSize: 15,
@@ -544,20 +559,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginLeft: 8,
     flexShrink: 1,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
   },
   listContainer: {
     padding: 0,
@@ -726,7 +727,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     borderRadius: 8,
-    backgroundColor: theme.colors.primary,
     minHeight: 46,
   },
   saveBtnText: {
@@ -735,3 +735,12 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 });
+
+function createDynamicStyles(brand: string, brandSoft: string, brandMuted: string) {
+  return StyleSheet.create({
+    headerIcon: { backgroundColor: brand },
+    saveBtn: { backgroundColor: brand },
+    badge: { backgroundColor: brandSoft },
+    badgeText: { color: brand },
+  });
+}

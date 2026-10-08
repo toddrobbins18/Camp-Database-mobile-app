@@ -20,6 +20,8 @@ import { theme } from '../theme/theme';
 import { FrontOfficeBackButton } from '../components/FrontOfficeBackButton';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
+import { useCampBrandTheme } from '../hooks/useCampBrandTheme';
+import { BrandTabs } from '../components/BrandTabs';
 import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import { campDateTimeToIso } from '../lib/campTime';
 import {
@@ -164,6 +166,7 @@ function OptionPicker({
 
 export function TransportAdminScreen({ navigation }: { navigation: any }) {
   const { companyId, season } = useCompany();
+  const { brand } = useCampBrandTheme();
   const { operationalDateString } = useCampOperationalDate();
   const [activeTab, setActiveTab] = useState<TabId>('pending');
   const [selectedDate, setSelectedDate] = useState(operationalDateString);
@@ -272,11 +275,11 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
 
       <View style={styles.dateRow}>
         <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
-          <Ionicons name="calendar-outline" size={18} color={theme.colors.primary} />
+          <Ionicons name="calendar-outline" size={18} color={brand} />
           <Text style={styles.dateBtnText}>{selectedDate}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setSelectedDate(operationalDateString)}>
-          <Text style={styles.todayLink}>Today</Text>
+          <Text style={[styles.todayLink, { color: brand }]}>Today</Text>
         </TouchableOpacity>
       </View>
       {showDatePicker && (
@@ -302,26 +305,19 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
         </View>
       </View>
 
-      <View style={styles.tabs}>
-        {(
-          [
-            { id: 'pending' as const, label: `Pending${pendingCount ? ` (${pendingCount})` : ''}` },
-            { id: 'exceptions' as const, label: 'Bus exceptions' },
-            { id: 'log' as const, label: 'Log change' },
-          ] as const
-        ).map((tab) => (
-          <TouchableOpacity
-            key={tab.id}
-            style={[styles.tab, activeTab === tab.id && styles.tabActive]}
-            onPress={() => setActiveTab(tab.id)}
-          >
-            <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>{tab.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <BrandTabs
+        variant="underline"
+        tabs={[
+          { key: 'pending', label: `Pending${pendingCount ? ` (${pendingCount})` : ''}` },
+          { key: 'exceptions', label: 'Bus exceptions' },
+          { key: 'log', label: 'Log change' },
+        ]}
+        activeTab={activeTab}
+        onChange={(key) => setActiveTab(key as TabId)}
+      />
 
       {loading ? (
-        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 24 }} />
+        <ActivityIndicator size="large" color={brand} style={{ marginTop: 24 }} />
       ) : (
         <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 32 }}>
           {activeTab === 'pending' && (
@@ -332,6 +328,7 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
               {dashboard?.pendingPickups.map((p) => (
                 <PendingCard
                   key={p.id}
+                  brandColor={brand}
                   title={p.camperName}
                   subtitle={`Pickup · ${PICKUP_CHANGE_LABELS[p.change_type] ?? p.change_type}`}
                   detail={p.notes ?? undefined}
@@ -342,6 +339,7 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
               {dashboard?.pendingAbsences.map((a) => (
                 <PendingCard
                   key={a.id}
+                  brandColor={brand}
                   title={a.camperName}
                   subtitle={`Absence · ${ABSENCE_TYPE_LABELS[a.absence_type] ?? a.absence_type}`}
                   detail={a.reason ?? undefined}
@@ -352,6 +350,7 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
               {dashboard?.pendingNurse.map((n) => (
                 <PendingCard
                   key={n.id}
+                  brandColor={brand}
                   title={n.camper_name}
                   subtitle="Nurse · Sent home"
                   detail={n.reason ?? undefined}
@@ -362,6 +361,7 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
               {dashboard?.pendingSwim.map((s) => (
                 <PendingCard
                   key={s.id}
+                  brandColor={brand}
                   title={s.camperName}
                   subtitle="Swim · Parent confirmed"
                   detail={s.instructor ?? undefined}
@@ -402,6 +402,7 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
               companyId={companyId}
               campers={campers}
               defaultDate={selectedDate}
+              brandColor={brand}
               onSaved={load}
             />
           )}
@@ -412,12 +413,14 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
 }
 
 function PendingCard({
+  brandColor,
   title,
   subtitle,
   detail,
   approving,
   onApprove,
 }: {
+  brandColor: string;
   title: string;
   subtitle: string;
   detail?: string;
@@ -429,7 +432,11 @@ function PendingCard({
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.pendingSubtitle}>{subtitle}</Text>
       {detail ? <Text style={styles.detail}>{detail}</Text> : null}
-      <TouchableOpacity style={styles.approveBtn} onPress={onApprove} disabled={approving}>
+      <TouchableOpacity
+        style={[styles.approveBtn, { backgroundColor: brandColor }]}
+        onPress={onApprove}
+        disabled={approving}
+      >
         {approving ? (
           <ActivityIndicator size="small" color="#fff" />
         ) : (
@@ -507,19 +514,45 @@ function LogForms({
   companyId,
   campers,
   defaultDate,
+  brandColor,
   onSaved,
 }: {
   companyId: string;
   campers: Camper[];
   defaultDate: string;
+  brandColor: string;
   onSaved: () => void;
 }) {
   return (
     <View style={styles.logStack}>
-      <PickupLogForm companyId={companyId} campers={campers} defaultDate={defaultDate} onSaved={onSaved} />
-      <AbsenceLogForm companyId={companyId} campers={campers} defaultDate={defaultDate} onSaved={onSaved} />
-      <SwimLogForm companyId={companyId} campers={campers} defaultDate={defaultDate} onSaved={onSaved} />
-      <NurseLogForm companyId={companyId} campers={campers} defaultDate={defaultDate} onSaved={onSaved} />
+      <PickupLogForm
+        companyId={companyId}
+        campers={campers}
+        defaultDate={defaultDate}
+        brandColor={brandColor}
+        onSaved={onSaved}
+      />
+      <AbsenceLogForm
+        companyId={companyId}
+        campers={campers}
+        defaultDate={defaultDate}
+        brandColor={brandColor}
+        onSaved={onSaved}
+      />
+      <SwimLogForm
+        companyId={companyId}
+        campers={campers}
+        defaultDate={defaultDate}
+        brandColor={brandColor}
+        onSaved={onSaved}
+      />
+      <NurseLogForm
+        companyId={companyId}
+        campers={campers}
+        defaultDate={defaultDate}
+        brandColor={brandColor}
+        onSaved={onSaved}
+      />
     </View>
   );
 }
@@ -528,11 +561,13 @@ function PickupLogForm({
   companyId,
   campers,
   defaultDate,
+  brandColor,
   onSaved,
 }: {
   companyId: string;
   campers: Camper[];
   defaultDate: string;
+  brandColor: string;
   onSaved: () => void;
 }) {
   const [camperId, setCamperId] = useState('');
@@ -597,7 +632,11 @@ function PickupLogForm({
       <TextInput style={styles.input} value={changeDate} onChangeText={setChangeDate} placeholder="YYYY-MM-DD" />
       <OptionPicker label="Type" value={changeType} options={CHANGE_TYPES} onChange={setChangeType} />
       <TextInput style={styles.input} value={notes} onChangeText={setNotes} placeholder="Notes" multiline />
-      <TouchableOpacity style={styles.submitBtn} onPress={() => void submit()} disabled={saving}>
+      <TouchableOpacity
+        style={[styles.submitBtn, { backgroundColor: brandColor }]}
+        onPress={() => void submit()}
+        disabled={saving}
+      >
         <Text style={styles.submitBtnText}>{saving ? 'Saving…' : 'Submit for approval'}</Text>
       </TouchableOpacity>
     </View>
@@ -608,11 +647,13 @@ function AbsenceLogForm({
   companyId,
   campers,
   defaultDate,
+  brandColor,
   onSaved,
 }: {
   companyId: string;
   campers: Camper[];
   defaultDate: string;
+  brandColor: string;
   onSaved: () => void;
 }) {
   const [camperId, setCamperId] = useState('');
@@ -677,7 +718,11 @@ function AbsenceLogForm({
       <TextInput style={styles.input} value={absenceDate} onChangeText={setAbsenceDate} placeholder="YYYY-MM-DD" />
       <OptionPicker label="Type" value={absenceType} options={ABSENCE_TYPES} onChange={setAbsenceType} />
       <TextInput style={styles.input} value={reason} onChangeText={setReason} placeholder="Reason" />
-      <TouchableOpacity style={styles.submitBtn} onPress={() => void submit()} disabled={saving}>
+      <TouchableOpacity
+        style={[styles.submitBtn, { backgroundColor: brandColor }]}
+        onPress={() => void submit()}
+        disabled={saving}
+      >
         <Text style={styles.submitBtnText}>{saving ? 'Saving…' : 'Submit for approval'}</Text>
       </TouchableOpacity>
     </View>
@@ -688,11 +733,13 @@ function SwimLogForm({
   companyId,
   campers,
   defaultDate,
+  brandColor,
   onSaved,
 }: {
   companyId: string;
   campers: Camper[];
   defaultDate: string;
+  brandColor: string;
   onSaved: () => void;
 }) {
   const [camperId, setCamperId] = useState('');
@@ -759,7 +806,11 @@ function SwimLogForm({
         <Text style={styles.fieldLabel}>Staff confirmed</Text>
         <Switch value={staffConfirmed} onValueChange={setStaffConfirmed} />
       </View>
-      <TouchableOpacity style={styles.submitBtn} onPress={() => void submit()} disabled={saving}>
+      <TouchableOpacity
+        style={[styles.submitBtn, { backgroundColor: brandColor }]}
+        onPress={() => void submit()}
+        disabled={saving}
+      >
         <Text style={styles.submitBtnText}>{saving ? 'Saving…' : 'Schedule lesson'}</Text>
       </TouchableOpacity>
     </View>
@@ -770,11 +821,13 @@ function NurseLogForm({
   companyId,
   campers,
   defaultDate,
+  brandColor,
   onSaved,
 }: {
   companyId: string;
   campers: Camper[];
   defaultDate: string;
+  brandColor: string;
   onSaved: () => void;
 }) {
   const [camperId, setCamperId] = useState('');
@@ -830,7 +883,11 @@ function NurseLogForm({
       />
       <TextInput style={styles.input} value={recordDate} onChangeText={setRecordDate} placeholder="YYYY-MM-DD" />
       <TextInput style={styles.input} value={reason} onChangeText={setReason} placeholder="Reason" />
-      <TouchableOpacity style={styles.submitBtn} onPress={() => void submit()} disabled={saving}>
+      <TouchableOpacity
+        style={[styles.submitBtn, { backgroundColor: brandColor }]}
+        onPress={() => void submit()}
+        disabled={saving}
+      >
         <Text style={styles.submitBtnText}>{saving ? 'Saving…' : 'Log sent home'}</Text>
       </TouchableOpacity>
     </View>
@@ -869,7 +926,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   dateBtnText: { fontSize: 14, color: theme.colors.text },
-  todayLink: { fontSize: 14, color: theme.colors.primary, fontWeight: '600' },
+  todayLink: { fontSize: 14, fontWeight: '600' },
   statsRow: { flexDirection: 'row', paddingHorizontal: theme.spacing.md, gap: 10 },
   statCard: {
     flex: 1,
@@ -924,7 +981,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: theme.colors.primary,
     borderRadius: 8,
     paddingVertical: 10,
     marginTop: 10,
@@ -978,7 +1034,6 @@ const styles = StyleSheet.create({
   },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   submitBtn: {
-    backgroundColor: theme.colors.primary,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',

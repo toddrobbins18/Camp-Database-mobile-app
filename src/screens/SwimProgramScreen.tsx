@@ -17,6 +17,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, isValid, parse } from 'date-fns';
 import { theme } from '../theme/theme';
 import { useCompany } from '../contexts/CompanyContext';
+import { useCampBrandTheme } from '../hooks/useCampBrandTheme';
+import { BrandTabs } from '../components/BrandTabs';
 import {
   BRACELETS,
   DATE_FMT,
@@ -72,6 +74,7 @@ function OptionPicker({
   options: readonly string[];
   onChange: (v: string) => void;
 }) {
+  const { brand, brandSoft } = useCampBrandTheme();
   const mergedOptions = useMemo(
     () => mergeProctorOptions([...options], value ? [value] : []),
     [options, value],
@@ -96,10 +99,14 @@ function OptionPicker({
               {mergedOptions.map((opt) => (
                 <TouchableOpacity
                   key={opt}
-                  style={[styles.pickerOption, value === opt && styles.pickerOptionActive]}
+                  style={[styles.pickerOption, value === opt && { backgroundColor: brandSoft }]}
                   onPress={() => { onChange(opt); setOpen(false); }}
                 >
-                  <Text style={[styles.pickerOptionText, value === opt && styles.pickerOptionTextActive]}>{opt}</Text>
+                  <Text
+                    style={[styles.pickerOptionText, value === opt && { color: brand, fontWeight: '600' }]}
+                  >
+                    {opt}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -159,6 +166,7 @@ type SwimProgramScreenProps = {
 
 export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: SwimProgramScreenProps) {
   const { companyId, season } = useCompany();
+  const { brand, brandSoft } = useCampBrandTheme();
   const [activeTab, setActiveTab] = useState<'bracelets' | 'levels' | 'formation' | 'history'>(initialTab);
   const [proctorOptions, setProctorOptions] = useState<string[]>([]);
   const [search, setSearch] = useState('');
@@ -353,8 +361,8 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
         <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
           <Ionicons name="menu-outline" size={26} color={theme.colors.text} />
         </TouchableOpacity>
-        <View style={styles.headerIcon}>
-          <Ionicons name="water" size={24} color={theme.colors.primary} />
+        <View style={[styles.headerIcon, { backgroundColor: brandSoft }]}>
+          <Ionicons name="water" size={24} color={brand} />
         </View>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Swim Program</Text>
@@ -404,37 +412,20 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
         </ScrollView>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll}>
-        <View style={styles.tabs}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'bracelets' && styles.tabActive]}
-            onPress={() => setActiveTab('bracelets')}
-          >
-            <Text style={[styles.tabText, activeTab === 'bracelets' && styles.tabTextActive]}>Bracelets</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'levels' && styles.tabActive]}
-            onPress={() => setActiveTab('levels')}
-          >
-            <Text style={[styles.tabText, activeTab === 'levels' && styles.tabTextActive]}>Levels</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'formation' && styles.tabActive]}
-            onPress={() => setActiveTab('formation')}
-          >
-            <Text style={[styles.tabText, activeTab === 'formation' && styles.tabTextActive]}>Group Formation</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'history' && styles.tabActive]}
-            onPress={() => setActiveTab('history')}
-          >
-            <Text style={[styles.tabText, activeTab === 'history' && styles.tabTextActive]}>Prior Seasons</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+      <BrandTabs
+        variant="underline"
+        tabs={[
+          { key: 'bracelets', label: 'Bracelets' },
+          { key: 'levels', label: 'Levels' },
+          { key: 'formation', label: 'Group Formation' },
+          { key: 'history', label: 'Prior Seasons' },
+        ]}
+        activeTab={activeTab}
+        onChange={(key) => setActiveTab(key as typeof activeTab)}
+      />
 
       {loading && activeTab !== 'history' && activeTab !== 'formation' ? (
-        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 32 }} />
+        <ActivityIndicator size="large" color={brand} style={{ marginTop: 32 }} />
       ) : (
         <ScrollView style={styles.content}>
           {activeTab === 'formation' ? (
@@ -449,7 +440,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                 <Text style={styles.cardTitle}>Prior seasons — campers with saved swim data</Text>
               </View>
               {historyLoading ? (
-                <ActivityIndicator size="small" color={theme.colors.primary} style={{ margin: 24 }} />
+                <ActivityIndicator size="small" color={brand} style={{ margin: 24 }} />
               ) : historyReport.length === 0 ? (
                 <Text style={styles.emptyState}>
                   No prior swim data yet. Enter data on Bracelets / Level Report or import CSV on web.
@@ -514,8 +505,8 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                           <Ionicons name="checkmark-circle" size={24} color="#10b981" />
                         ) : (
                           <View style={styles.sendButton}>
-                            <Ionicons name="mail" size={14} color={theme.colors.primary} />
-                            <Text style={styles.sendButtonText}>Send</Text>
+                            <Ionicons name="mail" size={14} color={brand} />
+                            <Text style={[styles.sendButtonText, { color: brand }]}>Send</Text>
                           </View>
                         )}
                       </View>
@@ -593,7 +584,10 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
               <Text style={styles.sectionHeading}>Current Bracelet</Text>
               <View style={styles.colorRow}>
                 <TouchableOpacity
-                  style={[styles.colorChip, !selectedBracelet.currentBracelet && styles.colorChipActive]}
+                  style={[
+                    styles.colorChip,
+                    !selectedBracelet.currentBracelet && { borderWidth: 2, borderColor: brand },
+                  ]}
                   onPress={() => updateBracelet(selectedBracelet.id, { currentBracelet: '' })}
                 >
                   <Text style={styles.colorChipText}>—</Text>
@@ -604,7 +598,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                     style={[
                       styles.colorChip,
                       { backgroundColor: BRACELET_COLORS[c].bg, borderColor: BRACELET_COLORS[c].border },
-                      selectedBracelet.currentBracelet === c && styles.colorChipActive,
+                      selectedBracelet.currentBracelet === c && { borderWidth: 2, borderColor: brand },
                     ]}
                     onPress={() => updateBracelet(selectedBracelet.id, { currentBracelet: c })}
                   >
@@ -653,7 +647,10 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                     <Text style={styles.emailBtnText}>Mark as not sent</Text>
                   </TouchableOpacity>
                 ) : (
-                  <TouchableOpacity style={styles.emailBtn} onPress={() => sendEmail(selectedBracelet)}>
+                  <TouchableOpacity
+                    style={[styles.emailBtn, { backgroundColor: brand }]}
+                    onPress={() => sendEmail(selectedBracelet)}
+                  >
                     <Ionicons name="mail" size={16} color="#fff" />
                     <Text style={styles.emailBtnTextPrimary}>Send email</Text>
                   </TouchableOpacity>

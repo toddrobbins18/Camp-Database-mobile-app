@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../theme/theme';
+import { useCampBrandTheme } from '../../hooks/useCampBrandTheme';
 import { StyledCard } from '../StyledCard';
 import { supabase } from '../../lib/supabase';
 import {
@@ -131,6 +132,7 @@ export function HealthCenterDayCampPanel({
   onVisitLogged,
   mode = 'full',
 }: Props) {
+  const { brand, brandMuted, brandSoft } = useCampBrandTheme();
   const [entityType, setEntityType] = useState<'camper' | 'staff'>('camper');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -347,7 +349,7 @@ export function HealthCenterDayCampPanel({
     <View style={{ gap: 16 }}>
       <StyledCard style={styles.card}>
         <View style={styles.cardHeader}>
-          <Ionicons name="add-circle-outline" size={22} color={theme.colors.secondary} />
+          <Ionicons name="add-circle-outline" size={22} color={brand} />
           <Text style={styles.cardTitle}>Log Health Center Visit</Text>
         </View>
         <Text style={styles.cardSubtitle}>
@@ -365,7 +367,10 @@ export function HealthCenterDayCampPanel({
 
         <View style={styles.toggleRow}>
           <TouchableOpacity
-            style={[styles.toggleBtn, entityType === 'camper' && styles.toggleBtnActive]}
+            style={[
+              styles.toggleBtn,
+              entityType === 'camper' && [styles.toggleBtnActive, { backgroundColor: brandSoft }],
+            ]}
             onPress={() => {
               setEntityType('camper');
               setSelectedId(null);
@@ -376,7 +381,10 @@ export function HealthCenterDayCampPanel({
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.toggleBtn, entityType === 'staff' && styles.toggleBtnActive]}
+            style={[
+              styles.toggleBtn,
+              entityType === 'staff' && [styles.toggleBtnActive, { backgroundColor: brandSoft }],
+            ]}
             onPress={() => {
               setEntityType('staff');
               setSelectedId(null);
@@ -412,7 +420,10 @@ export function HealthCenterDayCampPanel({
             filteredPeople.map((person) => (
               <TouchableOpacity
                 key={person.id}
-                style={[styles.personRow, selectedId === person.id && styles.personRowSelected]}
+                style={[
+                  styles.personRow,
+                  selectedId === person.id && { backgroundColor: brandMuted },
+                ]}
                 onPress={() => selectPerson(person.id)}
               >
                 <Ionicons name="person-outline" size={18} color={theme.colors.textSecondary} />
@@ -423,8 +434,8 @@ export function HealthCenterDayCampPanel({
                   ) : null}
                 </View>
                 {selectedId === person.id ? (
-                  <View style={styles.selectedBadge}>
-                    <Text style={styles.selectedBadgeText}>Selected</Text>
+                  <View style={[styles.selectedBadge, { backgroundColor: brandMuted }]}>
+                    <Text style={[styles.selectedBadgeText, { color: brand }]}>Selected</Text>
                   </View>
                 ) : null}
               </TouchableOpacity>
@@ -435,7 +446,7 @@ export function HealthCenterDayCampPanel({
         {selectedId ? (
           <View style={styles.formSection}>
             <Text style={styles.formSectionTitle}>
-              Visit for <Text style={styles.formSectionName}>{selectedName}</Text>
+              Visit for <Text style={{ color: brand, fontWeight: '700' }}>{selectedName}</Text>
             </Text>
             <HealthCenterVisitFormFields
               value={form}
@@ -456,7 +467,7 @@ export function HealthCenterDayCampPanel({
               >
                 <Text style={styles.clearBtnText}>Clear</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={logVisit} disabled={saving}>
+              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: brand }]} onPress={logVisit} disabled={saving}>
                 {saving ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
@@ -497,7 +508,13 @@ const detailStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   card: { padding: 16 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
   cardTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
   cardSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginBottom: 12 },
   fieldLabel: {
@@ -518,7 +535,7 @@ const styles = StyleSheet.create({
   },
   toggleRow: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.card,
+    backgroundColor: theme.colors.surface,
     borderRadius: 8,
     padding: 4,
     marginTop: 12,
@@ -548,26 +565,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.colors.border,
   },
-  personRowSelected: { backgroundColor: theme.colors.secondary + '15' },
   personName: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
   personSubtitle: { fontSize: 12, color: theme.colors.textSecondary },
   selectedBadge: {
-    backgroundColor: theme.colors.secondary + '22',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  selectedBadgeText: { fontSize: 11, fontWeight: '600', color: theme.colors.secondary },
+  selectedBadgeText: { fontSize: 11, fontWeight: '600' },
   formSection: {
     marginTop: 16,
     padding: 12,
     borderRadius: 8,
-    backgroundColor: theme.colors.card,
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
   formSectionTitle: { fontSize: 14, fontWeight: '600', marginBottom: 12, color: theme.colors.text },
-  formSectionName: { color: theme.colors.secondary },
   formActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 16 },
   clearBtn: {
     paddingHorizontal: 16,
@@ -581,7 +595,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: theme.colors.secondary,
     minWidth: 100,
     alignItems: 'center',
   },

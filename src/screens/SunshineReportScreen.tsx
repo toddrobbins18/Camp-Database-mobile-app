@@ -20,6 +20,7 @@ import { format } from 'date-fns';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
+import { useCampBrandTheme } from '../hooks/useCampBrandTheme';
 import { isNorthShoreDayCamp } from '../constants/camps';
 import { syncSunshineFromRoster } from '../lib/sunshineRoster';
 import { isNorthShoreSunshineGroup, sunshineGroupSortOrder } from '../lib/sunshineGroups';
@@ -88,6 +89,11 @@ function TagBadges({ values, options }: { values: string[]; options: SunshineTag
 
 export function SunshineReportScreen({ navigation }: any) {
   const { companyId, companySlug, season } = useCompany();
+  const { brand } = useCampBrandTheme();
+  const groupChipActiveStyle = useMemo(
+    () => ({ backgroundColor: brand, borderColor: brand }),
+    [brand],
+  );
   const northShoreSunshineOnly = isNorthShoreDayCamp(companySlug);
 
   const [date, setDate] = useState(todayISO());
@@ -680,7 +686,7 @@ export function SunshineReportScreen({ navigation }: any) {
     return (
       <SafeAreaView style={styles.container}>
         {renderHeader()}
-        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 32 }} />
+        <ActivityIndicator size="large" color={brand} style={{ marginTop: 32 }} />
       </SafeAreaView>
     );
   }
@@ -706,36 +712,50 @@ export function SunshineReportScreen({ navigation }: any) {
           />
         )}
         <TouchableOpacity
-          style={[styles.toolBtn, styles.toolBtnOutline]}
+          style={[styles.toolBtn, styles.toolBtnOutline, { borderColor: brand }]}
           disabled={syncingRoster}
           onPress={() => void refreshAll({ syncRoster: true })}
         >
-          <Ionicons name="refresh-outline" size={14} color={theme.colors.primary} />
-          <Text style={styles.toolBtnOutlineText}>{syncingRoster ? 'Loading…' : 'Reload from Roster'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.toolBtn, styles.toolBtnOutline]} onPress={() => void handleCSVDownloadTemplate()}>
-          <Ionicons name="download-outline" size={14} color={theme.colors.primary} />
-          <Text style={styles.toolBtnOutlineText}>Template</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.toolBtn, styles.toolBtnOutline]} onPress={() => void handleCSVImport()}>
-          <Ionicons name="cloud-upload-outline" size={14} color={theme.colors.primary} />
-          <Text style={styles.toolBtnOutlineText}>Import CSV</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.toolBtn, styles.toolBtnOutline]} onPress={() => setAddGroupOpen(true)}>
-          <Ionicons name="folder-open-outline" size={14} color={theme.colors.primary} />
-          <Text style={styles.toolBtnOutlineText}>Group</Text>
+          <Ionicons name="refresh-outline" size={14} color={brand} />
+          <Text style={[styles.toolBtnOutlineText, { color: brand }]}>
+            {syncingRoster ? 'Loading…' : 'Reload from Roster'}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.toolBtn, styles.toolBtnOutline]}
+          style={[styles.toolBtn, styles.toolBtnOutline, { borderColor: brand }]}
+          onPress={() => void handleCSVDownloadTemplate()}
+        >
+          <Ionicons name="download-outline" size={14} color={brand} />
+          <Text style={[styles.toolBtnOutlineText, { color: brand }]}>Template</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toolBtn, styles.toolBtnOutline, { borderColor: brand }]}
+          onPress={() => void handleCSVImport()}
+        >
+          <Ionicons name="cloud-upload-outline" size={14} color={brand} />
+          <Text style={[styles.toolBtnOutlineText, { color: brand }]}>Import CSV</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toolBtn, styles.toolBtnOutline, { borderColor: brand }]}
+          onPress={() => setAddGroupOpen(true)}
+        >
+          <Ionicons name="folder-open-outline" size={14} color={brand} />
+          <Text style={[styles.toolBtnOutlineText, { color: brand }]}>Group</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toolBtn, styles.toolBtnOutline, { borderColor: brand }]}
           onPress={() => {
             setNewCamper({ full_name: '', parent_email: '', group_id: activeGroupId });
             setAddCamperOpen(true);
           }}
         >
-          <Ionicons name="person-add-outline" size={14} color={theme.colors.primary} />
-          <Text style={styles.toolBtnOutlineText}>Add Camper</Text>
+          <Ionicons name="person-add-outline" size={14} color={brand} />
+          <Text style={[styles.toolBtnOutlineText, { color: brand }]}>Add Camper</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.toolBtn, styles.toolBtnPrimary]} onPress={() => void sendEndOfDayEmails()}>
+        <TouchableOpacity
+          style={[styles.toolBtn, styles.toolBtnPrimary, { backgroundColor: brand }]}
+          onPress={() => void sendEndOfDayEmails()}
+        >
           <Ionicons name="mail-outline" size={14} color="#fff" />
           <Text style={styles.toolBtnPrimaryText}>Send to Parents</Text>
         </TouchableOpacity>
@@ -770,7 +790,7 @@ export function SunshineReportScreen({ navigation }: any) {
                 return (
                   <TouchableOpacity
                     key={g.id}
-                    style={[styles.groupChip, selected && styles.groupChipActive]}
+                    style={[styles.groupChip, selected && groupChipActiveStyle]}
                     onPress={() => setActiveGroupId(g.id)}
                   >
                     <Text style={[styles.groupChipText, selected && styles.groupChipTextActive]}>{g.name}</Text>
@@ -842,7 +862,7 @@ export function SunshineReportScreen({ navigation }: any) {
                       <Switch
                         value={r?.send_email ?? true}
                         onValueChange={(v) => void upsertReport(camper.id, { send_email: v })}
-                        trackColor={{ true: theme.colors.primary }}
+                        trackColor={{ true: brand }}
                       />
                     </View>
                     <View style={[styles.td, { width: 72 }]}>
@@ -887,7 +907,7 @@ export function SunshineReportScreen({ navigation }: any) {
                     <Ionicons
                       name={selected ? 'checkmark-circle' : 'ellipse-outline'}
                       size={18}
-                      color={selected ? theme.colors.primary : theme.colors.textSecondary}
+                      color={selected ? brand : theme.colors.textSecondary}
                     />
                     <View style={[styles.tagBadge, { backgroundColor: colors.bg }]}>
                       <Text style={[styles.tagBadgeText, { color: colors.text }]}>{opt.label}</Text>
@@ -934,7 +954,10 @@ export function SunshineReportScreen({ navigation }: any) {
               {groups.map((g) => (
                 <TouchableOpacity
                   key={g.id}
-                  style={[styles.groupChip, (newCamper.group_id || activeGroupId) === g.id && styles.groupChipActive]}
+                  style={[
+                    styles.groupChip,
+                    (newCamper.group_id || activeGroupId) === g.id && groupChipActiveStyle,
+                  ]}
                   onPress={() => setNewCamper((p) => ({ ...p, group_id: g.id }))}
                 >
                   <Text
@@ -948,7 +971,7 @@ export function SunshineReportScreen({ navigation }: any) {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => void handleAddCamper()}>
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: brand }]} onPress={() => void handleAddCamper()}>
               <Text style={styles.primaryBtnText}>Add Camper</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -972,7 +995,7 @@ export function SunshineReportScreen({ navigation }: any) {
               onChangeText={setNewGroup}
               placeholder="e.g. Pandas"
             />
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => void handleAddGroup()}>
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: brand }]} onPress={() => void handleAddGroup()}>
               <Text style={styles.primaryBtnText}>Add Group</Text>
             </TouchableOpacity>
           </View>

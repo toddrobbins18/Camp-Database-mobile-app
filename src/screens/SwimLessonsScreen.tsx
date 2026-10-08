@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
+import { useCampBrandTheme } from '../hooks/useCampBrandTheme';
 import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
@@ -63,6 +64,11 @@ type Lesson = {
 
 export function SwimLessonsScreen({ navigation }: any) {
   const { companyId, season } = useCompany();
+  const { brand } = useCampBrandTheme();
+  const chipActiveStyle = useMemo(
+    () => ({ backgroundColor: brand, borderColor: brand }),
+    [brand],
+  );
   const { operationalDate } = useCampOperationalDate();
   const [campers, setCampers] = useState<Camper[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -322,7 +328,7 @@ export function SwimLessonsScreen({ navigation }: any) {
           <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
             <Ionicons name="menu-outline" size={26} color={theme.colors.text} />
           </TouchableOpacity>
-          <View style={styles.headerIcon}>
+          <View style={[styles.headerIcon, { backgroundColor: brand }]}>
             <Ionicons name="water" size={24} color="#fff" />
           </View>
           <View style={styles.headerTextContainer}>
@@ -330,7 +336,7 @@ export function SwimLessonsScreen({ navigation }: any) {
             <Text style={styles.headerSubtitle}>Schedule private lessons</Text>
           </View>
         </View>
-        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 24 }} />
+        <ActivityIndicator size="large" color={brand} style={{ marginTop: 24 }} />
       </SafeAreaView>
     );
   }
@@ -341,17 +347,20 @@ export function SwimLessonsScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
           <Ionicons name="menu-outline" size={26} color={theme.colors.text} />
         </TouchableOpacity>
-        <View style={styles.headerIcon}>
+        <View style={[styles.headerIcon, { backgroundColor: brand }]}>
           <Ionicons name="water" size={24} color="#fff" />
         </View>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Swim Lessons</Text>
           <Text style={styles.headerSubtitle}>Schedule private swim lessons for eligible camp families</Text>
         </View>
-        <TouchableOpacity style={styles.scheduleHeaderBtn} onPress={() => setPhoneModalOpen(true)}>
-          <Ionicons name="call-outline" size={16} color={theme.colors.text} />
+        <TouchableOpacity
+          style={[styles.scheduleHeaderBtn, styles.scheduleHeaderBtnOutline]}
+          onPress={() => setPhoneModalOpen(true)}
+        >
+          <Ionicons name="call-outline" size={16} color={brand} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.scheduleHeaderBtn} onPress={() => setScheduleModalOpen(true)}>
+        <TouchableOpacity style={[styles.scheduleHeaderBtn, { backgroundColor: brand }]} onPress={() => setScheduleModalOpen(true)}>
           <Ionicons name="add" size={16} color="#fff" />
           <Text style={styles.scheduleHeaderBtnText}>Schedule</Text>
         </TouchableOpacity>
@@ -371,7 +380,7 @@ export function SwimLessonsScreen({ navigation }: any) {
                   <Text style={styles.listDate}>{format(new Date(l.scheduled_at), 'MMM d, h:mm a')}</Text>
                   {l.notes ? <Text style={styles.listGroup}>{l.notes}</Text> : null}
                   <View style={styles.pendingActions}>
-                    <TouchableOpacity style={styles.approveBtn} onPress={() => void approveRequest(l.id)}>
+                    <TouchableOpacity style={[styles.approveBtn, { backgroundColor: brand }]} onPress={() => void approveRequest(l.id)}>
                       <Text style={styles.approveBtnText}>Approve</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.rejectBtn} onPress={() => rejectRequest(l.id)}>
@@ -462,7 +471,7 @@ export function SwimLessonsScreen({ navigation }: any) {
                 {campers.slice(0, 20).map((c) => (
                   <TouchableOpacity
                     key={c.id}
-                    style={[styles.chip, camperId === c.id && styles.chipActive]}
+                    style={[styles.chip, camperId === c.id && chipActiveStyle]}
                     onPress={() => setCamperId(c.id)}
                   >
                     <Text style={[styles.chipText, camperId === c.id && styles.chipTextActive]}>{c.name}</Text>
@@ -473,7 +482,7 @@ export function SwimLessonsScreen({ navigation }: any) {
               <Text style={styles.label}>Schedule type</Text>
               <View style={styles.modeRow}>
                 <TouchableOpacity
-                  style={[styles.modeChip, scheduleMode === 'once' && styles.chipActive]}
+                  style={[styles.modeChip, scheduleMode === 'once' && chipActiveStyle]}
                   onPress={() => setScheduleMode('once')}
                 >
                   <Text style={[styles.chipText, scheduleMode === 'once' && styles.chipTextActive]}>
@@ -481,7 +490,7 @@ export function SwimLessonsScreen({ navigation }: any) {
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modeChip, scheduleMode === 'recurring' && styles.chipActive]}
+                  style={[styles.modeChip, scheduleMode === 'recurring' && chipActiveStyle]}
                   onPress={() => setScheduleMode('recurring')}
                 >
                   <Text style={[styles.chipText, scheduleMode === 'recurring' && styles.chipTextActive]}>
@@ -526,7 +535,7 @@ export function SwimLessonsScreen({ navigation }: any) {
                 {SWIM_LESSON_TIME_OPTIONS.map((slot) => (
                   <TouchableOpacity
                     key={slot.value}
-                    style={[styles.modeChip, lessonTime === slot.value && styles.chipActive]}
+                    style={[styles.modeChip, lessonTime === slot.value && chipActiveStyle]}
                     onPress={() => setLessonTime(slot.value)}
                   >
                     <Text style={[styles.chipText, lessonTime === slot.value && styles.chipTextActive]}>
@@ -544,10 +553,10 @@ export function SwimLessonsScreen({ navigation }: any) {
                       <TouchableOpacity
                         onPress={() => setSelectedWeeks(weekOptions.map((w) => w.weekNumber))}
                       >
-                        <Text style={styles.quickActionText}>All weeks</Text>
+                        <Text style={[styles.quickActionText, { color: brand }]}>All weeks</Text>
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => setSelectedWeeks([])}>
-                        <Text style={styles.quickActionText}>Clear</Text>
+                        <Text style={[styles.quickActionText, { color: brand }]}>Clear</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -585,10 +594,10 @@ export function SwimLessonsScreen({ navigation }: any) {
                     <Text style={styles.label}>Days</Text>
                     <View style={styles.quickActions}>
                       <TouchableOpacity onPress={() => setSelectedDays([...ALL_CAMP_WEEKDAYS])}>
-                        <Text style={styles.quickActionText}>Mon–Fri</Text>
+                        <Text style={[styles.quickActionText, { color: brand }]}>Mon–Fri</Text>
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => setSelectedDays([])}>
-                        <Text style={styles.quickActionText}>Clear</Text>
+                        <Text style={[styles.quickActionText, { color: brand }]}>Clear</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -596,7 +605,7 @@ export function SwimLessonsScreen({ navigation }: any) {
                     {CAMP_WEEKDAY_OPTIONS.map((day) => (
                       <TouchableOpacity
                         key={day.value}
-                        style={[styles.dayChip, selectedDays.includes(day.value) && styles.chipActive]}
+                        style={[styles.dayChip, selectedDays.includes(day.value) && chipActiveStyle]}
                         onPress={() => toggleDay(day.value)}
                       >
                         <Text
@@ -646,7 +655,7 @@ export function SwimLessonsScreen({ navigation }: any) {
                 {instructorOptions.map((name) => (
                   <TouchableOpacity
                     key={name}
-                    style={[styles.chip, instructor === name && styles.chipActive]}
+                    style={[styles.chip, instructor === name && chipActiveStyle]}
                     onPress={() => setInstructor(name)}
                   >
                     <Text style={[styles.chipText, instructor === name && styles.chipTextActive]}>{name}</Text>
@@ -670,7 +679,7 @@ export function SwimLessonsScreen({ navigation }: any) {
                     setNewInstructorName('');
                   }}
                 >
-                  <Ionicons name="add" size={20} color={theme.colors.primary} />
+                  <Ionicons name="add" size={20} color={brand} />
                 </TouchableOpacity>
               </View>
 
@@ -689,7 +698,12 @@ export function SwimLessonsScreen({ navigation }: any) {
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.submitButton, styles.modalSubmitButton, saving && styles.submitButtonDisabled]}
+                style={[
+                  styles.submitButton,
+                  styles.modalSubmitButton,
+                  { backgroundColor: brand },
+                  saving && styles.submitButtonDisabled,
+                ]}
                 onPress={submit}
                 disabled={saving}
               >
@@ -722,7 +736,7 @@ export function SwimLessonsScreen({ navigation }: any) {
                 {campers.slice(0, 20).map((c) => (
                   <TouchableOpacity
                     key={c.id}
-                    style={[styles.chip, camperId === c.id && styles.chipActive]}
+                    style={[styles.chip, camperId === c.id && chipActiveStyle]}
                     onPress={() => setCamperId(c.id)}
                   >
                     <Text style={[styles.chipText, camperId === c.id && styles.chipTextActive]}>{c.name}</Text>
@@ -742,7 +756,11 @@ export function SwimLessonsScreen({ navigation }: any) {
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setPhoneModalOpen(false)}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.submitButton} onPress={() => void submitPhoneRequest()} disabled={saving}>
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: brand }]}
+                onPress={() => void submitPhoneRequest()}
+                disabled={saving}
+              >
                 <Text style={styles.submitButtonText}>{saving ? 'Saving…' : 'Log request'}</Text>
               </TouchableOpacity>
             </View>
@@ -778,7 +796,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 8,
-    backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -800,11 +817,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: theme.colors.primary,
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 8,
     marginLeft: 8,
+  },
+  scheduleHeaderBtnOutline: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   scheduleHeaderBtnText: {
     color: '#fff',
@@ -821,7 +842,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   approveBtn: {
-    backgroundColor: theme.colors.primary,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -906,7 +926,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   submitButton: {
-    backgroundColor: theme.colors.primary,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1087,10 +1106,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderWidth: 1,
     borderColor: '#cbd5e1',
-  },
-  chipActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
   },
   chipText: {
     fontSize: 13,

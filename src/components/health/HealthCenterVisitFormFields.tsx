@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../theme/theme';
+import { useCampBrandTheme } from '../../hooks/useCampBrandTheme';
 import {
   HEALTH_VISIT_CALLED_HOME_OPTIONS,
   HEALTH_VISIT_LOCATIONS,
@@ -52,6 +53,7 @@ function OptionPicker({
   placeholder?: string;
   disabled?: boolean;
 }) {
+  const { brand, brandMuted } = useCampBrandTheme();
   const [open, setOpen] = useState(false);
   const display = value || placeholder || '—';
 
@@ -75,13 +77,15 @@ function OptionPicker({
               {options.map((opt) => (
                 <TouchableOpacity
                   key={opt}
-                  style={[styles.pickerOption, value === opt && styles.pickerOptionActive]}
+                  style={[styles.pickerOption, value === opt && { backgroundColor: brandMuted }]}
                   onPress={() => {
                     onChange(opt);
                     setOpen(false);
                   }}
                 >
-                  <Text style={styles.pickerOptionText}>{opt}</Text>
+                  <Text style={[styles.pickerOptionText, value === opt && { color: brand, fontWeight: '600' }]}>
+                    {opt}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -107,6 +111,7 @@ function SuggestField({
   placeholder?: string;
   disabled?: boolean;
 }) {
+  const { brand } = useCampBrandTheme();
   const [open, setOpen] = useState(false);
 
   return (
@@ -126,7 +131,7 @@ function SuggestField({
           onPress={() => !disabled && setOpen(true)}
           disabled={disabled}
         >
-          <Ionicons name="list-outline" size={18} color={theme.colors.secondary} />
+          <Ionicons name="list-outline" size={18} color={brand} />
         </TouchableOpacity>
       </View>
       <Modal visible={open} transparent animationType="fade">
@@ -348,7 +353,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.colors.border,
   },
-  pickerOptionActive: { backgroundColor: theme.colors.secondary + '18' },
   pickerOptionText: { fontSize: 15, color: theme.colors.text },
   chipScroll: { marginTop: 8 },
   chip: {

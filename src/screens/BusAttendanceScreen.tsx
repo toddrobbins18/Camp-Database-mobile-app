@@ -18,6 +18,7 @@ import { File, Paths } from 'expo-file-system';
 import { theme } from '../theme/theme';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
+import { useCampBrandTheme } from '../hooks/useCampBrandTheme';
 import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import {
   allRoutesBusSubmitted,
@@ -55,6 +56,12 @@ async function shareTransportPdf(pdf: { filename: string; bytes: Uint8Array }) {
 
 export function BusAttendanceScreen({ navigation }: any) {
   const { availableCompanies } = useCompany();
+  const { brand, brandSoft } = useCampBrandTheme();
+  const chipActiveStyle = useMemo(
+    () => ({ borderColor: brand, backgroundColor: brandSoft }),
+    [brand, brandSoft],
+  );
+  const chipTextActiveStyle = useMemo(() => ({ color: brand }), [brand]);
   const { operationalDateString } = useCampOperationalDate();
 
   const [runDate, setRunDate] = useState(operationalDateString);
@@ -330,7 +337,7 @@ export function BusAttendanceScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
           <Ionicons name="menu-outline" size={26} color={theme.colors.text} />
         </TouchableOpacity>
-        <View style={styles.headerIcon}>
+        <View style={[styles.headerIcon, { backgroundColor: brand }]}>
           <Ionicons name="clipboard-outline" size={22} color="#fff" />
         </View>
         <View style={styles.headerTextContainer}>
@@ -356,10 +363,10 @@ export function BusAttendanceScreen({ navigation }: any) {
             <Text style={styles.busPickSub}>Select bus numbers to include in the PDF.</Text>
             <View style={styles.busPickActions}>
               <TouchableOpacity onPress={() => setSelectedRouteIds(routeIdsWithRoster)}>
-                <Text style={styles.busPickLink}>Select all</Text>
+                <Text style={[styles.busPickLink, chipTextActiveStyle]}>Select all</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setSelectedRouteIds([])}>
-                <Text style={styles.busPickLink}>Clear</Text>
+                <Text style={[styles.busPickLink, chipTextActiveStyle]}>Clear</Text>
               </TouchableOpacity>
               <Text style={styles.busPickCount}>
                 {selectedRouteIds.length}/{routes.length}
@@ -371,15 +378,19 @@ export function BusAttendanceScreen({ navigation }: any) {
                 return (
                   <TouchableOpacity
                     key={r.id}
-                    style={[styles.busChip, checked && styles.busChipActive, { borderLeftColor: r.color }]}
+                    style={[
+                      styles.busChip,
+                      checked && chipActiveStyle,
+                      { borderLeftColor: r.color },
+                    ]}
                     onPress={() => toggleBubbleSheetRoute(r.id)}
                   >
                     <Ionicons
                       name={checked ? 'checkbox' : 'square-outline'}
                       size={16}
-                      color={checked ? theme.colors.primary : theme.colors.textSecondary}
+                      color={checked ? brand : theme.colors.textSecondary}
                     />
-                    <Text style={[styles.busChipText, checked && styles.busChipTextActive]}>{r.bus}</Text>
+                    <Text style={[styles.busChipText, checked && chipTextActiveStyle]}>{r.bus}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -396,10 +407,10 @@ export function BusAttendanceScreen({ navigation }: any) {
                 return (
                   <TouchableOpacity
                     key={row.weekNumber}
-                    style={[styles.weekChip, active && styles.weekChipActive]}
+                    style={[styles.weekChip, active && chipActiveStyle]}
                     onPress={() => setSelectedWeek(row.weekNumber)}
                   >
-                    <Text style={[styles.weekChipText, active && styles.weekChipTextActive]}>
+                    <Text style={[styles.weekChipText, active && chipTextActiveStyle]}>
                       {formatEnrollmentWeekLabel(row.weekNumber, enrollmentCtx.calendar)}
                     </Text>
                   </TouchableOpacity>
@@ -439,7 +450,7 @@ export function BusAttendanceScreen({ navigation }: any) {
             </View>
           )}
           <TouchableOpacity
-            style={styles.todayQuickBtn}
+            style={[styles.todayQuickBtn, { backgroundColor: brand }]}
             onPress={() => setRunDate(operationalDateString)}
           >
             <Text style={styles.todayQuickBtnText}>Today</Text>
@@ -459,7 +470,10 @@ export function BusAttendanceScreen({ navigation }: any) {
 
         <View style={styles.runToggleRow}>
           <TouchableOpacity
-            style={[styles.runToggleBtn, timeOfDay === 'am' && styles.runToggleBtnActive]}
+            style={[
+              styles.runToggleBtn,
+              timeOfDay === 'am' && [styles.runToggleBtnActive, { borderColor: brand }],
+            ]}
             onPress={() => setTimeOfDay('am')}
           >
             <Ionicons
@@ -470,7 +484,10 @@ export function BusAttendanceScreen({ navigation }: any) {
             <Text style={[styles.runToggleText, timeOfDay === 'am' && styles.runToggleTextActive]}>AM</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.runToggleBtn, timeOfDay === 'pm' && styles.runToggleBtnActive]}
+            style={[
+              styles.runToggleBtn,
+              timeOfDay === 'pm' && [styles.runToggleBtnActive, { borderColor: brand }],
+            ]}
             onPress={() => setTimeOfDay('pm')}
           >
             <Ionicons
@@ -481,7 +498,7 @@ export function BusAttendanceScreen({ navigation }: any) {
             <Text style={[styles.runToggleText, timeOfDay === 'pm' && styles.runToggleTextActive]}>PM</Text>
           </TouchableOpacity>
           {(boardLoading || attendanceLoading) && (
-            <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginLeft: 8 }} />
+            <ActivityIndicator size="small" color={brand} style={{ marginLeft: 8 }} />
           )}
           <View style={styles.submittedBadge}>
             <Text style={styles.submittedBadgeText}>
@@ -562,7 +579,7 @@ export function BusAttendanceScreen({ navigation }: any) {
                   <Text style={styles.outlineActionBtnText}>Mark all present</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.primaryActionBtn}
+                  style={[styles.primaryActionBtn, { backgroundColor: brand }]}
                   onPress={() => void handleSubmitBus(r.id, r.bus)}
                   disabled={!campers.length || attendanceLoading}
                 >
@@ -585,7 +602,10 @@ export function BusAttendanceScreen({ navigation }: any) {
                       </View>
                       <View style={styles.paButtons}>
                         <TouchableOpacity
-                          style={[styles.paBtn, status === 'present' && styles.paBtnPresent]}
+                          style={[
+                            styles.paBtn,
+                            status === 'present' && { backgroundColor: brand, borderColor: brand },
+                          ]}
                           onPress={() => setCamperAttendance(r.id, c.key, 'present')}
                         >
                           <Text style={[styles.paBtnText, status === 'present' && styles.paBtnTextActive]}>P</Text>

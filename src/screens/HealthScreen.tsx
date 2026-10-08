@@ -31,6 +31,8 @@ import {
 import { MedicationMealTimeBadges } from '../components/nurse/MedicationMealTimeBadges';
 import { findInListByRfid, lookupChildByRfid, normalizeRfidInput, resolveCamperOrStaffByRfid } from '../lib/rfidUtils';
 import { HealthCenterDayCampPanel } from '../components/health/HealthCenterDayCampPanel';
+import { BrandTabs } from '../components/BrandTabs';
+import { useCampBrandTheme } from '../hooks/useCampBrandTheme';
 
 const GENDER_FILTER_OPTIONS = [
     { value: 'all' as const, label: 'All Genders' },
@@ -181,6 +183,7 @@ const isSameCalendarDay = (a: Date, b: Date) =>
 export const HealthScreen = ({ navigation }: any) => {
     const queryClient = useQueryClient();
     const { companyId, season, isDayCamp } = useCompany();
+    const { brand } = useCampBrandTheme();
     const { data: campersData, isLoading: campersLoading, isError: campersError } = useCampers(companyId, season);
     const {
         data: healthCenterStaffData = [],
@@ -1387,25 +1390,7 @@ export const HealthScreen = ({ navigation }: any) => {
                             </View>
                         )}
 
-                        {/* Tabs */}
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.tabsContainer}
-                            contentContainerStyle={styles.tabsContent}
-                        >
-                            {tabs.map((tab) => (
-                                <TouchableOpacity
-                                    key={tab}
-                                    style={[styles.tab, activeTab === tab && styles.tabActive]}
-                                    onPress={() => setActiveTab(tab)}
-                                >
-                                    <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                                        {tab}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
+                        <BrandTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
                         {/* Conditional Content Based on Active Tab */}
                         {activeTab === "Today's Medications" ? (
