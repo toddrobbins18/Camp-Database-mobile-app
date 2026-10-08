@@ -43,8 +43,20 @@ import {
 import {
   applyEnrollmentWeekToRoutes,
   buildCamperEnrollmentLookup,
+  camperEnrolledInWeekByLookup,
   filterUnplottedForWeek,
 } from '../lib/transportWeekView';
+import {
+  DEFAULT_TRANSPORT_BOARD_SETTINGS,
+  normalizeTransportBoardSettings,
+  type TransportBoardSettings,
+} from '../lib/transportBoardSettings';
+import type { CamperBusRunSchedules } from '../lib/transportCamperBusRun';
+import { type ParentTransportCamper, isParentTransportBusAssigned } from '../lib/transportParentTransport';
+import {
+  loadConfirmedBoardSnapshot,
+  persistConfirmedBoardSnapshot,
+} from '../lib/transportConfirmedBoardSnapshot';
 import {
   buildCarSeatCountByBusCsvRows,
   loadCamperCarSeatLookup,
@@ -53,6 +65,7 @@ import {
 import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
 import {
   build2026MappointRouteTemplate,
+  loadStopsOnlyTemplateFromSeason,
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
   type TransportBoardPayload,
@@ -61,6 +74,12 @@ import {
   type TransportRoutesSource,
   type TransportUnplottedCamper,
 } from '../lib/transportRoster';
+import { campminderIntegrationEnabled, isNestSandboxCompany } from '../constants/camps';
+import { SANDBOX_TRANSPORT_BOARD_SEASON } from '../lib/nestSandboxTransport';
+import {
+  buildApprovedChangeSheetRows,
+  changeSheetRowsToCsv,
+} from '../lib/transportChangeSheets';
 import {
   applyHistoricalAssignments,
   getReferenceDatasetStatus,
@@ -99,6 +118,7 @@ import type { GeocodeResult } from '../lib/transportBoardCache';
 
 export const DAY_CAMP_REPORTS = [
   { name: 'Transport Exceptions', desc: 'Absences, swim, office changes, and manual route edits for this date' },
+  { name: 'Master Change Sheet', desc: 'Approved pickup/absence/swim changes by bus for this date & run' },
   { name: 'Attendance', desc: 'Weekly bubble sheet — AM & PM Mon–Fri (paper backup)' },
   { name: 'Digital Attendance Log', desc: 'Export Present/Absent saved in Bus Attendance for this date & run' },
   { name: 'Bus Report', desc: 'Day camp bus assignments' },
@@ -209,8 +229,10 @@ async function shareTransportPdf(pdf: { filename: string; bytes: Uint8Array }) {
 }
 
 export function useDayCampTransport() {
-  const { companyId, season, availableCompanies } = useCompany();
+  const { companyId, companySlug, season, availableCompanies } = useCompany();
   const companyName = availableCompanies.find((c) => c.id === companyId)?.name ?? 'Day Camp';
+  const sandboxTransport = isNestSandboxCompany(companySlug);
+  const campminderEnabled = campminderIntegrationEnabled({ slug: companySlug, camp_type: 'day_camp' });
 
   const [coreStops, setCoreStops] = useState<Record<number, TransportRouteStop[]>>(
     () => (season === '2026' ? initialCoreStops : {}),
@@ -219,6 +241,11 @@ export function useDayCampTransport() {
     () => (season === '2026' ? initialRouteMeta : []),
   );
   const [unplottedCampers, setUnplottedCampers] = useState<TransportUnplottedCamper[]>([]);
+  const [parentTransportCampers, setParentTransportCampers] = useState<ParentTransportCamper[]>([]);
+  const [camperBusRunSchedules, setCamperBusRunSchedules] = useState<CamperBusRunSchedules>({});
+  const [boardSettings, setBoardSettings] = useState<TransportBoardSettings>(DEFAULT_TRANSPORT_BOARD_SETTINGS);
+  const [routesDraftMode, setRoutesDraftMode] = useState(false);
+  const [routesConfirmed, setRoutesConfirmed] = useState(false);
   const [routesConfigured, setRoutesConfigured] = useState(false);
   const [routesSource, setRoutesSource] = useState<TransportRoutesSource | undefined>();
   const [visibleRoutes, setVisibleRoutes] = useState<number[]>(
@@ -300,11 +327,27 @@ export function useDayCampTransport() {
     coreStops: {} as Record<number, TransportRouteStop[]>,
     routeMeta: [] as TransportRouteMeta[],
     unplottedCampers: [] as TransportUnplottedCamper[],
+    parentTransportCampers: [] as ParentTransportCamper[],
+    camperBusRunSchedules: {} as CamperBusRunSchedules,
+    boardSettings: DEFAULT_TRANSPORT_BOARD_SETTINGS as TransportBoardSettings,
+    routesDraftMode: false,
+    routesConfirmed: false,
     routesConfigured: false,
     routesSource: undefined as TransportRoutesSource | undefined,
   });
 
-  boardStateRef.current = { coreStops, routeMeta, unplottedCampers, routesConfigured, routesSource };
+  boardStateRef.current = {
+    coreStops,
+    routeMeta,
+    unplottedCampers,
+    parentTransportCampers,
+    camperBusRunSchedules,
+    boardSettings,
+    routesDraftMode,
+    routesConfirmed,
+    routesConfigured,
+    routesSource,
+  };
 
   useEffect(() => {
     void geocodeCacheRef.current.init();
@@ -332,12 +375,29 @@ export function useDayCampTransport() {
       coreStops,
       routeMeta,
       unplottedCampers,
+      parentTransportCampers,
+      camperBusRunSchedules,
+      settings: boardSettings,
       routesConfigured,
       routesSeason: routesConfigured ? season : undefined,
       routesSource,
+      routesDraftMode,
+      routesConfirmed,
       ...overrides,
     }),
-    [coreStops, routeMeta, unplottedCampers, routesConfigured, routesSource, season],
+    [
+      coreStops,
+      routeMeta,
+      unplottedCampers,
+      parentTransportCampers,
+      camperBusRunSchedules,
+      boardSettings,
+      routesConfigured,
+      routesSource,
+      routesDraftMode,
+      routesConfirmed,
+      season,
+    ],
   );
 
   const markRoutesConfigured = useCallback((source: TransportRoutesSource = 'manual') => {
@@ -348,7 +408,16 @@ export function useDayCampTransport() {
   const persistBoard = useCallback(
     async (payload: TransportBoardPayload) => {
       if (!companyId || !season) return false;
-      const marked = prepareBoardForPersist(payload, season);
+      const ref = boardStateRef.current;
+      const complete: TransportBoardPayload = {
+        ...payload,
+        parentTransportCampers: payload.parentTransportCampers ?? ref.parentTransportCampers,
+        camperBusRunSchedules: payload.camperBusRunSchedules ?? ref.camperBusRunSchedules,
+        settings: payload.settings ?? ref.boardSettings,
+        routesDraftMode: payload.routesDraftMode ?? ref.routesDraftMode,
+        routesConfirmed: payload.routesConfirmed ?? ref.routesConfirmed,
+      };
+      const marked = prepareBoardForPersist(complete, season);
       await persistBoardCache(companyId, season, marked);
       try {
         const { data: userRes } = await supabase.auth.getUser();
@@ -406,6 +475,17 @@ export function useDayCampTransport() {
       setRouteMeta(normalizedMeta);
       setVisibleRoutes(normalizedMeta.map((r) => r.id));
       setUnplottedCampers(payload.unplottedCampers);
+      setParentTransportCampers(
+        Array.isArray(payload.parentTransportCampers) ? payload.parentTransportCampers : [],
+      );
+      setCamperBusRunSchedules(
+        payload.camperBusRunSchedules && typeof payload.camperBusRunSchedules === 'object'
+          ? payload.camperBusRunSchedules
+          : {},
+      );
+      setBoardSettings(normalizeTransportBoardSettings(payload.settings));
+      setRoutesDraftMode(payload.routesDraftMode === true);
+      setRoutesConfirmed(payload.routesConfirmed === true);
       setRoutesConfigured(payload.routesConfigured === true);
       setRoutesSource(payload.routesSource);
       lastKnownStopCountRef.current = countBoardStops(payload.coreStops);
@@ -468,6 +548,11 @@ export function useDayCampTransport() {
       setVisibleRoutes([]);
       setRoutesConfigured(false);
       setRoutesSource(undefined);
+      setParentTransportCampers([]);
+      setCamperBusRunSchedules({});
+      setBoardSettings(DEFAULT_TRANSPORT_BOARD_SETTINGS);
+      setRoutesDraftMode(false);
+      setRoutesConfirmed(false);
     }
     void (async () => {
       try {
@@ -507,9 +592,19 @@ export function useDayCampTransport() {
               coreStops: restoredStops,
               routeMeta: meta,
               unplottedCampers: Array.isArray(saved.unplottedCampers) ? saved.unplottedCampers : [],
+              parentTransportCampers: Array.isArray(saved.parentTransportCampers)
+                ? saved.parentTransportCampers
+                : [],
+              camperBusRunSchedules:
+                saved.camperBusRunSchedules && typeof saved.camperBusRunSchedules === 'object'
+                  ? saved.camperBusRunSchedules
+                  : {},
+              settings: normalizeTransportBoardSettings(saved.settings),
               routesConfigured: saved.routesConfigured,
               routesSeason: saved.routesSeason,
               routesSource: saved.routesSource,
+              routesDraftMode: saved.routesDraftMode === true,
+              routesConfirmed: saved.routesConfirmed === true,
             },
             'supabase',
           );
@@ -650,8 +745,13 @@ export function useDayCampTransport() {
     coreStops,
     routeMeta,
     unplottedCampers,
+    parentTransportCampers,
+    camperBusRunSchedules,
+    boardSettings,
     routesConfigured,
     routesSource,
+    routesDraftMode,
+    routesConfirmed,
     persistLoaded,
     companyId,
     season,
@@ -662,21 +762,22 @@ export function useDayCampTransport() {
   useEffect(() => {
     return () => {
       if (skipPersistRef.current || importInProgressRef.current || !companyId) return;
-      const {
-        coreStops: stops,
-        routeMeta: meta,
-        unplottedCampers: unplotted,
-        routesConfigured: configured,
-        routesSource: source,
-      } = boardStateRef.current;
-      if (countBoardStops(stops) === 0 && unplotted.length === 0 && !configured) return;
+      const ref = boardStateRef.current;
+      if (countBoardStops(ref.coreStops) === 0 && ref.unplottedCampers.length === 0 && !ref.routesConfigured) {
+        return;
+      }
       void persistBoard({
-        coreStops: stops,
-        routeMeta: meta,
-        unplottedCampers: unplotted,
-        routesConfigured: configured,
-        routesSeason: configured ? season : undefined,
-        routesSource: source,
+        coreStops: ref.coreStops,
+        routeMeta: ref.routeMeta,
+        unplottedCampers: ref.unplottedCampers,
+        parentTransportCampers: ref.parentTransportCampers,
+        camperBusRunSchedules: ref.camperBusRunSchedules,
+        settings: ref.boardSettings,
+        routesConfigured: ref.routesConfigured,
+        routesSeason: ref.routesConfigured ? season : undefined,
+        routesSource: ref.routesSource,
+        routesDraftMode: ref.routesDraftMode,
+        routesConfirmed: ref.routesConfirmed,
       });
     };
   }, [companyId, season, persistBoard]);
@@ -725,6 +826,74 @@ export function useDayCampTransport() {
     () => filterUnplottedForWeek(unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup),
     [unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup],
   );
+
+  const parentTransportForWeek = useMemo(() => {
+    if (activeRouteEnrollmentWeek == null) return parentTransportCampers;
+    return parentTransportCampers.filter((c) =>
+      camperEnrolledInWeekByLookup(camperEnrollmentLookup, c.name, activeRouteEnrollmentWeek),
+    );
+  }, [parentTransportCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup]);
+
+  const parentTransportNoBusForWeek = useMemo(
+    () => parentTransportForWeek.filter((c) => !isParentTransportBusAssigned(c)),
+    [parentTransportForWeek],
+  );
+
+  const draftModeAvailable = season !== '2026' && routesConfigured;
+
+  const enterRoutesDraftMode = useCallback(async () => {
+    if (!companyId || !season) return;
+    if (routesDraftMode) {
+      toast('Already in draft mode', 'Confirm or discard when you are done testing.');
+      return;
+    }
+    if (!routesConfigured) {
+      toast('Add routes first', 'Apply a route template or add buses before entering draft mode.', true);
+      return;
+    }
+    const baseline = buildBoardPayload({ routesDraftMode: false, routesConfirmed });
+    await persistConfirmedBoardSnapshot(companyId, season, baseline);
+    const payload = buildBoardPayload({ routesDraftMode: true, routesConfirmed: false });
+    setRoutesDraftMode(true);
+    setRoutesConfirmed(false);
+    await persistBoard(payload);
+    toast('Draft mode ON', 'Test edits are safe until you confirm or discard.');
+  }, [
+    companyId,
+    season,
+    routesDraftMode,
+    routesConfigured,
+    routesConfirmed,
+    buildBoardPayload,
+    persistBoard,
+  ]);
+
+  const discardRoutesDraft = useCallback(async () => {
+    if (!companyId || !season) return;
+    const snapshot = await loadConfirmedBoardSnapshot(companyId, season);
+    if (!snapshot) {
+      toast('Nothing to restore', 'No pre-draft snapshot found.', true);
+      return;
+    }
+    const restored: TransportBoardPayload = {
+      ...snapshot,
+      routesDraftMode: false,
+      routesConfirmed: snapshot.routesConfirmed === true,
+    };
+    applyBoardPayload(restored);
+    await persistBoard(restored);
+    toast('Draft mode OFF', 'Restored routes from before draft mode.');
+  }, [companyId, season, applyBoardPayload, persistBoard]);
+
+  const confirmRoutesBoard = useCallback(async () => {
+    if (!companyId || !season) return;
+    const payload = buildBoardPayload({ routesDraftMode: false, routesConfirmed: true });
+    await persistConfirmedBoardSnapshot(companyId, season, payload);
+    setRoutesDraftMode(false);
+    setRoutesConfirmed(true);
+    await persistBoard(payload);
+    toast('Routes confirmed', 'Draft mode off — live board saved.');
+  }, [companyId, season, buildBoardPayload, persistBoard]);
 
   const totalCampers = useMemo(() => {
     const assigned = displayRoutes.reduce((sum, r) => sum + r.campers, 0);
@@ -1139,8 +1308,36 @@ export function useDayCampTransport() {
     if (!companyId) return;
     setApplyingTemplate(true);
     try {
-      const { coreStops: templateStops, routeMeta: templateMeta } =
-        await build2026MappointRouteTemplate(ROUTE_COLORS);
+      let templateStops: TransportBoardPayload['coreStops'];
+      let templateMeta: TransportRouteMeta[];
+      let routesSource: TransportRoutesSource = 'manual';
+      let templateDescription: string;
+
+      if (sandboxTransport) {
+        const fromSeed = await loadStopsOnlyTemplateFromSeason(
+          supabase,
+          companyId,
+          SANDBOX_TRANSPORT_BOARD_SEASON,
+          ROUTE_COLORS,
+        );
+        if (!fromSeed?.routeMeta.length) {
+          toast(
+            'Sandbox routes not seeded',
+            'Run seed_nest_sandbox_demo_data.sql in Supabase for 4 demo buses (not North Shore MapPoint).',
+            true,
+          );
+          return;
+        }
+        templateStops = fromSeed.coreStops;
+        templateMeta = fromSeed.routeMeta;
+        templateDescription = `${templateMeta.length} demo buses restored from sandbox seed (stops only).`;
+      } else {
+        const mappoint = await build2026MappointRouteTemplate(ROUTE_COLORS);
+        templateStops = mappoint.coreStops;
+        templateMeta = mappoint.routeMeta;
+        routesSource = 'mappoint2026';
+        templateDescription = `${templateMeta.length} buses loaded (stops only). Use learned routes to place campers.`;
+      }
 
       const payload: TransportBoardPayload = {
         coreStops: templateStops,
@@ -1148,17 +1345,14 @@ export function useDayCampTransport() {
         unplottedCampers,
         routesConfigured: true,
         routesSeason: season,
-        routesSource: 'mappoint2026',
+        routesSource,
       };
 
       const normalized = await normalizeTransportBoardForSeason(supabase, companyId, season, payload);
       await persistBoard(normalized);
       await finalizeBoardForSeason(normalized);
 
-      toast(
-        'Route template applied',
-        `${templateMeta.length} buses loaded (stops only). Use Apply Historical Assignments to place returning campers.`,
-      );
+      toast('Route template applied', templateDescription);
     } catch (e: unknown) {
       toast('Template apply failed', e instanceof Error ? e.message : String(e), true);
     } finally {
@@ -1668,6 +1862,38 @@ export function useDayCampTransport() {
   };
 
   const handleGenerateReport = async (reportName: string) => {
+    if (reportName === 'Master Change Sheet') {
+      if (!companyId) {
+        toast('Company not loaded', undefined, true);
+        return;
+      }
+      const [exceptions, manual] = await Promise.all([
+        fetchTransportExceptions(supabase, companyId, overrideDate),
+        loadManualOverrides(supabase, companyId, season, overrideDate),
+      ]);
+      const selectedIds = visibleRoutes.length ? visibleRoutes : routeMeta.map((r) => r.id);
+      const built = buildApprovedChangeSheetRows({
+        overrideDate,
+        runPeriod: timeOfDay,
+        exceptions,
+        manual,
+        routeMeta,
+        coreStops,
+        selectedRouteIds: selectedIds,
+      }).filter((r) => !r.camper.startsWith('(No transport'));
+      if (!built.length) {
+        toast('No changes', 'No approved changes for this date and buses.', true);
+        return;
+      }
+      const csv = changeSheetRowsToCsv(built);
+      const filename = `transport-change-sheet-${overrideDate}-${timeOfDay}.csv`;
+      const file = new File(Paths.cache, filename);
+      if (file.exists) file.delete();
+      file.create({ overwrite: true });
+      file.write(csv);
+      await Share.share({ url: file.uri, title: filename, message: csv });
+      return;
+    }
     if (reportName === 'Transport Exceptions') {
       if (!companyId) {
         toast('Company not loaded', undefined, true);
@@ -1933,5 +2159,16 @@ export function useDayCampTransport() {
     pickBulkCsv,
     pickUnplottedCsv,
     getEffectiveCore,
+    sandboxTransport,
+    campminderEnabled,
+    parentTransportCampers,
+    parentTransportForWeek,
+    parentTransportNoBusForWeek,
+    routesDraftMode,
+    routesConfirmed,
+    draftModeAvailable,
+    enterRoutesDraftMode,
+    discardRoutesDraft,
+    confirmRoutesBoard,
   };
 }

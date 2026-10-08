@@ -12,6 +12,9 @@ import {
   loadCamperRoutingPriors,
   loadRouteReferenceImport,
 } from './routeReferenceWarehouse';
+import type { CamperBusRunSchedules } from './transportCamperBusRun';
+import type { ParentTransportCamper } from './transportParentTransport';
+import type { TransportBoardSettings } from './transportBoardSettings';
 
 export {
   getBundledMappointRoutesCsv2026,
@@ -67,10 +70,15 @@ export type TransportBoardPayload = {
   coreStops: Record<number, TransportRouteStop[]>;
   routeMeta: TransportRouteMeta[];
   unplottedCampers: TransportUnplottedCamper[];
+  parentTransportCampers?: ParentTransportCamper[];
+  camperBusRunSchedules?: CamperBusRunSchedules;
+  settings?: TransportBoardSettings;
   /** True after explicit MapPoint apply or manual routing for this season. */
   routesConfigured?: boolean;
   routesSeason?: string;
   routesSource?: TransportRoutesSource;
+  routesDraftMode?: boolean;
+  routesConfirmed?: boolean;
 };
 
 const normName = (name: string) => name.trim().toLowerCase();

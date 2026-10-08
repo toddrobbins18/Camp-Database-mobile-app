@@ -50,6 +50,12 @@ export function northShoreBusTransportEnabled(company: CampLike): boolean {
   return isNorthShoreDayCamp(company?.slug) || isNestSandboxCompany(company?.slug);
 }
 
+/** CampMinder / MapPoint bulk tools — off in Nest training sandbox (web parity). */
+export function campminderIntegrationEnabled(company: CampLike): boolean {
+  if (isNestSandboxCompany(company?.slug)) return false;
+  return true;
+}
+
 export function isDayCampCompany(company: CampLike): boolean {
   if (!company) return false;
   if (company.camp_type === 'day_camp') return true;

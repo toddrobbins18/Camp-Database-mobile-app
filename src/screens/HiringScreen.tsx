@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -47,13 +49,26 @@ export function HiringScreen({ navigation }: any) {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
+  const loadFromRoster = useCallback(
+    async (options?: { clearSaved?: boolean }) => {
+      if (!companyId) return;
+      setLoading(true);
+      try {
+        if (options?.clearSaved) {
+          await AsyncStorage.removeItem(storageKey);
+        }
+        const next = await loadStaff(storageKey, companyId, season);
+        setStaff(next);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [companyId, season, storageKey],
+  );
+
   useEffect(() => {
-    if (!companyId) return;
-    setLoading(true);
-    void loadStaff(storageKey, companyId, season)
-      .then(setStaff)
-      .finally(() => setLoading(false));
-  }, [storageKey, companyId, season]);
+    void loadFromRoster();
+  }, [loadFromRoster]);
 
   useEffect(() => {
     void AsyncStorage.setItem(storageKey, JSON.stringify(staff));
@@ -134,6 +149,34 @@ export function HiringScreen({ navigation }: any) {
           <Text style={styles.headerTitle}>Staff Hiring {season}</Text>
           <Text style={styles.headerSubtitle}>Active hired staff for {season} only</Text>
         </View>
+        <TouchableOpacity
+          style={styles.headerAction}
+          onPress={() => void loadFromRoster()}
+          disabled={loading}
+          accessibilityLabel="Reload from roster"
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color={theme.colors.secondary} />
+          ) : (
+            <Ionicons name="refresh-outline" size={22} color={theme.colors.secondary} />
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.headerAction}
+          onPress={() => {
+            Alert.alert(
+              'Clear saved board?',
+              'Removes local hiring board edits and reloads hired staff from the roster.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Clear & reload', style: 'destructive', onPress: () => void loadFromRoster({ clearSaved: true }) },
+              ],
+            );
+          }}
+          accessibilityLabel="Clear saved board"
+        >
+          <Ionicons name="trash-outline" size={20} color={theme.colors.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
@@ -239,7 +282,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  headerTextContainer: { flex: 1 },
+  headerTextContainer: { flex: 1, minWidth: 0 },
+  headerAction: { padding: 6, marginLeft: 4 },
   headerTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
   headerSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
   content: { flex: 1 },

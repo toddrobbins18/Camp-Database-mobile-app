@@ -43,9 +43,12 @@ import {
   mergeBracelets,
   mergeLevels,
   type SwimHistoryReportRow,
+  importSwimProgramCsv,
+  type SwimImportProgress,
 } from '../lib/swimProgram';
 import { SwimGroupFormationPanel } from '../components/swim/SwimGroupFormationPanel';
 import { supabase } from '../lib/supabase';
+import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 
 const BRACELET_COLORS: Record<BraceletColor, { bg: string; text: string; border: string }> = {
   Red: { bg: '#fee2e2', text: '#ef4444', border: '#fca5a5' },
@@ -178,6 +181,8 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
   const [selectedBracelet, setSelectedBracelet] = useState<BraceletRecord | null>(null);
   const [selectedLevel, setSelectedLevel] = useState<LevelRecord | null>(null);
   const [inactiveHidden, setInactiveHidden] = useState(0);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<SwimImportProgress | null>(null);
 
   const loadRoster = useCallback(
     async (options?: { showLoading?: boolean }) => {
@@ -345,6 +350,46 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
     Alert.alert('Email queued', `Bracelet notice to ${record.name}'s family.`);
   };
 
+  const handleCsvImport = async () => {
+    if (!companyId || importing) return;
+    const picked = await pickAndReadCsvText();
+    if (!picked.ok) {
+      if (picked.error !== 'canceled') {
+        Alert.alert('Import failed', picked.message ?? 'Could not read file.');
+      }
+      return;
+    }
+    setImporting(true);
+    setImportProgress({ phase: 'parsing', current: 0, total: 1, message: 'Starting import…' });
+    try {
+      const result = await importSwimProgramCsv(
+        supabase,
+        companyId,
+        picked.text,
+        season,
+        setImportProgress,
+      );
+      await loadRoster({ showLoading: true });
+      await loadHistory();
+      const unmatchedNote =
+        result.unmatched.length > 0
+          ? `\n\nUnmatched (${result.unmatched.length}): ${result.unmatched.slice(0, 5).join(', ')}${result.unmatched.length > 5 ? '…' : ''}`
+          : '';
+      Alert.alert(
+        'Import complete',
+        `${picked.fileName}\nBracelets: ${result.bracelets} · Levels: ${result.levels} · Rows: ${result.csvRows}${unmatchedNote}`,
+      );
+      if (result.bracelets > 0) setActiveTab('bracelets');
+      else if (result.levels > 0) setActiveTab('levels');
+    } catch (err) {
+      console.error('[SwimProgram] CSV import error:', err);
+      Alert.alert('Import failed', err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setImporting(false);
+      setImportProgress(null);
+    }
+  };
+
   const renderBraceletPill = (color: BraceletColor | '') => {
     if (!color) return <Text style={styles.emptyText}>—</Text>;
     const c = BRACELET_COLORS[color];
@@ -374,7 +419,24 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
             {!loading ? ` · season ${season}` : ''}
           </Text>
         </View>
+        <TouchableOpacity
+          style={styles.importBtn}
+          onPress={() => void handleCsvImport()}
+          disabled={importing || !companyId}
+        >
+          {importing ? (
+            <ActivityIndicator size="small" color={brand} />
+          ) : (
+            <Ionicons name="cloud-upload-outline" size={22} color={brand} />
+          )}
+        </TouchableOpacity>
       </View>
+
+      {importProgress ? (
+        <Text style={styles.importProgressText} numberOfLines={2}>
+          {importProgress.message ?? 'Importing…'}
+        </Text>
+      ) : null}
 
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.searchIcon} />
@@ -443,7 +505,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                 <ActivityIndicator size="small" color={brand} style={{ margin: 24 }} />
               ) : historyReport.length === 0 ? (
                 <Text style={styles.emptyState}>
-                  No prior swim data yet. Enter data on Bracelets / Level Report or import CSV on web.
+                  No prior swim data yet. Enter data on Bracelets / Level Report or import CSV from the header.
                 </Text>
               ) : (
                 historyReport.flatMap((row) =>
@@ -755,7 +817,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
-  headerTextContainer: { flex: 1 },
+  headerTextContainer: { flex: 1, minWidth: 0 },
+  importBtn: { padding: 8 },
+  importProgressText: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+  },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: theme.colors.text },
   headerSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
   seasonRow: {

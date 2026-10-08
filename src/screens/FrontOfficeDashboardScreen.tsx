@@ -8,7 +8,10 @@ import {
     ActivityIndicator,
     Alert,
     RefreshControl,
+    Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format } from 'date-fns';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
@@ -17,6 +20,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import { getFrontOfficeTransportMenuItems } from '../constants/dayCampMenu';
 import { northShoreBusTransportEnabled } from '../constants/camps';
+import { useCampBrandTheme } from '../hooks/useCampBrandTheme';
 import {
     ABSENCE_TYPE_LABELS,
     approveDismissalAbsence,
@@ -32,8 +36,10 @@ import {
 
 export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) {
     const { companyId, season, companySlug } = useCompany();
+    const { brand } = useCampBrandTheme();
     const { operationalDateString } = useCampOperationalDate();
     const [selectedDate, setSelectedDate] = useState(operationalDateString);
+    const [showDatePicker, setShowDatePicker] = useState(false);
 
     useEffect(() => {
         setSelectedDate(operationalDateString);
@@ -187,10 +193,41 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
                     </View>
                 </View>
 
+                <View style={styles.dateRow}>
+                    <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
+                        <Ionicons name="calendar-outline" size={18} color={brand} />
+                        <Text style={styles.dateBtnText}>
+                            {format(new Date(`${selectedDate}T12:00:00`), 'MMM d, yyyy')}
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.todayBtn, { backgroundColor: brand }]}
+                        onPress={() => setSelectedDate(operationalDateString)}
+                    >
+                        <Text style={styles.todayBtnText}>Today</Text>
+                    </TouchableOpacity>
+                </View>
+                {showDatePicker && (
+                    <DateTimePicker
+                        value={new Date(`${selectedDate}T12:00:00`)}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={(_, d) => {
+                            setShowDatePicker(Platform.OS === 'ios');
+                            if (d) setSelectedDate(format(d, 'yyyy-MM-dd'));
+                        }}
+                    />
+                )}
+
                 <View style={styles.statsRow}>
                     <View style={[styles.statCard, pendingTodayCount > 0 && styles.statCardAlert]}>
                         <Text style={styles.statValue}>{pendingTodayCount}</Text>
                         <Text style={styles.statLabel}>Needs approval</Text>
+                        {(data?.allPendingCount ?? 0) > pendingTodayCount ? (
+                            <Text style={styles.statHint}>
+                                +{(data?.allPendingCount ?? 0) - pendingTodayCount} other dates
+                            </Text>
+                        ) : null}
                     </View>
                     <View style={styles.statCard}>
                         <Text style={styles.statValue}>{openOfficeCount}</Text>
@@ -205,6 +242,15 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
                         </Text>
                         <Text style={styles.statLabel}>Approved</Text>
                     </View>
+                    {showTransport ? (
+                        <View style={styles.statCard}>
+                            <Text style={styles.statValue}>{data?.routeCount ?? 0}</Text>
+                            <Text style={styles.statLabel}>
+                                Routes · AM {data?.busAmSubmitted ? '✓' : '—'} · PM{' '}
+                                {data?.busPmSubmitted ? '✓' : '—'}
+                            </Text>
+                        </View>
+                    ) : null}
                 </View>
 
                 <View style={styles.linkRow}>
@@ -235,7 +281,9 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
                     </TouchableOpacity>
                 </View>
 
-                <Text style={styles.sectionTitle}>Incoming — needs approval</Text>
+                <Text style={styles.sectionTitle}>
+                    Incoming — needs approval ({format(new Date(`${selectedDate}T12:00:00`), 'MMM d')})
+                </Text>
                 {!data?.pendingPickups.length &&
                 !data?.pendingAbsences.length &&
                 !data?.pendingNurse.length &&
@@ -321,6 +369,48 @@ export function FrontOfficeDashboardScreen({ navigation }: { navigation: any }) 
                         </TouchableOpacity>
                     ))
                 )}
+
+                <Text style={styles.sectionTitleApproved}>Approved for this date</Text>
+                {!data?.approvedPickups.length &&
+                !data?.approvedAbsences.length &&
+                !data?.approvedNurse.length &&
+                !data?.approvedSwim.length ? (
+                    <Text style={styles.empty}>Nothing approved yet for this date.</Text>
+                ) : null}
+                {data?.approvedPickups.map((p) => (
+                    <View key={p.id} style={styles.approvedCard}>
+                        <Text style={styles.approvedText}>
+                            <Text style={styles.cardName}>{p.camperName}</Text>
+                            {' — '}
+                            {PICKUP_CHANGE_LABELS[p.change_type] ?? p.change_type}
+                        </Text>
+                    </View>
+                ))}
+                {data?.approvedAbsences.map((a) => (
+                    <View key={a.id} style={styles.approvedCard}>
+                        <Text style={styles.approvedText}>
+                            <Text style={styles.cardName}>{a.camperName}</Text>
+                            {' — '}
+                            {ABSENCE_TYPE_LABELS[a.absence_type] ?? a.absence_type}
+                        </Text>
+                    </View>
+                ))}
+                {data?.approvedNurse.map((n) => (
+                    <View key={n.id} style={styles.approvedCard}>
+                        <Text style={styles.approvedText}>
+                            <Text style={styles.cardName}>{n.camper_name}</Text>
+                            {' — Nurse sent home'}
+                        </Text>
+                    </View>
+                ))}
+                {data?.approvedSwim.map((s) => (
+                    <View key={s.id} style={styles.approvedCard}>
+                        <Text style={styles.approvedText}>
+                            <Text style={styles.cardName}>{s.camperName}</Text>
+                            {' — Swim lesson (no bus)'}
+                        </Text>
+                    </View>
+                ))}
             </ScrollView>
         </SafeAreaView>
     );
@@ -348,7 +438,22 @@ const styles = StyleSheet.create({
     liveDotOn: { backgroundColor: '#10b981' },
     liveText: { fontSize: 12, color: theme.colors.textSecondary },
     liveTextOn: { color: '#047857', fontWeight: '600' },
-    statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+    dateRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+    dateBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+    },
+    dateBtnText: { fontSize: 14, color: theme.colors.text, fontWeight: '500' },
+    todayBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
+    todayBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+    statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
     statCard: {
         flex: 1,
         backgroundColor: theme.colors.surface,
@@ -360,6 +465,23 @@ const styles = StyleSheet.create({
     statCardAlert: { borderColor: '#fcd34d', backgroundColor: '#fffbeb' },
     statValue: { fontSize: 22, fontWeight: '700', color: theme.colors.text },
     statLabel: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 2 },
+    statHint: { fontSize: 10, color: '#b45309', marginTop: 4 },
+    sectionTitleApproved: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginTop: 20,
+        marginBottom: 10,
+        color: '#047857',
+    },
+    approvedCard: {
+        padding: 10,
+        marginBottom: 8,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#a7f3d0',
+        backgroundColor: '#ecfdf5',
+    },
+    approvedText: { fontSize: 13, color: theme.colors.text },
     linkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
     linkBtn: {
         paddingHorizontal: 12,

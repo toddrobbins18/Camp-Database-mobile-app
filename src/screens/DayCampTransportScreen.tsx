@@ -33,8 +33,12 @@ import { BusLocationSharingSection } from '../components/BusLocationSharingSecti
 import { DAY_CAMP_REPORTS, useDayCampTransport } from '../hooks/useDayCampTransport';
 import { useLiveBusLocations } from '../hooks/useLiveBusLocations';
 import { useCompany } from '../contexts/CompanyContext';
+import {
+  formatParentTransportSchedule,
+  parentTransportBusLabel,
+} from '../lib/transportParentTransport';
 
-type Tab = 'map' | 'unplotted' | 'reports';
+type Tab = 'map' | 'unplotted' | 'pt' | 'reports';
 
 function ymdFromDate(d: Date) {
   return format(d, 'yyyy-MM-dd');
@@ -80,16 +84,58 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: 'map', label: 'Route Map' },
     { id: 'unplotted', label: 'Unplotted', badge: t.unplottedForWeek.length || undefined },
+    { id: 'pt', label: 'Parent Transport', badge: t.parentTransportForWeek.length || undefined },
     { id: 'reports', label: 'Reports' },
   ];
 
   const toolbarItems = [
-    { key: 'template', label: 'Route Template', icon: 'layers-outline' as const, onPress: t.handleApplyRouteTemplate, loading: t.applyingTemplate },
-    { key: 'history', label: 'Learned Routes', icon: 'time-outline' as const, onPress: t.handleApplyHistoricalAssignments, loading: t.applyingHistorical, disabled: t.unplottedCampers.length === 0 },
-    { key: 'bulk', label: 'Bulk Upload', icon: 'cloud-upload-outline' as const, onPress: t.openBulkImport },
+    {
+      key: 'template',
+      label: t.sandboxTransport ? 'Reset sandbox routes' : 'Route Template',
+      icon: 'layers-outline' as const,
+      onPress: t.handleApplyRouteTemplate,
+      loading: t.applyingTemplate,
+    },
+    {
+      key: 'history',
+      label: t.sandboxTransport ? 'Place demo campers' : 'Learned Routes',
+      icon: 'time-outline' as const,
+      onPress: t.handleApplyHistoricalAssignments,
+      loading: t.applyingHistorical,
+      disabled: t.unplottedCampers.length === 0,
+    },
+    ...(t.campminderEnabled
+      ? [{ key: 'bulk', label: 'Bulk Upload', icon: 'cloud-upload-outline' as const, onPress: t.openBulkImport }]
+      : []),
     { key: 'camper', label: 'Add Camper', icon: 'person-add-outline' as const, onPress: () => t.setAddCamperOpen(true) },
     { key: 'regeo', label: 'Re-geocode', icon: 'location-outline' as const, onPress: t.handleRegeocodeAll, loading: t.regeocoding },
     { key: 'route', label: 'Add Route', icon: 'add-circle-outline' as const, onPress: () => t.setAddRouteOpen(true) },
+    ...(t.draftModeAvailable && !t.routesDraftMode
+      ? [
+          {
+            key: 'draft',
+            label: 'Draft Mode',
+            icon: 'flask-outline' as const,
+            onPress: () => void t.enterRoutesDraftMode(),
+          },
+        ]
+      : []),
+    ...(t.draftModeAvailable && t.routesDraftMode
+      ? [
+          {
+            key: 'confirm',
+            label: 'Confirm routes',
+            icon: 'checkmark-circle-outline' as const,
+            onPress: () => void t.confirmRoutesBoard(),
+          },
+          {
+            key: 'discard',
+            label: 'Discard draft',
+            icon: 'arrow-undo-outline' as const,
+            onPress: () => void t.discardRoutesDraft(),
+          },
+        ]
+      : []),
   ];
 
   const renderScopeDialog = () => (
@@ -440,6 +486,55 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
     </ScrollView>
   );
 
+  const renderPtTab = () => (
+    <ScrollView style={styles.tabContent} contentContainerStyle={styles.unplottedContent}>
+      <Text style={styles.weekHint}>
+        Parent drop-off / pick-up campers. Edit full PT roster on web; mobile shows saved board data.
+      </Text>
+      {t.activeRouteEnrollmentWeek != null && (
+        <Text style={styles.weekHint}>
+          Filtered for{' '}
+          {formatEnrollmentWeekLabel(t.activeRouteEnrollmentWeek, t.enrollmentWeekCalendar)}
+        </Text>
+      )}
+      {t.parentTransportForWeek.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>No parent transport campers for this week.</Text>
+        </View>
+      ) : (
+        <>
+          {t.parentTransportNoBusForWeek.length > 0 && (
+            <Text style={styles.ptSectionTitle}>PT only (no bus)</Text>
+          )}
+          {t.parentTransportNoBusForWeek.map((c) => (
+            <View key={`pt-nobus-${c.id}`} style={styles.ptCard}>
+              <Text style={styles.camperName}>{c.name}</Text>
+              <Text style={styles.ptMeta}>{parentTransportBusLabel(c, t.routeMeta)}</Text>
+              <Text style={styles.ptSchedule}>{formatParentTransportSchedule(c)}</Text>
+              {c.notes ? <Text style={styles.ptNotes}>{c.notes}</Text> : null}
+            </View>
+          ))}
+          {t.routeMeta.map((route) => {
+            const assigned = t.parentTransportForWeek.filter((c) => c.routeId === route.id);
+            if (!assigned.length) return null;
+            return (
+              <View key={`pt-route-${route.id}`}>
+                <Text style={styles.ptSectionTitle}>{route.bus}</Text>
+                {assigned.map((c) => (
+                  <View key={`pt-${c.id}`} style={styles.ptCard}>
+                    <Text style={styles.camperName}>{c.name}</Text>
+                    <Text style={styles.ptSchedule}>{formatParentTransportSchedule(c)}</Text>
+                    {c.notes ? <Text style={styles.ptNotes}>{c.notes}</Text> : null}
+                  </View>
+                ))}
+              </View>
+            );
+          })}
+        </>
+      )}
+    </ScrollView>
+  );
+
   const renderReportsTab = () => (
     <ScrollView style={styles.tabContent} contentContainerStyle={styles.reportsContent}>
       <View style={styles.reportDateRow}>
@@ -527,6 +622,21 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
         </TouchableOpacity>
       </ScrollView>
 
+      {t.draftModeAvailable && t.routesDraftMode ? (
+        <View style={styles.draftBanner}>
+          <Ionicons name="flask" size={16} color="#5b21b6" />
+          <Text style={styles.draftBannerText}>
+            Draft mode — changes are not final until you confirm or discard.
+          </Text>
+        </View>
+      ) : null}
+      {t.draftModeAvailable && t.routesConfirmed && !t.routesDraftMode ? (
+        <View style={styles.confirmedBanner}>
+          <Ionicons name="checkmark-circle" size={16} color="#047857" />
+          <Text style={styles.confirmedBannerText}>Routes confirmed for season {t.season}</Text>
+        </View>
+      ) : null}
+
       <View style={styles.tabs}>
         {tabs.map((tab) => (
           <TouchableOpacity
@@ -545,6 +655,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
       <View style={styles.tabPanel}>
         {activeTab === 'map' && renderMapTab()}
         {activeTab === 'unplotted' && renderUnplottedTab()}
+        {activeTab === 'pt' && renderPtTab()}
         {activeTab === 'reports' && renderReportsTab()}
       </View>
 
@@ -842,6 +953,44 @@ const styles = StyleSheet.create({
   stopTime: { fontSize: 9, color: theme.colors.textSecondary, marginLeft: 4, marginTop: 2 },
   tabContent: { flex: 1 },
   unplottedContent: { padding: theme.spacing.md, gap: 10 },
+  draftBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: theme.spacing.md,
+    marginBottom: 6,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#ede9fe',
+    borderWidth: 1,
+    borderColor: '#c4b5fd',
+  },
+  draftBannerText: { flex: 1, fontSize: 12, color: '#5b21b6', fontWeight: '600' },
+  confirmedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: theme.spacing.md,
+    marginBottom: 6,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  confirmedBannerText: { fontSize: 12, color: '#047857', fontWeight: '500' },
+  ptSectionTitle: { fontSize: 13, fontWeight: '700', color: theme.colors.text, marginTop: 8 },
+  ptCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: 12,
+    marginTop: 8,
+  },
+  ptMeta: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
+  ptSchedule: { fontSize: 11, color: theme.colors.secondary, marginTop: 4 },
+  ptNotes: { fontSize: 11, color: theme.colors.textSecondary, fontStyle: 'italic', marginTop: 4 },
   unplottedToolbar: { flexDirection: 'row', gap: 8, marginBottom: 4 },
   toolChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.surface, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: theme.colors.border },
   toolChipText: { fontSize: 12, color: theme.colors.text },
