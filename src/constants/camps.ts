@@ -4,6 +4,8 @@ export const CAMP_SLUG = {
   TIMBER_LAKE_WEST: 'timber-lake-west',
   TYLER_HILL_CAMP: 'tyler-hill-camp',
   NORTH_SHORE_DAY_CAMP: 'north-shore-day-camp',
+  /** Training / demo day camp — dummy data only (parity with web `camps.ts`). */
+  NEST_SANDBOX_DAY_CAMP: 'nest-sandbox-day-camp',
 } as const;
 
 /** Default camp when opening The Nest (North Shore day-camp focus). */
@@ -30,6 +32,10 @@ export type CampType = 'overnight' | 'day_camp';
 
 export function isNorthShoreDayCamp(slug: string | null | undefined): boolean {
   return slug === CAMP_SLUG.NORTH_SHORE_DAY_CAMP;
+}
+
+export function isNestSandboxCompany(slug: string | null | undefined): boolean {
+  return slug === CAMP_SLUG.NEST_SANDBOX_DAY_CAMP;
 }
 
 type CampLike = {

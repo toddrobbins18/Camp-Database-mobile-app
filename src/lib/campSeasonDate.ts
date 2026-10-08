@@ -1,5 +1,17 @@
 import { CAMP_TIMEZONE } from './parentPortalCutoff';
 
+function parseLocalDateYmd(ymd: string): Date {
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(ymd).trim());
+  const day = match?.[1] ?? String(ymd).trim().slice(0, 10);
+  return new Date(`${day}T00:00:00`);
+}
+
+function campYmdFromParts(parts: CampTimezoneParts, year: number): string {
+  const month = String(parts.month).padStart(2, '0');
+  const day = String(parts.day).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 type CampTimezoneParts = {
   year: number;
   month: number;
@@ -35,22 +47,20 @@ export function campTimezoneParts(now = new Date()): CampTimezoneParts {
   };
 }
 
-/** Same month/day/time as now, but year from the selected camp season (staff UI). */
-export function campDateInSeason(season: string, now = new Date()): Date {
-  const seasonYear = Number.parseInt(season, 10);
-  if (!Number.isFinite(seasonYear)) return now;
-
+/** Real camp-timezone calendar date — not shifted to sidebar season year. */
+export function campTodayDate(now = new Date()): Date {
   const parts = campTimezoneParts(now);
-  if (parts.year === seasonYear) return now;
+  return parseLocalDateYmd(campYmdFromParts(parts, parts.year));
+}
 
-  return new Date(
-    seasonYear,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-  );
+export function campTodayString(now = new Date()): string {
+  const parts = campTimezoneParts(now);
+  return campYmdFromParts(parts, parts.year);
+}
+
+/** Season selects roster data, not wall-clock year. */
+export function campDateInSeason(_season: string, now = new Date()): Date {
+  return campTodayDate(now);
 }
 
 /** Default Master Calendar month for day camps (June 1 of the selected season). */
@@ -60,10 +70,6 @@ export function campSeasonDefaultCalendarDate(season: string): Date {
   return new Date(seasonYear, 5, 1);
 }
 
-/** YYYY-MM-DD for staff queries — aligned to selected season year. */
-export function campDateStringInSeason(season: string, now = new Date()): string {
-  const parts = campTimezoneParts(campDateInSeason(season, now));
-  const month = String(parts.month).padStart(2, '0');
-  const day = String(parts.day).padStart(2, '0');
-  return `${parts.year}-${month}-${day}`;
+export function campDateStringInSeason(_season: string, now = new Date()): string {
+  return campTodayString(now);
 }

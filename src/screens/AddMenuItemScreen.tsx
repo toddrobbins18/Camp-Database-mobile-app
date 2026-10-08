@@ -6,6 +6,7 @@ import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { useAddMenuItem, MEAL_TYPE_OPTIONS, normalizeMenuMealType } from '../api/menu';
+import { dateToLocalYmd } from '../lib/dateOnly';
 import { useDivisions } from '../api/campers';
 
 export const AddMenuItemScreen = ({ navigation }: any) => {
@@ -39,10 +40,6 @@ export const AddMenuItemScreen = ({ navigation }: any) => {
         return `${month}/${day}/${year}`;
     };
 
-    const dateToISO = (date: Date): string => {
-        return date.toISOString().split('T')[0];
-    };
-
     const handleSave = () => {
         if (!companyId) {
             Alert.alert('Error', 'Company not loaded.');
@@ -64,7 +61,7 @@ export const AddMenuItemScreen = ({ navigation }: any) => {
         addMenuItemMutation.mutate(
             {
                 company_id: companyId,
-                date: dateToISO(menuDate),
+                date: dateToLocalYmd(menuDate),
                 meal_type: meal,
                 items: (menuItems || '').trim(),
                 allergens: (allergens || '').trim() || null,

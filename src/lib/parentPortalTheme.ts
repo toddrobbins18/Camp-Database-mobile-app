@@ -20,6 +20,7 @@ export type ParentPortalColors = {
   successBg: string;
   warning: string;
   warningBg: string;
+  error: string;
 };
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -84,5 +85,17 @@ export function buildParentPortalColors(themeColor: string): ParentPortalColors 
     successBg: '#F0FDF4',
     warning: '#B45309',
     warningBg: '#FFFBEB',
+    error: '#DC2626',
   };
+}
+
+/** Frosted card style on home when camp photo fills the background (web parity). */
+export const PP_AERIAL_GLASS = {
+  backgroundColor: 'rgba(255,255,255,0.55)',
+  borderColor: 'rgba(255,255,255,0.4)',
+};
+
+/** Camp photo for parent portal home — add bundled assets here when available. */
+export function resolveParentPortalHeroImageUrl(_companySlug?: string | null): string | null {
+  return null;
 }

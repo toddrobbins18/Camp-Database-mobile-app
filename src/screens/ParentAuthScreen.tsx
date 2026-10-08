@@ -16,6 +16,8 @@ import { useParentCompany } from '../hooks/useParentCompany';
 import { useRole } from '../hooks/useRole';
 import { userIsCampStaff } from '../constants/parentPortalConstants';
 import { useParentPortalColors } from '../components/parentPortal/ParentPortalShell';
+import { NestSandboxParentFlowGuide } from '../components/parentPortal/NestSandboxParentFlowGuide';
+import { isNestSandboxParentTraining } from '../lib/nestSandboxParentDemo';
 
 type Props = {
   navigation: any;
@@ -47,6 +49,7 @@ export function ParentAuthScreen({
   const [suPassword, setSuPassword] = useState('');
 
   const isStaffPreview = userIsCampStaff(roleData?.globalRoles ?? []);
+  const sandboxTraining = isNestSandboxParentTraining(companySlug);
 
   useEffect(() => {
     if (roleLoading || companyLoading) return;
@@ -178,6 +181,16 @@ export function ParentAuthScreen({
               <Text style={styles.primaryBtnText}>Open family portal</Text>
             </TouchableOpacity>
           </View>
+        </View>
+      ) : null}
+
+      {sandboxTraining && companyId && companySlug ? (
+        <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+          <NestSandboxParentFlowGuide
+            companyId={companyId}
+            companySlug={companySlug}
+            staffSignedIn={isStaffPreview}
+          />
         </View>
       ) : null}
 

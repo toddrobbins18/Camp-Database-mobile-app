@@ -17,6 +17,19 @@ export function canParentConfirmLesson(status: string | null | undefined): boole
   return status === 'scheduled';
 }
 
+export function normalizeSwimLessonRejectionReason(reason: string | null | undefined): string | null {
+  const trimmed = reason?.trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\bavailible\b/gi, 'available');
+}
+
+export function formatSwimLessonRejectionForParent(reason: string | null | undefined): string {
+  const normalized = normalizeSwimLessonRejectionReason(reason);
+  if (!normalized) return '';
+  if (/^not available\.?$/i.test(normalized)) return 'Not available';
+  return normalized;
+}
+
 export async function approveSwimLessonRequest(
   supabase: SupabaseClient,
   id: string,

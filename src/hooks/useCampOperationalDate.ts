@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCompany } from '../contexts/CompanyContext';
-import { campDateInSeason, campDateStringInSeason } from '../lib/campSeasonDate';
+import { campTodayDate, campTodayString } from '../lib/campSeasonDate';
 import { DEFAULT_SEASON } from '../constants/seasonConstants';
 
-/** Live clock + camp "today" aligned to the sidebar season year. */
+/** Live clock + real camp-timezone “today” (season filters roster, not calendar year). */
 export function useCampOperationalDate() {
   const { season } = useCompany();
   const currentSeason = season || DEFAULT_SEASON;
@@ -14,15 +14,9 @@ export function useCampOperationalDate() {
     return () => clearInterval(id);
   }, []);
 
-  const operationalDate = useMemo(
-    () => campDateInSeason(currentSeason, now),
-    [currentSeason, now],
-  );
+  const operationalDate = useMemo(() => campTodayDate(now), [now]);
 
-  const operationalDateString = useMemo(
-    () => campDateStringInSeason(currentSeason, now),
-    [currentSeason, now],
-  );
+  const operationalDateString = useMemo(() => campTodayString(now), [now]);
 
   return {
     now,

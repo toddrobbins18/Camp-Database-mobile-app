@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatCampDateTime } from '../../lib/campTime';
 import type { ParentPortalColors } from '../../lib/parentPortalTheme';
+import { PP_AERIAL_GLASS } from '../../lib/parentPortalTheme';
 import { PP, ppCard, ppFont } from '../../lib/parentPortalUi';
 
 export type CampAnnouncementContent = {
@@ -15,9 +16,10 @@ type CampAnnouncementProps = {
   campName: string;
   update?: CampAnnouncementContent | null;
   colors: ParentPortalColors;
+  glass?: boolean;
 };
 
-export function CampAnnouncement({ campName, update, colors }: CampAnnouncementProps) {
+export function CampAnnouncement({ campName, update, colors, glass }: CampAnnouncementProps) {
   const hasMessage = Boolean(update?.body?.trim());
   if (!hasMessage) return null;
 
@@ -28,8 +30,9 @@ export function CampAnnouncement({ campName, update, colors }: CampAnnouncementP
         styles.card,
         {
           borderColor: colors.brand + '30',
-          backgroundColor: colors.elevated,
+          backgroundColor: glass ? PP_AERIAL_GLASS.backgroundColor : colors.elevated,
         },
+        glass ? PP_AERIAL_GLASS : null,
       ]}
       accessibilityLabel="Camp update"
     >

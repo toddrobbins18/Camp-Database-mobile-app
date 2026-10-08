@@ -32,6 +32,7 @@ import { campersOnRouteForWeek } from '../lib/transportBusRunContext';
 import { loadGroupRoster, type GroupRosterCamper } from '../lib/transportGroupAttendance';
 import {
   camperEnrolledInWeek,
+  defaultEnrollmentWeekForDate,
   enrollmentWeekForDate,
   enrollmentWeekDayColumns,
   formatEnrollmentWeekRange,
@@ -731,7 +732,7 @@ export function useDayCampTransport() {
   }, [displayRoutes, unplottedForWeek]);
 
   const enrollmentWeekForReport = useMemo(
-    () => enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate),
+    () => defaultEnrollmentWeekForDate(enrollmentWeekCalendar, overrideDate),
     [enrollmentWeekCalendar, overrideDate],
   );
 

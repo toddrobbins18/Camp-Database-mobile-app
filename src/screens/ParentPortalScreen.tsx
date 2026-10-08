@@ -31,6 +31,10 @@ import {
 import { ParentAuthScreen } from './ParentAuthScreen';
 import { fetchPublishedCampUpdate } from '../lib/parentPortalCampUpdates';
 import type { CampAnnouncementContent } from '../components/parentPortal/CampAnnouncement';
+import { ParentPortalSandboxStaffPreview } from '../components/parentPortal/ParentPortalSandboxStaffPreview';
+import { isNestSandboxParentTraining } from '../lib/nestSandboxParentDemo';
+import { resolveParentPortalHeroImageUrl } from '../lib/parentPortalTheme';
+import { linkFamilyChildrenByGuardianEmail } from '../lib/parentFamilyLink';
 
 export function ParentPortalScreen({ navigation }: { navigation: any }) {
   const { companyId, companySlug, companyName, themeColor, loading: companyLoading } = useParentCompany();
@@ -88,7 +92,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
     setContactName(fam.primary_contact_name);
 
     try {
-      await supabase.rpc('link_family_children_by_guardian_email', { _family_id: fam.id });
+      await linkFamilyChildrenByGuardianEmail(supabase, fam.id);
     } catch (err) {
       console.warn('[ParentPortal] auto-link by guardian email failed:', err);
     }
@@ -166,6 +170,22 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
     }
   };
 
+  const sandboxTraining = isNestSandboxParentTraining(companySlug);
+  const isCampStaff = userIsCampStaff(roleData?.globalRoles ?? []);
+
+  if (sandboxTraining && isCampStaff && companyId && companySlug) {
+    return (
+      <ParentPortalSandboxStaffPreview
+        companyId={companyId}
+        companySlug={companySlug}
+        companyName={companyName}
+        themeColor={themeColor}
+        onSignOut={() => void handleSignOut()}
+        onBackToNest={() => navigation.navigate('Dashboard')}
+      />
+    );
+  }
+
   if (authed === null || companyLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.bg }]}>
@@ -197,12 +217,12 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.bg, padding: 24 }]}>
         <View style={[styles.linkCard, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
-          <Text style={[styles.linkTitle, { color: colors.text }]}>Almost there!</Text>
+          <Text style={[styles.linkTitle, { color: colors.text }]}>Welcome to {companyName}</Text>
           <Text style={[styles.linkBody, { color: colors.textMuted }]}>
-            One quick step — set up your family profile so we can show your kids here.
+            Your account isn&apos;t linked to a family yet. Create your family profile to get started.
           </Text>
           <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.brand }]} onPress={linkAccount}>
-            <Text style={styles.primaryBtnText}>Set up my family</Text>
+            <Text style={styles.primaryBtnText}>Create family & continue</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.border }]} onPress={handleSignOut}>
             <Text style={[styles.outlineBtnText, { color: colors.text }]}>Sign out</Text>
@@ -213,6 +233,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
   }
 
   const camperName = (id: string) => campers.find((c) => c.id === id)?.name ?? '—';
+  const heroImageUrl = resolveParentPortalHeroImageUrl(companySlug);
   const sharedProps = {
     campName: companyName,
     contactName,
@@ -224,6 +245,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
     authPickups,
     swimLessons,
     campUpdate,
+    heroImageUrl,
     onSaved: loadAll,
     onNavigate: setActiveView,
     camperName,
@@ -241,6 +263,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
       onNavigate={setActiveView}
       onSignOut={handleSignOut}
       showDrawer={false}
+      mainBackdropImageUrl={activeView === 'home' ? heroImageUrl : null}
     >
       {activeView === 'home' && <ParentHomeView {...sharedProps} />}
       {activeView === 'campers' && <ParentCampersView {...sharedProps} />}

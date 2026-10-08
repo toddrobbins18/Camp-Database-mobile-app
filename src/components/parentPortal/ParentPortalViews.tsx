@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { WelcomeHero } from './WelcomeHero';
-import { TodayAtCampBanner } from './TodayAtCampBanner';
+import { WelcomeHeader } from './WelcomeHeader';
+import { TodayTimeline } from './TodayTimeline';
 import { ParentActionTiles } from './ParentActionTiles';
+import { PP_AERIAL_GLASS } from '../../lib/parentPortalTheme';
+import { formatSwimLessonRejectionForParent } from '../../lib/swimLessonApproval';
 import { supabase } from '../../lib/supabase';
 import { formatCampDateTime } from '../../lib/campTime';
 import {
@@ -42,6 +44,7 @@ export type SharedViewProps = {
   authPickups: AuthorizedPickup[];
   swimLessons: SwimLesson[];
   campUpdate?: CampAnnouncementContent | null;
+  heroImageUrl?: string | null;
   onSaved: () => void;
   onNavigate: (view: ParentPortalView) => void;
   camperName: (id: string) => string;
@@ -53,14 +56,17 @@ function FriendlySection({
   title,
   action,
   colors,
+  titleColor,
   children,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   action?: React.ReactNode;
   colors: ParentPortalColors;
+  titleColor?: string;
   children: React.ReactNode;
 }) {
+  const titleFg = titleColor ?? colors.text;
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
@@ -68,7 +74,7 @@ function FriendlySection({
           <View style={[styles.sectionIcon, { backgroundColor: colors.brandSubtle }]}>
             <Ionicons name={icon} size={18} color={colors.brand} />
           </View>
-          <Text style={[ppFont.titleSm, { color: colors.text, flex: 1 }]}>{title}</Text>
+          <Text style={[ppFont.titleSm, { color: titleFg, flex: 1 }]}>{title}</Text>
         </View>
         {action}
       </View>
@@ -96,6 +102,7 @@ function CamperCard({
   swimLessons,
   onView,
   colors,
+  glass,
 }: {
   camper: Camper;
   todayIso: string;
@@ -104,6 +111,7 @@ function CamperCard({
   swimLessons: SwimLesson[];
   onView?: () => void;
   colors: ParentPortalColors;
+  glass?: boolean;
 }) {
   const absentToday = absences.some((a) => a.camper_id === camper.id && a.absence_date === todayIso);
   const pickupToday = pickups.find((p) => p.camper_id === camper.id && p.change_date === todayIso);
@@ -122,7 +130,7 @@ function CamperCard({
 
   return (
     <Wrapper
-      style={[ppCard(colors), styles.camperCard]}
+      style={[ppCard(colors), styles.camperCard, glass ? PP_AERIAL_GLASS : null]}
       {...(onView ? { onPress: onView, activeOpacity: 0.7 } : {})}
     >
       <View style={styles.camperTop}>
@@ -180,6 +188,7 @@ export function ParentHomeView({
   absences,
   swimLessons,
   campUpdate,
+  heroImageUrl,
   onNavigate,
   colors,
 }: Pick<
@@ -191,45 +200,47 @@ export function ParentHomeView({
   | 'absences'
   | 'swimLessons'
   | 'campUpdate'
+  | 'heroImageUrl'
   | 'onNavigate'
   | 'colors'
 >) {
   const todayIso = todayIsoDate();
-  const camperName = (id: string) => campers.find((c) => c.id === id)?.name?.split(/\s+/)[0] ?? 'Your child';
+  const hasAerialBg = Boolean(heroImageUrl?.trim());
+  const glass = hasAerialBg;
+  const camperName = (id: string) => campers.find((c) => c.id === id)?.name ?? '—';
+  const sectionTitleColor = hasAerialBg ? '#fff' : colors.text;
 
   return (
     <View style={styles.page}>
-      <WelcomeHero contactName={contactName} colors={colors} />
-
-      <CampAnnouncement campName={campName} update={campUpdate} colors={colors} />
-
-      <TodayAtCampBanner
-        todayIso={todayIso}
-        pickups={pickups}
-        absences={absences}
-        swimLessons={swimLessons}
-        camperName={camperName}
+      <WelcomeHeader
+        contactName={contactName}
+        campName={campName}
+        onAerialBackground={hasAerialBg}
         colors={colors}
       />
 
+      <CampAnnouncement campName={campName} update={campUpdate} colors={colors} glass={glass} />
+
       <FriendlySection
         icon="people"
-        title="Your kids"
+        title="My campers"
         colors={colors}
+        titleColor={sectionTitleColor}
         action={
           campers.length > 0 ? (
             <TouchableOpacity onPress={() => onNavigate('campers')} hitSlop={8}>
-              <Text style={[ppFont.bodyMedium, { color: colors.brand }]}>See all</Text>
+              <Text style={[ppFont.bodyMedium, { color: hasAerialBg ? '#fff' : colors.brand }]}>View all</Text>
             </TouchableOpacity>
           ) : undefined
         }
       >
         {campers.length === 0 ? (
           <EmptyBlock
-            icon="hourglass-outline"
-            title="We're getting your kids ready"
-            description="The camp office will link your children here soon. Check back shortly!"
+            icon="people-outline"
+            title="No campers linked yet"
+            description="Once the camp office connects your campers to your family account, they'll appear here with today's schedule and pickup details."
             colors={colors}
+            glass={glass}
           />
         ) : (
           <View style={styles.stack}>
@@ -243,15 +254,26 @@ export function ParentHomeView({
                 swimLessons={swimLessons}
                 onView={() => onNavigate('campers')}
                 colors={colors}
+                glass={glass}
               />
             ))}
           </View>
         )}
       </FriendlySection>
 
-      <FriendlySection icon="hand-left-outline" title="Need to tell camp something?" colors={colors}>
-        <ParentActionTiles onNavigate={onNavigate} colors={colors} />
+      <FriendlySection icon="flash-outline" title="Quick actions" colors={colors} titleColor={sectionTitleColor}>
+        <ParentActionTiles onNavigate={onNavigate} colors={colors} glass={glass} />
       </FriendlySection>
+
+      <TodayTimeline
+        todayIso={todayIso}
+        pickups={pickups}
+        absences={absences}
+        swimLessons={swimLessons}
+        camperName={camperName}
+        colors={colors}
+        glass={glass}
+      />
     </View>
   );
 }
@@ -266,9 +288,18 @@ export function ParentCampersView({
   const todayIso = todayIsoDate();
   return (
     <View style={styles.page}>
-      <PageIntro title="Your kids" subtitle="See who's at camp and what's on the schedule." colors={colors} />
+      <PageIntro
+        title="My campers"
+        subtitle="A personal overview of each camper in your family — group, today's status, and schedule updates."
+        colors={colors}
+      />
       {campers.length === 0 ? (
-        <EmptyBlock icon="people-outline" title="No kids linked yet" description="Contact the camp office if you expected to see your children here." colors={colors} />
+        <EmptyBlock
+          icon="people-outline"
+          title="No campers on file yet"
+          description="When the camp office links your children to your account, their profiles will appear here."
+          colors={colors}
+        />
       ) : (
         <View style={styles.stack}>
           {campers.map((camper) => (
@@ -372,9 +403,9 @@ export function ParentPickupsView(props: SharedViewProps) {
   return (
     <View style={styles.page}>
       <PageHeaderWithAction
-        title="Pickup changes"
-        subtitle="Tell us if pickup will be different today or another day."
-        actionLabel="Tell camp"
+        title="Pickups"
+        subtitle="Request pickup changes and track submitted requests."
+        actionLabel="Change pickup"
         onAction={() => setFormOpen(true)}
         disabled={props.campers.length === 0}
         colors={props.colors}
@@ -434,9 +465,9 @@ export function ParentAbsencesView(props: SharedViewProps) {
   return (
     <View style={styles.page}>
       <PageHeaderWithAction
-        title="Absences & late days"
-        subtitle="Let us know if your child won't come or will arrive late."
-        actionLabel="Let us know"
+        title="Absences"
+        subtitle="Report when your camper will be absent, arrive late, or leave early."
+        actionLabel="Report absence"
         onAction={() => setFormOpen(true)}
         disabled={props.campers.length === 0}
         colors={props.colors}
@@ -478,9 +509,9 @@ export function ParentAuthorizedView(props: SharedViewProps) {
   return (
     <View style={styles.page}>
       <PageHeaderWithAction
-        title="Who can pick up?"
-        subtitle="Grandparents, friends, or anyone approved to pick up your child."
-        actionLabel="Add person"
+        title="Authorized adults"
+        subtitle="Manage who is approved to pick up your campers."
+        actionLabel="Add authorized adult"
         onAction={() => setFormOpen(true)}
         colors={props.colors}
       />
@@ -595,7 +626,10 @@ export function ParentSwimView({
                 </View>
               ) : lesson.status === 'rejected' ? (
                 <Text style={[ppFont.caption, { color: colors.error, marginTop: PP.md }]}>
-                  Declined{lesson.rejection_reason ? `: ${lesson.rejection_reason}` : ''}
+                  Declined
+                  {lesson.rejection_reason
+                    ? `: ${formatSwimLessonRejectionForParent(lesson.rejection_reason)}`
+                    : ''}
                 </Text>
               ) : lesson.parent_confirmed ? (
                 <View style={styles.swimActions}>
@@ -649,14 +683,16 @@ function EmptyBlock({
   title,
   description,
   colors,
+  glass,
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
   colors: ParentPortalColors;
+  glass?: boolean;
 }) {
   return (
-    <View style={[ppCard(colors), styles.empty]}>
+    <View style={[ppCard(colors), styles.empty, glass ? PP_AERIAL_GLASS : null]}>
       <View style={[styles.emptyIcon, { backgroundColor: colors.brandSubtle }]}>
         <Ionicons name={icon} size={28} color={colors.brand} />
       </View>

@@ -154,6 +154,9 @@ export function absenceTypeLabel(value: string): string {
   return ABSENCE_TYPES.find((t) => t.v === value)?.l ?? value.replace(/_/g, ' ');
 }
 
+export const PICKUP_STATUSES = ['submitted', 'acknowledged', 'completed', 'cancelled'] as const;
+export const ABSENCE_STATUSES = ['submitted', 'acknowledged', 'cancelled'] as const;
+
 export function statusDisplayLabel(status: string): string {
   const labels: Record<string, string> = {
     submitted: 'Pending',

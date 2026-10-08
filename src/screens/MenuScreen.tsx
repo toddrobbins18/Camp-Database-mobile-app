@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { campDateInSeason } from '../lib/campSeasonDate';
+import { calendarDateOnly, dateToLocalYmd, parseLocalDateYmd } from '../lib/dateOnly';
 import { DEFAULT_SEASON } from '../constants/seasonConstants';
 import {
     View,
@@ -142,11 +143,9 @@ export const MenuScreen = ({ navigation }: any) => {
             return;
         }
 
-        const formattedDate = `${menuDate.getFullYear()}-${String(menuDate.getMonth() + 1).padStart(2, '0')}-${String(menuDate.getDate()).padStart(2, '0')}`;
-
         addMenuItemMutation.mutate({
             company_id: companyId,
-            date: formattedDate,
+            date: dateToLocalYmd(menuDate),
             meal_type: normalizedMealType,
             items: menuItemsText.trim(),
             allergens: allergens.trim() || null,
@@ -200,7 +199,7 @@ export const MenuScreen = ({ navigation }: any) => {
 
     const calendarEvents = useMemo<CalendarWidgetEvent[]>(() => {
         return menuItemsList.map((item) => {
-            const parsedDate = new Date(`${item.date}T00:00:00`);
+            const parsedDate = parseLocalDateYmd(calendarDateOnly(item.date));
             const meal = formatMenuMealTypeLabel(item.meal_type);
             const preview = item.items?.split(',')[0]?.trim() || item.items || 'Menu item';
             return {
@@ -215,11 +214,8 @@ export const MenuScreen = ({ navigation }: any) => {
     }, [menuItemsList]);
 
     const selectedDateMenuItems = useMemo(() => {
-        const y = calendarSelectedDate.getFullYear();
-        const m = String(calendarSelectedDate.getMonth() + 1).padStart(2, '0');
-        const d = String(calendarSelectedDate.getDate()).padStart(2, '0');
-        const key = `${y}-${m}-${d}`;
-        return menuItemsList.filter((item) => item.date === key);
+        const key = dateToLocalYmd(calendarSelectedDate);
+        return menuItemsList.filter((item) => calendarDateOnly(item.date) === key);
     }, [menuItemsList, calendarSelectedDate]);
 
     return (

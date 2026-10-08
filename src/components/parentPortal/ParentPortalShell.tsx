@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +32,10 @@ type Props = {
   onSignOut: () => void;
   onOpenDrawer?: () => void;
   showDrawer?: boolean;
+  /** Full-bleed camp photo behind main content on home (web parity). */
+  mainBackdropImageUrl?: string | null;
+  /** When nested inside another screen (sandbox staff preview). */
+  embedInParent?: boolean;
   children: React.ReactNode;
 };
 
@@ -47,6 +52,8 @@ export function ParentPortalShell({
   onNavigate,
   onSignOut,
   showDrawer = false,
+  mainBackdropImageUrl,
+  embedInParent = false,
   children,
 }: Props) {
   const colors = useMemo(() => {
@@ -69,8 +76,11 @@ export function ParentPortalShell({
 
   const moreActive = moreOpen || MOBILE_MORE.includes(activeView);
 
-  return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+  const Root = embedInParent ? View : SafeAreaView;
+  const rootProps = embedInParent ? { style: styles.root } : { style: styles.root, edges: ['top'] as const };
+
+  const mainInner = (
+    <>
       <View style={styles.header}>
         <View style={styles.headerMain}>
           <Text style={[ppFont.titleSm, { color: colors.text }]} numberOfLines={1}>
@@ -99,6 +109,22 @@ export function ParentPortalShell({
       >
         {children}
       </ScrollView>
+    </>
+  );
+
+  return (
+    <Root {...rootProps}>
+      {mainBackdropImageUrl?.trim() ? (
+        <ImageBackground
+          source={{ uri: mainBackdropImageUrl }}
+          style={styles.backdrop}
+          imageStyle={styles.backdropImage}
+        >
+          <View style={styles.backdropOverlay}>{mainInner}</View>
+        </ImageBackground>
+      ) : (
+        mainInner
+      )}
 
       {moreOpen ? (
         <View style={[styles.moreSheet, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
@@ -188,13 +214,16 @@ export function ParentPortalShell({
           </TouchableOpacity>
         </View>
       </SafeAreaView>
-    </SafeAreaView>
+    </Root>
   );
 }
 
 function createStyles(colors: ParentPortalColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
+    backdrop: { flex: 1 },
+    backdropImage: { resizeMode: 'cover' },
+    backdropOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
     header: {
       flexDirection: 'row',
       alignItems: 'center',

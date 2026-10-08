@@ -130,9 +130,9 @@ function DayCampModuleRouter({ route, navigation }: any) {
     return <DayCampPlaceholderScreen navigation={navigation} />;
 }
 import {
-    getDayCampNestCarryoverMenuItems,
-    getDayCampSidebarPocItems,
-    getParentPortalMenuItems,
+    getDayCampMainMenuItems,
+    getDayCampMenuPocItemsSorted,
+    getParentPortalNestedMenuItems,
     MobileDrawerMenuItem,
 } from '../constants/dayCampMenu';
 
@@ -186,9 +186,34 @@ function filterDayCampMenu(
     return items.filter((item) => hasMenuAccess(item.menuId));
 }
 
+type DrawerRow = {
+    key: string;
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    onPress: () => void;
+    menuItem?: MobileDrawerMenuItem;
+    indent?: boolean;
+};
+
+function drawerItemIsActive(
+    active: ReturnType<typeof getActiveRoute>,
+    item: MobileDrawerMenuItem,
+): boolean {
+    if (active.name !== item.screen) return false;
+    const moduleId = item.params?.moduleId;
+    if (moduleId) {
+        return (active.params as { moduleId?: string } | undefined)?.moduleId === moduleId;
+    }
+    if (item.screen === 'Camper' && item.params?.screen) {
+        return active.name === 'Camper';
+    }
+    return true;
+}
+
 // Custom Drawer Content with Role-Based Visibility
 const CustomDrawerContent = (props: any) => {
     const [searchText, setSearchText] = useState('');
+    const [parentPortalOpen, setParentPortalOpen] = useState(true);
     const { data: roleData } = useRole();
     const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp, isTimberLakeWest, isDayCamp } = useCompany();
     const { hasMenuAccess } = useMenuAccess();
@@ -242,35 +267,31 @@ const CustomDrawerContent = (props: any) => {
         },
     ];
 
-    const mainMenuItems: Array<{
-        key: string;
-        label: string;
-        icon: keyof typeof Ionicons.glyphMap;
-        onPress: () => void;
-    }> = [];
+    const mainMenuItems: DrawerRow[] = [];
+    const dayCampMenuItems: DrawerRow[] = [];
 
-    const dayCampMenuItems: Array<{
-        key: string;
-        label: string;
-        icon: keyof typeof Ionicons.glyphMap;
-        onPress: () => void;
-    }> = [];
+    const parentPortalNestedItems: DrawerRow[] = [];
 
-    const parentPortalMenuItems: Array<{
-        key: string;
-        label: string;
-        icon: keyof typeof Ionicons.glyphMap;
-        onPress: () => void;
-    }> = [];
+    const activeRoute = props.state ? getActiveRoute(props.state) : { name: 'Dashboard' as const };
 
     if (isDayCamp) {
         const company = { slug: companySlug, camp_type: 'day_camp' as const };
-        const carryover = filterDayCampMenu(getDayCampNestCarryoverMenuItems(), hasMenuAccess);
-        const poc = filterDayCampMenu(getDayCampSidebarPocItems(company), hasMenuAccess);
-        const parentPortal = filterDayCampMenu(getParentPortalMenuItems(), hasMenuAccess);
-        mainMenuItems.push(...carryover.map((item) => toDrawerMenuItem(item, props.navigation)));
-        dayCampMenuItems.push(...poc.map((item) => toDrawerMenuItem(item, props.navigation)));
-        parentPortalMenuItems.push(...parentPortal.map((item) => toDrawerMenuItem(item, props.navigation)));
+        const carryover = filterDayCampMenu(getDayCampMainMenuItems(company), hasMenuAccess);
+        const poc = filterDayCampMenu(getDayCampMenuPocItemsSorted(company), hasMenuAccess);
+        mainMenuItems.push(...carryover.map((item) => ({ ...toDrawerMenuItem(item, props.navigation), menuItem: item })));
+        dayCampMenuItems.push(...poc.map((item) => ({ ...toDrawerMenuItem(item, props.navigation), menuItem: item })));
+
+        const showParentFacing = hasMenuAccess('parent-portal');
+        if (showParentFacing) {
+            const nested = filterDayCampMenu(getParentPortalNestedMenuItems(), hasMenuAccess);
+            parentPortalNestedItems.push(
+                ...nested.map((item) => ({
+                    ...toDrawerMenuItem(item, props.navigation),
+                    menuItem: item,
+                    indent: true,
+                })),
+            );
+        }
     } else {
     mainMenuItems.push(
         { key: 'dashboard', label: 'Dashboard', icon: 'home-outline', onPress: () => props.navigation.navigate('Dashboard') },
@@ -410,26 +431,38 @@ const CustomDrawerContent = (props: any) => {
     }
     }
 
-    const renderDrawerItems = (
-        items: Array<{ key: string; label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void }>,
-    ) =>
-        [...items]
-            .sort((a, b) => a.label.localeCompare(b.label))
-            .map((item) => {
-                const label =
-                    item.key === 'messages' && inboxUnreadCount > 0
-                        ? `Messages (${inboxUnreadCount > 99 ? '99+' : inboxUnreadCount})`
-                        : item.label;
-                return (
-                    <DrawerItem
-                        key={item.key}
-                        label={label}
-                        icon={({ color }) => <Ionicons name={item.icon} size={22} color={color} />}
-                        onPress={item.onPress}
-                        {...drawerItemProps}
-                    />
-                );
-            });
+    const renderDrawerRows = (items: DrawerRow[], options?: { sort?: boolean }) => {
+        const list = options?.sort === false ? items : [...items].sort((a, b) => a.label.localeCompare(b.label));
+        return list.map((item) => {
+            const label =
+                item.key === 'messages' && inboxUnreadCount > 0
+                    ? `Messages (${inboxUnreadCount > 99 ? '99+' : inboxUnreadCount})`
+                    : item.label;
+            const isActive = item.menuItem ? drawerItemIsActive(activeRoute, item.menuItem) : false;
+            const tint = isActive ? menuTheme.menuActiveTint : menuTheme.menuItemInactive;
+            return (
+                <TouchableOpacity
+                    key={item.key}
+                    onPress={item.onPress}
+                    activeOpacity={0.75}
+                    style={[
+                        styles.drawerRow,
+                        item.indent && styles.drawerRowIndent,
+                        isActive && { backgroundColor: menuTheme.menuActiveBackground },
+                    ]}
+                >
+                    <Ionicons name={item.icon} size={18} color={tint} style={styles.drawerRowIcon} />
+                    <Text style={[styles.drawerRowLabel, { color: tint }]} numberOfLines={2}>
+                        {label}
+                    </Text>
+                </TouchableOpacity>
+            );
+        });
+    };
+
+    const parentPortalChildActive = parentPortalNestedItems.some(
+        (row) => row.menuItem && drawerItemIsActive(activeRoute, row.menuItem),
+    );
 
     return (
         <View style={{ flex: 1, backgroundColor: menuTheme.drawerBackground }}>
@@ -444,7 +477,7 @@ const CustomDrawerContent = (props: any) => {
             <DrawerContentScrollView {...props} contentContainerStyle={styles.drawerContent}>
                 {/* Header / Logo */}
                 <View style={styles.header}>
-                    <Text style={styles.logoText}>The Nest</Text>
+                    <Text style={[styles.logoText, { color: menuTheme.menuItemInactive }]}>The Nest</Text>
                 </View>
 
                 {/* Search Input Field */}
@@ -558,73 +591,109 @@ const CustomDrawerContent = (props: any) => {
                     </View>
                 )}
 
-                <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Main Menu</Text>
-                {renderDrawerItems(mainMenuItems)}
+                {(mainMenuItems.length > 0 || !isDayCamp) && (
+                    <>
+                        <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Main Menu</Text>
+                        {renderDrawerRows(mainMenuItems)}
+                    </>
+                )}
 
                 {isDayCamp && dayCampMenuItems.length > 0 && (
                     <>
                         <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Day Camp</Text>
-                        {renderDrawerItems(dayCampMenuItems)}
+                        {renderDrawerRows(dayCampMenuItems)}
                     </>
                 )}
 
-                {isDayCamp && parentPortalMenuItems.length > 0 && (
+                {isDayCamp && parentPortalNestedItems.length > 0 && (
                     <>
                         <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Parent Facing</Text>
-                        {renderDrawerItems(parentPortalMenuItems)}
+                        <TouchableOpacity
+                            onPress={() => setParentPortalOpen((v) => !v)}
+                            activeOpacity={0.75}
+                            style={[
+                                styles.drawerRow,
+                                parentPortalChildActive && { backgroundColor: menuTheme.menuActiveBackground },
+                            ]}
+                        >
+                            <Ionicons
+                                name="people-outline"
+                                size={18}
+                                color={menuTheme.menuItemInactive}
+                                style={styles.drawerRowIcon}
+                            />
+                            <Text style={[styles.drawerRowLabel, { color: menuTheme.menuItemInactive, flex: 1 }]}>
+                                Parent Portal
+                            </Text>
+                            <Ionicons
+                                name={parentPortalOpen ? 'chevron-up' : 'chevron-down'}
+                                size={16}
+                                color={menuTheme.sectionHeader}
+                            />
+                        </TouchableOpacity>
+                        {parentPortalOpen ? renderDrawerRows(parentPortalNestedItems, { sort: false }) : null}
                     </>
                 )}
 
                 {showAdministration && (
                     <>
                         <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Administration</Text>
-                        {hasMenuAccess('admin') && (
-                        <DrawerItem
-                            label="Admin Panel"
-                            icon={({ color }) => <Ionicons name="shield-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('AdminPanel')}
-                            {...drawerItemProps}
-                        />
-                        )}
-                        {hasMenuAccess('evaluation-questions') && (
-                        <DrawerItem
-                            label="Evaluation Questions"
-                            icon={({ color }) => <Ionicons name="clipboard-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('EvaluationQuestions')}
-                            {...drawerItemProps}
-                        />
-                        )}
-                        {hasMenuAccess('specialist-sport-assignments') && (
-                        <DrawerItem
-                            label="Specialist Sport Assignments"
-                            icon={({ color }) => <Ionicons name="trophy-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('SpecialistSportAssignments')}
-                            {...drawerItemProps}
-                        />
-                        )}
-                        {hasMenuAccess('role-permissions') && (
-                        <DrawerItem
-                            label="Role Permissions"
-                            icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('RolePermissions')}
-                            {...drawerItemProps}
-                        />
-                        )}
-                        {hasMenuAccess('division-permissions') && (
-                        <DrawerItem
-                            label="Division Permissions"
-                            icon={({ color }) => <Ionicons name="settings-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('DivisionPermissions')}
-                            {...drawerItemProps}
-                        />
-                        )}
-                        {hasMenuAccess('user-approvals') && (
-                        <DrawerItem
-                            label="User Approvals"
-                            icon={({ color }) => <Ionicons name="checkmark-circle-outline" size={22} color={color} />}
-                            onPress={() => props.navigation.navigate('UserApprovals')}
-                            {...drawerItemProps}
-                        />
+                        {renderDrawerRows(
+                            (
+                                [
+                                    ['admin-panel', 'Admin Panel', 'shield-outline', 'AdminPanel', 'admin'],
+                                    [
+                                        'evaluation-questions',
+                                        'Evaluation Questions',
+                                        'clipboard-outline',
+                                        'EvaluationQuestions',
+                                        'evaluation-questions',
+                                    ],
+                                    [
+                                        'role-permissions',
+                                        'Role Permissions',
+                                        'settings-outline',
+                                        'RolePermissions',
+                                        'role-permissions',
+                                    ],
+                                    [
+                                        'division-permissions',
+                                        'Division Permissions',
+                                        'settings-outline',
+                                        'DivisionPermissions',
+                                        'division-permissions',
+                                    ],
+                                    [
+                                        'specialist-sport-assignments',
+                                        'Specialist Sport Assignments',
+                                        'trophy-outline',
+                                        'SpecialistSportAssignments',
+                                        'specialist-sport-assignments',
+                                    ],
+                                    [
+                                        'user-approvals',
+                                        'User Approvals',
+                                        'checkmark-circle-outline',
+                                        'UserApprovals',
+                                        'user-approvals',
+                                    ],
+                                ] as const
+                            )
+                                .map(([key, label, icon, screen, menuId]) => ({
+                                    key,
+                                    label,
+                                    icon,
+                                    onPress: () => props.navigation.navigate(screen),
+                                    menuItem: {
+                                        key,
+                                        menuId,
+                                        label,
+                                        icon,
+                                        screen,
+                                    } as MobileDrawerMenuItem,
+                                }))
+                                .filter((row) => hasMenuAccess(row.menuItem!.menuId)),
+                            { sort: false },
                         )}
                     </>
                 )}
@@ -913,13 +982,32 @@ const styles = StyleSheet.create({
         paddingVertical: 0,
     },
     sectionHeader: {
-        color: '#64748b',
         fontSize: 12,
         fontWeight: '600',
         marginTop: theme.spacing.md,
         marginBottom: theme.spacing.xs,
         paddingLeft: theme.spacing.sm,
-        textTransform: 'uppercase',
+        letterSpacing: 0.2,
+    },
+    drawerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: theme.spacing.sm,
+        borderRadius: theme.borderRadius.md,
+        marginBottom: 2,
+    },
+    drawerRowIndent: {
+        paddingLeft: theme.spacing.lg + 8,
+    },
+    drawerRowIcon: {
+        width: 22,
+        marginRight: theme.spacing.sm,
+    },
+    drawerRowLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+        flex: 1,
     },
     drawerLabel: {
         fontSize: 14,

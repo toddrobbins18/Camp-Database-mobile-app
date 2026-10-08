@@ -1,6 +1,11 @@
 import type { ComponentProps } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { isNorthShoreDayCamp, northShoreBusTransportEnabled, type CampLike } from './camps';
+import {
+  isNorthShoreDayCamp,
+  northShoreBusTransportEnabled,
+  staffTimeClockEnabledForCompany,
+  type CampLike,
+} from './camps';
 
 export type MobileDrawerMenuItem = {
   key: string;
@@ -112,7 +117,7 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
     {
       key: 'change-sheets',
       menuId: 'change-sheets',
-      label: 'Change Sheets',
+      label: 'Master Change Sheet',
       icon: 'document-text-outline',
       screen: 'DayCampModule',
       params: { moduleId: 'change-sheets' },
@@ -173,7 +178,8 @@ export function getFrontOfficeTransportMenuItems(company: CampLike): MobileDrawe
   );
 }
 
-export function getParentPortalMenuItems(): MobileDrawerMenuItem[] {
+/** Parent Facing nested links — order matches web AppSidebar (Login → Family → Dashboard). */
+export function getParentPortalNestedMenuItems(): MobileDrawerMenuItem[] {
   return [
     {
       key: 'parent-portal-auth',
@@ -200,6 +206,25 @@ export function getParentPortalMenuItems(): MobileDrawerMenuItem[] {
       params: { moduleId: 'parent-portal-dashboard' },
     },
   ];
+}
+
+/** @deprecated use getParentPortalNestedMenuItems */
+export function getParentPortalMenuItems(): MobileDrawerMenuItem[] {
+  return getParentPortalNestedMenuItems();
+}
+
+/** Main Menu — sorted A–Z; Owl Time gated like web `getDayCampMainMenuItems`. */
+export function getDayCampMainMenuItems(company: CampLike): MobileDrawerMenuItem[] {
+  return getDayCampNestCarryoverMenuItems()
+    .filter(
+      (item) => item.menuId !== 'staff-time-clock' || staffTimeClockEnabledForCompany(company),
+    )
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Day Camp section — sorted A–Z (web `getDayCampMenuPocItemsSorted`). */
+export function getDayCampMenuPocItemsSorted(company: CampLike): MobileDrawerMenuItem[] {
+  return [...getDayCampSidebarPocItems(company)].sort((a, b) => a.label.localeCompare(b.label));
 }
 
 export type DayCampRolePermissionItem = {

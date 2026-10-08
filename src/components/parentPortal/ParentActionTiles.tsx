@@ -14,24 +14,54 @@ type Tile = {
 };
 
 const TILES: Tile[] = [
-  { id: 'pickups', icon: 'car-outline', label: 'Change pickup', hint: 'Different time or person', tint: '#DBEAFE' },
-  { id: 'absences', icon: 'calendar-outline', label: "Can't make it?", hint: 'Absent or running late', tint: '#FEF3C7' },
-  { id: 'authorized', icon: 'people-outline', label: 'Who can pick up?', hint: 'Add a trusted adult', tint: '#E0E7FF' },
-  { id: 'swim', icon: 'water-outline', label: 'Swim lessons', hint: 'View & confirm', tint: '#D1FAE5' },
+  {
+    id: 'pickups',
+    icon: 'calendar-outline',
+    label: 'Change pickup',
+    hint: 'Request a different pickup time or person for today or a future date.',
+    tint: '#DBEAFE',
+  },
+  {
+    id: 'absences',
+    icon: 'time-outline',
+    label: 'Report absence',
+    hint: "Let camp know if your child won't attend or will arrive late.",
+    tint: '#FEF3C7',
+  },
+  {
+    id: 'authorized',
+    icon: 'shield-checkmark-outline',
+    label: 'Authorized adults',
+    hint: 'Manage who is approved to pick up your camper.',
+    tint: '#D1FAE5',
+  },
+  {
+    id: 'swim',
+    icon: 'water-outline',
+    label: 'Swim lessons',
+    hint: 'View scheduled lessons and confirm attendance.',
+    tint: '#CFFAFE',
+  },
 ];
 
 type Props = {
   onNavigate: (view: ParentPortalView) => void;
   colors: ParentPortalColors;
+  glass?: boolean;
 };
 
-export function ParentActionTiles({ onNavigate, colors }: Props) {
+export function ParentActionTiles({ onNavigate, colors, glass }: Props) {
   return (
     <View style={styles.grid}>
       {TILES.map((tile) => (
         <TouchableOpacity
           key={tile.id}
-          style={[styles.tile, ppShadow(colors), { backgroundColor: colors.elevated }]}
+          style={[
+            styles.tile,
+            ppShadow(colors),
+            { backgroundColor: glass ? 'rgba(255,255,255,0.55)' : colors.elevated },
+            glass ? { borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' } : null,
+          ]}
           onPress={() => onNavigate(tile.id)}
           activeOpacity={0.75}
         >
