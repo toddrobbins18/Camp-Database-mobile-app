@@ -8,6 +8,7 @@ import {
 } from '../constants/camps';
 import {
   getDayCampNestCarryoverMenuItems,
+  getAllowedDayCampModuleIds,
   getDayCampPocItemsForCompany,
   getDayCampSidebarPocItems,
   getParentPortalMenuItems,
@@ -103,7 +104,7 @@ export function isScreenAllowedForCompany(route: ActiveRoute, company: CampLike 
   if (name === 'DayCampModule') {
     const moduleId = params?.moduleId as string | undefined;
     if (!moduleId || !isDayCampCompany(company)) return false;
-    return getDayCampPocItemsForCompany(company).some((item) => item.params?.moduleId === moduleId);
+    return getAllowedDayCampModuleIds(company).has(moduleId);
   }
 
   return getAllowedScreensForCompany(company).has(name);

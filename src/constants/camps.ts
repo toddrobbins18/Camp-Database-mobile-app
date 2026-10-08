@@ -47,7 +47,7 @@ type CampLike = {
 export type { CampLike };
 
 export function northShoreBusTransportEnabled(company: CampLike): boolean {
-  return isNorthShoreDayCamp(company?.slug);
+  return isNorthShoreDayCamp(company?.slug) || isNestSandboxCompany(company?.slug);
 }
 
 export function isDayCampCompany(company: CampLike): boolean {

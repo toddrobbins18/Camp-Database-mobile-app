@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { showNewInboxMessageNotification } from '../lib/inboxLocalNotification';
 import { canonicalProfileUuid, fetchMessageProfileLabels, rowParticipantIds } from '../lib/messageProfiles';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
+import { filterMessagesForCampInbox } from '../lib/messageInboxFilters';
 
 async function attachParticipantProfiles(
   rows: Record<string, unknown>[],
@@ -428,9 +429,12 @@ export function useMessagesRealtimeSync(userId: string | null) {
     }, [userId, queryClient]);
 }
 
-export const useMessages = (userId: string | null, companyId: string | null | undefined) => {
+type MessageCompanyScope = { id?: string; slug?: string | null } | null | undefined;
+
+export const useMessages = (userId: string | null, companyId: string | null | undefined, companySlug?: string | null) => {
+    const companyScope: MessageCompanyScope = companyId ? { id: companyId, slug: companySlug ?? null } : null;
     return useQuery({
-        queryKey: ['messages', userId, companyId ?? ''],
+        queryKey: ['messages', userId, companyId ?? '', companySlug ?? ''],
         queryFn: async () => {
             if (!userId) return [];
             try {
@@ -450,11 +454,13 @@ export const useMessages = (userId: string | null, companyId: string | null | un
                 if (error) throw error;
                 const withParties = await attachParticipantProfiles((data || []) as Record<string, unknown>[], companyId);
                 const enriched = await enrichInboxWithThreadPreview(withParties, companyId);
-                await setCachedJson(messagesCacheKey('inbox', userId, companyId), enriched);
-                return await applyQueuedMessageOps(enriched, userId, 'inbox');
+                const filtered = filterMessagesForCampInbox(enriched, companyScope);
+                await setCachedJson(messagesCacheKey('inbox', userId, companyId), filtered);
+                return await applyQueuedMessageOps(filtered, userId, 'inbox');
             } catch {
                 const cached = (await getCachedJson<Message[]>(messagesCacheKey('inbox', userId, companyId))) || [];
-                return await applyQueuedMessageOps(cached, userId, 'inbox');
+                const filtered = filterMessagesForCampInbox(cached, companyScope);
+                return await applyQueuedMessageOps(filtered, userId, 'inbox');
             }
         },
         enabled: !!userId,
@@ -531,6 +537,7 @@ export const useSendMessage = () => {
             recipient_id: string;
             subject: string;
             content: string;
+            company_id?: string | null;
             sender_display_name?: string | null;
         }) => {
             const row = {
@@ -538,6 +545,7 @@ export const useSendMessage = () => {
                 recipient_id: msg.recipient_id,
                 subject: msg.subject,
                 content: msg.content,
+                company_id: msg.company_id ?? null,
                 sender_display_name: msg.sender_display_name?.trim() || null,
             };
             if (await isOnlineNow()) {

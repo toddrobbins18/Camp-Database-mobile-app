@@ -213,6 +213,21 @@ export function getParentPortalMenuItems(): MobileDrawerMenuItem[] {
   return getParentPortalNestedMenuItems();
 }
 
+/** All DayCampModule ids the user may open for this camp (drawer + Front Office + parent nested). */
+export function getAllowedDayCampModuleIds(company: CampLike): Set<string> {
+  const ids = new Set<string>();
+  const add = (items: MobileDrawerMenuItem[]) => {
+    for (const item of items) {
+      const moduleId = item.params?.moduleId;
+      if (moduleId) ids.add(moduleId);
+    }
+  };
+  add(getDayCampNestCarryoverMenuItems());
+  add(getDayCampPocItemsForCompany(company));
+  add(getParentPortalNestedMenuItems());
+  return ids;
+}
+
 /** Main Menu — sorted A–Z; Owl Time gated like web `getDayCampMainMenuItems`. */
 export function getDayCampMainMenuItems(company: CampLike): MobileDrawerMenuItem[] {
   return getDayCampNestCarryoverMenuItems()

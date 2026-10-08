@@ -37,6 +37,7 @@ import { formatTime12Hour } from '../lib/formatTime';
 import { formatDashboardSpecialEventSubtitle } from '../lib/dailyWolfPrintableUtils';
 import { formatMenuMealTypeLabel } from '../api/menu';
 import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
+import { NestSandboxDashboardCard } from '../components/dashboard/NestSandboxDashboardCard';
 
 const DEFAULT_WEATHER_ZIP = '18469';
 
@@ -408,6 +409,8 @@ export const DashboardScreen = ({ navigation }: any) => {
                         </Text>
                     </View>
                 </View>
+
+                {isDayCamp ? <NestSandboxDashboardCard /> : null}
 
                 {showDashboardStats && (
                     <View style={styles.statsRow}>

@@ -34,6 +34,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { inboxSenderDisplayName, sentRecipientDisplayName } from '../lib/messageProfiles';
 import { messageContentPreview } from '../lib/messageContentUtils';
 import { MessageBody } from '../components/MessageBody';
+import { isNestSandboxCompany } from '../constants/camps';
+import { NestSandboxStaffTestAccountsCard } from '../components/messages/NestSandboxStaffTestAccountsCard';
+import * as DocumentPicker from 'expo-document-picker';
+import {
+    messageMediaEnabledForCamp,
+    classifyMessageMediaMime,
+    sendDirectMessageMedia,
+    messagePreviewLabel,
+} from '../lib/messageMedia';
 
 /** Inbox list second line: latest reply (web parity) or root message body. */
 function inboxThreadListSnippet(msg: {
@@ -76,8 +85,15 @@ export const MessagesScreen = ({ navigation }: any) => {
     const [groupSearchUsers, setGroupSearchUsers] = useState('');
     const [selectedGroupMembers, setSelectedGroupMembers] = useState<string[]>([]);
     const [emailConfig, setEmailConfig] = useState<{ is_configured?: boolean | null; is_active?: boolean | null; email_ready?: boolean | null } | null>(null);
+    const [pendingMedia, setPendingMedia] = useState<{
+        uri: string;
+        mimeType: string;
+        fileName: string;
+        kind: 'image' | 'video';
+    } | null>(null);
+    const sandboxMessageMedia = messageMediaEnabledForCamp(companySlug);
 
-    const { companyId, profile } = useCompany();
+    const { companyId, companySlug, profile } = useCompany();
     /**
      * Web passes `currentCompany?.id` into `fetchMessageProfileLabels` so `resolve_message_profile_labels` runs.
      * Use profile.company_id when context has not finished hydrating so inbox rows get real sender names, not "Unknown sender".
@@ -116,7 +132,7 @@ export const MessagesScreen = ({ navigation }: any) => {
         data: messages = [],
         isLoading: messagesLoading,
         dataUpdatedAt: inboxDataUpdatedAt,
-    } = useMessages(currentUserId, messageLabelsCompanyId);
+    } = useMessages(currentUserId, messageLabelsCompanyId, companySlug);
     const { data: sentMessages = [], isLoading: sentMessagesLoading } = useSentMessages(currentUserId, messageLabelsCompanyId);
     const { data: messageGroups = [], isLoading: groupsLoading } = useMessageGroups(currentUserId);
     const sendMutation = useSendMessage();
@@ -201,6 +217,28 @@ export const MessagesScreen = ({ navigation }: any) => {
         setSelectedUsers([]);
         setSearchUsers('');
         setDeliveryMethod('in-app');
+        setPendingMedia(null);
+    };
+
+    const pickMessageMedia = async () => {
+        const result = await DocumentPicker.getDocumentAsync({
+            type: ['image/*', 'video/*'],
+            copyToCacheDirectory: true,
+        });
+        if (result.canceled || !result.assets?.[0]) return;
+        const asset = result.assets[0];
+        const mimeType = asset.mimeType ?? 'application/octet-stream';
+        const kind = classifyMessageMediaMime(mimeType);
+        if (!kind) {
+            Alert.alert('Unsupported file', 'Choose a photo or video file.');
+            return;
+        }
+        setPendingMedia({
+            uri: asset.uri,
+            mimeType,
+            fileName: asset.name ?? `media-${Date.now()}`,
+            kind,
+        });
     };
 
     const handleClear = () => {
@@ -289,6 +327,8 @@ export const MessagesScreen = ({ navigation }: any) => {
                         </View>
                         <Text style={styles.subtitle}>Send notifications and view messages</Text>
                     </View>
+
+                    {isNestSandboxCompany(companySlug) ? <NestSandboxStaffTestAccountsCard /> : null}
 
                     {/* Action Buttons Row */}
                     <View style={styles.actionButtonsContainer}>
@@ -740,6 +780,17 @@ export const MessagesScreen = ({ navigation }: any) => {
                                 />
                             </View>
 
+                            {sandboxMessageMedia ? (
+                                <View style={{ marginBottom: 12 }}>
+                                    <TouchableOpacity style={styles.clearBtn} onPress={() => void pickMessageMedia()}>
+                                        <Ionicons name="attach" size={16} color={theme.colors.text} />
+                                        <Text style={styles.clearBtnText}>
+                                            {pendingMedia ? `Attached: ${pendingMedia.fileName}` : 'Attach photo or video'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : null}
+
                             <View style={styles.actionButtons}>
                                 <TouchableOpacity style={styles.clearBtn} onPress={handleClear}>
                                     <Text style={styles.clearBtnText}>Clear</Text>
@@ -760,9 +811,39 @@ export const MessagesScreen = ({ navigation }: any) => {
                                         Alert.alert('Missing subject', 'Please enter a subject.');
                                         return;
                                     }
-                                    if (!message.trim()) {
-                                        Alert.alert('Missing message', 'Please enter a message.');
+                                    if (!message.trim() && !pendingMedia) {
+                                        Alert.alert('Missing message', 'Please enter a message or attach media.');
                                         return;
+                                    }
+                                    if (
+                                        pendingMedia &&
+                                        sandboxMessageMedia &&
+                                        selectedUsers.length === 1 &&
+                                        deliveryMethod === 'in-app' &&
+                                        companyId
+                                    ) {
+                                        try {
+                                            const recipientId = selectedUsers[0];
+                                            const threadScopeId = recipientId;
+                                            const { error: mediaErr } = await sendDirectMessageMedia(supabase, {
+                                                companyId,
+                                                senderId: currentUserId,
+                                                recipientId,
+                                                subject: subject.trim() || (pendingMedia.kind === 'video' ? 'Video' : 'Photo'),
+                                                threadScopeId,
+                                                caption: message.trim(),
+                                                media: pendingMedia,
+                                                senderDisplayName: profile?.full_name ?? null,
+                                            });
+                                            if (mediaErr) throw new Error(mediaErr);
+                                            Alert.alert('Success', messagePreviewLabel(pendingMedia.kind, message.trim()));
+                                            handleCloseCompose();
+                                            queryClient.invalidateQueries({ queryKey: ['messages'] });
+                                            return;
+                                        } catch (err: any) {
+                                            Alert.alert('Error', err?.message || 'Failed to send media message.');
+                                            return;
+                                        }
                                     }
                                     try {
                                         const { data, error } = await supabase.functions.invoke('send-bulk-email', {

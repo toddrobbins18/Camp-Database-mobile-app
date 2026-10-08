@@ -5,6 +5,7 @@ import { NavigationContainer, useNavigationContainerRef } from '@react-navigatio
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Pressable, ScrollView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCompany } from '../contexts/CompanyContext';
+import { isNestSandboxCompany } from '../constants/camps';
 import { LoginScreen } from '../screens/LoginScreen';
 import { SignUpScreen } from '../screens/SignUpScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
@@ -52,7 +53,7 @@ import { OfficeTransportChangesScreen } from '../screens/OfficeTransportChangesS
 import { SwimLessonsScreen } from '../screens/SwimLessonsScreen';
 
 import { SwimProgramScreen } from '../screens/SwimProgramScreen';
-import { NurseScreen } from '../screens/NurseScreen';
+import { HealthCenterDayCampScreen } from '../screens/HealthCenterDayCampScreen';
 import { BusAttendanceScreen } from '../screens/BusAttendanceScreen';
 import { BusCheckInsScreen } from '../screens/BusCheckInsScreen';
 import { TransportChangeSheetsScreen } from '../screens/TransportChangeSheetsScreen';
@@ -110,7 +111,7 @@ function DayCampModuleRouter({ route, navigation }: any) {
         return <SwimProgramScreen navigation={navigation} initialTab="levels" />;
     }
     if (moduleId === 'nurse') {
-        return <NurseScreen navigation={navigation} />;
+        return <HealthCenterDayCampScreen navigation={navigation} />;
     }
     if (moduleId === 'bus-attendance') {
         return <BusAttendanceScreen navigation={navigation} />;
@@ -431,8 +432,16 @@ const CustomDrawerContent = (props: any) => {
     }
     }
 
+    const searchQuery = searchText.trim().toLowerCase();
+    const campSwitcherCompanies = availableCompanies.filter(
+        (c) => isNestSandboxCompany(companySlug) || !isNestSandboxCompany(c.slug),
+    );
+
     const renderDrawerRows = (items: DrawerRow[], options?: { sort?: boolean }) => {
-        const list = options?.sort === false ? items : [...items].sort((a, b) => a.label.localeCompare(b.label));
+        let list = options?.sort === false ? items : [...items].sort((a, b) => a.label.localeCompare(b.label));
+        if (searchQuery) {
+            list = list.filter((item) => item.label.toLowerCase().includes(searchQuery));
+        }
         return list.map((item) => {
             const label =
                 item.key === 'messages' && inboxUnreadCount > 0
@@ -541,7 +550,7 @@ const CustomDrawerContent = (props: any) => {
                 </View>
 
                 {/* Camp Switcher (multi-camp users) */}
-                {availableCompanies.length > 1 && (
+                {!isNestSandboxCompany(companySlug) && campSwitcherCompanies.length > 1 && (
                     <View style={styles.campSwitcherWrap}>
                         <TouchableOpacity
                             style={campSwitcherStyle}
@@ -555,7 +564,7 @@ const CustomDrawerContent = (props: any) => {
 
                         {showCampPicker && (
                             <View style={styles.campDropdown}>
-                                {availableCompanies.map((company) => {
+                                {campSwitcherCompanies.map((company) => {
                                     const isActive = company.id === companyId;
                                     return (
                                         <TouchableOpacity
