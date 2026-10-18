@@ -13,7 +13,12 @@ import {
   loadRouteReferenceImport,
 } from './routeReferenceWarehouse';
 import type { CamperBusRunSchedules } from './transportCamperBusRun';
-import type { ParentTransportCamper } from './transportParentTransport';
+import {
+  filterUnplottedExcludingParentTransport,
+  stripParentTransportFromCoreStops,
+  type ParentTransportCamper,
+} from './transportParentTransport';
+import { riderNamesFromStop } from './transportRouteStops';
 import type { TransportBoardSettings } from './transportBoardSettings';
 
 export {
@@ -122,18 +127,75 @@ export async function normalizeTransportBoardForSeason(
   board = stripEmptyRouteShell(board);
 
   const enrolled = await loadEnrolledCampersForTransport(supabase, companyId, season);
-  const hints =
-    season !== "2026"
-      ? await loadHistoricalAddressHints(supabase, companyId, "2026")
-      : undefined;
-  const unplottedCampers = buildUnplottedFromEnrollment({
-    enrolled,
-    coreStops: board.coreStops,
-    existingUnplotted: board.unplottedCampers,
-    addressHints: hints,
-  });
+  const hints = await loadHistoricalAddressHints(supabase, companyId, '2026');
+  const parentTransportCampers = board.parentTransportCampers ?? [];
+  const enrolledNames = new Set(enrolled.map((c) => normName(c.name)));
+  const prunedStops = stripParentTransportFromCoreStops(
+    pruneCoreStopsToSeasonRoster(board.coreStops, enrolledNames),
+    parentTransportCampers,
+  );
 
-  return { ...board, unplottedCampers };
+  const unplottedCampers = filterUnplottedExcludingParentTransport(
+    buildUnplottedFromEnrollment({
+      enrolled,
+      coreStops: prunedStops,
+      existingUnplotted: board.unplottedCampers,
+      addressHints: hints,
+    }),
+    parentTransportCampers,
+  );
+
+  return { ...board, coreStops: prunedStops, parentTransportCampers, unplottedCampers };
+}
+
+/** True when season normalize changed stored stops or unplotted (ghost riders removed). */
+export function transportBoardSeasonSyncChanged(
+  before: TransportBoardPayload,
+  after: TransportBoardPayload,
+): boolean {
+  if (JSON.stringify(before.coreStops) !== JSON.stringify(after.coreStops)) return true;
+  const unplottedKey = (p: TransportBoardPayload) =>
+    p.unplottedCampers
+      .map((c) => c.name.trim().toLowerCase())
+      .sort()
+      .join('\0');
+  return unplottedKey(before) !== unplottedKey(after);
+}
+
+/** Strip prior-season / MapPoint ghost riders; keep open stops (no names). */
+export function pruneCoreStopsToSeasonRoster(
+  coreStops: Record<number, TransportRouteStop[]>,
+  enrolledNames: Set<string>,
+): Record<number, TransportRouteStop[]> {
+  const out: Record<number, TransportRouteStop[]> = {};
+  for (const [routeId, stops] of Object.entries(coreStops)) {
+    out[Number(routeId)] = (stops ?? []).map((stop) => {
+      const riders = riderNamesFromStop(stop).filter((name) => enrolledNames.has(normName(name)));
+      if (riders.length === 0) {
+        return {
+          ...stop,
+          camperNames: [],
+          passengers: 0,
+          name: stop.address.split(',')[0]?.trim() || stop.name,
+        };
+      }
+      if (riders.length === 1) {
+        return {
+          ...stop,
+          camperNames: riders,
+          passengers: 1,
+          name: riders[0],
+        };
+      }
+      return {
+        ...stop,
+        camperNames: riders,
+        passengers: riders.length,
+        name: `${riders[0]} +${riders.length - 1}`,
+      };
+    });
+  }
+  return out;
 }
 
 /** Strip unconfigured routes before persisting (2027+ safety). */

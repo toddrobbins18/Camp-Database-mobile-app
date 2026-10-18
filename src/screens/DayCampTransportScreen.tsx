@@ -750,7 +750,11 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
       )}
       {t.parentTransportForWeek.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No parent transport campers for this week.</Text>
+          <Text style={styles.emptyText}>
+            {t.parentTransportCampers.length > 0
+              ? `No PT campers match this week filter (${t.parentTransportCampers.length} on the board — set Route Map week to All or another week).`
+              : 'No parent transport campers on the board.'}
+          </Text>
         </View>
       ) : (
         <>

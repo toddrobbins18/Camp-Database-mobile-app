@@ -36,6 +36,9 @@ import {
 } from '../lib/sunshineAirtableImport';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import { TAG_COLORS, normalizeGroupName, todayISO, type SunshineTagOption } from '../constants/sunshineReportConstants';
+import { sendSunshineReports } from '../lib/sunshineReportEmailApi';
+import { SunshineReportPreviewView } from '../components/SunshineReportPreviewView';
+import type { SunshinePreviewInput } from '../lib/sunshineLayout';
 
 type Group = { id: string; name: string; sort_order: number };
 type Camper = { id: string; full_name: string; group_id: string | null; parent_email: string | null; sort_order: number };
@@ -105,6 +108,10 @@ export function SunshineReportScreen({ navigation }: any) {
   const [reports, setReports] = useState<Record<string, Report>>({});
   const [loading, setLoading] = useState(true);
   const [syncingRoster, setSyncingRoster] = useState(false);
+  const [sendingEmails, setSendingEmails] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewCaption, setPreviewCaption] = useState('');
+  const [previewData, setPreviewData] = useState<SunshinePreviewInput | null>(null);
   const [groupSearch, setGroupSearch] = useState('');
 
   const [addCamperOpen, setAddCamperOpen] = useState(false);
@@ -343,8 +350,32 @@ export function SunshineReportScreen({ navigation }: any) {
     void upsertReport(camperId, { [field]: next });
   };
 
+  const previewParentEmail = () => {
+    const pool = groupCampers.filter((c) => reports[c.id]);
+    const withReport = pool.length ? pool : campers.filter((c) => reports[c.id]);
+    if (!withReport.length) {
+      Alert.alert('Info', 'Fill in at least one camper report for this date first.');
+      return;
+    }
+    const camper = withReport[0];
+    const r = reports[camper.id];
+    setPreviewData({
+      camperName: camper.full_name,
+      activities: r?.activities ?? [],
+      sports: r?.sports ?? [],
+      lunch: r?.lunch ?? [],
+      bm: r?.bm ?? false,
+      napped: r?.napped ?? false,
+    });
+    setPreviewCaption(
+      `NSDC Sunshine Report — ${camper.full_name}${camper.parent_email ? ` → ${camper.parent_email}` : ''}`,
+    );
+    setPreviewOpen(true);
+  };
+
   const sendEndOfDayEmails = async () => {
-    const toSend = groupCampers.filter((c) => {
+    if (!companyId || sendingEmails) return;
+    const toSend = campers.filter((c) => {
       const r = reports[c.id];
       return r?.send_email && !r.email_sent_at && c.parent_email;
     });
@@ -352,16 +383,39 @@ export function SunshineReportScreen({ navigation }: any) {
       Alert.alert('Info', 'No reports queued to send.');
       return;
     }
-    const now = new Date().toISOString();
-    for (const c of toSend) {
-      await supabase
-        .from('sunshine_reports')
-        .update({ email_sent_at: now })
-        .eq('camper_id', c.id)
-        .eq('report_date', date);
-      setReports((prev) => ({ ...prev, [c.id]: { ...prev[c.id], email_sent_at: now } }));
+    setSendingEmails(true);
+    try {
+      const result = await sendSunshineReports({
+        companyId,
+        reportDate: date,
+        camperIds: toSend.map((c) => c.id),
+      });
+      if (!result.success) {
+        Alert.alert('Error', result.error);
+        return;
+      }
+      const now = new Date().toISOString();
+      for (const row of result.results) {
+        if (row.status !== 'sent') continue;
+        setReports((prev) => ({
+          ...prev,
+          [row.camper_id]: { ...prev[row.camper_id], email_sent_at: now },
+        }));
+      }
+      const failed = result.results.filter((r) => r.status === 'failed');
+      if (result.sent === 0) {
+        Alert.alert(
+          'Error',
+          failed[0]?.status === 'failed' ? failed[0].error : 'No emails were sent.',
+        );
+      } else if (failed.length) {
+        Alert.alert('Partial success', `Sent ${result.sent}. ${failed.length} failed.`);
+      } else {
+        Alert.alert('Success', `Sent ${result.sent} sunshine report(s) to parents.`);
+      }
+    } finally {
+      setSendingEmails(false);
     }
-    Alert.alert('Success', `Marked ${toSend.length} report(s) as sent to parents.`);
   };
 
   const handleAddCamper = async () => {
@@ -753,11 +807,19 @@ export function SunshineReportScreen({ navigation }: any) {
           <Text style={[styles.toolBtnOutlineText, { color: brand }]}>Add Camper</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.toolBtn, styles.toolBtnPrimary, { backgroundColor: brand }]}
+          style={[styles.toolBtn, styles.toolBtnOutline, { borderColor: brand }]}
+          onPress={previewParentEmail}
+        >
+          <Ionicons name="eye-outline" size={14} color={brand} />
+          <Text style={[styles.toolBtnOutlineText, { color: brand }]}>Preview email</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toolBtn, styles.toolBtnPrimary, { backgroundColor: brand, opacity: sendingEmails ? 0.6 : 1 }]}
           onPress={() => void sendEndOfDayEmails()}
+          disabled={sendingEmails}
         >
           <Ionicons name="mail-outline" size={14} color="#fff" />
-          <Text style={styles.toolBtnPrimaryText}>Send to Parents</Text>
+          <Text style={styles.toolBtnPrimaryText}>{sendingEmails ? 'Sending…' : 'Send to Parents'}</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -978,6 +1040,28 @@ export function SunshineReportScreen({ navigation }: any) {
         </SafeAreaView>
       </Modal>
 
+      {/* Parent email preview */}
+      <Modal visible={previewOpen} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.formModal}>
+          <View style={styles.formHeader}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.formTitle}>Parent email preview</Text>
+              {previewCaption ? (
+                <Text style={styles.previewCaption} numberOfLines={2}>
+                  {previewCaption}
+                </Text>
+              ) : null}
+            </View>
+            <TouchableOpacity onPress={() => setPreviewOpen(false)}>
+              <Ionicons name="close" size={26} color={theme.colors.text} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.previewScroll} keyboardShouldPersistTaps="handled">
+            {previewData ? <SunshineReportPreviewView {...previewData} /> : null}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
       {/* Add Group modal */}
       <Modal visible={addGroupOpen} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.formModal}>
@@ -1018,6 +1102,8 @@ const styles = StyleSheet.create({
   headerTextContainer: { flex: 1 },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: theme.colors.text },
   headerSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4, lineHeight: 18 },
+  previewCaption: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 },
+  previewScroll: { padding: 16, paddingBottom: 32 },
   toolbarScroll: { borderBottomWidth: 1, borderBottomColor: theme.colors.border, maxHeight: 52 },
   toolbar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
   dateBtn: {

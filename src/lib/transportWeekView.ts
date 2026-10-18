@@ -1,6 +1,7 @@
 import { camperEnrolledInWeek } from './enrollmentWeekCalendar';
 import { normCamperName } from './transportGroupAttendance';
 import { CAMP_LOCATION } from './transportBoardUtils';
+import { isValidRouteCoordinate } from './transportRouteStops';
 
 export type CamperEnrollmentInfo = {
   enrolledWeeks?: number[];
@@ -60,10 +61,10 @@ export function camperEnrolledInWeekByLookup(
   if (info) {
     return camperEnrolledInWeek(info.enrolledWeeks, info.session, weekNumber);
   }
-  if (fallbackSession != null) {
+  if (fallbackSession != null && String(fallbackSession).trim()) {
     return camperEnrolledInWeek(undefined, fallbackSession, weekNumber);
   }
-  return true;
+  return false;
 }
 
 export function filterStopForEnrollmentWeek<T extends RouteStopLike>(
@@ -87,6 +88,57 @@ export function filterStopForEnrollmentWeek<T extends RouteStopLike>(
   };
 }
 
+/** Remove riders not on the active season roster (e.g. 2026 MapPoint names on a 2027 board). */
+export function filterStopToSeasonRoster<T extends RouteStopLike>(
+  stop: T,
+  seasonRosterNames: Set<string>,
+  campAddress: string = CAMP_LOCATION.address,
+): T {
+  if (stop.address === campAddress) return stop;
+
+  const riders = stopRiderNames(stop).filter((name) => seasonRosterNames.has(normCamperName(name)));
+  const primaryLabel =
+    riders[0] ?? (stop.address.split(',')[0]?.trim() || stop.name || stop.address);
+  return {
+    ...stop,
+    name: primaryLabel,
+    camperNames: riders,
+    passengers: riders.length,
+  };
+}
+
+export function pruneRouteStopsWithNoRiders<T extends RouteLike>(
+  routes: T[],
+  campAddress: string = CAMP_LOCATION.address,
+): T[] {
+  return routes.map((route) => {
+    const stops = route.stops.filter((s) => {
+      if (s.address === campAddress) return true;
+      if ((s.passengers ?? 0) > 0 || (s.camperNames?.length ?? 0) > 0) return true;
+      return isValidRouteCoordinate(s.lat, s.lng);
+    });
+    const campers = stops
+      .filter((s) => s.address !== campAddress)
+      .reduce((sum, s) => sum + (s.passengers || 0), 0);
+    return { ...route, stops, campers };
+  });
+}
+
+export function applySeasonRosterToRoutes<T extends RouteLike>(
+  routes: T[],
+  seasonRosterNames: Set<string>,
+  campAddress: string = CAMP_LOCATION.address,
+): T[] {
+  const filtered = routes.map((route) => {
+    const stops = route.stops.map((s) => filterStopToSeasonRoster(s, seasonRosterNames, campAddress));
+    const campers = stops
+      .filter((s) => s.address !== campAddress)
+      .reduce((sum, s) => sum + (s.passengers || 0), 0);
+    return { ...route, stops, campers };
+  });
+  return pruneRouteStopsWithNoRiders(filtered, campAddress);
+}
+
 export function applyEnrollmentWeekToRoutes<T extends RouteLike>(
   routes: T[],
   weekNumber: number | null,
@@ -94,7 +146,7 @@ export function applyEnrollmentWeekToRoutes<T extends RouteLike>(
   campAddress: string = CAMP_LOCATION.address,
 ): T[] {
   if (weekNumber == null) return routes;
-  return routes.map((route) => {
+  const filtered = routes.map((route) => {
     const stops = route.stops.map((s) =>
       filterStopForEnrollmentWeek(s, weekNumber, lookup, campAddress),
     );
@@ -103,6 +155,14 @@ export function applyEnrollmentWeekToRoutes<T extends RouteLike>(
       .reduce((sum, s) => sum + (s.passengers || 0), 0);
     return { ...route, stops, campers };
   });
+  return pruneRouteStopsWithNoRiders(filtered, campAddress);
+}
+
+export function filterUnplottedToSeasonRoster<T extends { name: string }>(
+  campers: T[],
+  seasonRosterNames: Set<string>,
+): T[] {
+  return campers.filter((c) => seasonRosterNames.has(normCamperName(c.name)));
 }
 
 export function filterUnplottedForWeek<T extends { name: string; session?: string }>(

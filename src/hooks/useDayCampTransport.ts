@@ -45,10 +45,13 @@ import {
 import { buildBusBubbleSheetRoutes } from '../lib/transportCamperBusRun';
 import {
   applyEnrollmentWeekToRoutes,
+  applySeasonRosterToRoutes,
   buildCamperEnrollmentLookup,
   camperEnrolledInWeekByLookup,
   filterUnplottedForWeek,
+  filterUnplottedToSeasonRoster,
 } from '../lib/transportWeekView';
+import { normCamperName } from '../lib/transportGroupAttendance';
 import {
   DEFAULT_TRANSPORT_BOARD_SETTINGS,
   effectiveStopDwellMinutes,
@@ -71,8 +74,10 @@ import {
   isParentTransportBusAssigned,
   countParentTransportOnRoute,
   formatParentTransportSchedule,
+  applyParentTransportExclusionToRoutes,
   parentTransportBusLabel,
   parentTransportRidersForRoute,
+  stripParentTransportFromCoreStops,
   stableParentTransportId,
   PARENT_TRANSPORT_NO_BUS_LABEL,
 } from '../lib/transportParentTransport';
@@ -91,6 +96,7 @@ import {
   loadStopsOnlyTemplateFromSeason,
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
+  transportBoardSeasonSyncChanged,
   type TransportBoardPayload,
   type TransportRouteMeta,
   type TransportRouteStop,
@@ -534,13 +540,18 @@ export function useDayCampTransport() {
       const normalized = await normalizeTransportBoardForSeason(supabase, companyId, season, payload);
       const strippedLegacyRoutes =
         season !== '2026' && countBoardStops(payload.coreStops) > 0 && !payload.routesConfigured;
+      const rosterSyncChanged = transportBoardSeasonSyncChanged(payload, normalized);
       applyBoardPayload(normalized, source);
-      if (strippedLegacyRoutes) {
+      if (strippedLegacyRoutes || rosterSyncChanged) {
         await persistBoard({
           ...normalized,
-          routesConfigured: false,
-          routesSeason: undefined,
-          routesSource: undefined,
+          ...(strippedLegacyRoutes
+            ? {
+                routesConfigured: false,
+                routesSeason: undefined,
+                routesSource: undefined,
+              }
+            : {}),
         });
       }
     },
@@ -575,7 +586,6 @@ export function useDayCampTransport() {
       setVisibleRoutes([]);
       setRoutesConfigured(false);
       setRoutesSource(undefined);
-      setParentTransportCampers([]);
       setCamperBusRunSchedules({});
       setBoardSettings(DEFAULT_TRANSPORT_BOARD_SETTINGS);
       setRoutesDraftMode(false);
@@ -754,7 +764,12 @@ export function useDayCampTransport() {
     if (!persistLoaded || !companyId || skipPersistRef.current || importInProgressRef.current) return;
     const stopCount = countBoardStops(coreStops);
     const payload = buildBoardPayload();
-    if (stopCount === 0 && unplottedCampers.length === 0 && !routesConfigured) {
+    if (
+      stopCount === 0
+      && unplottedCampers.length === 0
+      && parentTransportCampers.length === 0
+      && !routesConfigured
+    ) {
       if (lastKnownStopCountRef.current > 0) {
         void persistBoard(payload).then((ok) => {
           if (ok) lastKnownStopCountRef.current = 0;
@@ -790,7 +805,12 @@ export function useDayCampTransport() {
     return () => {
       if (skipPersistRef.current || importInProgressRef.current || !companyId) return;
       const ref = boardStateRef.current;
-      if (countBoardStops(ref.coreStops) === 0 && ref.unplottedCampers.length === 0 && !ref.routesConfigured) {
+      if (
+        countBoardStops(ref.coreStops) === 0
+        && ref.unplottedCampers.length === 0
+        && ref.parentTransportCampers.length === 0
+        && !ref.routesConfigured
+      ) {
         return;
       }
       void persistBoard({
@@ -876,20 +896,42 @@ export function useDayCampTransport() {
     [groupRoster],
   );
 
+  const seasonRosterNames = useMemo(
+    () => new Set(groupRoster.map((c) => normCamperName(c.name))),
+    [groupRoster],
+  );
+
   const activeRouteEnrollmentWeek =
     routeEnrollmentWeek === 'all' ? null : routeEnrollmentWeek;
 
-  const displayRoutes = useMemo(
-    () => applyEnrollmentWeekToRoutes(routes, activeRouteEnrollmentWeek, camperEnrollmentLookup),
-    [routes, activeRouteEnrollmentWeek, camperEnrollmentLookup],
-  );
+  const displayRoutes = useMemo(() => {
+    const seasonFiltered =
+      seasonRosterNames.size > 0
+        ? applySeasonRosterToRoutes(routes, seasonRosterNames)
+        : routes;
+    const withoutPtOnStops = applyParentTransportExclusionToRoutes(
+      seasonFiltered,
+      parentTransportCampers,
+    );
+    return applyEnrollmentWeekToRoutes(
+      withoutPtOnStops,
+      activeRouteEnrollmentWeek,
+      camperEnrollmentLookup,
+    );
+  }, [
+    routes,
+    seasonRosterNames,
+    parentTransportCampers,
+    activeRouteEnrollmentWeek,
+    camperEnrollmentLookup,
+  ]);
 
   const displayedRoutes = displayRoutes.filter((r) => visibleRoutes.includes(r.id));
 
-  const unplottedForWeek = useMemo(
-    () => filterUnplottedForWeek(unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup),
-    [unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup],
-  );
+  const unplottedForWeek = useMemo(() => {
+    const onSeasonRoster = filterUnplottedToSeasonRoster(unplottedCampers, seasonRosterNames);
+    return filterUnplottedForWeek(onSeasonRoster, activeRouteEnrollmentWeek, camperEnrollmentLookup);
+  }, [unplottedCampers, seasonRosterNames, activeRouteEnrollmentWeek, camperEnrollmentLookup]);
 
   const parentTransportForWeek = useMemo(() => {
     if (activeRouteEnrollmentWeek == null) return parentTransportCampers;
@@ -1047,19 +1089,19 @@ export function useDayCampTransport() {
         child.id,
         Math.max(500, ...parentTransportCampers.map((c) => c.id), 0) + 1,
       );
-      setParentTransportCampers((prev) => [
-        ...prev,
-        {
-          id,
-          childId: child.id,
-          name: child.name,
-          routeId: input.routeId,
-          am: input.am,
-          pm: input.pm,
-          weekdays: input.weekdays,
-          notes: input.notes.trim() || null,
-        },
-      ]);
+      const newCamper: ParentTransportCamper = {
+        id,
+        childId: child.id,
+        name: child.name,
+        routeId: input.routeId,
+        am: input.am,
+        pm: input.pm,
+        weekdays: input.weekdays,
+        notes: input.notes.trim() || null,
+      };
+      const nextPt = [...parentTransportCampers, newCamper];
+      setParentTransportCampers(nextPt);
+      setCoreStops((prev) => stripParentTransportFromCoreStops(prev, nextPt));
       setUnplottedCampers((prev) =>
         prev.filter((c) => c.name.trim().toLowerCase() !== child.name.trim().toLowerCase()),
       );
