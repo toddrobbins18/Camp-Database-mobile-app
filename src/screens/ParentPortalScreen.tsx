@@ -33,7 +33,10 @@ import { fetchPublishedCampUpdate } from '../lib/parentPortalCampUpdates';
 import type { CampAnnouncementContent } from '../components/parentPortal/CampAnnouncement';
 import { ParentPortalSandboxStaffPreview } from '../components/parentPortal/ParentPortalSandboxStaffPreview';
 import { isNestSandboxParentTraining } from '../lib/nestSandboxParentDemo';
-import { resolveParentPortalHeroImageUrl } from '../lib/parentPortalTheme';
+import {
+  hasParentPortalHeroBackground,
+  resolveParentPortalHeroImageSource,
+} from '../lib/parentPortalTheme';
 import { linkFamilyChildrenByGuardianEmail } from '../lib/parentFamilyLink';
 
 export function ParentPortalScreen({ navigation }: { navigation: any }) {
@@ -233,7 +236,8 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
   }
 
   const camperName = (id: string) => campers.find((c) => c.id === id)?.name ?? '—';
-  const heroImageUrl = resolveParentPortalHeroImageUrl(companySlug);
+  const heroBackdrop = hasParentPortalHeroBackground(companySlug);
+  const heroImageSource = resolveParentPortalHeroImageSource(companySlug);
   const sharedProps = {
     campName: companyName,
     contactName,
@@ -245,7 +249,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
     authPickups,
     swimLessons,
     campUpdate,
-    heroImageUrl,
+    heroBackdrop,
     onSaved: loadAll,
     onNavigate: setActiveView,
     camperName,
@@ -263,7 +267,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
       onNavigate={setActiveView}
       onSignOut={handleSignOut}
       showDrawer={false}
-      mainBackdropImageUrl={activeView === 'home' ? heroImageUrl : null}
+      mainBackdropImage={activeView === 'home' ? heroImageSource : null}
     >
       {activeView === 'home' && <ParentHomeView {...sharedProps} />}
       {activeView === 'campers' && <ParentCampersView {...sharedProps} />}

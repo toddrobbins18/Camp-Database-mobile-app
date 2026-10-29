@@ -18,7 +18,10 @@ import {
   fetchSandboxParentDemoRoster,
 } from '../../lib/nestSandboxParentDemo';
 import type { Camper, ParentPortalView } from '../../constants/parentPortalConstants';
-import { resolveParentPortalHeroImageUrl } from '../../lib/parentPortalTheme';
+import {
+  hasParentPortalHeroBackground,
+  resolveParentPortalHeroImageSource,
+} from '../../lib/parentPortalTheme';
 import { PP, ppFont } from '../../lib/parentPortalUi';
 
 type Props = {
@@ -66,7 +69,8 @@ export function ParentPortalSandboxStaffPreview({
     void loadPreviewCampers();
   }, [loadPreviewCampers]);
 
-  const heroImageUrl = resolveParentPortalHeroImageUrl(companySlug);
+  const heroBackdrop = hasParentPortalHeroBackground(companySlug);
+  const heroImageSource = resolveParentPortalHeroImageSource(companySlug);
   const previewFamilyLabel = selectedAccount?.label ?? 'Demo family';
   const contactName = selectedAccount?.guardianName ?? 'Demo parent';
 
@@ -81,7 +85,7 @@ export function ParentPortalSandboxStaffPreview({
     authPickups: [],
     swimLessons: [],
     campUpdate: null,
-    heroImageUrl,
+    heroBackdrop,
     onSaved: loadPreviewCampers,
     onNavigate: setActiveView,
     camperName: (id: string) => campers.find((c) => c.id === id)?.name ?? '—',
@@ -148,7 +152,7 @@ export function ParentPortalSandboxStaffPreview({
           activeView={activeView}
           onNavigate={setActiveView}
           onSignOut={onSignOut}
-          mainBackdropImageUrl={activeView === 'home' ? heroImageUrl : null}
+          mainBackdropImage={activeView === 'home' ? heroImageSource : null}
           embedInParent
         >
           {activeView === 'home' && <ParentHomeView {...sharedProps} />}

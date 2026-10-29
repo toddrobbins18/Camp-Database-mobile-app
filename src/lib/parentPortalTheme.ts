@@ -1,3 +1,4 @@
+import type { ImageSourcePropType } from 'react-native';
 import { CAMP_SLUG } from '../constants/camps';
 
 export const NORTH_SHORE_THEME_COLOR = '#1565C0';
@@ -95,7 +96,30 @@ export const PP_AERIAL_GLASS = {
   borderColor: 'rgba(255,255,255,0.4)',
 };
 
-/** Camp photo for parent portal home — add bundled assets here when available. */
-export function resolveParentPortalHeroImageUrl(_companySlug?: string | null): string | null {
-  return null;
+/** Bundled camp aerial for parent portal login + home — aligned with web `resolveParentPortalHeroImageUrl`. */
+export function resolveParentPortalHeroImageSource(
+  companySlug?: string | null,
+): ImageSourcePropType | null {
+  switch (companySlug) {
+    case CAMP_SLUG.NORTH_SHORE_DAY_CAMP:
+    case CAMP_SLUG.NEST_SANDBOX_DAY_CAMP:
+      return require('../../assets/ns-parent-portal-aerial.jpg');
+    case CAMP_SLUG.TYLER_HILL_CAMP:
+      return require('../../assets/image001.jpg');
+    case CAMP_SLUG.TIMBER_LAKE_CAMP:
+      return require('../../assets/tember-camp.jpeg');
+    case CAMP_SLUG.TIMBER_LAKE_WEST:
+      return require('../../assets/timber-lake-west-bg.jpeg');
+    default:
+      return null;
+  }
+}
+
+/** @deprecated Use resolveParentPortalHeroImageSource; kept for boolean checks during migration. */
+export function resolveParentPortalHeroImageUrl(companySlug?: string | null): string | null {
+  return resolveParentPortalHeroImageSource(companySlug) ? 'local' : null;
+}
+
+export function hasParentPortalHeroBackground(companySlug?: string | null): boolean {
+  return resolveParentPortalHeroImageSource(companySlug) != null;
 }

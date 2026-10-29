@@ -7,6 +7,7 @@ import {
   ScrollView,
   Platform,
   ImageBackground,
+  type ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,7 +34,7 @@ type Props = {
   onOpenDrawer?: () => void;
   showDrawer?: boolean;
   /** Full-bleed camp photo behind main content on home (web parity). */
-  mainBackdropImageUrl?: string | null;
+  mainBackdropImage?: ImageSourcePropType | null;
   /** When nested inside another screen (sandbox staff preview). */
   embedInParent?: boolean;
   children: React.ReactNode;
@@ -52,7 +53,7 @@ export function ParentPortalShell({
   onNavigate,
   onSignOut,
   showDrawer = false,
-  mainBackdropImageUrl,
+  mainBackdropImage,
   embedInParent = false,
   children,
 }: Props) {
@@ -114,9 +115,9 @@ export function ParentPortalShell({
 
   return (
     <Root {...rootProps}>
-      {mainBackdropImageUrl?.trim() ? (
+      {mainBackdropImage ? (
         <ImageBackground
-          source={{ uri: mainBackdropImageUrl }}
+          source={mainBackdropImage}
           style={styles.backdrop}
           imageStyle={styles.backdropImage}
         >

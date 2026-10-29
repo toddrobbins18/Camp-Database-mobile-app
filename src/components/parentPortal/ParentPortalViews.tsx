@@ -44,7 +44,7 @@ export type SharedViewProps = {
   authPickups: AuthorizedPickup[];
   swimLessons: SwimLesson[];
   campUpdate?: CampAnnouncementContent | null;
-  heroImageUrl?: string | null;
+  heroBackdrop?: boolean;
   onSaved: () => void;
   onNavigate: (view: ParentPortalView) => void;
   camperName: (id: string) => string;
@@ -188,7 +188,7 @@ export function ParentHomeView({
   absences,
   swimLessons,
   campUpdate,
-  heroImageUrl,
+  heroBackdrop,
   onNavigate,
   colors,
 }: Pick<
@@ -200,12 +200,12 @@ export function ParentHomeView({
   | 'absences'
   | 'swimLessons'
   | 'campUpdate'
-  | 'heroImageUrl'
+  | 'heroBackdrop'
   | 'onNavigate'
   | 'colors'
 >) {
   const todayIso = todayIsoDate();
-  const hasAerialBg = Boolean(heroImageUrl?.trim());
+  const hasAerialBg = Boolean(heroBackdrop);
   const glass = hasAerialBg;
   const camperName = (id: string) => campers.find((c) => c.id === id)?.name ?? '—';
   const sectionTitleColor = hasAerialBg ? '#fff' : colors.text;
