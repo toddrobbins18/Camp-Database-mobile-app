@@ -68,6 +68,7 @@ import { ParentPortalDashboardScreen } from '../screens/ParentPortalDashboardScr
 import { FrontOfficeDashboardScreen } from '../screens/FrontOfficeDashboardScreen';
 import { TransportAdminScreen } from '../screens/TransportAdminScreen';
 import { GroupBubbleSheetsScreen } from '../screens/GroupBubbleSheetsScreen';
+import { GroupAttendanceScreen } from '../screens/GroupAttendanceScreen';
 
 function DayCampModuleRouter({ route, navigation }: any) {
     const moduleId = route.params?.moduleId;
@@ -118,6 +119,9 @@ function DayCampModuleRouter({ route, navigation }: any) {
     }
     if (moduleId === 'bus-check-ins') {
         return <BusCheckInsScreen navigation={navigation} />;
+    }
+    if (moduleId === 'group-attendance') {
+        return <GroupAttendanceScreen navigation={navigation} />;
     }
     if (moduleId === 'group-bubble-sheets') {
         return <GroupBubbleSheetsScreen navigation={navigation} />;

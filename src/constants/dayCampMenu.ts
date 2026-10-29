@@ -21,6 +21,7 @@ export const FRONT_OFFICE_TRANSPORT_MENU_IDS = new Set([
   'transport-admin',
   'bus-attendance',
   'bus-check-ins',
+  'group-attendance',
   'change-sheets',
   'pending-transport-changes',
   'group-bubble-sheets',
@@ -105,6 +106,14 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
       icon: 'time-outline',
       screen: 'DayCampModule',
       params: { moduleId: 'bus-check-ins' },
+    },
+    {
+      key: 'group-attendance',
+      menuId: 'group-attendance',
+      label: 'Group Attendance',
+      icon: 'people-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'group-attendance' },
     },
     {
       key: 'group-bubble-sheets',
@@ -307,6 +316,10 @@ export const DAY_CAMP_MODULE_COPY: Record<string, { title: string; description: 
   'group-bubble-sheets': {
     title: 'Group Bubble Sheets',
     description: 'Print team attendance sheets filtered by enrollment week.',
+  },
+  'group-attendance': {
+    title: 'Group Attendance',
+    description: 'Mark present or absent by group with multi-select bulk actions.',
   },
   'transport-admin': {
     title: 'Transport Admin',

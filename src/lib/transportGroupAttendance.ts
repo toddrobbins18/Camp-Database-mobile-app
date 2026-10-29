@@ -21,6 +21,103 @@ export function groupAttendanceRecordKey(groupName: string, camperName: string):
   return `${groupName.trim().toLowerCase()}|${normCamperName(camperName)}`;
 }
 
+export function parseGroupAttendanceMap(raw: unknown): GroupAttendanceMap {
+  if (!raw || typeof raw !== 'object') return {};
+  const obj = raw as Record<string, unknown>;
+  const map: GroupAttendanceMap = {};
+  const source =
+    obj.records && typeof obj.records === 'object' && !Array.isArray(obj.records)
+      ? (obj.records as Record<string, unknown>)
+      : obj;
+  for (const [key, val] of Object.entries(source)) {
+    if (key === 'submittedAt') continue;
+    if (val === 'present' || val === 'absent') map[key] = val;
+  }
+  return map;
+}
+
+export async function loadGroupAttendance(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+  attendanceDate: string,
+): Promise<{ records: GroupAttendanceMap; submittedAt: string | null }> {
+  const { data, error } = await supabase
+    .from('transport_group_attendance' as 'profiles')
+    .select('data, submitted_at')
+    .eq('company_id', companyId)
+    .eq('season', season)
+    .eq('attendance_date', attendanceDate)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[Transport] Load group attendance failed:', error.message);
+    return { records: {}, submittedAt: null };
+  }
+
+  const payload = (data?.data ?? {}) as Record<string, unknown>;
+  return {
+    records: parseGroupAttendanceMap(payload),
+    submittedAt: (data?.submitted_at as string | null) ?? null,
+  };
+}
+
+export async function saveGroupAttendance(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+  attendanceDate: string,
+  records: GroupAttendanceMap,
+  options?: { submitted?: boolean; userId?: string | null },
+): Promise<boolean> {
+  const hasRecords = Object.keys(records).length > 0;
+  const now = new Date().toISOString();
+
+  if (!hasRecords && !options?.submitted) {
+    const { error } = await supabase
+      .from('transport_group_attendance' as 'profiles')
+      .delete()
+      .eq('company_id', companyId)
+      .eq('season', season)
+      .eq('attendance_date', attendanceDate);
+    if (error) {
+      console.error('[Transport] Clear group attendance failed:', error.message);
+      return false;
+    }
+    return true;
+  }
+
+  const payload: Record<string, unknown> = {
+    company_id: companyId,
+    season,
+    attendance_date: attendanceDate,
+    data: { records } as never,
+    updated_by: options?.userId ?? null,
+    updated_at: now,
+  };
+  if (options?.submitted) {
+    payload.submitted_at = now;
+    payload.submitted_by = options.userId ?? null;
+  }
+
+  const { error } = await supabase.from('transport_group_attendance' as 'profiles').upsert(payload as never);
+  if (error) {
+    console.error('[Transport] Save group attendance failed:', error.message);
+    return false;
+  }
+  return true;
+}
+
+export function groupAttendanceStatusLabel(
+  key: string,
+  map: GroupAttendanceMap,
+): 'Present' | 'Absent' | 'Unmarked' {
+  const s = map[key];
+  if (s === 'present') return 'Present';
+  if (s === 'absent') return 'Absent';
+  return 'Unmarked';
+}
+
 export async function loadGroupRoster(
   supabase: SupabaseClient,
   companyId: string,
