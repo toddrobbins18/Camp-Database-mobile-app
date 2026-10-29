@@ -2,7 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Pressable, ScrollView, Platform } from 'react-native';
+import {
+    View,
+    Text,
+    TextInput,
+    StyleSheet,
+    TouchableOpacity,
+    Pressable,
+    ScrollView,
+    Platform,
+    ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCompany } from '../contexts/CompanyContext';
 import { isNestSandboxCompany } from '../constants/camps';
@@ -148,6 +158,7 @@ import { useMenuAccess } from '../hooks/useMenuAccess';
 import { useBusCounselorNavScope } from '../hooks/useBusCounselorNavScope';
 import { withMenuPermission } from '../components/MenuPermissionGate';
 import { useMessagesRealtimeSync, useInboxUnreadCount } from '../api/messages';
+import { useInboxNotificationDeepLink } from '../lib/inboxNotificationNavigation';
 import {
     registerInboxNotificationPresentation,
     ensureInboxNotificationChannel,
@@ -227,7 +238,7 @@ const CustomDrawerContent = (props: any) => {
     const [parentPortalOpen, setParentPortalOpen] = useState(true);
     const { data: roleData } = useRole();
     const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp, isTimberLakeWest, isDayCamp } = useCompany();
-    const { hasMenuAccess } = useMenuAccess();
+    const { hasMenuAccess, isLoading: menuAccessLoading } = useMenuAccess();
     const { allowMenuItem } = useBusCounselorNavScope();
     const [showCampPicker, setShowCampPicker] = useState(false);
     const [showYearPicker, setShowYearPicker] = useState(false);
@@ -617,6 +628,14 @@ const CustomDrawerContent = (props: any) => {
                     </View>
                 )}
 
+                {menuAccessLoading && isDayCamp ? (
+                    <ActivityIndicator
+                        size="small"
+                        color={menuTheme.menuItemInactive}
+                        style={{ marginVertical: 12, alignSelf: 'center' }}
+                    />
+                ) : null}
+
                 {(mainMenuItems.length > 0 || !isDayCamp) && (
                     <>
                         <Text style={[styles.sectionHeader, { color: menuTheme.sectionHeader }]}>Main Menu</Text>
@@ -916,6 +935,11 @@ const MainAppNavigator = () => {
 };
 
 // Root Navigator (Stack)
+function InboxNotificationDeepLink({ navigationRef }: { navigationRef: ReturnType<typeof useNavigationContainerRef> }) {
+    useInboxNotificationDeepLink(navigationRef);
+    return null;
+}
+
 export const AppNavigator = () => {
     const navigationRef = useNavigationContainerRef();
     const [initialRouteName, setInitialRouteName] = useState<'Login' | 'MainApp' | null>(null);
@@ -938,6 +962,7 @@ export const AppNavigator = () => {
 
     return (
         <NavigationContainer ref={navigationRef}>
+            <InboxNotificationDeepLink navigationRef={navigationRef} />
             <CampSwitchNavigationGuard navigationRef={navigationRef} />
             <Stack.Navigator
                 screenOptions={{

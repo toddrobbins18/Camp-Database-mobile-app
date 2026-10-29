@@ -46,22 +46,39 @@ export const useRole = (overrideCompanyId?: string | null) => {
                 targetCompanyId = profile?.company_id ?? null;
             }
 
-            const { data: allRoleRows, error } = await supabase
-                .from('user_roles')
-                .select('role, company_id')
-                .eq('user_id', userId);
+            const [{ data: allRoleRows, error }, { data: profileRow }] = await Promise.all([
+                supabase.from('user_roles').select('role, company_id').eq('user_id', userId),
+                supabase.from('profiles').select('company_id, role').eq('id', userId).maybeSingle(),
+            ]);
 
             if (error) {
                 console.error('Error fetching role:', error);
                 return null;
             }
 
-            const globalRoles = [...new Set((allRoleRows ?? []).map((r) => r.role))];
-            const roles = targetCompanyId
-                ? (allRoleRows ?? [])
-                      .filter((r) => r.company_id === targetCompanyId)
-                      .map((r) => r.role)
+            let globalRoles = [...new Set((allRoleRows ?? []).map((r) => r.role))];
+            if (globalRoles.length === 0 && profileRow?.role) {
+                globalRoles = [String(profileRow.role)];
+            }
+
+            let roles: string[] = targetCompanyId
+                ? [
+                      ...new Set(
+                          (allRoleRows ?? [])
+                              .filter(
+                                  (r) =>
+                                      !r.company_id ||
+                                      r.company_id === targetCompanyId ||
+                                      (profileRow?.company_id === targetCompanyId && !r.company_id),
+                              )
+                              .map((r) => r.role),
+                      ),
+                  ]
                 : globalRoles;
+
+            if (roles.length === 0 && profileRow?.role && profileRow.company_id === targetCompanyId) {
+                roles = [...roles, String(profileRow.role)];
+            }
 
             // Match web AuthContext: admin/super_admin flags use roles across all companies.
             const isSuperAdmin = globalRoles.includes('super_admin');

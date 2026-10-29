@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
-import { useRolePermissions, useUpdateRolePermission } from '../api/permissions';
+import { useRolePermissionsMatrix, useUpdateRolePermission } from '../api/permissions';
 import { getDayCampRolePermissionMenuItems } from '../constants/dayCampMenu';
 
 interface Permission {
@@ -388,7 +388,7 @@ export const RolePermissionsScreen = ({ navigation }: any) => {
     ];
 
     // Fetch role permissions from Supabase (company-scoped, like web)
-    const { data: dbPermissionsData, isLoading: permLoading } = useRolePermissions(companyId);
+    const { data: dbPermissionsData, isLoading: permLoading } = useRolePermissionsMatrix(companyId);
     const dbPermissions = dbPermissionsData ?? EMPTY_DB_PERMISSIONS;
     const updatePermMutation = useUpdateRolePermission();
 

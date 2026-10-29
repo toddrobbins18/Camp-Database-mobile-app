@@ -13,25 +13,53 @@ export interface RolePermission {
     created_at: string;
 }
 
-export const useRolePermissions = (companyId: string | null) => {
+/** Admin Role Permissions screen — full matrix for one camp. */
+export const useRolePermissionsMatrix = (companyId: string | null) => {
     return useQuery({
-        queryKey: ['role_permissions', companyId],
+        queryKey: ['role_permissions_matrix', companyId],
         enabled: !!companyId,
         queryFn: async () => {
             if (!companyId) return [] as RolePermission[];
-            const cacheKey = `role_permissions:${companyId}`;
+            const { data, error } = await supabase
+                .from('role_permissions')
+                .select('*')
+                .eq('company_id', companyId)
+                .order('role', { ascending: true });
+            if (error) throw error;
+            return (data || []) as RolePermission[];
+        },
+    });
+};
+
+/** Match web AuthContext: load grants for the user’s roles, then scope to active camp. */
+export const useRolePermissions = (companyId: string | null, roles: string[]) => {
+    const rolesKey = roles.length ? [...roles].sort().join(',') : '';
+    return useQuery({
+        queryKey: ['role_permissions', companyId, rolesKey],
+        enabled: !!companyId && roles.length > 0,
+        staleTime: 60_000,
+        queryFn: async () => {
+            if (!companyId || !roles.length) return [] as RolePermission[];
+            const cacheKey = `role_permissions:${companyId}:${rolesKey}`;
+            const online = await isOnlineNow();
             try {
                 const { data, error } = await supabase
                     .from('role_permissions')
-                    .select('*')
-                    .eq('company_id', companyId)
-                    .order('role', { ascending: true });
+                    .select('id, company_id, role, menu_item, can_access, created_at')
+                    .eq('can_access', true)
+                    .in('role', roles as any);
                 if (error) throw error;
-                const rows = (data || []) as RolePermission[];
+                const rows = ((data || []) as RolePermission[]).filter(
+                    (p) => p.company_id === companyId && p.can_access === true,
+                );
                 await setCachedJson(cacheKey, rows);
                 return rows;
-            } catch {
-                return (await getCachedJson<RolePermission[]>(cacheKey)) || [];
+            } catch (err) {
+                if (online) {
+                    console.error('[role_permissions] fetch failed:', err);
+                    throw err;
+                }
+                return (await getCachedJson<RolePermission[]>(cacheKey)) ?? [];
             }
         },
     });

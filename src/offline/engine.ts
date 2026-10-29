@@ -169,6 +169,15 @@ export async function getCachedJson<T>(key: string): Promise<T | null> {
     }
 }
 
+export async function deleteCachedJsonByPrefix(prefix: string): Promise<void> {
+    try {
+        const db = await getDb();
+        await db.runAsync('DELETE FROM offline_cache WHERE key LIKE ?', [`${prefix}%`]);
+    } catch {
+        // Cache optional (e.g. web).
+    }
+}
+
 export async function safeGetCachedJson<T>(key: string): Promise<T | null> {
     try {
         return await getCachedJson<T>(key);
@@ -445,7 +454,11 @@ async function executeAction(action: SyncAction, payload: any): Promise<void> {
     }
     if (action === 'messages.mark_read') {
         const { id } = payload ?? {};
-        const { error } = await supabase.from('messages').update({ read: true }).eq('id', id);
+        const readAt = new Date().toISOString();
+        const { error } = await supabase
+            .from('messages')
+            .update({ read: true, read_at: readAt })
+            .eq('id', id);
         if (error) throw error;
         return;
     }

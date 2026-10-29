@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { isNestSandboxCompany } from '../constants/camps';
 
 export const MESSAGE_MEDIA_BUCKET = 'message-media';
 
@@ -8,6 +7,8 @@ export const MESSAGE_IMAGE_MIME_TYPES = [
   'image/png',
   'image/webp',
   'image/gif',
+  'image/heic',
+  'image/heif',
 ] as const;
 
 export const MESSAGE_VIDEO_MIME_TYPES = [
@@ -17,7 +18,31 @@ export const MESSAGE_VIDEO_MIME_TYPES = [
   'video/x-m4v',
 ] as const;
 
-export type MessageKind = 'text' | 'image' | 'video';
+export const MESSAGE_AUDIO_MIME_TYPES = [
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/x-m4a',
+  'audio/wav',
+  'audio/webm',
+  'audio/ogg',
+  'audio/aac',
+] as const;
+
+export const MESSAGE_FILE_MIME_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/csv',
+  'application/zip',
+  'application/x-zip-compressed',
+] as const;
+
+export type MessageKind = 'text' | 'image' | 'video' | 'audio' | 'file';
 
 export type PickedMessageMedia = {
   uri: string;
@@ -26,24 +51,80 @@ export type PickedMessageMedia = {
   kind: MessageKind;
 };
 
-export function messageMediaEnabledForCamp(slug: string | null | undefined): boolean {
-  return isNestSandboxCompany(slug);
+export function messageMediaEnabledForCamp(_slug: string | null | undefined): boolean {
+  return true;
 }
 
-export function classifyMessageMediaMime(mimeType: string): MessageKind | null {
-  if (MESSAGE_IMAGE_MIME_TYPES.includes(mimeType as (typeof MESSAGE_IMAGE_MIME_TYPES)[number])) {
-    return 'image';
+const EXTENSION_KIND: { ext: string; kind: MessageKind }[] = [
+  { ext: 'jpg', kind: 'image' },
+  { ext: 'jpeg', kind: 'image' },
+  { ext: 'png', kind: 'image' },
+  { ext: 'webp', kind: 'image' },
+  { ext: 'gif', kind: 'image' },
+  { ext: 'heic', kind: 'image' },
+  { ext: 'mp4', kind: 'video' },
+  { ext: 'mov', kind: 'video' },
+  { ext: 'm4v', kind: 'video' },
+  { ext: 'mp3', kind: 'audio' },
+  { ext: 'm4a', kind: 'audio' },
+  { ext: 'wav', kind: 'audio' },
+  { ext: 'pdf', kind: 'file' },
+  { ext: 'doc', kind: 'file' },
+  { ext: 'docx', kind: 'file' },
+  { ext: 'xls', kind: 'file' },
+  { ext: 'xlsx', kind: 'file' },
+  { ext: 'ppt', kind: 'file' },
+  { ext: 'pptx', kind: 'file' },
+  { ext: 'txt', kind: 'file' },
+  { ext: 'csv', kind: 'file' },
+  { ext: 'zip', kind: 'file' },
+];
+
+function kindFromFileName(fileName: string): MessageKind | null {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  if (!ext) return null;
+  return EXTENSION_KIND.find((e) => e.ext === ext)?.kind ?? null;
+}
+
+export function classifyMessageMediaMime(mimeType: string, fileName?: string): MessageKind | null {
+  const mime = mimeType?.toLowerCase() ?? '';
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  if (MESSAGE_FILE_MIME_TYPES.includes(mime as (typeof MESSAGE_FILE_MIME_TYPES)[number])) {
+    return 'file';
   }
-  if (MESSAGE_VIDEO_MIME_TYPES.includes(mimeType as (typeof MESSAGE_VIDEO_MIME_TYPES)[number])) {
-    return 'video';
-  }
+  if (fileName) return kindFromFileName(fileName);
   return null;
 }
 
-export function messagePreviewLabel(kind: MessageKind | string | null | undefined, content: string): string {
+export function messagePreviewLabel(
+  kind: MessageKind | string | null | undefined,
+  content: string,
+  fileName?: string | null,
+): string {
   if (kind === 'image') return content.trim() ? content.trim() : 'Photo';
   if (kind === 'video') return content.trim() ? content.trim() : 'Video';
+  if (kind === 'audio') return content.trim() ? content.trim() : 'Audio';
+  if (kind === 'file') {
+    if (content.trim()) return content.trim();
+    return fileName?.trim() || 'Attachment';
+  }
   return content;
+}
+
+export function defaultMediaMessageSubject(kind: MessageKind): string {
+  switch (kind) {
+    case 'video':
+      return 'Video';
+    case 'audio':
+      return 'Audio';
+    case 'file':
+      return 'Attachment';
+    case 'image':
+    default:
+      return 'Photo';
+  }
 }
 
 export function buildMessageMediaStoragePath(options: {
@@ -73,7 +154,7 @@ export async function uploadMessageMediaFromUri(
     const { error } = await supabase.storage.from(MESSAGE_MEDIA_BUCKET).upload(path, body, {
       cacheControl: '3600',
       upsert: false,
-      contentType: mimeType,
+      contentType: mimeType || 'application/octet-stream',
     });
     if (error) {
       console.error('[messageMedia] upload failed:', error.message);
@@ -163,4 +244,68 @@ export async function sendDirectMessageMedia(
   }
 
   return { error: null };
+}
+
+export async function pickMessageMediaFromDevice(): Promise<PickedMessageMedia | null> {
+  const DocumentPicker = await import('expo-document-picker');
+  const result = await DocumentPicker.getDocumentAsync({
+    type: ['image/*', 'video/*', 'audio/*', 'application/pdf', '*/*'],
+    copyToCacheDirectory: true,
+  });
+  if (result.canceled || !result.assets?.[0]) return null;
+  const asset = result.assets[0];
+  const fileName = asset.name ?? `media-${Date.now()}`;
+  const mimeType = asset.mimeType ?? 'application/octet-stream';
+  const kind = classifyMessageMediaMime(mimeType, fileName);
+  if (!kind) return null;
+  return { uri: asset.uri, mimeType, fileName, kind };
+}
+
+export async function sendGroupMessageMedia(
+  supabase: SupabaseClient,
+  options: {
+    companyId: string;
+    groupId: string;
+    senderId: string;
+    caption: string;
+    media: PickedMessageMedia;
+  },
+): Promise<{ error: string | null; preview: string }> {
+  const messageId = newMessageId();
+  const storagePath = buildMessageMediaStoragePath({
+    companyId: options.companyId,
+    scope: 'group',
+    scopeId: options.groupId,
+    messageId,
+    fileName: options.media.fileName,
+  });
+
+  const upload = await uploadMessageMediaFromUri(
+    supabase,
+    storagePath,
+    options.media.uri,
+    options.media.mimeType,
+  );
+  if (upload.error) return { error: upload.error, preview: '' };
+
+  const caption = options.caption.trim();
+  const { error } = await supabase.from('group_messages').insert({
+    id: messageId,
+    group_id: options.groupId,
+    sender_id: options.senderId,
+    content: caption,
+    message_kind: options.media.kind,
+    media_storage_path: storagePath,
+    media_mime: options.media.mimeType,
+    media_file_name: options.media.fileName,
+  });
+
+  if (error) {
+    console.error('[messageMedia] group insert failed:', error.message);
+    await supabase.storage.from(MESSAGE_MEDIA_BUCKET).remove([storagePath]);
+    return { error: 'Could not send media message. Please try again.', preview: '' };
+  }
+
+  const preview = messagePreviewLabel(options.media.kind, caption, options.media.fileName);
+  return { error: null, preview };
 }

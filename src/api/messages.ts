@@ -6,6 +6,7 @@ import { showNewInboxMessageNotification } from '../lib/inboxLocalNotification';
 import { canonicalProfileUuid, fetchMessageProfileLabels, rowParticipantIds } from '../lib/messageProfiles';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 import { filterMessagesForCampInbox } from '../lib/messageInboxFilters';
+import { threadIdFromMessageRow } from '../lib/inboxNotificationNavigation';
 
 async function attachParticipantProfiles(
   rows: Record<string, unknown>[],
@@ -186,6 +187,48 @@ async function enrichInboxWithThreadPreview(
   });
 }
 
+/** Sent inbox list: show read status from your latest reply in the thread (not stale root row). */
+async function enrichSentWithOutboundReplyReceipt(
+  rows: Message[],
+  senderUserId: string,
+): Promise<Message[]> {
+  if (!rows.length) return rows;
+  const parentIds = rows.map((r) => r.id);
+  const { data: childRows, error } = await supabase
+    .from('messages')
+    .select('parent_message_id, sender_id, read, read_at, created_at')
+    .in('parent_message_id', parentIds)
+    .order('created_at', { ascending: true });
+
+  if (error || !childRows?.length) return rows;
+
+  const byParent = new Map<string, typeof childRows>();
+  for (const c of childRows) {
+    const pid = String(c.parent_message_id ?? '');
+    if (!pid) continue;
+    const list = byParent.get(pid) ?? [];
+    list.push(c);
+    byParent.set(pid, list);
+  }
+
+  return rows.map((m) => {
+    const list = byParent.get(m.id) ?? [];
+    let latestOutbound: (typeof childRows)[0] | undefined;
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i].sender_id === senderUserId) {
+        latestOutbound = list[i];
+        break;
+      }
+    }
+    if (!latestOutbound) return m;
+    return {
+      ...m,
+      read: latestOutbound.read === true,
+      read_at: latestOutbound.read_at ?? null,
+    };
+  });
+}
+
 /** Replies in a 1:1 thread — RLS allows rows where user is sender or recipient. */
 export async function fetchMessageThread(
   parentId: string,
@@ -204,6 +247,42 @@ export async function fetchMessageThread(
   return attachParticipantProfiles((data || []) as Record<string, unknown>[], companyId);
 }
 
+export function messageThreadQueryKey(parentId: string, companyId: string | null | undefined) {
+  return ['message_thread', parentId, companyId ?? ''] as const;
+}
+
+/** Open DM thread — polled while active so sender sees read receipts after recipient reads on web. */
+export function useMessageThread(
+  parentId: string | null,
+  companyId: string | null | undefined,
+  userId: string | null,
+) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!parentId) return;
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'active') {
+        void queryClient.refetchQueries({
+          queryKey: messageThreadQueryKey(parentId, companyId),
+        });
+      }
+    });
+    return () => sub.remove();
+  }, [parentId, companyId, queryClient]);
+
+  return useQuery({
+    queryKey: parentId
+      ? messageThreadQueryKey(parentId, companyId)
+      : (['message_thread', 'disabled'] as const),
+    queryFn: () => fetchMessageThread(parentId!, companyId),
+    enabled: !!parentId && !!userId,
+    staleTime: 0,
+    refetchInterval: parentId ? 2_500 : false,
+    refetchIntervalInBackground: true,
+  });
+}
+
 // ===================== MESSAGES =====================
 
 export interface Message {
@@ -213,6 +292,7 @@ export interface Message {
     subject: string;
     content: string;
     read: boolean;
+    read_at?: string | null;
     created_at: string;
     sender_display_name?: string | null;
     sender?: { full_name?: string; email?: string };
@@ -264,7 +344,10 @@ async function applyQueuedMessageOps(rows: Message[], userId: string, kind: 'inb
             const id = (q.payload as any)?.id as string | undefined;
             if (!id) continue;
             const idx = out.findIndex((m) => m.id === id);
-            if (idx >= 0) out[idx] = { ...out[idx], read: true };
+            if (idx >= 0) {
+                const readAt = new Date().toISOString();
+                out[idx] = { ...out[idx], read: true, read_at: readAt };
+            }
         }
     }
     return out;
@@ -323,24 +406,24 @@ export function useMessagesRealtimeSync(userId: string | null) {
     useEffect(() => {
         if (!userId) return;
 
-        const invalidateInbox = () => {
-            queryClient.invalidateQueries({
+        const refetchInbox = () => {
+            void queryClient.refetchQueries({
                 predicate: (q) =>
                     Array.isArray(q.queryKey) &&
                     q.queryKey[0] === 'messages' &&
                     q.queryKey[1] === userId,
             });
         };
-        const invalidateSent = () => {
-            queryClient.invalidateQueries({
+        const refetchSent = () => {
+            void queryClient.refetchQueries({
                 predicate: (q) =>
                     Array.isArray(q.queryKey) &&
                     q.queryKey[0] === 'messages_sent' &&
                     q.queryKey[1] === userId,
             });
         };
-        const invalidateUnread = () => {
-            queryClient.invalidateQueries({ queryKey: inboxUnreadCountQueryKey(userId) });
+        const refetchUnread = () => {
+            void queryClient.refetchQueries({ queryKey: inboxUnreadCountQueryKey(userId) });
         };
 
         const involvesUser = (
@@ -370,9 +453,13 @@ export function useMessagesRealtimeSync(userId: string | null) {
                 },
                 (payload) => {
                     const newRow = payload.new as {
+                        id?: string;
                         recipient_id?: string;
                         sender_id?: string;
+                        parent_message_id?: string | null;
+                        group_id?: string | null;
                         read?: boolean;
+                        read_at?: string | null;
                         subject?: string;
                         content?: string;
                     } | null;
@@ -381,9 +468,26 @@ export function useMessagesRealtimeSync(userId: string | null) {
                     const touches = involvesUser(newRow) || involvesUser(oldRow);
 
                     if (touches) {
-                        invalidateInbox();
-                        invalidateSent();
-                        invalidateUnread();
+                        refetchInbox();
+                        refetchSent();
+                        refetchUnread();
+                    }
+
+                    if (
+                        payload.eventType === 'UPDATE' &&
+                        newRow?.sender_id != null &&
+                        String(newRow.sender_id) === userId &&
+                        (newRow.read === true || newRow.read_at)
+                    ) {
+                        const pid = newRow.parent_message_id;
+                        if (pid) {
+                            void queryClient.refetchQueries({
+                                predicate: (q) =>
+                                    Array.isArray(q.queryKey) &&
+                                    q.queryKey[0] === 'message_thread' &&
+                                    q.queryKey[1] === pid,
+                            });
+                        }
                     }
 
                     if (
@@ -392,9 +496,19 @@ export function useMessagesRealtimeSync(userId: string | null) {
                         String(newRow.recipient_id) === userId &&
                         !newRow.read
                     ) {
+                        const threadId = threadIdFromMessageRow(newRow);
                         void showNewInboxMessageNotification(
                             String(newRow.subject || 'New message'),
                             String(newRow.content || ''),
+                            newRow.id && threadId
+                                ? {
+                                      messageId: String(newRow.id),
+                                      threadId,
+                                      ...(newRow.group_id
+                                          ? { groupId: String(newRow.group_id) }
+                                          : {}),
+                                  }
+                                : undefined,
                         );
                     }
                 },
@@ -410,19 +524,19 @@ export function useMessagesRealtimeSync(userId: string | null) {
         if (!userId) return;
         const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
             if (next === 'active') {
-                queryClient.invalidateQueries({
+                void queryClient.refetchQueries({
                     predicate: (q) =>
                         Array.isArray(q.queryKey) &&
                         q.queryKey[0] === 'messages' &&
                         q.queryKey[1] === userId,
                 });
-                queryClient.invalidateQueries({
+                void queryClient.refetchQueries({
                     predicate: (q) =>
                         Array.isArray(q.queryKey) &&
                         q.queryKey[0] === 'messages_sent' &&
                         q.queryKey[1] === userId,
                 });
-                queryClient.invalidateQueries({ queryKey: inboxUnreadCountQueryKey(userId) });
+                void queryClient.refetchQueries({ queryKey: inboxUnreadCountQueryKey(userId) });
             }
         });
         return () => sub.remove();
@@ -464,9 +578,8 @@ export const useMessages = (userId: string | null, companyId: string | null | un
             }
         },
         enabled: !!userId,
-        staleTime: 8000,
-        /** Realtime subscriptions can flake on mobile; polls like unread count. */
-        refetchInterval: 20_000,
+        staleTime: 2_000,
+        refetchInterval: 12_000,
         refetchIntervalInBackground: true,
     });
 };
@@ -484,7 +597,8 @@ export const useSentMessages = (userId: string | null, companyId: string | null 
                     .is('parent_message_id', null)
                     .order('created_at', { ascending: false });
                 if (error) throw error;
-                const rows = await attachParticipantProfiles((data || []) as Record<string, unknown>[], companyId);
+                let rows = await attachParticipantProfiles((data || []) as Record<string, unknown>[], companyId);
+                rows = await enrichSentWithOutboundReplyReceipt(rows, userId);
                 await setCachedJson(messagesCacheKey('sent', userId, companyId), rows);
                 return await applyQueuedMessageOps(rows, userId, 'sent');
             } catch {
@@ -493,8 +607,8 @@ export const useSentMessages = (userId: string | null, companyId: string | null 
             }
         },
         enabled: !!userId,
-        staleTime: 8000,
-        refetchInterval: 20_000,
+        staleTime: 2_000,
+        refetchInterval: 12_000,
         refetchIntervalInBackground: true,
     });
 };
@@ -619,11 +733,9 @@ export const useMarkMessageRead = () => {
     return useMutation({
         mutationFn: async (messageId: string) => {
             if (await isOnlineNow()) {
-                const { error } = await supabase
-                    .from('messages')
-                    .update({ read: true })
-                    .eq('id', messageId);
-                if (error) throw error;
+                const { markMessageRead } = await import('../lib/messageReadReceipts');
+                const { error } = await markMessageRead(supabase, messageId);
+                if (error) throw new Error(error);
             } else {
                 await enqueueSync('messages.mark_read', { id: messageId });
             }

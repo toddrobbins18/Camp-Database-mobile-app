@@ -16,6 +16,7 @@ import {
     isCampSeason,
 } from '../constants/seasonConstants';
 import { invalidateCampScopedQueries } from '../lib/queryClient';
+import { deleteCachedJsonByPrefix } from '../offline/engine';
 
 /** Persists in-session camp switch (cleared on bootstrap bump). */
 const SUPER_ADMIN_COMPANY_PREFERENCE_KEY = '@the_nest_active_company_id';
@@ -193,6 +194,7 @@ export const CompanyProvider = ({ children }: CompanyProviderProps) => {
                 if (profileError) throw profileError;
 
                 setProfile(profileData);
+                await deleteCachedJsonByPrefix('role_permissions:');
 
                 const { data: roleData } = await supabase
                     .from('user_roles')

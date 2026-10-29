@@ -2,86 +2,66 @@ import { useCallback, useMemo } from 'react';
 import { useCompany } from '../contexts/CompanyContext';
 import { useRolePermissions } from '../api/permissions';
 import { useRole } from './useRole';
+import {
+  buildCompanyPermissionMap,
+  hasMenuPermissionWithAliases,
+} from '../lib/menuPermissionAliases';
 
 /** Match web ProtectedRoute + AppSidebar: role_permissions per company. */
 export function useMenuAccess() {
-    const { companyId, isSuperAdmin: isSuperAdminCompany } = useCompany();
-    const { data: roleData } = useRole();
-    const { data: rolePermissions = [], isLoading: permissionsLoading } = useRolePermissions(companyId);
+  const { companyId, isSuperAdmin: isSuperAdminCompany } = useCompany();
+  const { data: roleData } = useRole();
+  /** Same as web AuthContext: union permissions for every role the user holds (any camp). */
+  const menuRoles = roleData?.globalRoles ?? roleData?.roles ?? [];
+  const { data: rolePermissions = [], isLoading: permissionsLoading } = useRolePermissions(
+    companyId,
+    menuRoles,
+  );
+  const isSuperAdmin = isSuperAdminCompany || (roleData?.isSuperAdmin ?? false);
+  const isRoleLoaded = !!roleData;
 
-    const menuRoles = roleData?.globalRoles ?? roleData?.roles ?? [];
-    const isSuperAdmin = isSuperAdminCompany || (roleData?.isSuperAdmin ?? false);
-    const isRoleLoaded = !!roleData;
+  const isLoading = !isRoleLoaded || permissionsLoading;
 
-    const isLoading = !isRoleLoaded || permissionsLoading;
+  const permissionMap = useMemo(() => {
+    if (!companyId || menuRoles.length === 0) return {};
+    return buildCompanyPermissionMap(rolePermissions, companyId, menuRoles);
+  }, [companyId, rolePermissions, menuRoles]);
 
-    const hasMenuAccess = useCallback(
-        (menuItem: string) => {
-            if (!isRoleLoaded) return true;
-            if (isSuperAdmin) return true;
-            if (!companyId) return false;
-            if (menuRoles.length === 0) return false;
+  const hasMenuAccess = useCallback(
+    (menuItem: string) => {
+      // Match web useDayCampMenuVisibility: while auth/permissions load, don't hide the drawer.
+      if (isLoading) return true;
+      if (isSuperAdmin) return true;
+      if (!companyId) return false;
+      // Web shows full menu when userRolesLength === 0 (role row missing / not synced yet).
+      if (menuRoles.length === 0) return true;
 
-            const hasPerm = rolePermissions.some(
-                (perm) =>
-                    perm.company_id === companyId &&
-                    perm.can_access === true &&
-                    menuRoles.includes(String(perm.role)) &&
-                    perm.menu_item === menuItem,
-            );
-            if (hasPerm) return true;
-            // Legacy North Shore swim menu IDs → unified Swim Program.
-            if (menuItem === 'swim' || menuItem === 'swim-bracelets' || menuItem === 'swim-progress') {
-                return rolePermissions.some(
-                    (perm) =>
-                        perm.company_id === companyId &&
-                        perm.can_access === true &&
-                        menuRoles.includes(String(perm.role)) &&
-                        (perm.menu_item === 'swim' ||
-                            perm.menu_item === 'swim-bracelets' ||
-                            perm.menu_item === 'swim-progress'),
-                );
-            }
-            // Match web ProtectedRoute: Portal Dashboard uses parent-portal permission.
-            if (menuItem === 'parent-portal-dashboard') {
-                return rolePermissions.some(
-                    (perm) =>
-                        perm.company_id === companyId &&
-                        perm.can_access === true &&
-                        menuRoles.includes(String(perm.role)) &&
-                        perm.menu_item === 'parent-portal',
-                );
-            }
-            // Match web: Bus Attendance allowed when Transportation is enabled for the role.
-            if (
-                menuItem === 'bus-attendance' ||
-                menuItem === 'bus-check-ins' ||
-                menuItem === 'group-attendance' ||
-                menuItem === 'group-bubble-sheets' ||
-                menuItem === 'change-sheets' ||
-                menuItem === 'pending-transport-changes' ||
-                menuItem === 'transport-admin' ||
-                menuItem === 'front-office'
-            ) {
-                return rolePermissions.some(
-                    (perm) =>
-                        perm.company_id === companyId &&
-                        perm.can_access === true &&
-                        menuRoles.includes(String(perm.role)) &&
-                        perm.menu_item === 'transportation',
-                );
-            }
-            return false;
-        },
-        [isRoleLoaded, isSuperAdmin, companyId, menuRoles, rolePermissions],
-    );
+      if (hasMenuPermissionWithAliases(permissionMap, menuItem)) return true;
 
-    return useMemo(
-        () => ({
-            hasMenuAccess,
-            isLoading,
-            isRoleLoaded,
-        }),
-        [hasMenuAccess, isLoading, isRoleLoaded],
-    );
+      if (
+        menuItem === 'bus-attendance' ||
+        menuItem === 'bus-check-ins' ||
+        menuItem === 'group-attendance' ||
+        menuItem === 'group-bubble-sheets' ||
+        menuItem === 'change-sheets' ||
+        menuItem === 'pending-transport-changes' ||
+        menuItem === 'transport-admin' ||
+        menuItem === 'front-office'
+      ) {
+        return hasMenuPermissionWithAliases(permissionMap, 'transportation');
+      }
+
+      return false;
+    },
+    [isLoading, isSuperAdmin, companyId, menuRoles, permissionMap],
+  );
+
+  return useMemo(
+    () => ({
+      hasMenuAccess,
+      isLoading,
+      isRoleLoaded,
+    }),
+    [hasMenuAccess, isLoading, isRoleLoaded],
+  );
 }

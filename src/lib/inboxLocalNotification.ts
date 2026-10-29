@@ -37,8 +37,18 @@ export async function requestInboxNotificationPermission(): Promise<boolean> {
     return status === 'granted';
 }
 
+export type InboxPushData = {
+    messageId: string;
+    threadId: string;
+    groupId?: string;
+};
+
 /** Fire a local notification when the server inserts a row for this user (Realtime path). */
-export async function showNewInboxMessageNotification(title: string, bodySnippet: string): Promise<void> {
+export async function showNewInboxMessageNotification(
+    title: string,
+    bodySnippet: string,
+    data?: InboxPushData,
+): Promise<void> {
     try {
         const ok = await requestInboxNotificationPermission();
         if (!ok) return;
@@ -48,6 +58,7 @@ export async function showNewInboxMessageNotification(title: string, bodySnippet
             content: {
                 title: title?.trim() || 'New message',
                 body: body || 'You have a new notification.',
+                data: data ?? {},
                 ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL } : {}),
             },
             trigger: null,
