@@ -37,6 +37,13 @@ export function ParentTemplateEmailPanel({ companyId, childId, camperName, paren
       Alert.alert('Could not send', data?.error ?? error?.message ?? 'Failed to send email');
       return;
     }
+    if (data.sent === false) {
+      Alert.alert(
+        'Preview only',
+        data.message ?? `Would email "${label}" to ${data.recipient}. Configure M365 to send live.`,
+      );
+      return;
+    }
     Alert.alert('Sent', `"${label}" emailed to ${data.recipient}`);
   };
 

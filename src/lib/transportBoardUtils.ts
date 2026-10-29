@@ -254,6 +254,22 @@ export type RouteStopListLines = {
   camperNames: string[];
 };
 
+export const BLANK_OPEN_STOP_SUBTITLE = 'Open stop · no campers assigned';
+
+export function isBlankOpenRouteStop(lines: RouteStopListLines): boolean {
+  return lines.isOpenStop && lines.camperNames.length === 0 && lines.subtitle === BLANK_OPEN_STOP_SUBTITLE;
+}
+
+export function countBlankOpenStopsOnRoute(stops: { name: string; address: string; camperNames?: string[] }[]): number {
+  let count = 0;
+  for (const stop of stops) {
+    const isCamp = isCampStop(stop as TransportRouteStop);
+    const lines = routeStopListLines(stop, { isCamp });
+    if (isBlankOpenRouteStop(lines)) count += 1;
+  }
+  return count;
+}
+
 export function routeStopListLines(
   stop: { name: string; address: string; passengers?: number; camperNames?: string[] },
   options: { isCamp: boolean; pendingNames?: string[] },
@@ -286,7 +302,7 @@ export function routeStopListLines(
 
   return {
     title: street,
-    subtitle: 'Open stop · no campers assigned',
+    subtitle: BLANK_OPEN_STOP_SUBTITLE,
     isOpenStop: true,
     camperNames: [],
   };

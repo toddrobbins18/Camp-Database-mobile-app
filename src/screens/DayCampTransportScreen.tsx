@@ -30,6 +30,8 @@ import {
   getRouteStopLabel,
   isCampStop,
   routeStopListLines,
+  isBlankOpenRouteStop,
+  countBlankOpenStopsOnRoute,
 } from '../lib/transportBoardUtils';
 import { todayDateString } from '../lib/transportDailyOverrides';
 import {
@@ -130,6 +132,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   const [screenFocused, setScreenFocused] = useState(true);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showRouteSheet, setShowRouteSheet] = useState(true);
+  const [showBlankOpenStops, setShowBlankOpenStops] = useState(false);
   const [mapExpanded, setMapExpanded] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
   const [ptModalOpen, setPtModalOpen] = useState(false);
@@ -161,6 +164,11 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
       .filter((c) => !q || c.name.toLowerCase().includes(q))
       .slice(0, 80);
   }, [ptCamperSearch, t.groupRoster, t.parentTransportCampers]);
+
+  const hiddenBlankOpenStopCount = useMemo(
+    () => t.routes.reduce((sum, r) => sum + countBlankOpenStopsOnRoute(r.stops), 0),
+    [t.routes],
+  );
 
   const filteredBusRunEntries = useMemo(() => {
     const q = busRunSearch.trim().toLowerCase();
@@ -567,6 +575,19 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
               <TouchableOpacity onPress={t.showAllRoutes}><Text style={styles.linkText}>Show all</Text></TouchableOpacity>
             </View>
           </View>
+          <View style={styles.blankOpenToggleRow}>
+            <Text style={styles.blankOpenToggleLabel}>Empty open stops</Text>
+            <Switch
+              value={showBlankOpenStops}
+              onValueChange={setShowBlankOpenStops}
+              trackColor={{ false: theme.colors.border, true: theme.colors.secondary }}
+            />
+            {!showBlankOpenStops && hiddenBlankOpenStopCount > 0 ? (
+              <Text style={styles.blankOpenHiddenHint}>
+                {hiddenBlankOpenStopCount} hidden
+              </Text>
+            ) : null}
+          </View>
           <FlatList
             data={t.routes}
             keyExtractor={(r) => String(r.id)}
@@ -576,6 +597,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
             renderItem={({ item: r }) => {
               const isVisible = t.visibleRoutes.includes(r.id);
               const core = t.coreStops[r.id] || [];
+              const blankOpenOnRoute = countBlankOpenStopsOnRoute(r.stops);
               return (
                 <TouchableOpacity
                   style={[styles.routeCard, isVisible && styles.routeCardActive, { borderLeftColor: r.color }]}
@@ -609,6 +631,9 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                       {r.stops.map((stop, i) => {
                         const isCamp = isCampStop(stop);
                         const stopLines = routeStopListLines(stop, { isCamp });
+                        if (!showBlankOpenStops && !isCamp && isBlankOpenRouteStop(stopLines)) {
+                          return null;
+                        }
                         return (
                           <TouchableOpacity
                             key={i}
@@ -652,6 +677,13 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                           </TouchableOpacity>
                         );
                       })}
+                      {!showBlankOpenStops && blankOpenOnRoute > 0 ? (
+                        <TouchableOpacity onPress={() => setShowBlankOpenStops(true)}>
+                          <Text style={styles.showBlankOpenLink}>
+                            Show {blankOpenOnRoute} empty open {blankOpenOnRoute === 1 ? 'stop' : 'stops'}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
                     </ScrollView>
                   )}
                 </TouchableOpacity>
@@ -1464,6 +1496,16 @@ const styles = StyleSheet.create({
   routeSheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: theme.spacing.md, marginBottom: 6 },
   routeSheetTitle: { fontSize: 11, fontWeight: '600', color: theme.colors.textSecondary, textTransform: 'uppercase' },
   routeSheetActions: { flexDirection: 'row', gap: 12 },
+  blankOpenToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: theme.spacing.md,
+    marginBottom: 8,
+  },
+  blankOpenToggleLabel: { fontSize: 11, color: theme.colors.textSecondary, flex: 1 },
+  blankOpenHiddenHint: { fontSize: 10, color: theme.colors.textSecondary },
+  showBlankOpenLink: { fontSize: 10, color: theme.colors.secondary, fontWeight: '600', paddingVertical: 4 },
   linkText: { fontSize: 11, color: theme.colors.secondary, fontWeight: '500' },
   routeList: { paddingHorizontal: theme.spacing.md, gap: 8 },
   routeCard: { width: 200, backgroundColor: theme.colors.background, borderRadius: theme.borderRadius.md, padding: 10, borderWidth: 1, borderColor: theme.colors.border, borderLeftWidth: 4, marginRight: 8 },
