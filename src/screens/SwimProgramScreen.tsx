@@ -51,6 +51,7 @@ import {
   EXIT_SKILL_COUNT,
 } from '../lib/swimProgram';
 import { sendSwimProgressEmail } from '../lib/swimProgressApi';
+import { sendSwimBraceletEmail } from '../lib/swimBraceletApi';
 import { buildSwimProgressPdf } from '../lib/swimProgressPdf';
 import { swimProgressEmailSupported, type SwimProgressReportLevel } from '../lib/swimProgressSkills';
 import { SwimGroupFormationPanel } from '../components/swim/SwimGroupFormationPanel';
@@ -362,9 +363,31 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
     });
   };
 
-  const sendEmail = (record: BraceletRecord) => {
-    updateBracelet(record.id, { emailSent: true });
-    Alert.alert('Email queued', `Bracelet notice to ${record.name}'s family.`);
+  const sendEmail = async (record: BraceletRecord) => {
+    if (!companyId) return;
+    if (!record.divisionLeader?.trim()) {
+      Alert.alert('Division leader required', 'Assign a division leader on this row first.');
+      return;
+    }
+    try {
+      const result = await sendSwimBraceletEmail({
+        companyId,
+        childId: record.id,
+        season,
+      });
+      if (!result.success) {
+        Alert.alert('Email not sent', result.error);
+        return;
+      }
+      if (result.sent) {
+        updateBracelet(record.id, { emailSent: true });
+        Alert.alert('Email sent', `${result.subject}\n→ ${result.recipient}`);
+      } else {
+        Alert.alert('Email preview', `Would send to ${result.recipient}. Configure M365 to send live.`);
+      }
+    } catch (err) {
+      Alert.alert('Email failed', err instanceof Error ? err.message : 'Unknown error');
+    }
   };
 
   const handleSendProgressEmail = async (record: LevelRecord) => {
@@ -372,7 +395,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
     if (levelReportView === 'all' || !swimProgressEmailSupported(levelReportView as SwimProgressReportLevel)) {
       Alert.alert(
         'Progress email',
-        'Select Red Cross 1 in the level report view to send the skills chart email.',
+        'Select Red Cross 1, 2, 3, or 4 in the level report view to send a progress email.',
       );
       return;
     }
@@ -396,10 +419,12 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
         return;
       }
       Alert.alert(
-        'Progress email sent',
-        result.pdfAttached
-          ? `Sent to ${result.recipient} with skills chart attached.`
-          : `Sent to ${result.recipient}.`,
+        result.sent ? 'Progress email sent' : 'Progress email preview',
+        result.sent
+          ? result.pdfAttached
+            ? `Sent to ${result.recipient} with skills chart attached.`
+            : `Sent to ${result.recipient}.`
+          : `Would send to ${result.recipient}. ${result.message ?? 'Configure M365 to send live.'}`,
       );
     } catch (err) {
       Alert.alert('Email not sent', err instanceof Error ? err.message : 'Unknown error');
@@ -532,22 +557,24 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
         </ScrollView>
       </View>
 
-      <BrandTabs
-        variant="underline"
-        tabs={[
-          { key: 'bracelets', label: 'Bracelets' },
-          { key: 'levels', label: 'Levels' },
-          { key: 'formation', label: 'Group Formation' },
-          { key: 'history', label: 'Prior Seasons' },
-        ]}
-        activeTab={activeTab}
-        onChange={(key) => setActiveTab(key as typeof activeTab)}
-      />
+      <View style={styles.tabsBar}>
+        <BrandTabs
+          variant="underline"
+          tabs={[
+            { key: 'bracelets', label: 'Bracelets' },
+            { key: 'levels', label: 'Levels' },
+            { key: 'formation', label: 'Group Formation' },
+            { key: 'history', label: 'Prior Seasons' },
+          ]}
+          activeTab={activeTab}
+          onChange={(key) => setActiveTab(key as typeof activeTab)}
+        />
+      </View>
 
       {loading && activeTab !== 'history' && activeTab !== 'formation' ? (
         <ActivityIndicator size="large" color={brand} style={{ marginTop: 32 }} />
       ) : (
-        <ScrollView style={styles.content}>
+        <ScrollView style={styles.contentScroll} contentContainerStyle={styles.contentScrollInner}>
           {activeTab === 'formation' ? (
             companyId ? (
               <SwimGroupFormationPanel companyId={companyId} season={season} />
@@ -1067,7 +1094,9 @@ const styles = StyleSheet.create({
   tabActive: { borderBottomColor: theme.colors.primary },
   tabText: { fontSize: 14, fontWeight: '500', color: theme.colors.textSecondary },
   tabTextActive: { color: theme.colors.primary },
-  content: { flex: 1, padding: 16 },
+  tabsBar: { flexGrow: 0, flexShrink: 0, backgroundColor: '#fff' },
+  contentScroll: { flex: 1, backgroundColor: '#f5f5f5' },
+  contentScrollInner: { padding: 16, paddingBottom: 32, flexGrow: 0 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 8,

@@ -42,6 +42,7 @@ import {
 } from '../lib/enrollmentWeekCalendar';
 import { campDateTimeToIso } from '../lib/campTime';
 import { approveSwimLessonRequest, rejectSwimLessonRequest } from '../lib/swimLessonApproval';
+import { runSwimLessonReminders } from '../lib/swimLessonReminderApi';
 
 type ScheduleMode = 'once' | 'recurring';
 
@@ -96,6 +97,29 @@ export function SwimLessonsScreen({ navigation }: any) {
   const [weekCalendar, setWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
   const [selectedWeeks, setSelectedWeeks] = useState<number[]>([]);
   const [selectedDays, setSelectedDays] = useState<CampWeekday[]>([]);
+  const [reminderRunning, setReminderRunning] = useState(false);
+
+  const sendThreeDayReminders = async () => {
+    if (!companyId || reminderRunning) return;
+    setReminderRunning(true);
+    try {
+      const result = await runSwimLessonReminders({ companyId, daysAhead: 3 });
+      if (!result.success) {
+        Alert.alert('Error', result.error);
+        return;
+      }
+      const sent = result.results.filter((r) => r.status === 'sent').length;
+      const preview = result.results.filter((r) => r.status === 'preview').length;
+      const skipped = result.results.filter((r) => r.status === 'skipped').length;
+      Alert.alert(
+        '3-day confirm emails',
+        `Lessons on ${result.targetDay}:\n${sent} sent\n${preview} preview (M365 off)\n${skipped} skipped`,
+      );
+      if (sent > 0) await load();
+    } finally {
+      setReminderRunning(false);
+    }
+  };
 
   const resolvedCalendar = useMemo(
     () => resolveSwimLessonWeekCalendar(weekCalendar, season),
@@ -367,6 +391,17 @@ export function SwimLessonsScreen({ navigation }: any) {
       </View>
 
       <ScrollView style={styles.content}>
+        <TouchableOpacity
+          style={[styles.reminderBtn, { borderColor: brand, opacity: reminderRunning ? 0.6 : 1 }]}
+          onPress={() => void sendThreeDayReminders()}
+          disabled={reminderRunning}
+        >
+          <Ionicons name="mail-outline" size={18} color={brand} />
+          <Text style={[styles.reminderBtnText, { color: brand }]}>
+            {reminderRunning ? 'Running…' : '3-day confirm emails'}
+          </Text>
+        </TouchableOpacity>
+
         {pendingLessons.length > 0 ? (
           <View style={[styles.card, styles.pendingCard]}>
             <View style={styles.cardHeader}>
@@ -865,6 +900,22 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+  },
+  reminderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    backgroundColor: '#fff',
+  },
+  reminderBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   card: {
     backgroundColor: '#fff',

@@ -110,6 +110,7 @@ export function SunshineReportScreen({ navigation }: any) {
   const [syncingRoster, setSyncingRoster] = useState(false);
   const [sendingEmails, setSendingEmails] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewCamperId, setPreviewCamperId] = useState('');
   const [previewCaption, setPreviewCaption] = useState('');
   const [previewData, setPreviewData] = useState<SunshinePreviewInput | null>(null);
   const [groupSearch, setGroupSearch] = useState('');
@@ -350,15 +351,16 @@ export function SunshineReportScreen({ navigation }: any) {
     void upsertReport(camperId, { [field]: next });
   };
 
-  const previewParentEmail = () => {
-    const pool = groupCampers.filter((c) => reports[c.id]);
-    const withReport = pool.length ? pool : campers.filter((c) => reports[c.id]);
-    if (!withReport.length) {
-      Alert.alert('Info', 'Fill in at least one camper report for this date first.');
-      return;
-    }
-    const camper = withReport[0];
-    const r = reports[camper.id];
+  const previewCamperPool = useMemo(
+    () => (groupCampers.length ? groupCampers : campers),
+    [groupCampers, campers],
+  );
+
+  const applyPreviewForCamper = (camperId: string) => {
+    const camper = campers.find((c) => c.id === camperId);
+    if (!camper) return;
+    const r = reports[camperId];
+    setPreviewCamperId(camperId);
     setPreviewData({
       camperName: camper.full_name,
       activities: r?.activities ?? [],
@@ -370,6 +372,16 @@ export function SunshineReportScreen({ navigation }: any) {
     setPreviewCaption(
       `NSDC Sunshine Report — ${camper.full_name}${camper.parent_email ? ` → ${camper.parent_email}` : ''}`,
     );
+  };
+
+  const previewParentEmail = () => {
+    if (!previewCamperPool.length) {
+      Alert.alert('Info', 'No campers in this group.');
+      return;
+    }
+    const defaultId =
+      previewCamperPool.find((c) => reports[c.id])?.id ?? previewCamperPool[0].id;
+    applyPreviewForCamper(defaultId);
     setPreviewOpen(true);
   };
 
@@ -1056,6 +1068,29 @@ export function SunshineReportScreen({ navigation }: any) {
               <Ionicons name="close" size={26} color={theme.colors.text} />
             </TouchableOpacity>
           </View>
+          {previewCamperPool.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.previewCamperPicker}
+              contentContainerStyle={styles.previewCamperPickerContent}
+            >
+              {previewCamperPool.map((c) => {
+                const selected = c.id === previewCamperId;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.previewCamperChip, selected && { backgroundColor: brand, borderColor: brand }]}
+                    onPress={() => applyPreviewForCamper(c.id)}
+                  >
+                    <Text style={[styles.previewCamperChipText, selected && styles.previewCamperChipTextActive]}>
+                      {c.full_name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ) : null}
           <ScrollView contentContainerStyle={styles.previewScroll} keyboardShouldPersistTaps="handled">
             {previewData ? <SunshineReportPreviewView {...previewData} /> : null}
           </ScrollView>
@@ -1103,6 +1138,18 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: theme.colors.text },
   headerSubtitle: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4, lineHeight: 18 },
   previewCaption: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 },
+  previewCamperPicker: { maxHeight: 44, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  previewCamperPickerContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 8, alignItems: 'center' },
+  previewCamperChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#fafafa',
+  },
+  previewCamperChipText: { fontSize: 13, fontWeight: '500', color: theme.colors.text },
+  previewCamperChipTextActive: { color: '#fff' },
   previewScroll: { padding: 16, paddingBottom: 32 },
   toolbarScroll: { borderBottomWidth: 1, borderBottomColor: theme.colors.border, maxHeight: 52 },
   toolbar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 8 },

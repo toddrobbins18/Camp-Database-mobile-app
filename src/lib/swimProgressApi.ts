@@ -2,7 +2,15 @@ import { supabase } from './supabase';
 import type { SwimProgressReportLevel } from './swimProgressSkills';
 
 export type SendSwimProgressEmailResult =
-  | { success: true; recipient: string; subject: string; pdfAttached: boolean }
+  | {
+      success: true;
+      sent: boolean;
+      preview: boolean;
+      recipient: string;
+      subject: string;
+      pdfAttached: boolean;
+      message?: string;
+    }
   | { success: false; error: string };
 
 export async function sendSwimProgressEmail(params: {
@@ -34,8 +42,11 @@ export async function sendSwimProgressEmail(params: {
 
   return {
     success: true,
+    sent: Boolean(data.sent),
+    preview: Boolean(data.preview),
     recipient: String(data.recipient),
     subject: String(data.subject),
     pdfAttached: Boolean(data.pdfAttached),
+    message: typeof data.message === 'string' ? data.message : undefined,
   };
 }

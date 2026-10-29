@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, TouchableOpacity, Text, StyleSheet, ViewStyle } from 'react-native';
+import { ScrollView, TouchableOpacity, Text, View, StyleSheet, ViewStyle } from 'react-native';
 import { theme } from '../theme/theme';
 import { useCampBrandTheme } from '../hooks/useCampBrandTheme';
 
@@ -53,9 +53,16 @@ export function BrandTabs({ tabs, activeTab, onChange, style, variant = 'pill' }
 
   if (variant === 'underline') {
     return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.underlineScroll, style]}>
-        <View style={styles.underlineRow}>{body}</View>
-      </ScrollView>
+      <View style={[styles.underlineShell, style]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.underlineScroll}
+          contentContainerStyle={styles.underlineRow}
+        >
+          {body}
+        </ScrollView>
+      </View>
     );
   }
 
@@ -84,12 +91,22 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     maxWidth: 280,
   },
-  underlineScroll: {
+  underlineShell: {
+    flexGrow: 0,
+    flexShrink: 0,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     backgroundColor: theme.colors.surface,
   },
-  underlineRow: { flexDirection: 'row', paddingHorizontal: theme.spacing.md },
+  underlineScroll: {
+    flexGrow: 0,
+  },
+  underlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 2,
+  },
   tabUnderline: {
     paddingVertical: 12,
     marginRight: 20,
