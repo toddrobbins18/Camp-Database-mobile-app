@@ -141,6 +141,7 @@ import { ODManagementScreen } from '../screens/ODManagementScreen';
 import { StaffTimeClockScreen } from '../screens/StaffTimeClockScreen';
 import { useRole } from '../hooks/useRole';
 import { useMenuAccess } from '../hooks/useMenuAccess';
+import { useBusCounselorNavScope } from '../hooks/useBusCounselorNavScope';
 import { withMenuPermission } from '../components/MenuPermissionGate';
 import { useMessagesRealtimeSync, useInboxUnreadCount } from '../api/messages';
 import {
@@ -184,8 +185,11 @@ function toDrawerMenuItem(
 function filterDayCampMenu(
     items: MobileDrawerMenuItem[],
     hasMenuAccess: (menuItem: string) => boolean,
+    allowMenuItem?: (menuId: string) => boolean,
 ): MobileDrawerMenuItem[] {
-    return items.filter((item) => hasMenuAccess(item.menuId));
+    return items.filter(
+        (item) => hasMenuAccess(item.menuId) && (allowMenuItem ? allowMenuItem(item.menuId) : true),
+    );
 }
 
 type DrawerRow = {
@@ -220,6 +224,7 @@ const CustomDrawerContent = (props: any) => {
     const { data: roleData } = useRole();
     const { availableCompanies, switchCompany, companyId, companySlug, companyThemeColor, isSuperAdmin: isSuperAdminCompany, loadError, retryLoad, season, setSeason, availableSeasons, isTimberLakeCamp, isTimberLakeWest, isDayCamp } = useCompany();
     const { hasMenuAccess } = useMenuAccess();
+    const { allowMenuItem } = useBusCounselorNavScope();
     const [showCampPicker, setShowCampPicker] = useState(false);
     const [showYearPicker, setShowYearPicker] = useState(false);
 
@@ -279,14 +284,14 @@ const CustomDrawerContent = (props: any) => {
 
     if (isDayCamp) {
         const company = { slug: companySlug, camp_type: 'day_camp' as const };
-        const carryover = filterDayCampMenu(getDayCampMainMenuItems(company), hasMenuAccess);
-        const poc = filterDayCampMenu(getDayCampMenuPocItemsSorted(company), hasMenuAccess);
+        const carryover = filterDayCampMenu(getDayCampMainMenuItems(company), hasMenuAccess, allowMenuItem);
+        const poc = filterDayCampMenu(getDayCampMenuPocItemsSorted(company), hasMenuAccess, allowMenuItem);
         mainMenuItems.push(...carryover.map((item) => ({ ...toDrawerMenuItem(item, props.navigation), menuItem: item })));
         dayCampMenuItems.push(...poc.map((item) => ({ ...toDrawerMenuItem(item, props.navigation), menuItem: item })));
 
         const showParentFacing = hasMenuAccess('parent-portal');
         if (showParentFacing) {
-            const nested = filterDayCampMenu(getParentPortalNestedMenuItems(), hasMenuAccess);
+            const nested = filterDayCampMenu(getParentPortalNestedMenuItems(), hasMenuAccess, allowMenuItem);
             parentPortalNestedItems.push(
                 ...nested.map((item) => ({
                     ...toDrawerMenuItem(item, props.navigation),

@@ -33,9 +33,13 @@ export function useFilteredBusRoutes(runDate: string, timeOfDay: 'am' | 'pm') {
         isSuperAdmin,
         isAdmin,
         hasTransportAdmin: hasMenuAccess('transport-admin'),
-        hasTransportation: hasMenuAccess('transportation'),
       }),
     [isSuperAdmin, isAdmin, hasMenuAccess],
+  );
+
+  const hasTransportCoordinatorAccess = useMemo(
+    () => hasMenuAccess('transportation'),
+    [hasMenuAccess],
   );
 
   useEffect(() => {
@@ -79,8 +83,13 @@ export function useFilteredBusRoutes(runDate: string, timeOfDay: 'am' | 'pm') {
   );
 
   const routes = useMemo(
-    () => filterRoutesForAssignedBus(allRoutes, assignedBus, canViewAll),
-    [allRoutes, assignedBus, canViewAll],
+    () =>
+      filterRoutesForAssignedBus(allRoutes, {
+        assignedBus,
+        canViewAll,
+        hasTransportCoordinatorAccess,
+      }),
+    [allRoutes, assignedBus, canViewAll, hasTransportCoordinatorAccess],
   );
 
   return {
@@ -92,6 +101,7 @@ export function useFilteredBusRoutes(runDate: string, timeOfDay: 'am' | 'pm') {
     enrollmentCtx,
     assignedBus,
     canViewAll,
+    hasTransportCoordinatorAccess,
     busScopeLabel: !canViewAll && assignedBus ? assignedBus : null,
   };
 }

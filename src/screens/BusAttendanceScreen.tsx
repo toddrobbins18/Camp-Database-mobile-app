@@ -34,6 +34,7 @@ import { campersOnRouteForWeek, weekContextForNumber } from '../lib/transportBus
 import { formatEnrollmentWeekLabel } from '../lib/enrollmentWeekCalendar';
 import { getEffectiveCoreStops } from '../lib/transportRunBoard';
 import { useFilteredBusRoutes } from '../hooks/useFilteredBusRoutes';
+import { useBusCounselorNavScope } from '../hooks/useBusCounselorNavScope';
 import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
 import { FrontOfficeBackButton } from '../components/FrontOfficeBackButton';
 import { BusLocationSharingSection } from '../components/BusLocationSharingSection';
@@ -73,6 +74,7 @@ export function BusAttendanceScreen({ navigation }: any) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [screenFocused, setScreenFocused] = useState(true);
 
+  const { isNavLocked } = useBusCounselorNavScope();
   const {
     companyId,
     season,
@@ -82,6 +84,7 @@ export function BusAttendanceScreen({ navigation }: any) {
     enrollmentCtx,
     busScopeLabel,
     assignedBus,
+    canViewAll,
   } = useFilteredBusRoutes(runDate, timeOfDay);
 
   useFocusEffect(
@@ -332,7 +335,7 @@ export function BusAttendanceScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <FrontOfficeBackButton navigation={navigation} />
+      {!isNavLocked ? <FrontOfficeBackButton navigation={navigation} /> : null}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuButton}>
           <Ionicons name="menu-outline" size={26} color={theme.colors.text} />
@@ -357,7 +360,7 @@ export function BusAttendanceScreen({ navigation }: any) {
       </View>
 
       <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
-        {routes.length > 0 ? (
+        {routes.length > 1 ? (
           <View style={styles.busPickCard}>
             <Text style={styles.busPickTitle}>Bubble sheet buses</Text>
             <Text style={styles.busPickSub}>Select bus numbers to include in the PDF.</Text>
@@ -535,7 +538,13 @@ export function BusAttendanceScreen({ navigation }: any) {
         </TouchableOpacity>
 
         {!boardLoading && !routes.length ? (
-          <Text style={styles.emptyText}>No campers scheduled on buses for this date and run.</Text>
+          <Text style={styles.emptyText}>
+            {assignedBus
+              ? `Your profile is set to ${assignedBus}, but no matching route was found for this date and run.`
+              : canViewAll
+                ? 'No routes on the board for this date.'
+                : 'Ask an admin to set your assigned bus on your user profile.'}
+          </Text>
         ) : null}
 
         {routes.map((r) => {
