@@ -167,18 +167,56 @@ export async function uploadMessageMediaFromUri(
   }
 }
 
+async function blobToDataUri(blob: Blob, mimeHint?: string | null): Promise<string> {
+  const mime = mimeHint || blob.type || 'application/octet-stream';
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  const encode =
+    typeof globalThis.btoa === 'function'
+      ? globalThis.btoa.bind(globalThis)
+      : (s: string) => {
+          throw new Error('btoa unavailable');
+        };
+  return `data:${mime};base64,${encode(binary)}`;
+}
+
+/** Signed URL for web; on native falls back to authenticated storage download → data URI. */
 export async function createSignedMessageMediaUrl(
   supabase: SupabaseClient,
   storagePath: string,
+  mimeHint?: string | null,
 ): Promise<string | null> {
+  const path = storagePath.trim();
+  if (!path) return null;
+
+  await supabase.auth.refreshSession().catch(() => undefined);
+
   const { data, error } = await supabase.storage
     .from(MESSAGE_MEDIA_BUCKET)
-    .createSignedUrl(storagePath, 60 * 60);
-  if (error || !data?.signedUrl) {
-    console.warn('[messageMedia] signed URL failed:', error?.message);
+    .createSignedUrl(path, 60 * 60);
+  if (!error && data?.signedUrl) {
+    return data.signedUrl;
+  }
+  if (error) {
+    console.warn('[messageMedia] signed URL failed:', error.message);
+  }
+
+  const { data: blob, error: dlErr } = await supabase.storage.from(MESSAGE_MEDIA_BUCKET).download(path);
+  if (dlErr || !blob) {
+    console.warn('[messageMedia] download failed:', dlErr?.message);
     return null;
   }
-  return data.signedUrl;
+  try {
+    return await blobToDataUri(blob, mimeHint);
+  } catch (e) {
+    console.warn('[messageMedia] blob to data URI failed:', e);
+    return null;
+  }
 }
 
 function newMessageId(): string {
@@ -201,6 +239,9 @@ export async function sendDirectMessageMedia(
     media: PickedMessageMedia;
     senderDisplayName?: string | null;
     notificationType?: string;
+    childId?: string | null;
+    familyId?: string | null;
+    threadKind?: string | null;
   },
 ): Promise<{ error: string | null }> {
   const messageId = newMessageId();
@@ -235,6 +276,9 @@ export async function sendDirectMessageMedia(
     media_storage_path: storagePath,
     media_mime: options.media.mimeType,
     media_file_name: options.media.fileName,
+    ...(options.childId ? { child_id: options.childId } : {}),
+    ...(options.familyId ? { family_id: options.familyId } : {}),
+    ...(options.threadKind ? { thread_kind: options.threadKind } : {}),
   });
 
   if (error) {

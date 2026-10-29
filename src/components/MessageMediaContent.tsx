@@ -2,7 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Image, ActivityIndicator, TouchableOpacity, Linking, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import { createSignedMessageMediaUrl, type MessageKind } from '../lib/messageMedia';
+import {
+  classifyMessageMediaMime,
+  createSignedMessageMediaUrl,
+  messagePreviewLabel,
+  type MessageKind,
+} from '../lib/messageMedia';
 import { MessageBody } from './MessageBody';
 import { theme } from '../theme/theme';
 
@@ -41,36 +46,57 @@ export function MessageMediaContent({
   content,
   messageKind = 'text',
   mediaStoragePath,
+  mediaMime,
   mediaFileName,
   senderId,
   notificationType,
   style,
 }: Props) {
-  const kind = (messageKind || 'text') as MessageKind;
+  const path = mediaStoragePath?.trim() || null;
+  let kind = (messageKind || 'text') as MessageKind;
+  if (path && kind === 'text') {
+    const inferred = classifyMessageMediaMime(mediaMime ?? '', mediaFileName ?? undefined);
+    kind = inferred ?? 'image';
+  }
+
+  const isMediaKind =
+    kind === 'image' || kind === 'video' || kind === 'audio' || kind === 'file';
+  const showMedia = isMediaKind && !!path;
+
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
-    if (!mediaStoragePath || kind === 'text') {
+    if (!showMedia || !path) {
       setUrl(null);
+      setLoading(false);
+      setImageError(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
-    void createSignedMessageMediaUrl(supabase, mediaStoragePath).then((signed) => {
+    setImageError(false);
+    void createSignedMessageMediaUrl(supabase, path, mediaMime).then((resolved) => {
       if (cancelled) return;
-      setUrl(signed);
+      setUrl(resolved);
       setLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [mediaStoragePath, kind]);
+  }, [path, showMedia, mediaMime]);
 
-  if (kind === 'text' || !mediaStoragePath) {
+  useEffect(() => {
+    setImageError(false);
+  }, [url]);
+
+  if (!showMedia) {
+    const preview = messagePreviewLabel(kind, content, mediaFileName);
+    const bodyText = content.trim() || (isMediaKind && !path ? preview : content);
     return (
       <MessageBody
-        content={content}
+        content={bodyText}
         senderId={senderId}
         notificationType={notificationType}
         style={style}
@@ -87,8 +113,26 @@ export function MessageMediaContent({
     );
   }
 
-  if (!url) {
-    return <Text style={styles.error}>Could not load attachment.</Text>;
+  if (!url || imageError) {
+    return (
+      <View style={style}>
+        <View style={styles.placeholder}>
+          <Ionicons name="image-outline" size={28} color={theme.colors.textSecondary} />
+          <Text style={styles.placeholderTitle}>
+            {messagePreviewLabel(kind, content, mediaFileName)}
+          </Text>
+          <Text style={styles.muted}>Could not load — leave chat and open again</Text>
+        </View>
+        {content?.trim() ? (
+          <MessageBody
+            content={content}
+            senderId={senderId}
+            notificationType={notificationType}
+            style={{ marginTop: 8 }}
+          />
+        ) : null}
+      </View>
+    );
   }
 
   const open = () => void Linking.openURL(url);
@@ -98,7 +142,13 @@ export function MessageMediaContent({
     <View style={style}>
       {kind === 'image' ? (
         <TouchableOpacity onPress={open} activeOpacity={0.9}>
-          <Image source={{ uri: url }} style={styles.image} resizeMode="contain" accessibilityLabel="Shared photo" />
+          <Image
+            source={{ uri: url }}
+            style={styles.image}
+            resizeMode="cover"
+            accessibilityLabel="Shared photo"
+            onError={() => setImageError(true)}
+          />
         </TouchableOpacity>
       ) : null}
       {kind === 'video' ? (
@@ -124,7 +174,14 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   muted: { fontSize: 12, color: theme.colors.textSecondary },
   error: { fontSize: 12, color: '#b91c1c' },
-  image: { width: '100%', maxHeight: 280, borderRadius: 8, backgroundColor: theme.colors.background },
+  image: {
+    width: 260,
+    height: 260,
+    maxWidth: '100%',
+    borderRadius: 10,
+    backgroundColor: theme.colors.background,
+  },
+  placeholderTitle: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
   fileRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -135,4 +192,15 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   fileName: { flex: 1, fontSize: 14, color: theme.colors.text },
+  placeholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.background,
+  },
 });

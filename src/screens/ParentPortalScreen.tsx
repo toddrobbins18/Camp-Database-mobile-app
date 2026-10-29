@@ -38,6 +38,7 @@ import {
   resolveParentPortalHeroImageSource,
 } from '../lib/parentPortalTheme';
 import { linkFamilyChildrenByGuardianEmail } from '../lib/parentFamilyLink';
+import { ParentPortalMessagesView } from '../components/parentPortal/ParentPortalMessagesView';
 
 export function ParentPortalScreen({ navigation }: { navigation: any }) {
   const { companyId, companySlug, companyName, themeColor, loading: companyLoading } = useParentCompany();
@@ -46,6 +47,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
 
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [activeView, setActiveView] = useState<ParentPortalView>('home');
+  const [messageThreadOpen, setMessageThreadOpen] = useState(false);
   const [familyId, setFamilyId] = useState<string | null>(null);
   const [familyName, setFamilyName] = useState('');
   const [contactName, setContactName] = useState<string | null>(null);
@@ -267,10 +269,19 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
       onNavigate={setActiveView}
       onSignOut={handleSignOut}
       showDrawer={false}
+      mainScroll={!(activeView === 'messages' && messageThreadOpen)}
       mainBackdropImage={activeView === 'home' ? heroImageSource : null}
     >
       {activeView === 'home' && <ParentHomeView {...sharedProps} />}
       {activeView === 'campers' && <ParentCampersView {...sharedProps} />}
+      {activeView === 'messages' && (
+        <ParentPortalMessagesView
+          companyId={companyId}
+          companySlug={companySlug}
+          colors={colors}
+          onThreadActive={setMessageThreadOpen}
+        />
+      )}
       {activeView === 'pickups' && <ParentPickupsView {...sharedProps} />}
       {activeView === 'absences' && <ParentAbsencesView {...sharedProps} />}
       {activeView === 'authorized' && <ParentAuthorizedView {...sharedProps} />}

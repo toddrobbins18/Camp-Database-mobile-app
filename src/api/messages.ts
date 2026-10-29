@@ -236,7 +236,9 @@ export async function fetchMessageThread(
 ): Promise<Message[]> {
   const { data, error } = await supabase
     .from('messages')
-    .select('*')
+    .select(
+      'id, sender_id, recipient_id, subject, content, created_at, read, read_at, parent_message_id, notification_type, sender_display_name, message_kind, media_storage_path, media_mime, media_file_name, thread_kind, child_id, family_id, company_id',
+    )
     .eq('parent_message_id', parentId)
     .order('created_at', { ascending: true });
 
@@ -299,6 +301,11 @@ export interface Message {
     /** Same as web inbox — cached label or snapshot for From: line */
     sender_name?: string;
     recipient?: { full_name?: string; email?: string };
+    message_kind?: string | null;
+    media_storage_path?: string | null;
+    media_mime?: string | null;
+    media_file_name?: string | null;
+    thread_kind?: string | null;
     /** Inbox only — latest reply in thread (parity with Nest web Messages). */
     reply_count?: number;
     latest_reply_content?: string;

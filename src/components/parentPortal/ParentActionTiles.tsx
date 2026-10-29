@@ -15,6 +15,13 @@ type Tile = {
 
 const TILES: Tile[] = [
   {
+    id: 'messages',
+    icon: 'chatbubbles-outline',
+    label: 'Messages',
+    hint: "Chat with your camper's division leader and view photos & videos.",
+    tint: '#E0E7FF',
+  },
+  {
     id: 'pickups',
     icon: 'calendar-outline',
     label: 'Change pickup',

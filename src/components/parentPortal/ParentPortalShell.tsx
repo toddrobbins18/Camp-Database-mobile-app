@@ -37,11 +37,13 @@ type Props = {
   mainBackdropImage?: ImageSourcePropType | null;
   /** When nested inside another screen (sandbox staff preview). */
   embedInParent?: boolean;
+  /** False when a full-height child needs the main area (e.g. open message thread). */
+  mainScroll?: boolean;
   children: React.ReactNode;
 };
 
 const MOBILE_PRIMARY: ParentPortalView[] = ['home', 'campers', 'pickups', 'absences'];
-const MOBILE_MORE: ParentPortalView[] = ['authorized', 'swim'];
+const MOBILE_MORE: ParentPortalView[] = ['messages', 'authorized', 'swim'];
 
 export function ParentPortalShell({
   campName,
@@ -55,6 +57,7 @@ export function ParentPortalShell({
   showDrawer = false,
   mainBackdropImage,
   embedInParent = false,
+  mainScroll = true,
   children,
 }: Props) {
   const colors = useMemo(() => {
@@ -103,10 +106,13 @@ export function ParentPortalShell({
       </View>
 
       <ScrollView
-        style={styles.main}
-        contentContainerStyle={styles.mainContent}
+        style={[styles.main, !mainScroll && styles.mainFill]}
+        contentContainerStyle={[
+          mainScroll ? styles.mainContent : styles.mainFillContent,
+        ]}
+        scrollEnabled={mainScroll}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={mainScroll}
       >
         {children}
       </ScrollView>
@@ -243,6 +249,10 @@ function createStyles(colors: ParentPortalColors) {
       marginLeft: PP.sm,
     },
     main: { flex: 1 },
+    mainFill: { minHeight: 0 },
+    mainFillContent: {
+      flexGrow: 1,
+    },
     mainContent: {
       paddingHorizontal: PP.xl,
       paddingTop: PP.lg,

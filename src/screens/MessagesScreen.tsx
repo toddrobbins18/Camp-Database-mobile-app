@@ -45,6 +45,10 @@ import {
     markThreadRepliesReadForRecipient,
     mergeMessageRead,
 } from '../lib/messageReadReceipts';
+import {
+    listStaffParentPortalInbox,
+    type StaffParentPortalThreadRow,
+} from '../lib/parentPortalMessaging';
 import { isNestSandboxCompany } from '../constants/camps';
 import { NestSandboxStaffTestAccountsCard } from '../components/messages/NestSandboxStaffTestAccountsCard';
 import * as DocumentPicker from 'expo-document-picker';
@@ -128,6 +132,8 @@ export const MessagesScreen = ({ navigation, route }: any) => {
     const [threadSending, setThreadSending] = useState(false);
     const [openGroupId, setOpenGroupId] = useState<string | null>(null);
     const [openGroupTitle, setOpenGroupTitle] = useState('');
+    const [familyThreads, setFamilyThreads] = useState<StaffParentPortalThreadRow[]>([]);
+    const [familyThreadsLoading, setFamilyThreadsLoading] = useState(false);
 
     const { companyId, companySlug, profile } = useCompany();
     const messageMediaEnabled = messageMediaEnabledForCamp(companySlug);
@@ -212,6 +218,11 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         queryKey: ['profiles_for_messages', companyId],
         queryFn: async () => {
             if (!companyId) return [];
+            const {
+                data: { session },
+            } = await supabase.auth.getSession();
+            if (!session?.user) return [];
+
             const mapProfileRows = (rows: { id: string; full_name: string | null; email: string | null }[]) =>
                 rows.map((p) => ({
                     id: p.id,
@@ -224,6 +235,14 @@ export const MessagesScreen = ({ navigation, route }: any) => {
             });
             if (!error && data) {
                 return mapProfileRows(data as { id: string; full_name: string | null; email: string | null }[]);
+            }
+
+            const notAuthenticated =
+                error?.code === 'P0001' &&
+                typeof error?.message === 'string' &&
+                error.message.includes('not authenticated');
+            if (notAuthenticated) {
+                return [];
             }
 
             const missingRpc =
@@ -248,7 +267,7 @@ export const MessagesScreen = ({ navigation, route }: any) => {
             console.error('[MessagesScreen] list_message_recipient_profiles:', error);
             throw error;
         },
-        enabled: !!companyId,
+        enabled: !!companyId && !!currentUserId,
     });
     const messageCount = messages.length;
     const sentCount = sentMessages.length;
@@ -272,6 +291,20 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         setShowComposeModal(false);
         setOpenThreadId(null);
         setOpenGroupId(null);
+    };
+    const handleFamilies = () => {
+        setActiveView('families');
+        setShowComposeModal(false);
+        setOpenThreadId(null);
+        setOpenGroupId(null);
+        if (companyId) {
+            setFamilyThreadsLoading(true);
+            void listStaffParentPortalInbox(supabase, companyId).then(({ rows, error }) => {
+                if (error) Alert.alert('Families', error);
+                setFamilyThreads(rows);
+                setFamilyThreadsLoading(false);
+            });
+        }
     };
 
     const openGroup = (group: { id: string; name: string }) => {
@@ -510,9 +543,12 @@ export const MessagesScreen = ({ navigation, route }: any) => {
     }, [openThreadId, messageLabelsCompanyId, currentUserId, queryClient]);
 
     useEffect(() => {
-        if (!openThreadId || !currentUserId || activeView !== 'inbox') return;
-        const root = (activeList as any[]).find((m) => m.id === openThreadId);
-        if (root?.recipient_id !== currentUserId) return;
+        if (!openThreadId || !currentUserId) return;
+        if (activeView !== 'inbox' && activeView !== 'families') return;
+        if (activeView === 'inbox') {
+            const root = (activeList as any[]).find((m) => m.id === openThreadId);
+            if (root?.recipient_id !== currentUserId) return;
+        }
         void markThreadRepliesReadForRecipient(supabase, openThreadId, currentUserId);
     }, [openThreadId, currentUserId, activeView, activeList, threadReplies.length]);
 
@@ -545,6 +581,9 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                     caption: trimmed,
                     media: threadPendingMedia,
                     senderDisplayName: profile?.full_name ?? null,
+                    childId: (detailMessage as any).child_id ?? null,
+                    familyId: (detailMessage as any).family_id ?? null,
+                    threadKind: (detailMessage as any).thread_kind ?? null,
                 });
                 if (mediaErr) throw new Error(mediaErr);
             } else {
@@ -558,6 +597,15 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                     read: false,
                     sender_display_name: profile?.full_name?.trim() || null,
                     company_id: companyId,
+                    ...((detailMessage as any).child_id
+                        ? { child_id: (detailMessage as any).child_id }
+                        : {}),
+                    ...((detailMessage as any).family_id
+                        ? { family_id: (detailMessage as any).family_id }
+                        : {}),
+                    ...((detailMessage as any).thread_kind
+                        ? { thread_kind: (detailMessage as any).thread_kind }
+                        : {}),
                 });
                 if (error) throw error;
             }
@@ -593,7 +641,7 @@ export const MessagesScreen = ({ navigation, route }: any) => {
     const handleThreadBack = useCallback(() => setOpenThreadId(null), []);
 
     useEffect(() => {
-        if (!openThreadId) return;
+        if (!openThreadId || activeView === 'families') return;
         const list = activeView === 'sent' ? sentMessages : messages;
         if (!list.some((m: any) => m.id === openThreadId)) {
             setOpenThreadId(null);
@@ -601,20 +649,25 @@ export const MessagesScreen = ({ navigation, route }: any) => {
     }, [messages, sentMessages, activeView, openThreadId]);
 
     const showingThread =
-        (activeView === 'inbox' || activeView === 'sent') && !!openThreadId && !!detailMessage;
+        (activeView === 'inbox' || activeView === 'sent' || activeView === 'families') &&
+        !!openThreadId &&
+        !!detailMessage;
     const showingGroup = activeView === 'groups' && !!openGroupId;
     const showMessagesChrome = !showingThread && !showingGroup;
 
+    const activeFamilyRow = familyThreads.find((f) => f.thread_root_id === openThreadId);
     const threadPartyLabel =
-        detailMessage && activeView === 'sent'
-            ? sentRecipientDisplayName(detailMessage)
-            : detailMessage
-              ? inboxSenderDisplayName(detailMessage)
-              : '';
+        activeView === 'families' && activeFamilyRow
+            ? `${activeFamilyRow.parent_display_name ?? 'Parent'} · ${activeFamilyRow.child_name ?? 'Camper'}`
+            : detailMessage && activeView === 'sent'
+              ? sentRecipientDisplayName(detailMessage)
+              : detailMessage
+                ? inboxSenderDisplayName(detailMessage)
+                : '';
     const canReplyToThread =
-        !!detailMessage?.sender_id &&
+        !!detailMessage &&
         !!currentUserId &&
-        (activeView === 'inbox' || activeView === 'sent');
+        (activeView === 'inbox' || activeView === 'sent' || activeView === 'families');
 
     const renderSegmentTabs = () => (
         <ScrollView
@@ -660,6 +713,19 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                 />
                 <Text style={[styles.segmentTabText, activeView === 'groups' && styles.segmentTabTextActive]}>
                     Groups
+                </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={[styles.segmentTab, activeView === 'families' && styles.segmentTabActive]}
+                onPress={handleFamilies}
+            >
+                <Ionicons
+                    name="home-outline"
+                    size={16}
+                    color={activeView === 'families' ? '#fff' : theme.colors.textSecondary}
+                />
+                <Text style={[styles.segmentTabText, activeView === 'families' && styles.segmentTabTextActive]}>
+                    Families
                 </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -748,7 +814,11 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                         >
                             <Ionicons name="chevron-back" size={24} color={theme.colors.primary} />
                             <Text style={styles.threadBackLabel}>
-                                {activeView === 'sent' ? 'Sent' : 'Inbox'}
+                                {activeView === 'sent'
+                                    ? 'Sent'
+                                    : activeView === 'families'
+                                      ? 'Families'
+                                      : 'Inbox'}
                             </Text>
                         </TouchableOpacity>
                     </View>
@@ -766,6 +836,68 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                             {openGroupTitle}
                         </Text>
                     </View>
+                )}
+
+                {activeView === 'families' && !showingThread && (
+                    <StyledCard style={styles.messagesListCard}>
+                        <View style={styles.listCardHeader}>
+                            <Text style={styles.listCardTitle}>Parent families</Text>
+                            <Text style={styles.messageCountCompact}>{familyThreads.length} threads</Text>
+                        </View>
+                        {familyThreadsLoading ? (
+                            <ActivityIndicator size="large" color={theme.colors.secondary} style={{ marginTop: 24 }} />
+                        ) : familyThreads.length === 0 ? (
+                            <View style={styles.emptyStateCompact}>
+                                <Ionicons name="people-outline" size={40} color={theme.colors.icon} />
+                                <Text style={styles.emptyText}>No parent portal conversations yet.</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.inboxList}>
+                                {familyThreads.map((row) => (
+                                    <TouchableOpacity
+                                        key={row.thread_root_id}
+                                        activeOpacity={0.7}
+                                        style={styles.inboxRow}
+                                        onPress={() => {
+                                            setOpenThreadId(row.thread_root_id);
+                                            if (currentUserId) {
+                                                void markThreadRepliesReadForRecipient(
+                                                    supabase,
+                                                    row.thread_root_id,
+                                                    currentUserId,
+                                                );
+                                            }
+                                        }}
+                                    >
+                                        <View style={styles.avatarCircle}>
+                                            <Text style={styles.avatarText}>
+                                                {nameInitial(row.parent_display_name ?? 'P')}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.inboxRowBody}>
+                                            <View style={styles.inboxRowTop}>
+                                                <Text style={styles.inboxRowParty} numberOfLines={1}>
+                                                    {row.parent_display_name ?? 'Parent'}
+                                                </Text>
+                                                {(row.unread_for_staff ?? 0) > 0 ? (
+                                                    <Text style={styles.inboxRowDate}>{row.unread_for_staff} new</Text>
+                                                ) : null}
+                                            </View>
+                                            <Text style={styles.inboxRowSubject} numberOfLines={1}>
+                                                Camper: {row.child_name ?? '—'}
+                                            </Text>
+                                            {row.latest_preview ? (
+                                                <Text style={styles.inboxRowSnippet} numberOfLines={2}>
+                                                    {messageContentPreview(row.latest_preview, 80)}
+                                                </Text>
+                                            ) : null}
+                                        </View>
+                                        <Ionicons name="chevron-forward" size={18} color={theme.colors.icon} />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+                    </StyledCard>
                 )}
 
                 {(activeView === 'inbox' || activeView === 'sent') && !showingThread && (
