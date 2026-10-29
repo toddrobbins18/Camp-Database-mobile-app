@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../theme/theme';
 import { supabase } from '../../lib/supabase';
 import { PARENT_EMAIL_TEMPLATE_OPTIONS, type ParentEmailTemplateKey } from '../../lib/parentEmailTemplates';
+import { ParentReminderShotLayer } from './ParentReminderShotLayer';
 
 type Props = {
   companyId: string | undefined;
@@ -14,6 +15,9 @@ type Props = {
 
 export function ParentTemplateEmailPanel({ companyId, childId, camperName, parentEmail }: Props) {
   const [sendingKey, setSendingKey] = useState<ParentEmailTemplateKey | null>(null);
+  const [capturing, setCapturing] = useState(false);
+  const [shotTemplate, setShotTemplate] = useState<ParentEmailTemplateKey>('sunscreen');
+  const shotRef = useRef<View>(null);
 
   if (!parentEmail?.trim()) {
     return (
@@ -24,11 +28,28 @@ export function ParentTemplateEmailPanel({ companyId, childId, camperName, paren
   const send = async (templateKey: ParentEmailTemplateKey, label: string) => {
     if (!companyId) return;
     setSendingKey(templateKey);
+
+    let image_base64: string | undefined;
+    let attachmentSkipped = false;
+    try {
+      setShotTemplate(templateKey);
+      setCapturing(true);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      const { captureParentReminderJpegBase64 } = await import('../../lib/parentReminderCapture');
+      image_base64 = await captureParentReminderJpegBase64(shotRef, templateKey);
+    } catch (e) {
+      attachmentSkipped = true;
+      console.warn('Reminder JPEG capture skipped; sending HTML email only', e);
+    } finally {
+      setCapturing(false);
+    }
+
     const { data, error } = await supabase.functions.invoke('send-parent-template-email', {
       body: {
         company_id: companyId,
         child_id: childId,
         template_key: templateKey,
+        image_base64,
       },
     });
     setSendingKey(null);
@@ -44,7 +65,10 @@ export function ParentTemplateEmailPanel({ companyId, childId, camperName, paren
       );
       return;
     }
-    Alert.alert('Sent', `"${label}" emailed to ${data.recipient}`);
+    const attachmentNote = attachmentSkipped
+      ? '\n\nNote: Image attachment needs a rebuilt dev app (npx expo run:ios). Email body still sent.'
+      : '';
+    Alert.alert('Sent', `"${label}" emailed to ${data.recipient}${attachmentNote}`);
   };
 
   const confirmSend = (templateKey: ParentEmailTemplateKey, label: string) => {
@@ -60,6 +84,12 @@ export function ParentTemplateEmailPanel({ companyId, childId, camperName, paren
 
   return (
     <View style={styles.container}>
+      {capturing ? (
+        <View pointerEvents="none" style={styles.offscreen} collapsable={false}>
+          <ParentReminderShotLayer ref={shotRef} templateKey={shotTemplate} camperName={camperName} />
+        </View>
+      ) : null}
+
       <View style={styles.headerRow}>
         <Ionicons name="mail-outline" size={16} color={theme.colors.textSecondary} />
         <Text style={styles.title}>Quick email to parent</Text>
@@ -94,6 +124,12 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
+  },
+  offscreen: {
+    position: 'absolute',
+    left: -10000,
+    top: 0,
+    opacity: 0,
   },
   headerRow: {
     flexDirection: 'row',
