@@ -51,6 +51,7 @@ import {
 } from '../lib/swimLessonApproval';
 import { approveDismissalSwim } from '../lib/dismissalDashboard';
 import { runSwimLessonReminders } from '../lib/swimLessonReminderApi';
+import { SwimLessonCalendarPanel } from '../components/SwimLessonCalendarPanel';
 
 type ScheduleMode = 'once' | 'recurring';
 
@@ -107,6 +108,7 @@ export function SwimLessonsScreen({ navigation }: any) {
   const [selectedWeeks, setSelectedWeeks] = useState<number[]>([]);
   const [selectedDays, setSelectedDays] = useState<CampWeekday[]>([]);
   const [reminderRunning, setReminderRunning] = useState(false);
+  const [pageView, setPageView] = useState<'list' | 'calendar'>('list');
 
   const sendThreeDayReminders = async () => {
     if (!companyId || reminderRunning) return;
@@ -293,6 +295,18 @@ export function SwimLessonsScreen({ navigation }: any) {
     [lessons],
   );
 
+  const calendarLessons = useMemo(
+    () =>
+      lessons.map((l) => ({
+        id: l.id,
+        camperName: camperName(l.camper_id),
+        instructor: l.instructor,
+        status: l.status,
+        scheduled_at: l.scheduled_at,
+      })),
+    [lessons, campers],
+  );
+
   const approveTransport = async (id: string) => {
     const { error } = await approveDismissalSwim(supabase, id);
     if (error) Alert.alert('Error', error.message);
@@ -406,6 +420,45 @@ export function SwimLessonsScreen({ navigation }: any) {
       </View>
 
       <ScrollView style={styles.content}>
+        <View style={styles.viewToggleRow}>
+          <TouchableOpacity
+            style={[
+              styles.viewToggleBtn,
+              pageView === 'list' && { backgroundColor: brand, borderColor: brand },
+            ]}
+            onPress={() => setPageView('list')}
+            accessibilityRole="button"
+            accessibilityState={{ selected: pageView === 'list' }}
+          >
+            <Ionicons
+              name={pageView === 'list' ? 'list' : 'list-outline'}
+              size={20}
+              color={pageView === 'list' ? '#fff' : brand}
+            />
+            <Text style={[styles.viewToggleText, pageView === 'list' && styles.viewToggleTextActive]}>
+              List
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.viewToggleBtn,
+              pageView === 'calendar' && { backgroundColor: brand, borderColor: brand },
+            ]}
+            onPress={() => setPageView('calendar')}
+            accessibilityRole="button"
+            accessibilityState={{ selected: pageView === 'calendar' }}
+          >
+            <Ionicons
+              name={pageView === 'calendar' ? 'calendar' : 'calendar-outline'}
+              size={20}
+              color={pageView === 'calendar' ? '#fff' : brand}
+            />
+            <Text style={[styles.viewToggleText, pageView === 'calendar' && styles.viewToggleTextActive]}>
+              Calendar
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity
           style={[styles.reminderBtn, { borderColor: brand, opacity: reminderRunning ? 0.6 : 1 }]}
           onPress={() => void sendThreeDayReminders()}
@@ -417,7 +470,16 @@ export function SwimLessonsScreen({ navigation }: any) {
           </Text>
         </TouchableOpacity>
 
-        {pendingLessons.length > 0 ? (
+        {pageView === 'calendar' && companyId ? (
+          <SwimLessonCalendarPanel
+            companyId={companyId}
+            season={season}
+            brand={brand}
+            lessons={calendarLessons}
+          />
+        ) : null}
+
+        {pageView === 'list' && pendingLessons.length > 0 ? (
           <View style={[styles.card, styles.pendingCard]}>
             <View style={styles.cardHeader}>
               <Ionicons name="time-outline" size={18} color="#92400E" />
@@ -443,6 +505,7 @@ export function SwimLessonsScreen({ navigation }: any) {
           </View>
         ) : null}
 
+        {pageView === 'list' ? (
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="list" size={18} color={theme.colors.text} />
@@ -511,6 +574,7 @@ export function SwimLessonsScreen({ navigation }: any) {
             )}
           </View>
         </View>
+        ) : null}
       </ScrollView>
 
       <Modal
@@ -931,6 +995,36 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+  },
+  viewToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+    padding: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.background,
+  },
+  viewToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    backgroundColor: '#fff',
+  },
+  viewToggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
+  viewToggleTextActive: {
+    color: '#fff',
   },
   reminderBtn: {
     flexDirection: 'row',
