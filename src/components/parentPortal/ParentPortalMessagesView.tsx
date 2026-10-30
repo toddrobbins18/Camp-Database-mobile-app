@@ -23,6 +23,7 @@ import { ParentPortalMediaGallery } from './ParentPortalMediaGallery';
 import { messageContentPreview } from '../../lib/messageContentUtils';
 import type { ParentPortalColors } from '../../lib/parentPortalTheme';
 import { markThreadRepliesReadForRecipient } from '../../lib/messageReadReceipts';
+import { resolveThreadRecipientId } from '../../lib/messageThreadRecipient';
 import {
   messageMediaEnabledForCamp,
   sendDirectMessageMedia,
@@ -198,8 +199,11 @@ export function ParentPortalMessagesView({
       Alert.alert('Empty reply', 'Write a message or attach a file.');
       return;
     }
-    const recipientId =
-      currentUserId === threadRoot.sender_id ? threadRoot.recipient_id : threadRoot.sender_id;
+    const recipientId = resolveThreadRecipientId(
+      threadRoot as { sender_id?: string | null; recipient_id?: string | null },
+      currentUserId,
+      threadReplies,
+    );
     if (!recipientId) {
       Alert.alert('Cannot reply', 'This conversation has no recipient.');
       return;

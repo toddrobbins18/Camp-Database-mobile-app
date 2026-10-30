@@ -45,6 +45,7 @@ import {
     markThreadRepliesReadForRecipient,
     mergeMessageRead,
 } from '../lib/messageReadReceipts';
+import { resolveThreadRecipientId } from '../lib/messageThreadRecipient';
 import {
     listStaffParentPortalInbox,
     type StaffParentPortalThreadRow,
@@ -653,10 +654,11 @@ export const MessagesScreen = ({ navigation, route }: any) => {
             Alert.alert('Empty reply', 'Write a message or attach a file.');
             return;
         }
-        const recipientId =
-            currentUserId === detailMessage.sender_id
-                ? detailMessage.recipient_id
-                : detailMessage.sender_id;
+        const recipientId = resolveThreadRecipientId(
+            detailMessage,
+            currentUserId,
+            threadReplies,
+        );
         if (!recipientId) {
             Alert.alert('Cannot reply', 'This message has no recipient to reply to.');
             return;
@@ -723,6 +725,7 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         companyId,
         threadSending,
         threadPendingMedia,
+        threadReplies,
         profile?.full_name,
         messageLabelsCompanyId,
         queryClient,

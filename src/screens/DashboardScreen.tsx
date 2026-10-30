@@ -31,7 +31,7 @@ import {
     useDashboardStats,
 } from '../api/dashboard';
 import { groupOutlookItemsByDate, outlookDayHeading } from '../lib/personScheduleOutlook';
-import { useInboxUnreadCount } from '../api/messages';
+import { MobileNotificationBell } from '../components/MobileNotificationBell';
 import { supabase } from '../lib/supabase';
 import { formatTime12Hour } from '../lib/formatTime';
 import { formatDashboardSpecialEventSubtitle } from '../lib/dailyWolfPrintableUtils';
@@ -71,13 +71,6 @@ export const DashboardScreen = ({ navigation }: any) => {
     const todayString = operationalDateString;
     const todayMonth = operationalDate.getMonth() + 1;
     const todayDay = operationalDate.getDate();
-
-    const [dashboardUserId, setDashboardUserId] = useState<string | null>(null);
-    useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => setDashboardUserId(data.user?.id ?? null));
-    }, []);
-
-    const { data: inboxUnread = 0 } = useInboxUnreadCount(dashboardUserId);
 
     // Dashboard Notes (Tyler Hill)
     const [notesLoading, setNotesLoading] = useState(false);
@@ -373,26 +366,7 @@ export const DashboardScreen = ({ navigation }: any) => {
                     </TouchableOpacity>
 
                     <View style={styles.headerRight}>
-                        <TouchableOpacity
-                            onPress={() => navigation.navigate('Messages')}
-                            style={styles.headerBellWrap}
-                            accessibilityLabel={
-                                inboxUnread > 0
-                                    ? `Messages, ${inboxUnread} unread notifications`
-                                    : 'Messages'
-                            }
-                        >
-                            <View style={[styles.headerIconBtn, styles.headerBellInner]}>
-                                <Ionicons name="notifications-outline" size={26} color={ink} />
-                            </View>
-                            {inboxUnread > 0 && (
-                                <View style={styles.headerBellBadge} accessibilityLabel={`${inboxUnread} unread`}>
-                                    <Text style={styles.headerBellBadgeText}>
-                                        {inboxUnread > 99 ? '99+' : inboxUnread}
-                                    </Text>
-                                </View>
-                            )}
-                        </TouchableOpacity>
+                        <MobileNotificationBell navigation={navigation} iconColor={ink} />
                         <MobileUserMenu navigation={navigation} />
                     </View>
                 </View>

@@ -157,8 +157,10 @@ import { useRole } from '../hooks/useRole';
 import { useMenuAccess } from '../hooks/useMenuAccess';
 import { useBusCounselorNavScope } from '../hooks/useBusCounselorNavScope';
 import { withMenuPermission } from '../components/MenuPermissionGate';
-import { useMessagesRealtimeSync, useInboxUnreadCount } from '../api/messages';
+import { useMessagesRealtimeSync } from '../api/messages';
+import { useInboxUnreadCount } from '../hooks/useInboxUnreadCount';
 import { useParentAnnouncementNotifications } from '../lib/parentAnnouncementNotifications';
+import { registerExpoPushToken } from '../lib/expoPushRegistration';
 import { useInboxNotificationDeepLink } from '../lib/inboxNotificationNavigation';
 import {
     registerInboxNotificationPresentation,
@@ -877,6 +879,7 @@ const MainAppNavigator = () => {
         void (async () => {
             await ensureInboxNotificationChannel();
             await requestInboxNotificationPermission();
+            await registerExpoPushToken(supabase);
         })();
     }, [realtimeUserId]);
 

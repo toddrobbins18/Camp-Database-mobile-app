@@ -7,6 +7,9 @@ import { planInboxPushForInsert } from '../lib/messagePushFromRow';
 import { canonicalProfileUuid, fetchMessageProfileLabels, rowParticipantIds } from '../lib/messageProfiles';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 import { filterMessagesForCampInbox } from '../lib/messageInboxFilters';
+import { inboxUnreadCountQueryKey } from '../hooks/useInboxUnreadCount';
+
+export { inboxUnreadCountQueryKey, useInboxUnreadCount } from '../hooks/useInboxUnreadCount';
 
 async function attachParticipantProfiles(
   rows: Record<string, unknown>[],
@@ -323,15 +326,9 @@ export interface MessageGroup {
     updated_at?: string;
 }
 
-/** React Query key for unread inbox rows (all message rows where recipient = user & read=false). */
-export function inboxUnreadCountQueryKey(userId: string) {
-    return ['inboxUnreadCount', userId] as const;
-}
-
 const messagesCacheKey = (kind: 'inbox' | 'sent', userId: string, companyId?: string | null) =>
     `messages:${kind}:${userId}:${companyId ?? ''}`;
 const groupsCacheKey = (userId: string) => `message_groups:${userId}`;
-const unreadCacheKey = (userId: string) => `messages_unread:${userId}`;
 
 async function applyQueuedMessageOps(rows: Message[], userId: string, kind: 'inbox' | 'sent'): Promise<Message[]> {
     const out = [...rows];
@@ -358,52 +355,6 @@ async function applyQueuedMessageOps(rows: Message[], userId: string, kind: 'inb
         }
     }
     return out;
-}
-
-async function queuedUnreadAdjustment(userId: string): Promise<number> {
-    const queued = await listQueued('messages.');
-    let delta = 0;
-    for (const q of queued) {
-        if (q.action === 'messages.insert') {
-            const ins = Array.isArray(q.payload) ? (q.payload as any[]) : [q.payload as any];
-            for (const row of ins) {
-                if (row?.recipient_id === userId && !row?.read) delta += 1;
-            }
-        } else if (q.action === 'messages.mark_read') {
-            delta -= 1;
-        }
-    }
-    return delta;
-}
-
-export function useInboxUnreadCount(userId: string | null) {
-    return useQuery({
-        queryKey: userId ? inboxUnreadCountQueryKey(userId) : ['inboxUnreadCount', 'disabled'],
-        queryFn: async (): Promise<number> => {
-            if (!userId) return 0;
-            try {
-                const { count, error } = await supabase
-                    .from('messages')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('recipient_id', userId)
-                    .eq('read', false);
-                if (error) throw error;
-                const base = count ?? 0;
-                const total = Math.max(0, base + (await queuedUnreadAdjustment(userId)));
-                await setCachedJson(unreadCacheKey(userId), total);
-                return total;
-            } catch {
-                const cached = (await getCachedJson<number>(unreadCacheKey(userId))) ?? 0;
-                return Math.max(0, cached + (await queuedUnreadAdjustment(userId)));
-            }
-        },
-        enabled: !!userId,
-        staleTime: 5000,
-        /** Fallback when Realtime misses events (sleep/network/publication quirks). */
-        refetchInterval: 30_000,
-        /** When Realtime misses (background / network), unread count still updates periodically. */
-        refetchIntervalInBackground: true,
-    });
 }
 
 /** Subscribe to inbox/sent DB changes. Uses an unfiltered channel: RLS scopes events to rows the user may SELECT; filtered `recipient_id=eq` subs are unreliable for INSERT on some projects. */

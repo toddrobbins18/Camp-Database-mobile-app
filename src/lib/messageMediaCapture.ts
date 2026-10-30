@@ -13,26 +13,56 @@ export type MessageMediaCaptureAction =
   | 'file';
 
 const NATIVE_BUILD_HINT =
-  'Camera, microphone, and photo library need a dev build with the latest native modules. From the mobile app folder run: npx expo run:ios (or npx expo run:android), then open that build—not an older simulator install.';
+  'Camera and mic need a dev build with native modules. In Camp-Database-mobile-app run: npx expo run:ios (or run:android), then open that app—not Expo Go with an old binary.';
 
-function alertNativeModuleMissing(): void {
-  Alert.alert('App update required', NATIVE_BUILD_HINT);
+function alertNativeModuleMissing(onFallback?: () => void): void {
+  const buttons: { text: string; onPress?: () => void; style?: 'cancel' | 'default' }[] = [];
+  if (onFallback) {
+    buttons.push({ text: 'Pick file instead', onPress: onFallback });
+  }
+  buttons.push({ text: 'OK', style: 'cancel' });
+  Alert.alert('Native camera unavailable', NATIVE_BUILD_HINT, buttons);
 }
 
-async function loadImagePicker() {
+let imagePickerNativeOk: boolean | null = null;
+
+async function hasImagePickerNativeModule(): Promise<boolean> {
+  if (imagePickerNativeOk !== null) return imagePickerNativeOk;
   try {
-    return await import('expo-image-picker');
+    const { requireOptionalNativeModule } = await import('expo-modules-core');
+    const native = requireOptionalNativeModule('ExponentImagePicker');
+    imagePickerNativeOk = native != null;
   } catch {
-    alertNativeModuleMissing();
+    imagePickerNativeOk = false;
+  }
+  return imagePickerNativeOk;
+}
+
+type ImagePickerModule = typeof import('expo-image-picker');
+
+async function loadImagePicker(): Promise<ImagePickerModule | null> {
+  const hasNative = await hasImagePickerNativeModule();
+  if (!hasNative) return null;
+  try {
+    const mod = await import('expo-image-picker');
+    if (typeof mod.requestCameraPermissionsAsync !== 'function') {
+      imagePickerNativeOk = false;
+      return null;
+    }
+    return mod;
+  } catch {
+    imagePickerNativeOk = false;
     return null;
   }
 }
 
 async function loadAudio() {
   try {
+    const { requireOptionalNativeModule } = await import('expo-modules-core');
+    const native = requireOptionalNativeModule('ExponentAV');
+    if (!native) return null;
     return await import('expo-av');
   } catch {
-    alertNativeModuleMissing();
     return null;
   }
 }
@@ -47,16 +77,23 @@ function assetToPicked(
   return { uri, fileName, mimeType, kind };
 }
 
-export async function captureMessageMedia(
-  action: MessageMediaCaptureAction,
+async function runImagePickerAction(
+  action: 'camera_photo' | 'camera_video' | 'library',
 ): Promise<PickedMessageMedia | null> {
-  switch (action) {
-    case 'camera_photo': {
-      const ImagePicker = await loadImagePicker();
-      if (!ImagePicker) return null;
+  const ImagePicker = await loadImagePicker();
+  if (!ImagePicker) {
+    return new Promise((resolve) => {
+      alertNativeModuleMissing(() => {
+        void pickMessageMediaFromDevice().then(resolve);
+      });
+    });
+  }
+
+  try {
+    if (action === 'camera_photo') {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Camera', 'Camera permission is required to take photos or videos.');
+        Alert.alert('Camera', 'Camera permission is required.');
         return null;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -70,12 +107,10 @@ export async function captureMessageMedia(
       const mimeType = a.mimeType ?? 'image/jpeg';
       return assetToPicked(a.uri, fileName, mimeType);
     }
-    case 'camera_video': {
-      const ImagePicker = await loadImagePicker();
-      if (!ImagePicker) return null;
+    if (action === 'camera_video') {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Camera', 'Camera permission is required to take photos or videos.');
+        Alert.alert('Camera', 'Camera permission is required.');
         return null;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -89,30 +124,50 @@ export async function captureMessageMedia(
       const mimeType = a.mimeType ?? 'video/mp4';
       return assetToPicked(a.uri, fileName, mimeType);
     }
-    case 'library': {
-      const ImagePicker = await loadImagePicker();
-      if (!ImagePicker) return null;
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Photos', 'Photo library access is required.');
-        return null;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
-        quality: 0.85,
-        videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Photos', 'Photo library access is required.');
+      return null;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      quality: 0.85,
+      videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+    });
+    if (result.canceled || !result.assets?.[0]) return null;
+    const a = result.assets[0];
+    const isVideo = a.type === 'video';
+    const fileName =
+      a.fileName ?? (isVideo ? `video-${Date.now()}.mp4` : `photo-${Date.now()}.jpg`);
+    const mimeType = a.mimeType ?? (isVideo ? 'video/mp4' : 'image/jpeg');
+    return assetToPicked(a.uri, fileName, mimeType);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('ExponentImagePicker') || msg.includes('native module')) {
+      imagePickerNativeOk = false;
+      return new Promise((resolve) => {
+        alertNativeModuleMissing(() => {
+          void pickMessageMediaFromDevice().then(resolve);
+        });
       });
-      if (result.canceled || !result.assets?.[0]) return null;
-      const a = result.assets[0];
-      const isVideo = a.type === 'video';
-      const fileName =
-        a.fileName ?? (isVideo ? `video-${Date.now()}.mp4` : `photo-${Date.now()}.jpg`);
-      const mimeType = a.mimeType ?? (isVideo ? 'video/mp4' : 'image/jpeg');
-      return assetToPicked(a.uri, fileName, mimeType);
     }
-    case 'voice': {
+    console.warn('[messageMediaCapture]', msg);
+    return null;
+  }
+}
+
+export async function captureMessageMedia(
+  action: MessageMediaCaptureAction,
+): Promise<PickedMessageMedia | null> {
+  switch (action) {
+    case 'camera_photo':
+      return runImagePickerAction('camera_photo');
+    case 'camera_video':
+      return runImagePickerAction('camera_video');
+    case 'library':
+      return runImagePickerAction('library');
+    case 'voice':
       return recordVoiceMessage();
-    }
     case 'file':
       return pickMessageMediaFromDevice();
     default:
@@ -125,8 +180,12 @@ let activeRecording: any = null;
 
 export async function startVoiceRecording(): Promise<boolean> {
   if (activeRecording) return true;
-  const { Audio } = (await loadAudio()) ?? {};
-  if (!Audio) return false;
+  const av = await loadAudio();
+  if (!av?.Audio) {
+    Alert.alert('Microphone unavailable', NATIVE_BUILD_HINT);
+    return false;
+  }
+  const { Audio } = av;
   const { status } = await Audio.requestPermissionsAsync();
   if (status !== 'granted') {
     Alert.alert('Microphone', 'Microphone permission is required to record voice messages.');
@@ -147,11 +206,11 @@ export async function stopVoiceRecording(): Promise<PickedMessageMedia | null> {
   const recording = activeRecording;
   activeRecording = null;
   if (!recording) return null;
-  const { Audio } = (await loadAudio()) ?? {};
+  const av = await loadAudio();
   try {
     await recording.stopAndUnloadAsync();
-    if (Audio) {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+    if (av?.Audio) {
+      await av.Audio.setAudioModeAsync({ allowsRecordingIOS: false });
     }
     const uri = recording.getURI() as string | null;
     if (!uri) return null;
@@ -173,8 +232,11 @@ export function cancelVoiceRecording(): void {
 }
 
 async function recordVoiceMessage(): Promise<PickedMessageMedia | null> {
-  const audio = await loadAudio();
-  if (!audio) return null;
+  const av = await loadAudio();
+  if (!av) {
+    Alert.alert('Microphone unavailable', NATIVE_BUILD_HINT);
+    return null;
+  }
 
   return new Promise((resolve) => {
     Alert.alert(
@@ -227,16 +289,22 @@ export function openMessageMediaCaptureMenu(
   onSelected: (media: PickedMessageMedia) => void,
 ): void {
   const pick = (action: MessageMediaCaptureAction) => {
-    void captureMessageMedia(action).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('ExponentImagePicker') || msg.includes('native module')) {
-        alertNativeModuleMissing();
-        return;
-      }
-      console.warn('[messageMediaCapture]', msg);
-    }).then((media) => {
-      if (media) onSelected(media);
-    });
+    void captureMessageMedia(action)
+      .then((media) => {
+        if (media) onSelected(media);
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('ExponentImagePicker') || msg.includes('native module')) {
+          alertNativeModuleMissing(() => {
+            void pickMessageMediaFromDevice().then((m) => {
+              if (m) onSelected(m);
+            });
+          });
+          return;
+        }
+        console.warn('[messageMediaCapture]', msg);
+      });
   };
 
   if (Platform.OS === 'ios') {

@@ -7,6 +7,7 @@ import { StyledCard } from '../components/StyledCard';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { MobileUserMenu } from '../components/MobileUserMenu';
+import { MobileNotificationBell } from '../components/MobileNotificationBell';
 import { enqueueSync, getCachedJson, isOnlineNow, setCachedJson } from '../offline/engine';
 
 interface NotificationPreference {
@@ -156,12 +157,7 @@ export const NotificationPreferencesScreen = ({ navigation }: any) => {
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Notification Preferences</Text>
                 <View style={styles.headerRight}>
-                    <TouchableOpacity
-                        onPress={() => navigation.navigate('Messages')}
-                        style={styles.headerIconBtn}
-                    >
-                        <Ionicons name="notifications-outline" size={26} color={theme.colors.primary} />
-                    </TouchableOpacity>
+                    <MobileNotificationBell navigation={navigation} iconColor={theme.colors.primary} />
                     <MobileUserMenu navigation={navigation} />
                 </View>
             </View>

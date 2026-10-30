@@ -17,6 +17,7 @@ import {
   publishParentPortalAnnouncement,
   type ParentPortalAnnouncement,
 } from '../../lib/parentPortalAnnouncements';
+import type { PickedMessageMedia } from '../../lib/messageMedia';
 import { formatCampDateTime } from '../../lib/campTime';
 import { StyledCard } from '../StyledCard';
 
@@ -31,6 +32,7 @@ export function StaffAnnouncementsPanel({ companyId, season }: Props) {
   const [title, setTitle] = useState('Camp announcement');
   const [body, setBody] = useState('');
   const [publishing, setPublishing] = useState(false);
+  const [image, setImage] = useState<PickedMessageMedia | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -46,7 +48,7 @@ export function StaffAnnouncementsPanel({ companyId, season }: Props) {
 
   const publish = async () => {
     const text = body.trim();
-    if (!text || publishing) return;
+    if ((!text && !image) || publishing) return;
     setPublishing(true);
     const { error } = await publishParentPortalAnnouncement(
       supabase,
@@ -54,6 +56,7 @@ export function StaffAnnouncementsPanel({ companyId, season }: Props) {
       season,
       title.trim() || 'Camp announcement',
       text,
+      { image },
     );
     setPublishing(false);
     if (error) {
@@ -61,7 +64,17 @@ export function StaffAnnouncementsPanel({ companyId, season }: Props) {
       return;
     }
     setBody('');
+    setImage(null);
     void refresh();
+  };
+
+  const pickPhoto = () => {
+    void import('../../lib/messageMediaCapture').then(({ openMessageMediaCaptureMenu }) => {
+      openMessageMediaCaptureMenu((media) => {
+        if (media.kind === 'image') setImage(media);
+        else Alert.alert('Announcements', 'Photos only for announcements.');
+      });
+    });
   };
 
   return (
@@ -84,9 +97,17 @@ export function StaffAnnouncementsPanel({ companyId, season }: Props) {
           placeholder="Write your announcement…"
           multiline
         />
+        <TouchableOpacity style={styles.photoBtn} onPress={pickPhoto}>
+          <Text style={styles.photoBtnText}>{image ? 'Change photo' : 'Add photo'}</Text>
+        </TouchableOpacity>
+        {image ? (
+          <Text style={styles.fileHint} numberOfLines={1}>
+            {image.fileName}
+          </Text>
+        ) : null}
         <TouchableOpacity
-          style={[styles.btn, (!body.trim() || publishing) && styles.btnOff]}
-          disabled={!body.trim() || publishing}
+          style={[styles.btn, (!body.trim() && !image) || publishing ? styles.btnOff : null]}
+          disabled={(!body.trim() && !image) || publishing}
           onPress={() => void publish()}
         >
           {publishing ? (
@@ -149,6 +170,9 @@ const styles = StyleSheet.create({
   },
   btnOff: { opacity: 0.5 },
   btnText: { color: '#fff', fontWeight: '600' },
+  photoBtn: { marginBottom: 8 },
+  photoBtnText: { color: theme.colors.secondary, fontWeight: '600' },
+  fileHint: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 },
   listTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
   empty: { color: theme.colors.textSecondary, marginTop: 8 },
   row: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border, paddingVertical: 12 },

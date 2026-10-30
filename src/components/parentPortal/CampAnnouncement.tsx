@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatCampDateTime } from '../../lib/campTime';
 import type { ParentPortalColors } from '../../lib/parentPortalTheme';
@@ -10,6 +10,7 @@ export type CampAnnouncementContent = {
   title: string;
   body: string;
   publishedAt?: string | null;
+  mediaImageUrl?: string | null;
 };
 
 type CampAnnouncementProps = {
@@ -20,7 +21,7 @@ type CampAnnouncementProps = {
 };
 
 export function CampAnnouncement({ campName, update, colors, glass }: CampAnnouncementProps) {
-  const hasMessage = Boolean(update?.body?.trim());
+  const hasMessage = Boolean(update?.body?.trim() || update?.mediaImageUrl);
   if (!hasMessage) return null;
 
   return (
@@ -53,9 +54,19 @@ export function CampAnnouncement({ campName, update, colors, glass }: CampAnnoun
           <Text style={[ppFont.titleSm, { color: colors.text, marginTop: PP.sm }]}>
             {update!.title}
           </Text>
-          <Text style={[ppFont.body, { color: colors.textMuted, marginTop: PP.sm, lineHeight: 22 }]}>
-            {update!.body}
-          </Text>
+          {update?.mediaImageUrl ? (
+            <Image
+              source={{ uri: update.mediaImageUrl }}
+              style={styles.heroImage}
+              resizeMode="cover"
+              accessibilityLabel="Announcement photo"
+            />
+          ) : null}
+          {update!.body?.trim() ? (
+            <Text style={[ppFont.body, { color: colors.textMuted, marginTop: PP.sm, lineHeight: 22 }]}>
+              {update!.body}
+            </Text>
+          ) : null}
           {update?.publishedAt ? (
             <Text style={[ppFont.caption, { color: colors.textMuted, marginTop: PP.sm }]}>
               Posted {formatCampDateTime(update.publishedAt)}
@@ -111,5 +122,11 @@ const styles = StyleSheet.create({
   badgeText: {
     fontWeight: '700',
     letterSpacing: 0.6,
+  },
+  heroImage: {
+    marginTop: PP.sm,
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
   },
 });
