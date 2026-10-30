@@ -26,6 +26,7 @@ import {
 import {
   buildApprovedChangeSheetRows,
   changeSheetRowsToCsv,
+  PARENT_TRANSPORT_CHANGE_SHEET_BUS,
   type TransportChangeSheetRow,
 } from '../lib/transportChangeSheets';
 
@@ -38,12 +39,13 @@ function dateFromYmd(ymd: string) {
 }
 
 export function TransportChangeSheetsScreen({ navigation }: { navigation: any }) {
-  const { routeMeta, coreStops, loading: boardLoading, companyId, season } =
+  const { routeMeta, coreStops, parentTransportCampers, loading: boardLoading, companyId, season } =
     useTransportBoardSnapshot();
   const [sheetDate, setSheetDate] = useState(todayDateString());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [runPeriod, setRunPeriod] = useState<TransportRunPeriod>('am');
   const [selectedRouteIds, setSelectedRouteIds] = useState<number[]>([]);
+  const [includeParentTransport, setIncludeParentTransport] = useState(true);
   const [rows, setRows] = useState<TransportChangeSheetRow[]>([]);
   const [loadingSheet, setLoadingSheet] = useState(false);
 
@@ -51,6 +53,7 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
 
   useEffect(() => {
     setSelectedRouteIds(routeMeta.map((r) => r.id));
+    setIncludeParentTransport(true);
   }, [routeIdsKey, routeMeta]);
 
   const toggleRoute = (routeId: number) => {
@@ -59,14 +62,20 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
     );
   };
 
-  const selectAllRoutes = () => setSelectedRouteIds(routeMeta.map((r) => r.id));
-  const clearRoutes = () => setSelectedRouteIds([]);
+  const selectAllRoutes = () => {
+    setSelectedRouteIds(routeMeta.map((r) => r.id));
+    setIncludeParentTransport(true);
+  };
+  const clearRoutes = () => {
+    setSelectedRouteIds([]);
+    setIncludeParentTransport(false);
+  };
 
   const loadSheet = useCallback(async () => {
     if (!companyId || !season) return;
     setLoadingSheet(true);
     try {
-      if (!selectedRouteIds.length) {
+      if (!selectedRouteIds.length && !includeParentTransport) {
         setRows([]);
         return;
       }
@@ -82,26 +91,41 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
         routeMeta,
         coreStops,
         selectedRouteIds,
+        includeParentTransport,
+        parentTransportCampers,
       });
       setRows(built.filter((r) => !r.camper.startsWith('(No transport')));
     } finally {
       setLoadingSheet(false);
     }
-  }, [companyId, coreStops, routeMeta, runPeriod, season, selectedRouteIds, sheetDate]);
+  }, [
+    companyId,
+    coreStops,
+    includeParentTransport,
+    parentTransportCampers,
+    routeMeta,
+    runPeriod,
+    season,
+    selectedRouteIds,
+    sheetDate,
+  ]);
 
   useEffect(() => {
     if (!boardLoading) void loadSheet();
   }, [boardLoading, loadSheet]);
 
   const routeLabel = useMemo(() => {
-    if (!selectedRouteIds.length) return 'No buses selected';
+    if (!selectedRouteIds.length && !includeParentTransport) return 'Nothing selected';
+    if (!selectedRouteIds.length && includeParentTransport) return PARENT_TRANSPORT_CHANGE_SHEET_BUS;
+    if (selectedRouteIds.length === routeMeta.length && includeParentTransport) return 'All buses + PT';
     if (selectedRouteIds.length === routeMeta.length) return 'All buses';
     if (selectedRouteIds.length === 1) {
       const r = routeMeta.find((x) => x.id === selectedRouteIds[0]);
       return r ? `${r.bus} · ${r.name}` : '1 bus';
     }
-    return `${selectedRouteIds.length} buses`;
-  }, [routeMeta, selectedRouteIds]);
+    const label = `${selectedRouteIds.length} bus${selectedRouteIds.length === 1 ? '' : 'es'}`;
+    return includeParentTransport ? `${label} + PT` : label;
+  }, [includeParentTransport, routeMeta, selectedRouteIds]);
 
   const shareSheet = async () => {
     if (!rows.length) return;
@@ -137,7 +161,7 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
         <TouchableOpacity
           style={[styles.shareBtn, rows.length === 0 && styles.shareBtnDisabled]}
           onPress={() => void shareSheet()}
-          disabled={rows.length === 0 || selectedRouteIds.length === 0}
+          disabled={rows.length === 0 || (!selectedRouteIds.length && !includeParentTransport)}
         >
           <Ionicons name="share-outline" size={20} color="#fff" />
         </TouchableOpacity>
@@ -211,6 +235,23 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
             </TouchableOpacity>
           );
         })}
+        <TouchableOpacity
+          style={[
+            styles.routeChip,
+            includeParentTransport && styles.routeChipActive,
+            styles.ptChip,
+          ]}
+          onPress={() => setIncludeParentTransport((v) => !v)}
+        >
+          <Ionicons
+            name={includeParentTransport ? 'checkbox' : 'square-outline'}
+            size={14}
+            color={includeParentTransport ? theme.colors.primary : theme.colors.textSecondary}
+          />
+          <Text style={[styles.routeChipText, includeParentTransport && styles.routeChipTextActive]}>
+            PT
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <View style={styles.statsRow}>
@@ -341,6 +382,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderLeftWidth: 3,
+  },
+  ptChip: {
+    borderLeftWidth: 1,
+    borderStyle: 'dashed',
   },
   routeChipActive: { backgroundColor: theme.colors.secondary + '12', borderColor: theme.colors.secondary },
   routeChipText: { fontSize: 12, color: theme.colors.textSecondary, fontWeight: '500' },

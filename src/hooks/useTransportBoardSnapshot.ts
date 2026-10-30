@@ -14,12 +14,16 @@ export function useTransportBoardSnapshot() {
   const { companyId, season } = useCompany();
   const [routeMeta, setRouteMeta] = useState<TransportRouteMeta[]>([]);
   const [coreStops, setCoreStops] = useState<Record<number, TransportRouteStop[]>>({});
+  const [parentTransportCampers, setParentTransportCampers] = useState<
+    { routeId: number | null; name: string }[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     if (!companyId || !season) {
       setRouteMeta([]);
       setCoreStops({});
+      setParentTransportCampers([]);
       setLoading(false);
       return;
     }
@@ -42,6 +46,7 @@ export function useTransportBoardSnapshot() {
       if (!payload) {
         setRouteMeta([]);
         setCoreStops({});
+        setParentTransportCampers([]);
         return;
       }
 
@@ -62,6 +67,12 @@ export function useTransportBoardSnapshot() {
       }
       setRouteMeta(meta);
       setCoreStops(stops);
+      setParentTransportCampers(
+        (normalized.parentTransportCampers ?? []).map((c) => ({
+          routeId: c.routeId ?? null,
+          name: c.name,
+        })),
+      );
     } finally {
       setLoading(false);
     }
@@ -71,5 +82,5 @@ export function useTransportBoardSnapshot() {
     void load();
   }, [load]);
 
-  return { routeMeta, coreStops, loading, reload: load, companyId, season };
+  return { routeMeta, coreStops, parentTransportCampers, loading, reload: load, companyId, season };
 }

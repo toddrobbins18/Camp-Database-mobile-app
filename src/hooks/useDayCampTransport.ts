@@ -2176,6 +2176,11 @@ export function useDayCampTransport() {
         routeMeta,
         coreStops,
         selectedRouteIds: selectedIds,
+        includeParentTransport: true,
+        parentTransportCampers: parentTransportCampers.map((c) => ({
+          routeId: c.routeId ?? null,
+          name: c.name,
+        })),
       }).filter((r) => !r.camper.startsWith('(No transport'));
       if (!built.length) {
         toast('No changes', 'No approved changes for this date and buses.', true);

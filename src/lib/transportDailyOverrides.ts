@@ -6,6 +6,10 @@ import {
   formatCampTime,
   swimLessonBusRun,
 } from "./campTime";
+import {
+  PARENT_TRANSPORT_CHANGE_SHEET_BUS,
+  PARENT_TRANSPORT_STOP_LABEL,
+} from "./transportParentTransport";
 
 export interface TransportRouteStop {
   name: string;
@@ -559,6 +563,7 @@ function findCamperInRoutes(
   camperName: string,
   routeMeta: TransportRouteMeta[],
   coreStops: Record<number, TransportRouteStop[]>,
+  parentTransportCampers?: { routeId: number | null; name: string }[],
 ): { routeName: string; bus: string; address: string } | null {
   const target = normName(camperName);
   for (const meta of routeMeta) {
@@ -567,6 +572,15 @@ function findCamperInRoutes(
         return { routeName: meta.name, bus: meta.bus, address: stop.address };
       }
     }
+  }
+  const pt = parentTransportCampers?.find((c) => normName(c.name) === target);
+  if (pt) {
+    const tied = pt.routeId != null ? routeMeta.find((r) => r.id === pt.routeId) : null;
+    return {
+      routeName: tied ? `${tied.name} · PT` : "Parent Transport",
+      bus: PARENT_TRANSPORT_CHANGE_SHEET_BUS,
+      address: PARENT_TRANSPORT_STOP_LABEL,
+    };
   }
   return null;
 }
@@ -578,8 +592,10 @@ export function buildTransportExceptionsReportRows(options: {
   manual: TransportManualOverrides;
   routeMeta: TransportRouteMeta[];
   coreStops: Record<number, TransportRouteStop[]>;
+  parentTransportCampers?: { routeId: number | null; name: string }[];
 }): (string | number)[][] {
-  const { overrideDate, exceptions, manual, routeMeta, coreStops } = options;
+  const { overrideDate, exceptions, manual, routeMeta, coreStops, parentTransportCampers } =
+    options;
   const rows: (string | number)[][] = [
     [
       "Date",
@@ -597,7 +613,7 @@ export function buildTransportExceptionsReportRows(options: {
   ];
 
   for (const ex of exceptions) {
-    const scheduled = findCamperInRoutes(ex.camperName, routeMeta, coreStops);
+    const scheduled = findCamperInRoutes(ex.camperName, routeMeta, coreStops, parentTransportCampers);
     rows.push([
       overrideDate,
       runPeriodLabel(ex.appliesTo),

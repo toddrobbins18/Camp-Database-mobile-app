@@ -41,7 +41,8 @@ type PendingAction =
   | { kind: 'swim'; id: string; camper: string };
 
 export function PendingTransportChangesScreen({ navigation }: { navigation: any }) {
-  const { routeMeta, coreStops, loading: boardLoading, companyId } = useTransportBoardSnapshot();
+  const { routeMeta, coreStops, parentTransportCampers, loading: boardLoading, companyId } =
+    useTransportBoardSnapshot();
   const [sheetDate, setSheetDate] = useState(todayDateString());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [runPeriod, setRunPeriod] = useState<TransportRunPeriod>('am');
@@ -112,13 +113,15 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
         exceptions,
         routeMeta,
         coreStops,
-        selectedRouteIds: [],
+        selectedRouteIds: routeMeta.map((r) => r.id),
+        includeParentTransport: true,
+        parentTransportCampers,
       });
       setRows(built.filter((r) => !r.camper.startsWith('(No transport')));
     } finally {
       setLoadingSheet(false);
     }
-  }, [companyId, coreStops, routeMeta, runPeriod, sheetDate]);
+  }, [companyId, coreStops, parentTransportCampers, routeMeta, runPeriod, sheetDate]);
 
   useEffect(() => {
     if (!boardLoading) void loadPending();
