@@ -57,6 +57,7 @@ import {
     type DivisionChannelRow,
 } from '../lib/divisionChannelMessaging';
 import { DivisionChannelChatPanel } from '../components/messages/DivisionChannelChatPanel';
+import { StaffAnnouncementsPanel } from '../components/messages/StaffAnnouncementsPanel';
 import { isNestSandboxCompany } from '../constants/camps';
 import { NestSandboxStaffTestAccountsCard } from '../components/messages/NestSandboxStaffTestAccountsCard';
 import * as DocumentPicker from 'expo-document-picker';
@@ -147,7 +148,7 @@ export const MessagesScreen = ({ navigation, route }: any) => {
     const [openChannel, setOpenChannel] = useState<{ rootId: string; name: string } | null>(null);
     const [channelsUnreadCount, setChannelsUnreadCount] = useState(0);
 
-    const { companyId, companySlug, profile } = useCompany();
+    const { companyId, companySlug, profile, season } = useCompany();
     const messageMediaEnabled = messageMediaEnabledForCamp(companySlug);
     /**
      * Web passes `currentCompany?.id` into `fetchMessageProfileLabels` so `resolve_message_profile_labels` runs.
@@ -373,6 +374,14 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         setOpenGroupId(null);
         setOpenChannel(null);
         void refreshDivisionChannelsList();
+    };
+
+    const handleAnnouncements = () => {
+        setActiveView('announcements');
+        setShowComposeModal(false);
+        setOpenThreadId(null);
+        setOpenGroupId(null);
+        setOpenChannel(null);
     };
 
     const openDivisionChannel = async (row: DivisionChannelRow) => {
@@ -828,6 +837,24 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                 </Text>
             </TouchableOpacity>
             <TouchableOpacity
+                style={[styles.segmentTab, activeView === 'announcements' && styles.segmentTabActive]}
+                onPress={handleAnnouncements}
+            >
+                <Ionicons
+                    name="megaphone-outline"
+                    size={16}
+                    color={activeView === 'announcements' ? '#fff' : theme.colors.textSecondary}
+                />
+                <Text
+                    style={[
+                        styles.segmentTabText,
+                        activeView === 'announcements' && styles.segmentTabTextActive,
+                    ]}
+                >
+                    Announce
+                </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
                 style={[styles.segmentTab, styles.segmentTabCompose, activeView === 'compose' && styles.segmentTabActive]}
                 onPress={handleCompose}
             >
@@ -946,6 +973,10 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                         </Text>
                     </View>
                 )}
+
+                {activeView === 'announcements' && companyId ? (
+                    <StaffAnnouncementsPanel companyId={companyId} season={season} />
+                ) : null}
 
                 {activeView === 'channels' && !showingChannel && (
                     <StyledCard style={styles.messagesListCard}>

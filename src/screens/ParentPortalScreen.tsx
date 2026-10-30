@@ -29,7 +29,7 @@ import {
   ParentSwimView,
 } from '../components/parentPortal/ParentPortalViews';
 import { ParentAuthScreen } from './ParentAuthScreen';
-import { fetchPublishedCampUpdate } from '../lib/parentPortalCampUpdates';
+import { fetchLatestParentPortalHomeBulletin } from '../lib/parentPortalAnnouncements';
 import type { CampAnnouncementContent } from '../components/parentPortal/CampAnnouncement';
 import { ParentPortalSandboxStaffPreview } from '../components/parentPortal/ParentPortalSandboxStaffPreview';
 import { isNestSandboxParentTraining } from '../lib/nestSandboxParentDemo';
@@ -134,7 +134,7 @@ export function ParentPortalScreen({ navigation, route }: { navigation: any; rou
       supabase.from('absences').select('*').eq('family_id', fam.id).order('absence_date', { ascending: false }),
       supabase.from('authorized_pickups').select('*').eq('family_id', fam.id).order('full_name'),
       swimPromise,
-      fetchPublishedCampUpdate(supabase, companyId).catch(() => null),
+      fetchLatestParentPortalHomeBulletin(supabase, companyId).catch(() => null),
     ]);
 
     setCampers(linked);

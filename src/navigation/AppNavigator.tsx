@@ -158,6 +158,7 @@ import { useMenuAccess } from '../hooks/useMenuAccess';
 import { useBusCounselorNavScope } from '../hooks/useBusCounselorNavScope';
 import { withMenuPermission } from '../components/MenuPermissionGate';
 import { useMessagesRealtimeSync, useInboxUnreadCount } from '../api/messages';
+import { useParentAnnouncementNotifications } from '../lib/parentAnnouncementNotifications';
 import { useInboxNotificationDeepLink } from '../lib/inboxNotificationNavigation';
 import {
     registerInboxNotificationPresentation,
@@ -880,6 +881,7 @@ const MainAppNavigator = () => {
     }, [realtimeUserId]);
 
     useMessagesRealtimeSync(realtimeUserId);
+    useParentAnnouncementNotifications(realtimeUserId);
 
     return (
         <Drawer.Navigator
