@@ -18,7 +18,10 @@
       "buildNumber": "41",
       "supportsTablet": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "The Nest uses the camera to take photos and videos for camp messages.",
+        "NSMicrophoneUsageDescription": "The Nest uses the microphone for voice and video messages.",
+        "NSPhotoLibraryUsageDescription": "The Nest uses your photo library to attach pictures and videos to messages."
       }
     },
     "android": {
@@ -46,6 +49,14 @@
           "locationWhenInUsePermission": "The Nest uses your location to show live bus position on your route while you choose to share it.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The Nest uses your photo library to attach pictures and videos to messages.",
+          "cameraPermission": "The Nest uses the camera to take photos and videos for messages.",
+          "microphonePermission": "The Nest uses the microphone for voice and video messages."
         }
       ]
     ],

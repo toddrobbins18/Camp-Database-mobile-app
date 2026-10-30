@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
-import { PP, ppFont } from '../../lib/parentPortalUi';
+import { PP, ppFont, useParentPortalMainAreaHeight } from '../../lib/parentPortalUi';
 import {
   listParentPortalThreads,
   openParentDivisionLeaderThread,
@@ -25,7 +25,6 @@ import type { ParentPortalColors } from '../../lib/parentPortalTheme';
 import { markThreadRepliesReadForRecipient } from '../../lib/messageReadReceipts';
 import {
   messageMediaEnabledForCamp,
-  pickMessageMediaFromDevice,
   sendDirectMessageMedia,
   type PickedMessageMedia,
 } from '../../lib/messageMedia';
@@ -45,7 +44,8 @@ export function ParentPortalMessagesView({
   colors,
   onThreadActive,
 }: Props) {
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const mainAreaHeight = useParentPortalMainAreaHeight();
+  const styles = useMemo(() => createStyles(colors, mainAreaHeight), [colors, mainAreaHeight]);
   const [sectionTab, setSectionTab] = useState<SectionTab>('chats');
   const [rows, setRows] = useState<ParentPortalThreadRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -249,12 +249,6 @@ export function ParentPortalMessagesView({
     }
   };
 
-  const pickThreadMedia = async () => {
-    const media = await pickMessageMediaFromDevice();
-    if (!media) return;
-    setThreadPendingMedia(media);
-  };
-
   if (activeRow && threadRoot) {
     return (
       <View style={styles.threadWrap}>
@@ -271,7 +265,6 @@ export function ParentPortalMessagesView({
           setThreadPendingMedia={setThreadPendingMedia}
           threadSending={threadSending}
           onSend={sendThreadReply}
-          onPickMedia={() => void pickThreadMedia()}
           onBack={() => {
             setActiveRow(null);
             setThreadRoot(null);
@@ -365,10 +358,16 @@ export function ParentPortalMessagesView({
   );
 }
 
-function createStyles(colors: ParentPortalColors) {
+function createStyles(colors: ParentPortalColors, mainAreaHeight: number) {
   return StyleSheet.create({
     container: { paddingBottom: 24 },
-    threadWrap: { flex: 1, minHeight: 0, alignSelf: 'stretch' },
+    threadWrap: {
+      flex: 1,
+      height: mainAreaHeight,
+      maxHeight: mainAreaHeight,
+      minHeight: 0,
+      alignSelf: 'stretch',
+    },
     title: {
       fontSize: 22,
       fontFamily: ppFont.semibold,

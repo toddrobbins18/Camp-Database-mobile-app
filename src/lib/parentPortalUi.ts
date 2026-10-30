@@ -1,4 +1,5 @@
-import { Platform, StyleSheet, TextStyle, ViewStyle } from 'react-native';
+import { Platform, StyleSheet, TextStyle, ViewStyle, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ParentPortalColors } from './parentPortalTheme';
 
 /** 4pt grid — use everywhere for alignment. */
@@ -112,4 +113,13 @@ export function ppPrimaryBtn(colors: ParentPortalColors): ViewStyle {
 
 export function ppSectionHeader(title: string, colors: ParentPortalColors): TextStyle {
   return { ...ppFont.titleSm, color: colors.text };
+}
+
+/** Height for content between parent portal camp header and bottom tab bar (message thread fill). */
+export function useParentPortalMainAreaHeight(): number {
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const campHeader = 52;
+  const tabBar = 56 + Math.max(insets.bottom, 8);
+  return Math.max(280, height - insets.top - campHeader - tabBar);
 }

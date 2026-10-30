@@ -56,7 +56,7 @@ type Props = {
   setThreadPendingMedia: (v: PickedMessageMedia | null) => void;
   threadSending: boolean;
   onSend: (text: string) => void | Promise<void>;
-  onPickMedia: () => void;
+  onPickMedia?: () => void;
   onBack: () => void;
   senderLabel: (row: ChatRow) => string;
   /** Parent portal: frosted glass bubbles + softer chat canvas. */
@@ -176,10 +176,12 @@ function DirectMessageThreadViewInner({
           style={styles.chatScroll}
           contentContainerStyle={[
             styles.chatContent,
-            timeline.length === 0 ? styles.chatContentEmpty : null,
+            timeline.length === 0 ? styles.chatContentEmpty : styles.chatContentFilled,
           ]}
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="on-drag"
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
         >
           {timeline.map(renderBubble)}
         </ScrollView>

@@ -21,7 +21,8 @@ type Props = {
   setThreadPendingMedia: (v: PickedMessageMedia | null) => void;
   threadSending: boolean;
   onSend: (text: string) => void | Promise<void>;
-  onPickMedia: () => void;
+  /** @deprecated Composer opens attach menu internally; optional override. */
+  onPickMedia?: () => void;
   appearance?: ChatAppearance;
   brandColor?: string;
 };
@@ -195,6 +196,16 @@ function ThreadMessageComposerInner({
     return () => clearTimeout(t);
   }, [threadId]);
 
+  const handleAttach = () => {
+    if (onPickMedia) {
+      onPickMedia();
+      return;
+    }
+    void import('../../lib/messageMediaCapture').then(({ openMessageMediaCaptureMenu }) => {
+      openMessageMediaCaptureMenu(setThreadPendingMedia);
+    });
+  };
+
   const handleSend = () => {
     const text = draft.trim();
     if (threadSending || (!text && !threadPendingMedia)) return;
@@ -212,7 +223,19 @@ function ThreadMessageComposerInner({
     <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       {threadPendingMedia ? (
         <View style={styles.attachmentChip}>
-          <Ionicons name="document-attach-outline" size={16} color={theme.colors.secondary} />
+          <Ionicons
+            name={
+              threadPendingMedia.kind === 'image'
+                ? 'image-outline'
+                : threadPendingMedia.kind === 'video'
+                  ? 'videocam-outline'
+                  : threadPendingMedia.kind === 'audio'
+                    ? 'mic-outline'
+                    : 'document-attach-outline'
+            }
+            size={16}
+            color={theme.colors.secondary}
+          />
           <Text style={styles.attachmentName} numberOfLines={1}>
             {threadPendingMedia.fileName}
           </Text>
@@ -223,7 +246,7 @@ function ThreadMessageComposerInner({
       ) : null}
       <View style={styles.bar}>
         {messageMediaEnabled ? (
-          <TouchableOpacity style={styles.attachBtn} onPress={onPickMedia}>
+          <TouchableOpacity style={styles.attachBtn} onPress={handleAttach}>
             <Ionicons name="add" size={28} color={theme.colors.textSecondary} />
           </TouchableOpacity>
         ) : null}

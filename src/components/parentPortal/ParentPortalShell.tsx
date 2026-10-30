@@ -20,7 +20,7 @@ import {
   resolveParentPortalThemeColor,
   type ParentPortalColors,
 } from '../../lib/parentPortalTheme';
-import { PP, ppFont } from '../../lib/parentPortalUi';
+import { PP, ppFont, useParentPortalMainAreaHeight } from '../../lib/parentPortalUi';
 
 type Props = {
   campName: string;
@@ -66,6 +66,7 @@ export function ParentPortalShell({
   }, [themeColor, companySlug]);
 
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const mainAreaHeight = useParentPortalMainAreaHeight();
   const [moreOpen, setMoreOpen] = useState(false);
 
   const navIcon = (
@@ -107,12 +108,15 @@ export function ParentPortalShell({
 
       <ScrollView
         style={[styles.main, !mainScroll && styles.mainFill]}
-        contentContainerStyle={[
-          mainScroll ? styles.mainContent : styles.mainFillContent,
-        ]}
+        contentContainerStyle={
+          mainScroll
+            ? styles.mainContent
+            : [styles.mainFillContent, { height: mainAreaHeight, maxHeight: mainAreaHeight }]
+        }
         scrollEnabled={mainScroll}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={mainScroll}
+        nestedScrollEnabled
       >
         {children}
       </ScrollView>

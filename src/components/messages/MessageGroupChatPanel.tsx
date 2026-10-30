@@ -16,7 +16,6 @@ import { fetchMessageProfileLabels } from '../../lib/messageProfiles';
 import { MessageMediaContent } from '../MessageMediaContent';
 import {
   messageMediaEnabledForCamp,
-  pickMessageMediaFromDevice,
   sendGroupMessageMedia,
 } from '../../lib/messageMedia';
 
@@ -147,10 +146,8 @@ export function MessageGroupChatPanel({
     }
   };
 
-  const attachAndSend = async () => {
+  const sendPickedMedia = async (media: import('../../lib/messageMedia').PickedMessageMedia) => {
     if (!currentUserId || !companyId || sending) return;
-    const media = await pickMessageMediaFromDevice();
-    if (!media) return;
     setSending(true);
     try {
       const { error, preview } = await sendGroupMessageMedia(supabase, {
@@ -169,6 +166,13 @@ export function MessageGroupChatPanel({
     } finally {
       setSending(false);
     }
+  };
+
+  const attachAndSend = () => {
+    if (!currentUserId || !companyId || sending) return;
+    import('../../lib/messageMediaCapture').then(({ openMessageMediaCaptureMenu }) => {
+      openMessageMediaCaptureMenu((media) => void sendPickedMedia(media));
+    });
   };
 
   if (loading) {
@@ -209,7 +213,7 @@ export function MessageGroupChatPanel({
           {mediaEnabled ? (
             <TouchableOpacity
               style={styles.iconBtn}
-              onPress={() => void attachAndSend()}
+              onPress={attachAndSend}
               disabled={sending}
               accessibilityLabel="Attach file"
             >

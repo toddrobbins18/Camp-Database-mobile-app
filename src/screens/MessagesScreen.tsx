@@ -357,8 +357,11 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         });
     };
 
-    const pickMessageMedia = () => void pickDocumentMedia(setPendingMedia);
-    const pickThreadMedia = () => void pickDocumentMedia(setThreadPendingMedia);
+    const pickMessageMedia = () => {
+        void import('../lib/messageMediaCapture').then(({ openMessageMediaCaptureMenu }) => {
+            openMessageMediaCaptureMenu(setPendingMedia);
+        });
+    };
 
     const handleClear = () => {
         setSubject('');
@@ -770,7 +773,6 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                     setThreadPendingMedia={setThreadPendingMedia}
                     threadSending={threadSending}
                     onSend={sendThreadReply}
-                    onPickMedia={pickThreadMedia}
                     onBack={handleThreadBack}
                     senderLabel={handleThreadSenderLabel}
                 />
