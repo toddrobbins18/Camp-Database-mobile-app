@@ -41,7 +41,15 @@ import {
   type EnrollmentWeekCalendar,
 } from '../lib/enrollmentWeekCalendar';
 import { campDateTimeToIso } from '../lib/campTime';
-import { approveSwimLessonRequest, rejectSwimLessonRequest } from '../lib/swimLessonApproval';
+import {
+  approveSwimLessonRequest,
+  isSwimLessonBookedStatus,
+  rejectSwimLessonRequest,
+  swimLessonStatusLabel,
+  swimParentApprovalLabel,
+  swimTransportApprovalLabel,
+} from '../lib/swimLessonApproval';
+import { approveDismissalSwim } from '../lib/dismissalDashboard';
 import { runSwimLessonReminders } from '../lib/swimLessonReminderApi';
 
 type ScheduleMode = 'once' | 'recurring';
@@ -61,6 +69,7 @@ type Lesson = {
   reminder_sent_at: string | null;
   rejection_reason: string | null;
   notes: string | null;
+  transport_status: string | null;
 };
 
 export function SwimLessonsScreen({ navigation }: any) {
@@ -263,14 +272,14 @@ export function SwimLessonsScreen({ navigation }: any) {
         instructor: instructorVal,
         cost_cents: costCents,
         notes: notesVal,
-        status: 'scheduled',
+        status: 'booked',
       });
       setSaving(false);
       if (error) {
         Alert.alert('Error', error.message);
         return;
       }
-      Alert.alert('Success', 'Swim lesson scheduled');
+      Alert.alert('Success', 'Swim lesson booked');
     }
 
     setScheduleModalOpen(false);
@@ -280,9 +289,15 @@ export function SwimLessonsScreen({ navigation }: any) {
 
   const pendingLessons = useMemo(() => lessons.filter((l) => l.status === 'pending'), [lessons]);
   const activeLessons = useMemo(
-    () => lessons.filter((l) => l.status !== 'pending' && l.status !== 'rejected' && l.status !== 'cancelled'),
+    () => lessons.filter((l) => isSwimLessonBookedStatus(l.status)),
     [lessons],
   );
+
+  const approveTransport = async (id: string) => {
+    const { error } = await approveDismissalSwim(supabase, id);
+    if (error) Alert.alert('Error', error.message);
+    else load();
+  };
 
   const approveRequest = async (id: string) => {
     const { data: userRes } = await supabase.auth.getUser();
@@ -431,10 +446,10 @@ export function SwimLessonsScreen({ navigation }: any) {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="list" size={18} color={theme.colors.text} />
-            <Text style={styles.cardTitle}>Approved lessons</Text>
+            <Text style={styles.cardTitle}>Booked lessons</Text>
           </View>
           <Text style={styles.cardDescription}>
-            Parents confirm attendance in the Parent Portal after approval.
+            Parent Pending/Approved; after parent approves, transport goes to Pending Changes for staff.
           </Text>
           <View style={styles.listContainer}>
             {activeLessons.length === 0 ? (
@@ -465,11 +480,27 @@ export function SwimLessonsScreen({ navigation }: any) {
                     </View>
 
                     <View style={styles.listFooterRow}>
-                      {l.parent_confirmed ? (
-                        <View style={styles.badgeSent}><Text style={styles.badgeSentText}>Confirmed</Text></View>
-                      ) : (
-                        <View style={styles.badgePending}><Text style={styles.badgePendingText}>Pending</Text></View>
-                      )}
+                      <View style={styles.badgePending}>
+                        <Text style={styles.badgePendingText}>Status: {swimLessonStatusLabel(l.status)}</Text>
+                      </View>
+                      <View style={l.parent_confirmed ? styles.badgeSent : styles.badgePending}>
+                        <Text style={l.parent_confirmed ? styles.badgeSentText : styles.badgePendingText}>
+                          Parent: {swimParentApprovalLabel(l.parent_confirmed)}
+                        </Text>
+                      </View>
+                      <View style={styles.badgePending}>
+                        <Text style={styles.badgePendingText}>
+                          Transport: {swimTransportApprovalLabel(l.parent_confirmed, l.transport_status)}
+                        </Text>
+                      </View>
+                      {swimTransportApprovalLabel(l.parent_confirmed, l.transport_status) === 'Pending' ? (
+                        <TouchableOpacity
+                          style={[styles.approveBtn, { backgroundColor: brand, marginTop: 8 }]}
+                          onPress={() => void approveTransport(l.id)}
+                        >
+                          <Text style={styles.approveBtnText}>Approve transport</Text>
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
                   </View>
                   <TouchableOpacity onPress={() => remove(l.id)} style={styles.deleteButton}>

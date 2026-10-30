@@ -636,7 +636,7 @@ export function ParentSwimView({
                   <View style={[styles.confirmedBadge, { backgroundColor: colors.successBg }]}>
                     <Ionicons name="checkmark-circle" size={14} color={colors.success} />
                     <Text style={[ppFont.caption, { color: colors.success, fontWeight: '500', marginLeft: 4 }]}>
-                      Confirmed
+                      Approved
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -663,7 +663,7 @@ export function ParentSwimView({
                         transport_status: 'submitted',
                       })
                       .eq('id', lesson.id)
-                      .eq('status', 'scheduled');
+                      .in('status', ['booked', 'scheduled']);
                     onSaved();
                   }}
                 >

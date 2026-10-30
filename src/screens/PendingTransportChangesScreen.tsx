@@ -81,7 +81,7 @@ export function PendingTransportChangesScreen({ navigation }: { navigation: any 
           .eq('company_id', companyId)
           .eq('parent_confirmed', true)
           .eq('transport_status', 'submitted')
-          .neq('status', 'cancelled')
+          .in('status', ['booked', 'scheduled'])
           .gte('scheduled_at', campYmdToUtcStartIso(sheetDate))
           .lt('scheduled_at', campYmdToUtcEndIso(sheetDate)),
       ]);
