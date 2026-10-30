@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  getCanonicalDayCampGradeDisplay,
+  getDayCampGradeSortIndex,
+} from "./divisionFilterUtils";
 import { compareByLastName } from "./nameSortUtils";
 import { filterActiveRoster } from "./rosterStatus";
 import {
@@ -171,9 +175,15 @@ export function buildSwimFormationGroups(
   const groups: SwimFormationGroup[] = [];
   let groupIndex = 0;
 
-  const bucketList = [...buckets.entries()].sort((a, b) =>
-    bucketLabel(a[1].labelParts).localeCompare(bucketLabel(b[1].labelParts)),
-  );
+  const bucketList = [...buckets.entries()].sort((a, b) => {
+    if (criteria.includes("division")) {
+      const divA = a[1].campers[0]?.division ?? "";
+      const divB = b[1].campers[0]?.division ?? "";
+      const byGrade = getDayCampGradeSortIndex(divA) - getDayCampGradeSortIndex(divB);
+      if (byGrade !== 0) return byGrade;
+    }
+    return bucketLabel(a[1].labelParts).localeCompare(bucketLabel(b[1].labelParts));
+  });
 
   for (const [, bucket] of bucketList) {
     const leaderPartitions = partitionByDivisionLeader(bucket.campers);
@@ -206,6 +216,7 @@ export function buildSwimFormationGroups(
 type FormationChildRow = RosterChild & {
   leader_id?: string | null;
   status?: string | null;
+  grade?: string | null;
   division?: { name: string } | { name: string }[] | null;
 };
 
@@ -230,7 +241,9 @@ export async function fetchSwimFormationCampers(
     const to = from + pageSize - 1;
     const { data, error } = await supabase
       .from("children")
-      .select("id, name, person_id, group_name, season, leader_id, status, division:divisions(name)")
+      .select(
+        "id, name, person_id, group_name, grade, season, leader_id, status, division:divisions(name)",
+      )
       .eq("company_id", companyId)
       .eq("season", season)
       .order("name")
@@ -242,6 +255,7 @@ export async function fetchSwimFormationCampers(
       name: row.name,
       person_id: String(row.person_id ?? row.id),
       group_name: row.group_name,
+      grade: row.grade as string | null,
       season: row.season,
       leader_id: row.leader_id,
       status: row.status,
@@ -282,7 +296,10 @@ export async function fetchSwimFormationCampers(
       id: child.id,
       name: child.name,
       personId: child.person_id,
-      division: divisionNameFromRow(child as Row),
+      division: getCanonicalDayCampGradeDisplay(
+        divisionNameFromRow(child as Row),
+        (child as Row).grade,
+      ),
       group: rosterGroup(child),
       divisionLeader: rosterDivisionLeader(child),
       highestCompletedLevel: highestCompletedSwimLevel(level),

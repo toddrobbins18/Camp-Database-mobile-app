@@ -459,9 +459,13 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
         result.unmatched.length > 0
           ? `\n\nUnmatched (${result.unmatched.length}): ${result.unmatched.slice(0, 5).join(', ')}${result.unmatched.length > 5 ? '…' : ''}`
           : '';
+      const parentNote =
+        result.guardianEmails > 0
+          ? `\nParent emails added: ${result.guardianEmails}`
+          : '';
       Alert.alert(
         'Import complete',
-        `${picked.fileName}\nBracelets: ${result.bracelets} · Levels: ${result.levels} · Rows: ${result.csvRows}${unmatchedNote}`,
+        `${picked.fileName}\nBracelets: ${result.bracelets} · Levels: ${result.levels} · Rows: ${result.csvRows}${parentNote}${unmatchedNote}`,
       );
       if (result.bracelets > 0) setActiveTab('bracelets');
       else if (result.levels > 0) setActiveTab('levels');

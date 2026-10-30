@@ -17,7 +17,7 @@ import {
     getCamperEffectiveDivision,
     getCamperGradeDisplay,
     getDayCampDivisionDropdownLabel,
-    getDayCampGradeSortIndex,
+    compareDayCampGradesByLabels,
     getDivisionDropdownLabel,
     normalizeDivisionNameForFilter,
     prepareDayCampDivisionDropdown,
@@ -335,9 +335,12 @@ export const CamperScreen = ({ navigation }: any) => {
                 if (genderCompare !== 0) return genderCompare;
                 const divA = getCamperEffectiveDivision(a as any);
                 const divB = getCamperEffectiveDivision(b as any);
-                const gradeCompare =
-                    getDayCampGradeSortIndex(divA.name ?? (a as any).grade) -
-                    getDayCampGradeSortIndex(divB.name ?? (b as any).grade);
+                const gradeCompare = compareDayCampGradesByLabels(
+                    divA.name,
+                    (a as any).grade,
+                    divB.name,
+                    (b as any).grade,
+                );
                 if (gradeCompare !== 0) return gradeCompare;
                 return compareByLastName(a, b);
             }
@@ -355,18 +358,20 @@ export const CamperScreen = ({ navigation }: any) => {
 
             const divA = getCamperEffectiveDivision(a as any);
             const divB = getCamperEffectiveDivision(b as any);
-            const orderA = isDayCamp
-                ? getDayCampGradeSortIndex(divA.name ?? (a as any).grade)
-                : (divA.sort_order ?? 999);
-            const orderB = isDayCamp
-                ? getDayCampGradeSortIndex(divB.name ?? (b as any).grade)
-                : (divB.sort_order ?? 999);
-            if (orderA !== orderB) return orderA - orderB;
-
             if (isDayCamp) {
+                const gradeCompare = compareDayCampGradesByLabels(
+                    divA.name,
+                    (a as any).grade,
+                    divB.name,
+                    (b as any).grade,
+                );
+                if (gradeCompare !== 0) return gradeCompare;
                 const genderCompare = compareByCamperGender((a as any).gender, (b as any).gender);
                 if (genderCompare !== 0) return genderCompare;
             } else {
+                const orderA = divA.sort_order ?? 999;
+                const orderB = divB.sort_order ?? 999;
+                if (orderA !== orderB) return orderA - orderB;
                 const nameA = normalizeDivisionNameForFilter(divA.name);
                 const nameB = normalizeDivisionNameForFilter(divB.name);
                 if (nameA !== nameB) return nameA.localeCompare(nameB);

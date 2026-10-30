@@ -1,5 +1,7 @@
 // Bunking auto-optimizer — shared with tyler-hill web Bunking page.
 
+import { isCoedYoungDayCampGrade } from "./divisionFilterUtils";
+
 export type OptCamper = {
   id: string;
   name: string;
@@ -27,6 +29,7 @@ export type OptimizeOptions = {
 const norm = (s?: string) => (s || '').trim().toLowerCase();
 
 function isCoedDivision(division: string, coed: string[]) {
+  if (isCoedYoungDayCampGrade(division)) return true;
   const d = norm(division);
   return coed.some((c) => d === c || d.includes(c));
 }
