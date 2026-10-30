@@ -18,6 +18,7 @@ import {
   stripParentTransportFromCoreStops,
   type ParentTransportCamper,
 } from './transportParentTransport';
+import { CAMP_LOCATION } from './transportBoardUtils';
 import { riderNamesFromStop } from './transportRouteStops';
 import type { TransportBoardSettings } from './transportBoardSettings';
 
@@ -131,7 +132,9 @@ export async function normalizeTransportBoardForSeason(
   const parentTransportCampers = board.parentTransportCampers ?? [];
   const enrolledNames = new Set(enrolled.map((c) => normName(c.name)));
   const prunedStops = stripParentTransportFromCoreStops(
-    pruneCoreStopsToSeasonRoster(board.coreStops, enrolledNames),
+    pruneEmptyPassengerStops(
+      pruneCoreStopsToSeasonRoster(board.coreStops, enrolledNames),
+    ),
     parentTransportCampers,
   );
 
@@ -160,6 +163,22 @@ export function transportBoardSeasonSyncChanged(
       .sort()
       .join('\0');
   return unplottedKey(before) !== unplottedKey(after);
+}
+
+/** Remove template / MapPoint stops with no enrolled riders (camp stop kept). */
+export function pruneEmptyPassengerStops(
+  coreStops: Record<number, TransportRouteStop[]>,
+  campAddress: string = CAMP_LOCATION.address,
+): Record<number, TransportRouteStop[]> {
+  const normCamp = campAddress.trim().toLowerCase();
+  const out: Record<number, TransportRouteStop[]> = {};
+  for (const [routeId, stops] of Object.entries(coreStops)) {
+    out[Number(routeId)] = (stops ?? []).filter((stop) => {
+      if (stop.address.trim().toLowerCase() === normCamp) return true;
+      return riderNamesFromStop(stop).length > 0;
+    });
+  }
+  return out;
 }
 
 /** Strip prior-season / MapPoint ghost riders; keep open stops (no names). */

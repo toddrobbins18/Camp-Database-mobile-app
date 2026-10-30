@@ -32,6 +32,8 @@ import {
   routeStopListLines,
   isBlankOpenRouteStop,
   countBlankOpenStopsOnRoute,
+  buildPendingNamesByAddress,
+  filterRoutesForMapDisplay,
 } from '../lib/transportBoardUtils';
 import { todayDateString } from '../lib/transportDailyOverrides';
 import {
@@ -155,6 +157,15 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
     notes: '',
   });
   const isToday = t.overrideDate === todayDateString();
+
+  const mapDisplayedRoutes = useMemo(() => {
+    const pending = buildPendingNamesByAddress(t.unplottedForWeek);
+    return filterRoutesForMapDisplay(t.displayedRoutes, {
+      campAddress: CAMP_LOCATION.address,
+      showBlankOpenStops,
+      pendingNamesByAddress: pending,
+    });
+  }, [t.displayedRoutes, t.unplottedForWeek, showBlankOpenStops]);
 
   const ptRosterOptions = useMemo(() => {
     const q = ptCamperSearch.trim().toLowerCase();
@@ -538,7 +549,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
             </View>
           )}
           <TransportRouteMapNative
-            routes={t.displayedRoutes}
+            routes={mapDisplayedRoutes}
             allRoutes={t.allRoutes}
             unplottedCampers={t.unplottedForWeek}
             liveBuses={liveBuses}
@@ -1377,7 +1388,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
 
       <RouteMapFullscreen visible={mapExpanded} onClose={() => setMapExpanded(false)}>
         <TransportRouteMapNative
-          routes={t.displayedRoutes}
+          routes={mapDisplayedRoutes}
           allRoutes={t.allRoutes}
           unplottedCampers={t.unplottedForWeek}
           liveBuses={liveBuses}

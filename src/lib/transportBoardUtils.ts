@@ -270,6 +270,55 @@ export function countBlankOpenStopsOnRoute(stops: { name: string; address: strin
   return count;
 }
 
+const normAddrForPending = (address: string) =>
+  address.toLowerCase().replace(/[.,#]/g, ' ').replace(/\s+/g, ' ').trim();
+
+export function buildPendingNamesByAddress(
+  unplotted: { name: string; address: string }[],
+): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const camper of unplotted) {
+    const key = normAddrForPending(camper.address);
+    if (!key) continue;
+    const list = map.get(key) ?? [];
+    list.push(camper.name);
+    map.set(key, list);
+  }
+  return map;
+}
+
+export function filterRouteStopsForMapDisplay<T extends TransportRouteStop>(
+  stops: T[],
+  options: {
+    campAddress: string;
+    showBlankOpenStops: boolean;
+    pendingNamesByAddress?: Map<string, string[]>;
+  },
+): T[] {
+  if (options.showBlankOpenStops) return stops;
+  return stops.filter((stop) => {
+    if (normAddr(stop.address) === normAddr(options.campAddress)) return true;
+    const pending =
+      options.pendingNamesByAddress?.get(normAddrForPending(stop.address)) ?? [];
+    const lines = routeStopListLines(stop, { isCamp: false, pendingNames: pending });
+    return !isBlankOpenRouteStop(lines);
+  });
+}
+
+export function filterRoutesForMapDisplay<R extends { stops: TransportRouteStop[] }>(
+  routes: R[],
+  options: {
+    campAddress: string;
+    showBlankOpenStops: boolean;
+    pendingNamesByAddress?: Map<string, string[]>;
+  },
+): R[] {
+  return routes.map((route) => ({
+    ...route,
+    stops: filterRouteStopsForMapDisplay(route.stops, options),
+  }));
+}
+
 export function routeStopListLines(
   stop: { name: string; address: string; passengers?: number; camperNames?: string[] },
   options: { isCamp: boolean; pendingNames?: string[] },

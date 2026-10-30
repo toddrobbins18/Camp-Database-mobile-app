@@ -905,10 +905,7 @@ export function useDayCampTransport() {
     routeEnrollmentWeek === 'all' ? null : routeEnrollmentWeek;
 
   const displayRoutes = useMemo(() => {
-    const seasonFiltered =
-      seasonRosterNames.size > 0
-        ? applySeasonRosterToRoutes(routes, seasonRosterNames)
-        : routes;
+    const seasonFiltered = applySeasonRosterToRoutes(routes, seasonRosterNames);
     const withoutPtOnStops = applyParentTransportExclusionToRoutes(
       seasonFiltered,
       parentTransportCampers,

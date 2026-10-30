@@ -115,7 +115,7 @@ export function pruneRouteStopsWithNoRiders<T extends RouteLike>(
     const stops = route.stops.filter((s) => {
       if (s.address === campAddress) return true;
       if ((s.passengers ?? 0) > 0 || (s.camperNames?.length ?? 0) > 0) return true;
-      return isValidRouteCoordinate(s.lat, s.lng);
+      return false;
     });
     const campers = stops
       .filter((s) => s.address !== campAddress)
