@@ -256,14 +256,6 @@ export const CamperScreen = ({ navigation }: any) => {
         assignedLeader: '',
         assignedLeaderId: '' as string,
         tshirtSize: '',
-        birthdayPartyType: '',
-        birthdayPartyComments: '',
-        birthdayCakeMeal: '',
-        birthdayCakeType: '',
-        birthdayFrostingColors: [] as string[],
-        birthdayToppings: [] as string[],
-        birthdayCakeAllergies: [] as string[],
-        birthdayCakeMessage: '',
         guardianEmail: '',
         guardianPhone: '',
         emergencyContact: '',
@@ -2394,181 +2386,6 @@ export const CamperScreen = ({ navigation }: any) => {
                                         </View>
                                     </View>
 
-                                    {/* Birthday Party Preferences (in same modal) */}
-                                    <View style={styles.birthdaySection}>
-                                        <View style={styles.sectionDivider} />
-                                        <Text style={styles.sectionTitle}>Birthday Party Preferences</Text>
-
-                                        <Text style={styles.sectionSubTitle}>Birthday Celebration Choice</Text>
-                                        <View style={styles.radioGroup}>
-                                            {[
-                                                { value: '', label: 'None' },
-                                                { value: 'pizza_soda', label: 'Pizza & Soda Party at Rec Hall' },
-                                                { value: 'ice_cream', label: 'Ice Cream Party in the Canteen' },
-                                                { value: 'cookies_movie', label: 'Reggies Cookies and Bunk Movie' },
-                                                { value: 'campfire_smores', label: 'Campfire and S\'mores' },
-                                            ].map((opt) => (
-                                                <TouchableOpacity
-                                                    key={opt.value}
-                                                    style={styles.radioOption}
-                                                    onPress={() => setEditFormData({ ...editFormData, birthdayPartyType: opt.value })}
-                                                >
-                                                    <View style={styles.radioButton}>
-                                                        {editFormData.birthdayPartyType === opt.value && (
-                                                            <View style={styles.radioButtonInner} />
-                                                        )}
-                                                    </View>
-                                                    <Text style={styles.radioLabel}>{opt.label}</Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-
-                                        <Text style={styles.sectionSubTitle}>Additional Comments</Text>
-                                        <TextInput
-                                            style={styles.formTextArea}
-                                            placeholder="Any special requests (e.g., campfire location, timing, number of people in bunk)"
-                                            placeholderTextColor={theme.colors.textSecondary}
-                                            value={editFormData.birthdayPartyComments}
-                                            onChangeText={(text) => setEditFormData({ ...editFormData, birthdayPartyComments: text })}
-                                            multiline
-                                            numberOfLines={3}
-                                            textAlignVertical="top"
-                                        />
-
-                                        <Text style={styles.sectionSubTitle}>When do you want the cake served?</Text>
-                                        <View style={styles.radioGroup}>
-                                            {[
-                                                { value: '', label: 'None' },
-                                                { value: 'lunch', label: 'Lunch' },
-                                                { value: 'dinner', label: 'Dinner' },
-                                            ].map((opt) => (
-                                                <TouchableOpacity
-                                                    key={opt.value || 'none'}
-                                                    style={styles.radioOption}
-                                                    onPress={() => setEditFormData({ ...editFormData, birthdayCakeMeal: opt.value })}
-                                                >
-                                                    <View style={styles.radioButton}>
-                                                        {editFormData.birthdayCakeMeal === opt.value && (
-                                                            <View style={styles.radioButtonInner} />
-                                                        )}
-                                                    </View>
-                                                    <Text style={styles.radioLabel}>{opt.label}</Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-
-                                        <Text style={styles.sectionSubTitle}>Cake Customization</Text>
-
-                                        <Text style={[styles.sectionSubTitle, { marginTop: theme.spacing.sm }]}>Cake Type</Text>
-                                        <View style={styles.radioGroup}>
-                                            {[
-                                                { value: 'rice_krispy', label: 'Rice Krispy Sheet Cake' },
-                                                { value: 'vanilla', label: 'Vanilla Frosted Cake' },
-                                                { value: 'chocolate', label: 'Chocolate Frosted Cake' },
-                                            ].map((opt) => (
-                                                <TouchableOpacity
-                                                    key={opt.value}
-                                                    style={styles.radioOption}
-                                                    onPress={() => setEditFormData({ ...editFormData, birthdayCakeType: opt.value })}
-                                                >
-                                                    <View style={styles.radioButton}>
-                                                        {editFormData.birthdayCakeType === opt.value && (
-                                                            <View style={styles.radioButtonInner} />
-                                                        )}
-                                                    </View>
-                                                    <Text style={styles.radioLabel}>{opt.label}</Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-
-                                        <Text style={[styles.sectionSubTitle, { marginTop: theme.spacing.sm }]}>Frosting Color (select all that apply)</Text>
-                                        <View style={styles.checkboxGrid}>
-                                            {['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Purple', 'Pink', 'No Color'].map((color) => {
-                                                const value = color.toLowerCase().replace(' ', '_');
-                                                const isChecked = editFormData.birthdayFrostingColors.includes(value);
-                                                return (
-                                                    <TouchableOpacity
-                                                        key={color}
-                                                        style={styles.checkboxOption}
-                                                        onPress={() => {
-                                                            const next = isChecked
-                                                                ? editFormData.birthdayFrostingColors.filter((c) => c !== value)
-                                                                : [...editFormData.birthdayFrostingColors, value];
-                                                            setEditFormData({ ...editFormData, birthdayFrostingColors: next });
-                                                        }}
-                                                    >
-                                                        <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                                                            {isChecked && <Ionicons name="checkmark" size={16} color={theme.colors.surface} />}
-                                                        </View>
-                                                        <Text style={styles.checkboxLabel}>{color}</Text>
-                                                    </TouchableOpacity>
-                                                );
-                                            })}
-                                        </View>
-
-                                        <Text style={[styles.sectionSubTitle, { marginTop: theme.spacing.sm }]}>Toppings (select all that apply)</Text>
-                                        <View style={styles.checkboxGrid}>
-                                            {['Rainbow Sprinkles', 'Chocolate Sprinkles', 'Crushed Oreos', 'Sour Patch', 'Marshmallows', 'Graham Crackers', 'Pretzels', "M&M's", 'Strawberries', 'Blueberries', 'Cookies', 'Cherries', 'Chocolate Syrup', 'Caramel Syrup', 'No Toppings'].map((topping) => {
-                                                const value = topping.toLowerCase().replace(/[^a-z0-9]/g, '_');
-                                                const isChecked = editFormData.birthdayToppings.includes(value);
-                                                return (
-                                                    <TouchableOpacity
-                                                        key={topping}
-                                                        style={styles.checkboxOption}
-                                                        onPress={() => {
-                                                            const next = isChecked
-                                                                ? editFormData.birthdayToppings.filter((t) => t !== value)
-                                                                : [...editFormData.birthdayToppings, value];
-                                                            setEditFormData({ ...editFormData, birthdayToppings: next });
-                                                        }}
-                                                    >
-                                                        <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                                                            {isChecked && <Ionicons name="checkmark" size={16} color={theme.colors.surface} />}
-                                                        </View>
-                                                        <Text style={styles.checkboxLabel}>{topping}</Text>
-                                                    </TouchableOpacity>
-                                                );
-                                            })}
-                                        </View>
-
-                                        <Text style={[styles.sectionSubTitle, { marginTop: theme.spacing.sm }]}>Any Allergies? (select all that apply)</Text>
-                                        <View style={styles.checkboxGrid}>
-                                            {['Gluten', 'Dairy', 'Sesame', 'Egg', 'Soy', 'Vegan'].map((allergy) => {
-                                                const value = allergy.toLowerCase();
-                                                const isChecked = editFormData.birthdayCakeAllergies.includes(value);
-                                                return (
-                                                    <TouchableOpacity
-                                                        key={allergy}
-                                                        style={styles.checkboxOption}
-                                                        onPress={() => {
-                                                            const next = isChecked
-                                                                ? editFormData.birthdayCakeAllergies.filter((a) => a !== value)
-                                                                : [...editFormData.birthdayCakeAllergies, value];
-                                                            setEditFormData({ ...editFormData, birthdayCakeAllergies: next });
-                                                        }}
-                                                    >
-                                                        <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                                                            {isChecked && <Ionicons name="checkmark" size={16} color={theme.colors.surface} />}
-                                                        </View>
-                                                        <Text style={styles.checkboxLabel}>{allergy}</Text>
-                                                    </TouchableOpacity>
-                                                );
-                                            })}
-                                        </View>
-
-                                        <Text style={[styles.sectionSubTitle, { marginTop: theme.spacing.sm }]}>What do you want written on the cake?</Text>
-                                        <TextInput
-                                            style={styles.formTextArea}
-                                            placeholder="Enter custom message for the cake"
-                                            placeholderTextColor={theme.colors.textSecondary}
-                                            value={editFormData.birthdayCakeMessage}
-                                            onChangeText={(text) => setEditFormData({ ...editFormData, birthdayCakeMessage: text })}
-                                            multiline
-                                            numberOfLines={3}
-                                            textAlignVertical="top"
-                                        />
-                                    </View>
-
                                     {/* Form Buttons */}
                                     <View style={styles.formButtons}>
                                         <TouchableOpacity
@@ -2603,23 +2420,6 @@ export const CamperScreen = ({ navigation }: any) => {
                                                         guardian_phone: editFormData.guardianPhone || null,
                                                         leader_id: editFormData.assignedLeaderId || null,
                                                         tshirt_size: editFormData.tshirtSize || null,
-                                                        birthday_party_type: editFormData.birthdayPartyType || null,
-                                                        birthday_party_comments: editFormData.birthdayPartyComments || null,
-                                                        birthday_cake_meal: editFormData.birthdayCakeMeal || null,
-                                                        birthday_cake_type: editFormData.birthdayCakeType || null,
-                                                        birthday_frosting_colors:
-                                                            editFormData.birthdayFrostingColors.length > 0
-                                                                ? editFormData.birthdayFrostingColors
-                                                                : null,
-                                                        birthday_toppings:
-                                                            editFormData.birthdayToppings.length > 0
-                                                                ? editFormData.birthdayToppings
-                                                                : null,
-                                                        birthday_cake_allergies:
-                                                            editFormData.birthdayCakeAllergies.length > 0
-                                                                ? editFormData.birthdayCakeAllergies
-                                                                : null,
-                                                        birthday_cake_message: editFormData.birthdayCakeMessage || null,
                                                         date_of_birth: toIsoDateOrNull(editFormData.dateOfBirth)
                                                     } as any);
                                                 }
@@ -3055,14 +2855,6 @@ export const CamperScreen = ({ navigation }: any) => {
                                                     assignedLeader: leaderDisplay,
                                                     assignedLeaderId: leaderId,
                                                     tshirtSize: camperAny.tshirt_size || camperAny.tshirtSize || '',
-                                                    birthdayPartyType: camperAny.birthday_party_type || camperAny.birthdayPartyType || '',
-                                                    birthdayPartyComments: camperAny.birthday_party_comments || camperAny.birthdayPartyComments || '',
-                                                    birthdayCakeMeal: camperAny.birthday_cake_meal || camperAny.birthdayCakeMeal || '',
-                                                    birthdayCakeType: camperAny.birthday_cake_type || camperAny.birthdayCakeType || '',
-                                                    birthdayFrostingColors: camperAny.birthday_frosting_colors || camperAny.birthdayFrostingColors || [],
-                                                    birthdayToppings: camperAny.birthday_toppings || camperAny.birthdayToppings || [],
-                                                    birthdayCakeAllergies: camperAny.birthday_cake_allergies || camperAny.birthdayCakeAllergies || [],
-                                                    birthdayCakeMessage: camperAny.birthday_cake_message || camperAny.birthdayCakeMessage || '',
                                                     guardianEmail: camperAny.guardian_email || camperAny.guardianEmail || '',
                                                     guardianPhone: camperAny.guardian_phone || camperAny.guardianPhone || '',
                                                     emergencyContact: camperAny.emergency_contact || '',
