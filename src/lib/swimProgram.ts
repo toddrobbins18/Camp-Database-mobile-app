@@ -1058,7 +1058,21 @@ export type SwimCsvImportRow = {
   season: string;
   bracelet?: Partial<BraceletRecord>;
   levels?: Partial<LevelRecord>;
+  guardianEmail?: string;
 };
+
+export function normalizeSwimImportParentEmail(raw?: string | null): string | null {
+  const value = (raw ?? "").trim();
+  if (!value || value.includes("http://") || value.includes("https://")) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return null;
+  return value;
+}
+
+function findParentEmailColumnIndex(headers: string[]): number {
+  return headers.findIndex(
+    (h) => h === "email" || h === "guardian_email" || h === "parent_email",
+  );
+}
 
 /** Parse Airtable / sheet CSV — supports season + person_id columns for prior years. */
 export function parseSwimProgramCsv(
@@ -1075,6 +1089,7 @@ export function parseSwimProgramCsv(
   const seasonIdx = headers.findIndex((h) => h === "season" || h === "year");
   const groupIdx = headers.findIndex((h) => h === "group");
   const personIdx = findPersonColumnIndex(headers);
+  const emailIdx = findParentEmailColumnIndex(headers);
 
   const index = buildSwimChildIndex(children, defaultSeason);
   const rows: SwimCsvImportRow[] = [];
@@ -1096,6 +1111,11 @@ export function parseSwimProgramCsv(
     }
 
     const importRow: SwimCsvImportRow = { child, season: importSeason };
+
+    if (emailIdx >= 0) {
+      const guardianEmail = normalizeSwimImportParentEmail(cols[emailIdx]);
+      if (guardianEmail) importRow.guardianEmail = guardianEmail;
+    }
 
     const braceletPartial = parseAirtableBraceletImport(headers, cols, csvGroup);
     if (braceletPartial) {
@@ -1161,7 +1181,7 @@ export function parseSwimProgramCsv(
       };
     }
 
-    if (importRow.bracelet || importRow.levels) rows.push(importRow);
+    if (importRow.bracelet || importRow.levels || importRow.guardianEmail) rows.push(importRow);
   }
 
   return { rows, unmatched };
@@ -1181,6 +1201,7 @@ type MergedImportRow = {
   season: string;
   bracelet?: Partial<BraceletRecord>;
   levels?: Partial<LevelRecord>;
+  guardianEmail?: string;
 };
 
 function mergeImportRows(parsed: SwimCsvImportRow[]): MergedImportRow[] {
@@ -1190,9 +1211,63 @@ function mergeImportRows(parsed: SwimCsvImportRow[]): MergedImportRow[] {
     const prev = byKey.get(key) ?? { child: row.child, season: row.season };
     if (row.bracelet) prev.bracelet = { ...prev.bracelet, ...row.bracelet };
     if (row.levels) prev.levels = { ...prev.levels, ...row.levels };
+    if (row.guardianEmail) prev.guardianEmail = row.guardianEmail;
     byKey.set(key, prev);
   }
   return [...byKey.values()];
+}
+
+async function backfillGuardianEmailsFromSwimImport(
+  supabase: SupabaseClient,
+  companyId: string,
+  merged: MergedImportRow[],
+  onProgress?: (progress: SwimImportProgress) => void,
+): Promise<number> {
+  const emailByChildId = new Map<string, string>();
+  for (const row of merged) {
+    if (row.guardianEmail) emailByChildId.set(row.child.id, row.guardianEmail);
+  }
+  if (emailByChildId.size === 0) return 0;
+
+  const childIds = [...emailByChildId.keys()];
+  const { data: existingRows, error: loadError } = await supabase
+    .from("children")
+    .select("id, guardian_email")
+    .eq("company_id", companyId)
+    .in("id", childIds);
+  if (loadError) throw loadError;
+
+  const toUpdate: { id: string; guardian_email: string }[] = [];
+  for (const row of existingRows ?? []) {
+    if (row.guardian_email?.trim()) continue;
+    const email = emailByChildId.get(String(row.id));
+    if (email) toUpdate.push({ id: String(row.id), guardian_email: email });
+  }
+  if (toUpdate.length === 0) return 0;
+
+  onProgress?.({
+    phase: "saving",
+    current: 0,
+    total: toUpdate.length,
+    message: `Updating ${toUpdate.length} parent email${toUpdate.length === 1 ? "" : "s"}…`,
+  });
+
+  let updated = 0;
+  for (let i = 0; i < toUpdate.length; i += SWIM_IMPORT_BATCH_SIZE) {
+    const batch = toUpdate.slice(i, i + SWIM_IMPORT_BATCH_SIZE);
+    await Promise.all(
+      batch.map(async ({ id, guardian_email }) => {
+        const { error } = await supabase
+          .from("children")
+          .update({ guardian_email })
+          .eq("id", id)
+          .eq("company_id", companyId)
+          .or("guardian_email.is.null,guardian_email.eq.");
+        if (!error) updated += 1;
+      }),
+    );
+  }
+  return updated;
 }
 
 async function loadExistingSwimRowsForSeason(
@@ -1229,11 +1304,18 @@ export async function importSwimProgramRows(
   companyId: string,
   parsed: SwimCsvImportRow[],
   onProgress?: (progress: SwimImportProgress) => void,
-): Promise<{ bracelets: number; levels: number }> {
+): Promise<{ bracelets: number; levels: number; guardianEmails: number }> {
   const merged = mergeImportRows(parsed);
   let bracelets = 0;
   let levels = 0;
-  if (!merged.length) return { bracelets, levels };
+  if (!merged.length) return { bracelets, levels, guardianEmails: 0 };
+
+  const guardianEmails = await backfillGuardianEmailsFromSwimImport(
+    supabase,
+    companyId,
+    merged,
+    onProgress,
+  );
 
   const bySeason = new Map<string, MergedImportRow[]>();
   for (const row of merged) {
@@ -1269,6 +1351,8 @@ export async function importSwimProgramRows(
         ? { ...levelFromChild(row.child), ...row.levels, lastModified: "Imported" }
         : null;
 
+      if (!hasBracelet && !hasLevels) continue;
+
       payloads.push({
         company_id: companyId,
         child_id: row.child.id,
@@ -1296,7 +1380,7 @@ export async function importSwimProgramRows(
     }
   }
 
-  return { bracelets, levels };
+  return { bracelets, levels, guardianEmails };
 }
 
 export async function importSwimProgramCsv(
@@ -1306,7 +1390,14 @@ export async function importSwimProgramCsv(
   defaultSeason: string,
   onProgress?: (progress: SwimImportProgress) => void,
   options?: { fileName?: string },
-): Promise<{ bracelets: number; levels: number; unmatched: string[]; csvRows: number; matched: number }> {
+): Promise<{
+  bracelets: number;
+  levels: number;
+  guardianEmails: number;
+  unmatched: string[];
+  csvRows: number;
+  matched: number;
+}> {
   onProgress?.({
     phase: "parsing",
     current: 0,
