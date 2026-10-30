@@ -152,8 +152,8 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
   ];
 }
 
-/** North Shore — hide Media per Todd (Jul 30). Bunking + Hiring enabled for roster. */
-const NORTH_SHORE_SKIP_POC_MENU_IDS = new Set(['media']);
+/** North Shore — Todd Jul 30: skip Hiring, Bunking, Media until asked. */
+const NORTH_SHORE_SKIP_POC_MENU_IDS = new Set(['media', 'hiring', 'bunking']);
 
 function isTransportMenuItem(menuId: string): boolean {
   return BUS_TRANSPORT_MENU_IDS.has(menuId);
