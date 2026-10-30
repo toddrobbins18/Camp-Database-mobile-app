@@ -51,7 +51,10 @@ const WEEKLY_BUS_INSTRUCTION =
   "Mark Present (P) for each AM and PM run this week. One row per camper — siblings each get their own row.";
 
 const WEEKLY_GROUP_INSTRUCTION =
-  "Mark Present (P) in the bubble for each weekday the camper attends. Five bubbles per row — one per day.";
+  "One Present bubble per camper for group sheets. Bus sheets use AM and PM.";
+
+const GROUP_PRESENT_INSTRUCTION =
+  "One Present bubble per camper. Reuse this sheet each day of the week.";
 
 const COMBINED_SHEET_INSTRUCTION =
   "Bus sections: mark Present (P) or Absent (A) for today. Group sections: mark Present (P) for each weekday.";
@@ -430,6 +433,13 @@ function drawWeeklyTableHeader(
   return rowBottom;
 }
 
+function bubbleScheduled(camper: BubbleSheetCamper, day: WeekDayColumn): boolean {
+  const tag = `${day.label} ${day.sublabel ?? ""}`.toUpperCase();
+  if (/\bAM\b/.test(tag) && !/\bPM\b/.test(tag)) return camper.ridesAm !== false;
+  if (/\bPM\b/.test(tag) && !/\bAM\b/.test(tag)) return camper.ridesPm !== false;
+  return true;
+}
+
 function drawWeeklyTableRow(
   doc: jsPDF,
   layout: WeeklySheetLayout,
@@ -452,18 +462,11 @@ function drawWeeklyTableRow(
   doc.text(camper.name.slice(0, 36), layout.textName, textY);
 
   const bubbleCy = rowTop + ROW_HEIGHT / 2;
-  const amPmPair =
-    weekDays.length === 2 && weekDays[0]?.label === "AM" && weekDays[1]?.label === "PM";
 
-  weekDays.forEach((_, dayIndex) => {
+  weekDays.forEach((day, dayIndex) => {
     const cx = layout.dayColumnCenters[dayIndex];
     if (!cx) return;
-    if (amPmPair) {
-      const scheduled = dayIndex === 0 ? camper.ridesAm === true : camper.ridesPm === true;
-      drawPresentOrCrossedBubble(doc, cx, bubbleCy, scheduled);
-    } else {
-      drawPresentOrCrossedBubble(doc, cx, bubbleCy, true);
-    }
+    drawPresentOrCrossedBubble(doc, cx, bubbleCy, bubbleScheduled(camper, day));
   });
 }
 
@@ -785,7 +788,8 @@ export async function buildGroupBubbleSheetPdf(options: {
     options.companyName,
     "Group Attendance Bubble Sheet",
     metaLines,
-    [{ layout: "weekly", sections, weekDays: options.weekDays }],
+    [{ layout: "weekly", sections, weekDays: [{ label: "Present" }] }],
+    GROUP_PRESENT_INSTRUCTION,
   );
 
   return docToPdfResult(doc, `group-bubble-sheet-week-${options.enrollmentWeek}.pdf`);
@@ -867,13 +871,7 @@ export async function buildCombinedAttendanceBubbleSheetPdf(options: {
     parts.push({
       layout: "weekly",
       sections: groupSections,
-      weekDays: options.weekDays?.length ? options.weekDays.slice(0, 5) : [
-        { label: "Mon" },
-        { label: "Tue" },
-        { label: "Wed" },
-        { label: "Thu" },
-        { label: "Fri" },
-      ],
+      weekDays: [{ label: "Present" }],
     });
   }
 

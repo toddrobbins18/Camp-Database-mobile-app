@@ -59,11 +59,12 @@ import { supabase } from '../lib/supabase';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 
 const BRACELET_COLORS: Record<BraceletColor, { bg: string; text: string; border: string }> = {
-  Red: { bg: '#fee2e2', text: '#ef4444', border: '#fca5a5' },
-  Orange: { bg: '#ffedd5', text: '#f97316', border: '#fdba74' },
-  Yellow: { bg: '#fef9c3', text: '#eab308', border: '#fde047' },
-  Green: { bg: '#dcfce7', text: '#10b981', border: '#86efac' },
-  Blue: { bg: '#e0f2fe', text: '#0ea5e9', border: '#7dd3fc' },
+  'Non Swimmer/Beginner': { bg: '#e2e8f0', text: '#0f172a', border: '#94a3b8' },
+  Red: { bg: '#dc2626', text: '#ffffff', border: '#b91c1c' },
+  Orange: { bg: '#f97316', text: '#ffffff', border: '#ea580c' },
+  Yellow: { bg: '#facc15', text: '#422006', border: '#eab308' },
+  Green: { bg: '#16a34a', text: '#ffffff', border: '#15803d' },
+  Blue: { bg: '#2563eb', text: '#ffffff', border: '#1d4ed8' },
 };
 
 function parseStoredDate(value: string): Date | undefined {
@@ -618,6 +619,12 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                           <View style={styles.levelBlock}>
                             <Text style={styles.infoLabel}>Tadpole</Text>
                             <Text style={styles.infoValue}>{s.levels.tadpole.join(' ')}</Text>
+                          </View>
+                          <View style={styles.levelBlock}>
+                            <Text style={styles.infoLabel}>RC1 / RC2 / RC3 / RC4 / Frog</Text>
+                            <Text style={styles.infoValue}>
+                              {[s.levels.redCross, s.levels.redCross2, s.levels.redCross3, s.levels.redCross4, s.levels.frog].join(' · ')}
+                            </Text>
                           </View>
                         </View>
                       ) : null}

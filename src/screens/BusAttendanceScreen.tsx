@@ -292,13 +292,6 @@ export function BusAttendanceScreen({ navigation }: any) {
       Alert.alert('No buses selected');
       return;
     }
-    if (activeWeek == null || !activeWeekContext) {
-      Alert.alert(
-        'Enrollment week calendar required',
-        'Set week start/end dates under Group Bubble Sheets, then pick a week.',
-      );
-      return;
-    }
     const sheetRoutes = selectedRoutes.map((r) => ({
       bus: r.bus,
       routeName: r.name,
@@ -310,12 +303,12 @@ export function BusAttendanceScreen({ navigation }: any) {
 
     try {
       installTextCodecPolyfill();
-      const { buildBusBubbleSheetsPdf } = await import('../lib/transportBubbleSheetPdf');
-      const built = await buildBusBubbleSheetsPdf({
+      const { buildDayBusBubbleSheetPdf } = await import('../lib/transportBubbleSheetPdf');
+      const built = await buildDayBusBubbleSheetPdf({
         companyName,
-        enrollmentWeek: activeWeek,
-        weekDateRange: activeWeekContext.weekDateRange ?? undefined,
-        weekDays: activeWeekContext.weekDays,
+        date: runDate,
+        enrollmentWeek: activeWeek ?? undefined,
+        weekDateRange: activeWeekContext?.weekDateRange ?? undefined,
         routes: sheetRoutes,
       });
       if (!built) {
@@ -326,7 +319,7 @@ export function BusAttendanceScreen({ navigation }: any) {
     } catch {
       Alert.alert('Bubble sheet', 'Could not share PDF.');
     }
-  }, [board, selectedRoutes, activeWeek, activeWeekContext, campersForRoute, companyName]);
+  }, [board, selectedRoutes, activeWeek, activeWeekContext, campersForRoute, companyName, runDate]);
 
   const runDateOutsideWeek =
     enrollmentCtx?.enrollmentWeek == null &&
