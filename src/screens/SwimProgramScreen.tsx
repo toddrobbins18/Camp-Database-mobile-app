@@ -451,6 +451,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
         picked.text,
         season,
         setImportProgress,
+        { fileName: picked.fileName },
       );
       await loadRoster({ showLoading: true });
       await loadHistory();
