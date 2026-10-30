@@ -34,6 +34,7 @@ type Props = {
   companySlug?: string | null;
   colors: ParentPortalColors;
   onThreadActive?: (active: boolean) => void;
+  initialOpenThreadRootId?: string | null;
 };
 
 type SectionTab = 'chats' | 'photos';
@@ -43,6 +44,7 @@ export function ParentPortalMessagesView({
   companySlug,
   colors,
   onThreadActive,
+  initialOpenThreadRootId,
 }: Props) {
   const mainAreaHeight = useParentPortalMainAreaHeight();
   const styles = useMemo(() => createStyles(colors, mainAreaHeight), [colors, mainAreaHeight]);
@@ -76,6 +78,12 @@ export function ParentPortalMessagesView({
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
     void refreshList();
   }, [refreshList]);
+
+  useEffect(() => {
+    if (!initialOpenThreadRootId || threadRoot) return;
+    void openThreadByRootId(initialOpenThreadRootId, null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot deep link from push
+  }, [initialOpenThreadRootId]);
 
   const loadThread = useCallback(
     async (rootId: string) => {

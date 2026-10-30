@@ -40,7 +40,7 @@ import {
 import { linkFamilyChildrenByGuardianEmail } from '../lib/parentFamilyLink';
 import { ParentPortalMessagesView } from '../components/parentPortal/ParentPortalMessagesView';
 
-export function ParentPortalScreen({ navigation }: { navigation: any }) {
+export function ParentPortalScreen({ navigation, route }: { navigation: any; route?: any }) {
   const { companyId, companySlug, companyName, themeColor, loading: companyLoading } = useParentCompany();
   const colors = useParentPortalColors(themeColor, companySlug);
   const { data: roleData } = useRole(companyId);
@@ -48,6 +48,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [activeView, setActiveView] = useState<ParentPortalView>('home');
   const [messageThreadOpen, setMessageThreadOpen] = useState(false);
+  const [pushOpenThreadRootId, setPushOpenThreadRootId] = useState<string | null>(null);
   const [familyId, setFamilyId] = useState<string | null>(null);
   const [familyName, setFamilyName] = useState('');
   const [contactName, setContactName] = useState<string | null>(null);
@@ -58,6 +59,16 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
   const [swimLessons, setSwimLessons] = useState<SwimLesson[]>([]);
   const [campUpdate, setCampUpdate] = useState<CampAnnouncementContent | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const tab = route?.params?.initialTab;
+    if (tab === 'messages') setActiveView('messages');
+    const rootId = route?.params?.openMessageThreadRootId;
+    if (typeof rootId === 'string' && rootId.trim()) {
+      setActiveView('messages');
+      setPushOpenThreadRootId(rootId.trim());
+    }
+  }, [route?.params?.initialTab, route?.params?.openMessageThreadRootId]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -280,6 +291,7 @@ export function ParentPortalScreen({ navigation }: { navigation: any }) {
           companySlug={companySlug}
           colors={colors}
           onThreadActive={setMessageThreadOpen}
+          initialOpenThreadRootId={pushOpenThreadRootId}
         />
       )}
       {activeView === 'pickups' && <ParentPickupsView {...sharedProps} />}

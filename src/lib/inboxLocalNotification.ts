@@ -38,9 +38,12 @@ export async function requestInboxNotificationPermission(): Promise<boolean> {
 }
 
 export type InboxPushData = {
-    messageId: string;
-    threadId: string;
+    messageId?: string;
+    threadId?: string;
     groupId?: string;
+    activeView?: 'inbox' | 'sent' | 'families' | 'channels' | 'groups' | 'parent_portal';
+    channelRootId?: string;
+    channelName?: string;
 };
 
 /** Fire a local notification when the server inserts a row for this user (Realtime path). */

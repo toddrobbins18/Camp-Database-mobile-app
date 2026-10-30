@@ -98,7 +98,7 @@ function DayCampModuleRouter({ route, navigation }: any) {
         return <ParentAuthScreen navigation={navigation} />;
     }
     if (moduleId === 'parent-portal') {
-        return <ParentPortalScreen navigation={navigation} />;
+        return <ParentPortalScreen navigation={navigation} route={route} />;
     }
     if (moduleId === 'parent-portal-dashboard') {
         return <ParentPortalDashboardScreen navigation={navigation} />;

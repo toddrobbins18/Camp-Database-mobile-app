@@ -3,10 +3,10 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { showNewInboxMessageNotification } from '../lib/inboxLocalNotification';
+import { planInboxPushForInsert } from '../lib/messagePushFromRow';
 import { canonicalProfileUuid, fetchMessageProfileLabels, rowParticipantIds } from '../lib/messageProfiles';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
 import { filterMessagesForCampInbox } from '../lib/messageInboxFilters';
-import { threadIdFromMessageRow } from '../lib/inboxNotificationNavigation';
 
 async function attachParticipantProfiles(
   rows: Record<string, unknown>[],
@@ -465,10 +465,14 @@ export function useMessagesRealtimeSync(userId: string | null) {
                         sender_id?: string;
                         parent_message_id?: string | null;
                         group_id?: string | null;
+                        thread_kind?: string | null;
+                        division_id?: string | null;
                         read?: boolean;
                         read_at?: string | null;
                         subject?: string;
                         content?: string;
+                        message_kind?: string | null;
+                        media_file_name?: string | null;
                     } | null;
                     const oldRow = payload.old as { recipient_id?: string; sender_id?: string } | null;
 
@@ -497,26 +501,53 @@ export function useMessagesRealtimeSync(userId: string | null) {
                         }
                     }
 
-                    if (
-                        payload.eventType === 'INSERT' &&
-                        newRow?.recipient_id != null &&
-                        String(newRow.recipient_id) === userId &&
-                        !newRow.read
-                    ) {
-                        const threadId = threadIdFromMessageRow(newRow);
-                        void showNewInboxMessageNotification(
-                            String(newRow.subject || 'New message'),
-                            String(newRow.content || ''),
-                            newRow.id && threadId
-                                ? {
-                                      messageId: String(newRow.id),
-                                      threadId,
-                                      ...(newRow.group_id
-                                          ? { groupId: String(newRow.group_id) }
-                                          : {}),
-                                  }
-                                : undefined,
-                        );
+                    if (payload.eventType === 'INSERT' && newRow?.id) {
+                        void (async () => {
+                            if (
+                                newRow.thread_kind === 'division_channel' &&
+                                newRow.parent_message_id &&
+                                newRow.division_id
+                            ) {
+                                const { data: allowed } = await supabase.rpc(
+                                    'staff_can_access_division_messaging',
+                                    {
+                                        _user_id: userId,
+                                        _division_id: newRow.division_id,
+                                    },
+                                );
+                                if (!allowed) return;
+                            }
+
+                            let plan = planInboxPushForInsert(newRow, userId);
+                            if (!plan) return;
+
+                            if (
+                                plan.data.activeView === 'families' &&
+                                newRow.thread_kind === 'parent_division_leader'
+                            ) {
+                                const { data: fam } = await supabase
+                                    .from('families')
+                                    .select('id')
+                                    .eq('user_id', userId)
+                                    .limit(1)
+                                    .maybeSingle();
+                                if (fam?.id) {
+                                    plan = {
+                                        ...plan,
+                                        data: {
+                                            ...plan.data,
+                                            activeView: 'parent_portal',
+                                        },
+                                    };
+                                }
+                            }
+
+                            void showNewInboxMessageNotification(
+                                plan.title,
+                                plan.body,
+                                plan.data,
+                            );
+                        })();
                     }
                 },
             )

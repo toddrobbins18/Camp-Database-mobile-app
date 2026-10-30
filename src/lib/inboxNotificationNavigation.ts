@@ -6,6 +6,9 @@ export type InboxNotificationData = {
   messageId?: string;
   threadId?: string;
   groupId?: string;
+  activeView?: 'inbox' | 'sent' | 'families' | 'channels' | 'groups' | 'parent_portal';
+  channelRootId?: string;
+  channelName?: string;
 };
 
 export function threadIdFromMessageRow(row: {
@@ -22,12 +25,36 @@ export function navigateFromInboxNotification(
 ): void {
   if (!data || !navigationRef.isReady()) return;
 
-  if (data.groupId) {
+  if (data.groupId || data.activeView === 'groups') {
     navigationRef.navigate('MainApp', {
       screen: 'Messages',
       params: {
-        openGroupId: String(data.groupId),
+        openGroupId: data.groupId ? String(data.groupId) : undefined,
         activeView: 'groups',
+      },
+    });
+    return;
+  }
+
+  if (data.activeView === 'parent_portal') {
+    navigationRef.navigate('MainApp', {
+      screen: 'DayCampModule',
+      params: {
+        moduleId: 'parent-portal',
+        initialTab: 'messages',
+        openMessageThreadRootId: data.threadId,
+      },
+    });
+    return;
+  }
+
+  if (data.activeView === 'channels' && data.channelRootId) {
+    navigationRef.navigate('MainApp', {
+      screen: 'Messages',
+      params: {
+        activeView: 'channels',
+        openChannelRootId: String(data.channelRootId),
+        channelName: data.channelName,
       },
     });
     return;
@@ -36,11 +63,18 @@ export function navigateFromInboxNotification(
   const threadId = data.threadId || data.messageId;
   if (!threadId) return;
 
+  const view =
+    data.activeView === 'families'
+      ? 'families'
+      : data.activeView === 'sent'
+        ? 'sent'
+        : 'inbox';
+
   navigationRef.navigate('MainApp', {
     screen: 'Messages',
     params: {
       openThreadId: String(threadId),
-      activeView: 'inbox',
+      activeView: view,
     },
   });
 }
