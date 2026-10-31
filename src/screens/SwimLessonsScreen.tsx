@@ -34,7 +34,6 @@ import {
 } from '../lib/swimLessonSchedule';
 import {
   fetchSwimLessonInstructorOptions,
-  saveInstructorName,
 } from '../lib/swimLessonInstructors';
 import {
   loadEnrollmentWeekCalendar,
@@ -96,7 +95,6 @@ export function SwimLessonsScreen({ navigation }: any) {
   const [duration, setDuration] = useState('30');
   const [instructor, setInstructor] = useState('');
   const [instructorOptions, setInstructorOptions] = useState<string[]>([]);
-  const [newInstructorName, setNewInstructorName] = useState('');
   const [cost, setCost] = useState('45');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -158,7 +156,6 @@ export function SwimLessonsScreen({ navigation }: any) {
     setLessonTime(DEFAULT_SWIM_LESSON_TIME);
     setDuration('30');
     setInstructor('');
-    setNewInstructorName('');
     setCost('45');
     setNotes('');
     setDate(operationalDate);
@@ -780,38 +777,22 @@ export function SwimLessonsScreen({ navigation }: any) {
                 </View>
               </View>
 
-              <Text style={styles.label}>Instructor</Text>
+              <Text style={styles.label}>Instructor (lifeguard)</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.camperChips}>
-                {instructorOptions.map((name) => (
-                  <TouchableOpacity
-                    key={name}
-                    style={[styles.chip, instructor === name && chipActiveStyle]}
-                    onPress={() => setInstructor(name)}
-                  >
-                    <Text style={[styles.chipText, instructor === name && styles.chipTextActive]}>{name}</Text>
-                  </TouchableOpacity>
-                ))}
+                {instructorOptions.length === 0 ? (
+                  <Text style={styles.detailText}>No lifeguards on roster for this season</Text>
+                ) : (
+                  instructorOptions.map((name) => (
+                    <TouchableOpacity
+                      key={name}
+                      style={[styles.chip, instructor === name && chipActiveStyle]}
+                      onPress={() => setInstructor(name)}
+                    >
+                      <Text style={[styles.chipText, instructor === name && styles.chipTextActive]}>{name}</Text>
+                    </TouchableOpacity>
+                  ))
+                )}
               </ScrollView>
-              <View style={styles.row}>
-                <TextInput
-                  style={[styles.input, styles.flex1]}
-                  value={newInstructorName}
-                  onChangeText={setNewInstructorName}
-                  placeholder="Add instructor name"
-                />
-                <TouchableOpacity
-                  style={styles.addInstructorBtn}
-                  onPress={async () => {
-                    if (!companyId || !newInstructorName.trim()) return;
-                    const next = await saveInstructorName(companyId, newInstructorName);
-                    setInstructorOptions(next);
-                    setInstructor(newInstructorName.trim());
-                    setNewInstructorName('');
-                  }}
-                >
-                  <Ionicons name="add" size={20} color={brand} />
-                </TouchableOpacity>
-              </View>
 
               <Text style={styles.label}>Notes</Text>
               <TextInput
