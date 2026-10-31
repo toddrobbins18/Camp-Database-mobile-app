@@ -42,8 +42,8 @@ type Props = {
   children: React.ReactNode;
 };
 
-const MOBILE_PRIMARY: ParentPortalView[] = ['home', 'campers', 'pickups', 'absences'];
-const MOBILE_MORE: ParentPortalView[] = ['messages', 'authorized', 'swim'];
+const MOBILE_PRIMARY: ParentPortalView[] = ['home', 'messages', 'pickups', 'absences'];
+const MOBILE_MORE: ParentPortalView[] = ['campers', 'authorized', 'swim'];
 
 export function ParentPortalShell({
   campName,

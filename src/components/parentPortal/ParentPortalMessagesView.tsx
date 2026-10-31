@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
@@ -14,9 +15,12 @@ import {
   listParentPortalThreads,
   openParentDivisionLeaderThread,
   fetchMessageRootById,
+  parentPortalThreadListTitle,
   PARENT_DIVISION_LEADER_THREAD_KIND,
   type ParentPortalThreadRow,
 } from '../../lib/parentPortalMessaging';
+import { formatParentMessageListDate } from '../../lib/campTime';
+import { camperInitials } from '../../constants/parentPortalConstants';
 import { fetchMessageThread } from '../../api/messages';
 import { DirectMessageThreadView } from '../messages/DirectMessageThreadView';
 import { ParentPortalMediaGallery } from './ParentPortalMediaGallery';
@@ -59,8 +63,21 @@ export function ParentPortalMessagesView({
   const [threadSending, setThreadSending] = useState(false);
   const [threadPendingMedia, setThreadPendingMedia] = useState<PickedMessageMedia | null>(null);
   const [opening, setOpening] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const mediaEnabled = messageMediaEnabledForCamp(companySlug);
+
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => {
+      const haystack = [row.child_name, row.division_leader_name, row.latest_preview, row.group_name]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [rows, searchQuery]);
 
   useEffect(() => {
     onThreadActive?.(!!(activeRow && threadRoot));
@@ -270,7 +287,7 @@ export function ParentPortalMessagesView({
           detailMessage={threadRoot}
           threadReplies={threadReplies}
           currentUserId={currentUserId}
-          threadPartyLabel={activeRow.division_leader_name ?? 'Division leader'}
+          threadPartyLabel={parentPortalThreadListTitle(activeRow)}
           canReply
           messageMediaEnabled={mediaEnabled}
           threadPendingMedia={threadPendingMedia}
@@ -304,23 +321,31 @@ export function ParentPortalMessagesView({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Messages</Text>
-      <Text style={styles.subtitle}>
-        Chat with your camper&apos;s division leader and view shared photos &amp; videos.
-      </Text>
-      <View style={styles.tabRow}>
+      <View style={styles.segmentRow}>
         <TouchableOpacity
-          style={[styles.tabBtn, sectionTab === 'chats' && styles.tabBtnActive]}
+          style={[styles.segmentBtn, sectionTab === 'chats' && styles.segmentBtnActive]}
           onPress={() => setSectionTab('chats')}
         >
-          <Text style={[styles.tabBtnText, sectionTab === 'chats' && styles.tabBtnTextActive]}>Chats</Text>
+          <Ionicons
+            name="chatbubbles-outline"
+            size={16}
+            color={sectionTab === 'chats' ? '#fff' : colors.textMuted}
+          />
+          <Text style={[styles.segmentText, sectionTab === 'chats' && styles.segmentTextActive]}>
+            Chats
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tabBtn, sectionTab === 'photos' && styles.tabBtnActive]}
+          style={[styles.segmentBtn, sectionTab === 'photos' && styles.segmentBtnActive]}
           onPress={() => setSectionTab('photos')}
         >
-          <Text style={[styles.tabBtnText, sectionTab === 'photos' && styles.tabBtnTextActive]}>
-            Photos &amp; videos
+          <Ionicons
+            name="images-outline"
+            size={16}
+            color={sectionTab === 'photos' ? '#fff' : colors.textMuted}
+          />
+          <Text style={[styles.segmentText, sectionTab === 'photos' && styles.segmentTextActive]}>
+            Photos
           </Text>
         </TouchableOpacity>
       </View>
@@ -338,34 +363,64 @@ export function ParentPortalMessagesView({
           <Text style={styles.emptyText}>Link campers to your family to start messaging.</Text>
         </View>
       ) : null}
-      {sectionTab === 'chats'
-        ? rows.map((row) => (
-            <TouchableOpacity
-              key={row.child_id}
-              style={[styles.row, !row.division_leader_user_id && styles.rowDisabled]}
-              disabled={!row.division_leader_user_id}
-              onPress={() => void openThread(row)}
-            >
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{row.child_name.charAt(0)}</Text>
-              </View>
-              <View style={styles.rowBody}>
-                <Text style={styles.rowTitle}>{row.child_name}</Text>
-                <Text style={styles.rowLeader}>
-                  {row.division_leader_name
-                    ? `Division leader: ${row.division_leader_name}`
-                    : 'Division leader not assigned'}
-                </Text>
-                {row.latest_preview ? (
-                  <Text style={styles.rowPreview} numberOfLines={2}>
-                    {messageContentPreview(row.latest_preview, 80)}
-                  </Text>
-                ) : null}
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-            </TouchableOpacity>
-          ))
-        : null}
+      {sectionTab === 'chats' && rows.length > 0 ? (
+        <>
+          <View style={styles.searchWrap}>
+            <Ionicons name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search"
+              placeholderTextColor={colors.textMuted}
+              style={styles.searchInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+          <View style={styles.inboxCard}>
+            {filteredRows.length === 0 ? (
+              <Text style={styles.emptySearch}>No conversations match your search.</Text>
+            ) : (
+              filteredRows.map((row, index) => {
+                const preview = row.latest_preview
+                  ? messageContentPreview(row.latest_preview, 100)
+                  : row.division_leader_name
+                    ? 'Tap to message your division leader'
+                    : 'Division leader not assigned yet';
+                return (
+                  <TouchableOpacity
+                    key={row.child_id}
+                    style={[
+                      styles.inboxRow,
+                      index > 0 && styles.inboxRowBorder,
+                      !row.division_leader_user_id && styles.rowDisabled,
+                    ]}
+                    disabled={!row.division_leader_user_id}
+                    onPress={() => void openThread(row)}
+                  >
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{camperInitials(row.child_name)}</Text>
+                    </View>
+                    <View style={styles.rowBody}>
+                      <View style={styles.rowTitleRow}>
+                        <Text style={styles.rowTitle} numberOfLines={1}>
+                          {parentPortalThreadListTitle(row)}
+                        </Text>
+                        {row.latest_at ? (
+                          <Text style={styles.rowDate}>{formatParentMessageListDate(row.latest_at)}</Text>
+                        ) : null}
+                      </View>
+                      <Text style={styles.rowPreview} numberOfLines={2}>
+                        {preview}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -380,58 +435,88 @@ function createStyles(colors: ParentPortalColors, mainAreaHeight: number) {
       minHeight: 0,
       alignSelf: 'stretch',
     },
-    title: {
-      fontSize: 22,
-      fontFamily: ppFont.semibold,
-      color: colors.text,
-      marginBottom: 6,
-    },
-    subtitle: {
-      fontSize: 14,
-      fontFamily: ppFont.regular,
-      color: colors.textMuted,
-      marginBottom: 12,
-      lineHeight: 20,
-    },
-    tabRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-    tabBtn: {
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 999,
+    segmentRow: {
+      flexDirection: 'row',
+      gap: 4,
+      padding: 4,
+      borderRadius: PP.radiusLg,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.elevated,
+      marginBottom: 14,
     },
-    tabBtnActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-    tabBtnText: { fontSize: 13, fontFamily: ppFont.semibold, color: colors.textMuted },
-    tabBtnTextActive: { color: '#fff' },
-    centered: { paddingVertical: 48, alignItems: 'center', gap: 12 },
-    emptyText: { fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 24 },
-    row: {
+    segmentBtn: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      paddingVertical: 14,
-      paddingHorizontal: 12,
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 10,
+      borderRadius: PP.radiusMd,
+    },
+    segmentBtnActive: { backgroundColor: colors.brand },
+    segmentText: { fontSize: 14, fontFamily: ppFont.semibold, color: colors.textMuted },
+    segmentTextActive: { color: '#fff' },
+    searchWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
       borderRadius: PP.radiusLg,
-      backgroundColor: colors.elevated,
-      marginBottom: 10,
       borderWidth: 1,
       borderColor: colors.border,
+      backgroundColor: colors.elevated,
+      marginBottom: 12,
+      paddingHorizontal: 12,
+      minHeight: 44,
+    },
+    searchIcon: { marginRight: 8 },
+    searchInput: {
+      flex: 1,
+      fontSize: 16,
+      fontFamily: ppFont.regular,
+      color: colors.text,
+      paddingVertical: 10,
+    },
+    inboxCard: {
+      borderRadius: PP.radiusLg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.elevated,
+      overflow: 'hidden',
+    },
+    inboxRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+    },
+    inboxRowBorder: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+    },
+    centered: { paddingVertical: 48, alignItems: 'center', gap: 12 },
+    emptyText: { fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 24 },
+    emptySearch: {
+      fontSize: 14,
+      color: colors.textMuted,
+      textAlign: 'center',
+      paddingVertical: 32,
+      paddingHorizontal: 16,
     },
     rowDisabled: { opacity: 0.45 },
     avatar: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
       backgroundColor: colors.brandSubtle,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    avatarText: { fontSize: 18, fontFamily: ppFont.semibold, color: colors.brand },
-    rowBody: { flex: 1, minWidth: 0 },
-    rowTitle: { fontSize: 16, fontFamily: ppFont.semibold, color: colors.text },
-    rowLeader: { fontSize: 12, fontFamily: ppFont.medium, color: colors.brand, marginTop: 2 },
-    rowPreview: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
+    avatarText: { fontSize: 15, fontFamily: ppFont.semibold, color: colors.brand },
+    rowBody: { flex: 1, minWidth: 0, paddingTop: 2 },
+    rowTitleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+    rowTitle: { flex: 1, fontSize: 16, fontFamily: ppFont.semibold, color: colors.text },
+    rowDate: { fontSize: 12, fontFamily: ppFont.regular, color: colors.textMuted },
+    rowPreview: { fontSize: 14, fontFamily: ppFont.regular, color: colors.textMuted, marginTop: 4, lineHeight: 19 },
   });
 }
