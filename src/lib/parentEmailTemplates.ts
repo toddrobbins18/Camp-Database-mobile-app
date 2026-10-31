@@ -1,9 +1,5 @@
-/** Todd: four NSDC reminder graphics only (no towel / pack lunch). */
-export type ParentEmailTemplateKey =
-  | 'sunscreen'
-  | 'extra_clothes'
-  | 'water_bottle'
-  | 'rain_gear';
+/** Todd: sunscreen, goggles, extra clothing only (no lunch/towel/water/rain). */
+export type ParentEmailTemplateKey = 'sunscreen' | 'extra_clothes' | 'goggles';
 
 export type ParentEmailTemplateOption = {
   key: ParentEmailTemplateKey;
@@ -13,7 +9,6 @@ export type ParentEmailTemplateOption = {
 
 export const PARENT_EMAIL_TEMPLATE_OPTIONS: ParentEmailTemplateOption[] = [
   { key: 'sunscreen', label: 'More sunscreen', icon: 'sunny-outline' },
+  { key: 'goggles', label: 'Goggles', icon: 'eye-outline' },
   { key: 'extra_clothes', label: 'Extra clothes', icon: 'shirt-outline' },
-  { key: 'water_bottle', label: 'Water bottle', icon: 'water' },
-  { key: 'rain_gear', label: 'Rain gear', icon: 'rainy-outline' },
 ];

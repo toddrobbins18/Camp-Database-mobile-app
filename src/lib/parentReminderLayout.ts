@@ -26,8 +26,7 @@ export const PARENT_REMINDER_NAME: ParentReminderNameLayout = {
 const PARENT_REMINDER_SOURCES: Record<ParentEmailTemplateKey, ImageSourcePropType> = {
   sunscreen: require('../../assets/parent-reminders/sunscreen.jpg'),
   extra_clothes: require('../../assets/parent-reminders/extra_clothing.jpg'),
-  water_bottle: require('../../assets/parent-reminders/water_bottle.jpg'),
-  rain_gear: require('../../assets/parent-reminders/rain_gear.jpg'),
+  goggles: require('../../assets/parent-reminders/goggles.jpg'),
 };
 
 export function parentReminderImageSource(templateKey: ParentEmailTemplateKey): ImageSourcePropType {
