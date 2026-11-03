@@ -20,7 +20,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { useCampBrandTheme } from '../hooks/useCampBrandTheme';
 import { BrandTabs } from '../components/BrandTabs';
 import {
-  BRACELETS,
+  SWIM_BRACELET_DASHBOARD_COLORS,
   DATE_FMT,
   LEVEL_OPTIONS,
   PASS_OPTIONS,
@@ -315,7 +315,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
     [search, levelData],
   );
 
-  const braceletCounts = BRACELETS.reduce<Record<string, number>>((acc, c) => {
+  const braceletCounts = SWIM_BRACELET_DASHBOARD_COLORS.reduce<Record<string, number>>((acc, c) => {
     acc[c] = braceletData.filter((b) => b.currentBracelet === c).length;
     return acc;
   }, {});
@@ -553,7 +553,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
 
       <View style={styles.statsContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {BRACELETS.map((color) => (
+          {SWIM_BRACELET_DASHBOARD_COLORS.map((color) => (
             <View key={color} style={styles.statCard}>
               <View
                 style={[
@@ -833,7 +833,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                 >
                   <Text style={styles.colorChipText}>—</Text>
                 </TouchableOpacity>
-                {BRACELETS.map((c) => (
+                {SWIM_BRACELET_DASHBOARD_COLORS.map((c) => (
                   <TouchableOpacity
                     key={c}
                     style={[

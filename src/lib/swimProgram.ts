@@ -3,7 +3,13 @@ import { compareByLastName } from "./nameSortUtils";
 import { filterActiveRoster } from "./rosterStatus";
 import { supabase } from "./supabase";
 
-export type BraceletColor = "Red" | "Orange" | "Yellow" | "Green" | "Blue";
+export type BraceletColor =
+  | "Non Swimmer/Beginner"
+  | "Red"
+  | "Orange"
+  | "Yellow"
+  | "Green"
+  | "Blue";
 /** A = Achieved, W = Working towards (sheet notation) */
 export type SkillStatus = "A" | "W" | "—";
 export type LevelStatus = "Complete" | "Incomplete" | "—";
@@ -68,7 +74,17 @@ export interface SwimSeasonHistory {
 }
 
 export const PROCTORS = ["MF", "JT", "VS", "KL", "AR"];
-export const BRACELETS: BraceletColor[] = ["Red", "Orange", "Yellow", "Green", "Blue"];
+export const BRACELETS: BraceletColor[] = [
+  "Non Swimmer/Beginner",
+  "Red",
+  "Orange",
+  "Yellow",
+  "Green",
+  "Blue",
+];
+
+/** Todd's bracelet buckets — row picker, counts, and filters. */
+export const SWIM_BRACELET_DASHBOARD_COLORS: BraceletColor[] = ["Non Swimmer/Beginner", "Orange"];
 export const PASS_OPTIONS = ["Passed", "Did Not Pass", "Retest"] as const;
 export type PassStatus = (typeof PASS_OPTIONS)[number];
 
@@ -163,7 +179,9 @@ export function normalizeBraceletColor(raw: unknown): BraceletColor | "" {
   const s = String(raw ?? "").trim();
   if (!s) return "";
   const match = BRACELETS.find((c) => c.toLowerCase() === s.toLowerCase());
-  return match ?? "";
+  if (match) return match;
+  if (/^non\s*swimmer/i.test(s) || /^beginner$/i.test(s)) return "Non Swimmer/Beginner";
+  return "";
 }
 
 export function mergePassOptions(extra: string[]): string[] {
