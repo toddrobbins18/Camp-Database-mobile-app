@@ -17,7 +17,7 @@ import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
 import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import {
-  defaultEnrollmentWeekForDate,
+  campWeekForScheduleLookup,
   loadEnrollmentWeekCalendar,
   type EnrollmentWeekCalendar,
 } from '../lib/enrollmentWeekCalendar';
@@ -25,19 +25,18 @@ import { campTimeHHmmFromIso } from '../lib/campTime';
 import { campProgramStartDate } from '../lib/medicationStartDate';
 import {
   SCHEDULE_DAY_LABELS,
+  activeScheduleRotationWeek,
   areaLabel,
   campWeekNumber,
   dayOfWeekFromYmd,
   formatMinutes12,
+  groupScheduleSlotFromRow,
   hhmmToMinutes,
   minutesToPgTime,
-  pgTimeToMinutes,
-  rotationWeekFromLocation,
   sameScheduleLabel,
   scheduleAreaOptions,
   scheduleGroupName,
   scheduleLocationForSave,
-  scheduleRotationWeek,
   slotMatchesArea,
   slotsAtTime,
   type GroupScheduleDraft,
@@ -56,32 +55,7 @@ type UploadRow = {
   created_at: string;
 };
 
-function slotFromRow(row: {
-  id: string;
-  upload_id: string;
-  group_name: string;
-  day_of_week: number | null;
-  applies_on: string | null;
-  start_time: string;
-  end_time: string;
-  activity: string;
-  location: string | null;
-}): GroupScheduleSlot {
-  const location = row.location ?? '';
-  const rotationWeek = rotationWeekFromLocation(location);
-  return {
-    id: row.id,
-    uploadId: row.upload_id,
-    groupName: scheduleGroupName(row.group_name),
-    dayOfWeek: row.day_of_week,
-    appliesOn: row.applies_on,
-    rotationWeek,
-    startMinutes: pgTimeToMinutes(row.start_time),
-    endMinutes: pgTimeToMinutes(row.end_time),
-    activity: row.activity,
-    location: rotationWeek ? '' : location,
-  };
-}
+const SCHEDULE_SLOT_PAGE = 1000;
 
 function periodLabel(slot: GroupScheduleDraft): string {
   return `${formatMinutes12(slot.startMinutes)}–${formatMinutes12(slot.endMinutes)}`;
@@ -125,41 +99,67 @@ export function GroupSchedulesScreen({ navigation }: { navigation: { openDrawer:
     void loadEnrollmentWeekCalendar(supabase, companyId, season).then(setCalendar);
   }, [companyId, season]);
 
-  const enrollmentWeek = useMemo(
-    () => defaultEnrollmentWeekForDate(calendar, lookupDate),
-    [calendar, lookupDate],
+  const campWeek = useMemo(
+    () =>
+      lookupDate && season
+        ? campWeekForScheduleLookup(
+            calendar,
+            lookupDate,
+            campProgramStartDate(season),
+            campWeekNumber,
+          )
+        : null,
+    [calendar, lookupDate, season],
   );
 
   useEffect(() => {
     if (!companyId || !season) return;
     void loadGroupRoster(supabase, companyId, season, {
-      enrollmentWeek: enrollmentWeek ?? undefined,
+      enrollmentWeek: campWeek ?? undefined,
     }).then(setRoster);
-  }, [companyId, season, enrollmentWeek]);
+  }, [companyId, season, campWeek]);
 
   const loadSchedules = async () => {
     if (!companyId || !season) return;
     setLoading(true);
-    const [slotRes, uploadRes] = await Promise.all([
-      supabase
-        .from('group_schedule_slots')
-        .select('id, upload_id, group_name, day_of_week, applies_on, start_time, end_time, activity, location')
-        .eq('company_id', companyId)
-        .eq('season', season)
-        .limit(20000),
-      supabase
-        .from('group_schedule_uploads')
-        .select('id, file_name, applies_on, created_at')
-        .eq('company_id', companyId)
-        .eq('season', season)
-        .order('created_at', { ascending: false }),
-    ]);
-    if (slotRes.error || uploadRes.error) {
+    const slotSelect =
+      'id, upload_id, group_name, day_of_week, applies_on, start_time, end_time, activity, location';
+    const uploadRes = await supabase
+      .from('group_schedule_uploads')
+      .select('id, file_name, applies_on, created_at')
+      .eq('company_id', companyId)
+      .eq('season', season)
+      .order('created_at', { ascending: false });
+
+    const loaded: GroupScheduleSlot[] = [];
+    if (!uploadRes.error) {
+      for (let offset = 0; ; offset += SCHEDULE_SLOT_PAGE) {
+        const slotRes = await supabase
+          .from('group_schedule_slots')
+          .select(slotSelect)
+          .eq('company_id', companyId)
+          .eq('season', season)
+          .order('id')
+          .range(offset, offset + SCHEDULE_SLOT_PAGE - 1);
+        if (slotRes.error) {
+          showAppAlert('Schedules', 'Could not load schedules. The database update may still need to be applied.');
+          setSlots([]);
+          setUploads([]);
+          setLoading(false);
+          return;
+        }
+        const page = slotRes.data ?? [];
+        loaded.push(...page.map((row) => groupScheduleSlotFromRow(row as never)));
+        if (page.length < SCHEDULE_SLOT_PAGE) break;
+      }
+    }
+
+    if (uploadRes.error) {
       showAppAlert('Schedules', 'Could not load schedules. The database update may still need to be applied.');
       setSlots([]);
       setUploads([]);
     } else {
-      setSlots((slotRes.data ?? []).map((row) => slotFromRow(row as never)));
+      setSlots(loaded);
       setUploads((uploadRes.data ?? []) as UploadRow[]);
     }
     setLoading(false);
@@ -170,11 +170,10 @@ export function GroupSchedulesScreen({ navigation }: { navigation: { openDrawer:
   }, [companyId, season]);
 
   const minutes = hhmmToMinutes(lookupTime) ?? 0;
-  const campWeek = useMemo(() => {
-    if (!lookupDate) return null;
-    return enrollmentWeek ?? (season ? campWeekNumber(lookupDate, campProgramStartDate(season)) : null);
-  }, [enrollmentWeek, lookupDate, season]);
-  const rotationWeek = scheduleRotationWeek(campWeek);
+  const rotationWeek = useMemo(
+    () => activeScheduleRotationWeek(slots, campWeek),
+    [slots, campWeek],
+  );
   const atTime = useMemo(
     () => (lookupDate ? slotsAtTime(slots, lookupDate, minutes, rotationWeek) : []),
     [slots, lookupDate, minutes, rotationWeek],
@@ -400,9 +399,10 @@ export function GroupSchedulesScreen({ navigation }: { navigation: { openDrawer:
             <Text style={styles.nowText}>Now</Text>
           </TouchableOpacity>
           {lookupDay ? <Text style={styles.weekBadge}>{lookupDay}</Text> : null}
-          {campWeek && rotationWeek ? (
+          {campWeek ? (
             <Text style={styles.weekBadge}>
-              Camp week {campWeek} · schedule week {rotationWeek}
+              Camp week {campWeek}
+              {rotationWeek ? ` · schedule week ${rotationWeek}` : ''}
             </Text>
           ) : null}
           {loading ? <ActivityIndicator size="small" /> : null}
@@ -488,21 +488,40 @@ export function GroupSchedulesScreen({ navigation }: { navigation: { openDrawer:
                 : `has ${visible.length} activities at this time.`}
           </Text>
         ) : null}
-        {visible.map((slot) => {
-          const names = campersByGroup.get(scheduleGroupName(slot.groupName).toLowerCase()) ?? [];
-          return (
-            <View key={slot.id} style={styles.card}>
-              <Text style={styles.cardTitle}>{slot.groupName}</Text>
-              <Text style={styles.cardBody}>
-                {slot.activity}
-                {slot.location ? ` · ${areaLabel(slot)}` : ''} · {periodLabel(slot)}
-              </Text>
-              <Text style={styles.cardMeta}>
-                {names.length === 0 ? 'No campers on the roster' : `${names.length} · ${names.join(', ')}`}
-              </Text>
-            </View>
-          );
-        })}
+        {visible.length > 0 ? (
+          <Text style={styles.resultCount}>
+            {visible.length} {visible.length === 1 ? 'group' : 'groups'} at this time.
+            {groupFilter === ALL && areaFilter === ALL
+              ? ' Pick a group or activity to see campers.'
+              : ''}
+          </Text>
+        ) : null}
+        <ScrollView
+          style={[
+            styles.resultsScroll,
+            visible.length > 8 ? styles.resultsScrollCapped : null,
+          ]}
+          nestedScrollEnabled
+        >
+          {visible.map((slot) => {
+            const names = campersByGroup.get(scheduleGroupName(slot.groupName).toLowerCase()) ?? [];
+            const showCampers = groupFilter !== ALL || areaFilter !== ALL;
+            return (
+              <View key={slot.id} style={styles.card}>
+                <Text style={styles.cardTitle}>{slot.groupName}</Text>
+                <Text style={styles.cardBody} numberOfLines={2}>
+                  {slot.activity}
+                  {slot.location ? ` · ${areaLabel(slot)}` : ''} · {periodLabel(slot)}
+                </Text>
+                {showCampers ? (
+                  <Text style={styles.cardMeta} numberOfLines={3}>
+                    {names.length === 0 ? 'No campers on the roster' : `${names.length} · ${names.join(', ')}`}
+                  </Text>
+                ) : null}
+              </View>
+            );
+          })}
+        </ScrollView>
         {slots.length > 0 && visible.length === 0 ? (
           <Text style={styles.empty}>Nobody is scheduled for that time.</Text>
         ) : null}
@@ -619,6 +638,9 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, color: theme.colors.text, maxWidth: 140 },
   empty: { fontSize: 13, color: theme.colors.textSecondary, marginVertical: 12 },
   callout: { fontSize: 15, color: theme.colors.text, marginBottom: 8, fontWeight: '600' },
+  resultCount: { fontSize: 13, color: theme.colors.textSecondary, marginBottom: 8 },
+  resultsScroll: {},
+  resultsScrollCapped: { maxHeight: 360 },
   card: {
     backgroundColor: theme.colors.surface,
     borderRadius: 10,
