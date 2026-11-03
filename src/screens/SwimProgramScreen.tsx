@@ -171,6 +171,11 @@ function DateField({
   );
 }
 
+function historySkillLine(skills: SkillStatus[], level: LevelStatus): string {
+  if (skills.some((status) => status !== '—')) return skills.join(' ');
+  return level !== '—' ? level : '—';
+}
+
 type SwimProgramScreenProps = {
   navigation: any;
   initialTab?: 'bracelets' | 'levels' | 'formation' | 'history';
@@ -185,6 +190,15 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyReport, setHistoryReport] = useState<SwimHistoryReportRow[]>([]);
+  const priorHistoryRows = useMemo(
+    () =>
+      historyReport.flatMap((row) =>
+        row.seasons
+          .filter((entry) => entry.season !== season)
+          .map((entry) => ({ personId: row.personId, name: row.name, entry })),
+      ),
+    [historyReport, season],
+  );
   const [braceletData, setBraceletData] = useState<BraceletRecord[]>([]);
   const [levelData, setLevelData] = useState<LevelRecord[]>([]);
   const [selectedBracelet, setSelectedBracelet] = useState<BraceletRecord | null>(null);
@@ -591,46 +605,47 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>Prior seasons — campers with saved swim data</Text>
+                <Text style={styles.cardHint}>
+                  Earlier seasons only. {season} is on Bracelets and Levels.
+                </Text>
               </View>
               {historyLoading ? (
                 <ActivityIndicator size="small" color={brand} style={{ margin: 24 }} />
-              ) : historyReport.length === 0 ? (
+              ) : priorHistoryRows.length === 0 ? (
                 <Text style={styles.emptyState}>
                   No prior swim data yet. Enter data on Bracelets / Level Report or import CSV from the header.
                 </Text>
               ) : (
-                historyReport.flatMap((row) =>
-                  row.seasons.map((s) => (
-                    <View key={`${row.personId}-${s.season}`} style={styles.listItem}>
+                priorHistoryRows.map((row) => (
+                    <View key={`${row.personId}-${row.entry.season}`} style={styles.listItem}>
                       <Text style={styles.camperName}>{row.name}</Text>
                       <Text style={styles.camperGroup}>
-                        Season {s.season} · {s.bracelet?.currentBracelet || '—'} bracelet
+                        Season {row.entry.season} · {row.entry.bracelet?.currentBracelet || '—'} bracelet
                       </Text>
-                      {s.levels ? (
+                      {row.entry.levels ? (
                         <View style={styles.listSubInfoLevels}>
                           <View style={styles.levelBlock}>
                             <Text style={styles.infoLabel}>Goldfish</Text>
-                            <Text style={styles.infoValue}>{s.levels.goldfish.join(' ')}</Text>
+                            <Text style={styles.infoValue}>{historySkillLine(row.entry.levels.goldfish, row.entry.levels.goldfishLevel)}</Text>
                           </View>
                           <View style={styles.levelBlock}>
                             <Text style={styles.infoLabel}>Minnow</Text>
-                            <Text style={styles.infoValue}>{s.levels.minnow.join(' ')}</Text>
+                            <Text style={styles.infoValue}>{historySkillLine(row.entry.levels.minnow, row.entry.levels.minnowLevel)}</Text>
                           </View>
                           <View style={styles.levelBlock}>
                             <Text style={styles.infoLabel}>Tadpole</Text>
-                            <Text style={styles.infoValue}>{s.levels.tadpole.join(' ')}</Text>
+                            <Text style={styles.infoValue}>{historySkillLine(row.entry.levels.tadpole, row.entry.levels.tadpoleLevel)}</Text>
                           </View>
                           <View style={styles.levelBlock}>
                             <Text style={styles.infoLabel}>RC1 / RC2 / RC3 / RC4 / Frog</Text>
                             <Text style={styles.infoValue}>
-                              {[s.levels.redCross, s.levels.redCross2, s.levels.redCross3, s.levels.redCross4, s.levels.frog].join(' · ')}
+                              {[row.entry.levels.redCross, row.entry.levels.redCross2, row.entry.levels.redCross3, row.entry.levels.redCross4, row.entry.levels.frog].join(' · ')}
                             </Text>
                           </View>
                         </View>
                       ) : null}
                     </View>
-                  )),
-                )
+                  ))
               )}
             </View>
           ) : activeTab === 'bracelets' ? (

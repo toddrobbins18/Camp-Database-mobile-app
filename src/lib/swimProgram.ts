@@ -601,7 +601,19 @@ export async function fetchSwimHistoryReport(
       Boolean(bracelet?.currentBracelet) ||
       (levels?.goldfish.some((s) => s !== "—") ?? false) ||
       (levels?.minnow.some((s) => s !== "—") ?? false) ||
-      (levels?.tadpole.some((s) => s !== "—") ?? false);
+      (levels?.tadpole.some((s) => s !== "—") ?? false) ||
+      (levels
+        ? [
+            levels.goldfishLevel,
+            levels.minnowLevel,
+            levels.tadpoleLevel,
+            levels.redCross,
+            levels.redCross2,
+            levels.redCross3,
+            levels.redCross4,
+            levels.frog,
+          ].some((status) => status !== "—")
+        : false);
 
     if (!hasData) continue;
 
