@@ -69,6 +69,14 @@ export function getDayCampNestCarryoverMenuItems(): MobileDrawerMenuItem[] {
 export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
   return [
     {
+      key: 'schedules',
+      menuId: 'schedules',
+      label: 'Schedules',
+      icon: 'calendar-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'schedules' },
+    },
+    {
       key: 'front-office',
       menuId: 'front-office',
       label: 'Front Office',
