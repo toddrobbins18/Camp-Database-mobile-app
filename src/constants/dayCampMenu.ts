@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  isNorthShoreDayCamp,
+  dayCampHidesUnreleasedPocModules,
   northShoreBusTransportEnabled,
   staffTimeClockEnabledForCompany,
   type CampLike,
@@ -160,7 +160,7 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
   ];
 }
 
-/** North Shore — Todd Jul 30: skip Hiring, Bunking, Media until asked. */
+/** North Shore Phase 1 — skip Hiring, Bunking, Media until asked (all live day camps). */
 const NORTH_SHORE_SKIP_POC_MENU_IDS = new Set(['media', 'hiring', 'bunking']);
 
 function isTransportMenuItem(menuId: string): boolean {
@@ -169,7 +169,7 @@ function isTransportMenuItem(menuId: string): boolean {
 
 export function getDayCampPocItemsForCompany(company: CampLike): MobileDrawerMenuItem[] {
   return getDayCampPocMenuItems().filter((item) => {
-    if (isNorthShoreDayCamp(company?.slug) && NORTH_SHORE_SKIP_POC_MENU_IDS.has(item.menuId)) {
+    if (dayCampHidesUnreleasedPocModules(company) && NORTH_SHORE_SKIP_POC_MENU_IDS.has(item.menuId)) {
       return false;
     }
     if (isTransportMenuItem(item.menuId) && !northShoreBusTransportEnabled(company)) {

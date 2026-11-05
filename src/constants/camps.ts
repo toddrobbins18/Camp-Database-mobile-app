@@ -4,6 +4,8 @@ export const CAMP_SLUG = {
   TIMBER_LAKE_WEST: 'timber-lake-west',
   TYLER_HILL_CAMP: 'tyler-hill-camp',
   NORTH_SHORE_DAY_CAMP: 'north-shore-day-camp',
+  HAMPTON_COUNTRY_DAY_CAMP: 'hampton-country-day-camp',
+  SOUTHAMPTON_CAMP_CLUB: 'southampton-camp-club',
   /** Training / demo day camp — dummy data only (parity with web `camps.ts`). */
   NEST_SANDBOX_DAY_CAMP: 'nest-sandbox-day-camp',
 } as const;
@@ -34,6 +36,14 @@ export function isNorthShoreDayCamp(slug: string | null | undefined): boolean {
   return slug === CAMP_SLUG.NORTH_SHORE_DAY_CAMP;
 }
 
+export function isHamptonCountryDayCamp(slug: string | null | undefined): boolean {
+  return slug === CAMP_SLUG.HAMPTON_COUNTRY_DAY_CAMP;
+}
+
+export function isSouthamptonCampClub(slug: string | null | undefined): boolean {
+  return slug === CAMP_SLUG.SOUTHAMPTON_CAMP_CLUB;
+}
+
 export function isNestSandboxCompany(slug: string | null | undefined): boolean {
   return slug === CAMP_SLUG.NEST_SANDBOX_DAY_CAMP;
 }
@@ -46,10 +56,6 @@ type CampLike = {
 
 export type { CampLike };
 
-export function northShoreBusTransportEnabled(company: CampLike): boolean {
-  return isNorthShoreDayCamp(company?.slug) || isNestSandboxCompany(company?.slug);
-}
-
 /** CampMinder / MapPoint bulk tools — off in Nest training sandbox (web parity). */
 export function campminderIntegrationEnabled(company: CampLike): boolean {
   if (isNestSandboxCompany(company?.slug)) return false;
@@ -60,6 +66,16 @@ export function isDayCampCompany(company: CampLike): boolean {
   if (!company) return false;
   if (company.camp_type === 'day_camp') return true;
   return isNorthShoreDayCamp(company.slug);
+}
+
+/** Day-camp bus transport modules — empty per camp; not used by overnight camps. */
+export function northShoreBusTransportEnabled(company: CampLike): boolean {
+  return isDayCampCompany(company);
+}
+
+/** Live day camps hide Hiring / Bunking / Media, same as North Shore. Sandbox keeps those extras. */
+export function dayCampHidesUnreleasedPocModules(company: CampLike): boolean {
+  return isDayCampCompany(company) && !isNestSandboxCompany(company?.slug);
 }
 
 const APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS = [
