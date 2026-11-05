@@ -6,7 +6,11 @@ import { showNewInboxMessageNotification } from '../lib/inboxLocalNotification';
 import { planInboxPushForInsert } from '../lib/messagePushFromRow';
 import { canonicalProfileUuid, fetchMessageProfileLabels, rowParticipantIds } from '../lib/messageProfiles';
 import { enqueueSync, getCachedJson, isOnlineNow, listQueued, setCachedJson } from '../offline/engine';
-import { filterMessagesForCampInbox } from '../lib/messageInboxFilters';
+import {
+    filterMessagesForCampInbox,
+    messageShownInInboxList,
+    messageShownInSentList,
+} from '../lib/messageInboxFilters';
 import { inboxUnreadCountQueryKey } from '../hooks/useInboxUnreadCount';
 
 export { inboxUnreadCountQueryKey, useInboxUnreadCount } from '../hooks/useInboxUnreadCount';
@@ -548,14 +552,64 @@ export const useMessages = (userId: string | null, companyId: string | null | un
                 if (fixErr && !missingRpc) {
                     console.warn('[messages] apply_message_senders_from_email_logs_for_inbox:', fixErr.message);
                 }
-                const { data, error } = await supabase
-                    .from('messages')
-                    .select('*')
-                    .eq('recipient_id', userId)
-                    .is('parent_message_id', null)
-                    .order('created_at', { ascending: false });
-                if (error) throw error;
-                const withParties = await attachParticipantProfiles((data || []) as Record<string, unknown>[], companyId);
+                const [addressed, parentThreads, repliesToMe] = await Promise.all([
+                    supabase
+                        .from('messages')
+                        .select('*')
+                        .eq('recipient_id', userId)
+                        .is('parent_message_id', null)
+                        .order('created_at', { ascending: false }),
+                    supabase
+                        .from('messages')
+                        .select('*')
+                        .eq('sender_id', userId)
+                        .eq('thread_kind', 'parent_division_leader')
+                        .is('parent_message_id', null),
+                    supabase
+                        .from('messages')
+                        .select('parent_message_id')
+                        .eq('recipient_id', userId)
+                        .not('parent_message_id', 'is', null),
+                ]);
+                if (addressed.error) throw addressed.error;
+                const inboundReplyRoots = new Set(
+                    (repliesToMe.data ?? [])
+                        .map((row) => row.parent_message_id)
+                        .filter((id): id is string => !!id),
+                );
+                const byId = new Map<string, Record<string, unknown>>();
+                for (const row of [...(addressed.data ?? []), ...(parentThreads.data ?? [])]) {
+                    if (!row || !messageShownInInboxList(row, userId, { hasInboundReply: inboundReplyRoots.has(row.id) })) {
+                        continue;
+                    }
+                    byId.set(row.id, row);
+                }
+                const missingRootIds = [...inboundReplyRoots].filter((id) => !byId.has(id));
+                if (missingRootIds.length > 0) {
+                    const { data: extraRoots, error: extraErr } = await supabase
+                        .from('messages')
+                        .select('*')
+                        .in('id', missingRootIds)
+                        .is('parent_message_id', null);
+                    if (extraErr) throw extraErr;
+                    for (const row of extraRoots ?? []) {
+                        if (messageShownInInboxList(row, userId, { hasInboundReply: true })) {
+                            byId.set(row.id, row);
+                        }
+                    }
+                }
+                const data = [...byId.values()]
+                    .sort(
+                        (a, b) =>
+                            new Date(String(b.created_at ?? 0)).getTime() -
+                            new Date(String(a.created_at ?? 0)).getTime(),
+                    )
+                    .map((row) =>
+                        String(row.sender_id ?? '') === userId && String(row.recipient_id ?? '') !== userId
+                            ? { ...row, read: true }
+                            : row,
+                    );
+                const withParties = await attachParticipantProfiles(data, companyId);
                 const enriched = await enrichInboxWithThreadPreview(withParties, companyId);
                 const filtered = filterMessagesForCampInbox(enriched, companyScope);
                 await setCachedJson(messagesCacheKey('inbox', userId, companyId), filtered);
@@ -587,6 +641,7 @@ export const useSentMessages = (userId: string | null, companyId: string | null 
                     .order('created_at', { ascending: false });
                 if (error) throw error;
                 let rows = await attachParticipantProfiles((data || []) as Record<string, unknown>[], companyId);
+                rows = rows.filter((row) => messageShownInSentList(row));
                 rows = await enrichSentWithOutboundReplyReceipt(rows, userId);
                 await setCachedJson(messagesCacheKey('sent', userId, companyId), rows);
                 return await applyQueuedMessageOps(rows, userId, 'sent');

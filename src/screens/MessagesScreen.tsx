@@ -59,6 +59,7 @@ import {
 } from '../lib/divisionChannelMessaging';
 import { DivisionChannelChatPanel } from '../components/messages/DivisionChannelChatPanel';
 import { StaffAnnouncementsPanel } from '../components/messages/StaffAnnouncementsPanel';
+import { StaffAudienceMessagesPanel } from '../components/messages/StaffAudienceMessagesPanel';
 import { isNestSandboxCompany } from '../constants/camps';
 import { NestSandboxStaffTestAccountsCard } from '../components/messages/NestSandboxStaffTestAccountsCard';
 import * as DocumentPicker from 'expo-document-picker';
@@ -858,6 +859,32 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                 </Text>
             </TouchableOpacity>
             <TouchableOpacity
+                style={[styles.segmentTab, activeView === 'group_messages' && styles.segmentTabActive]}
+                onPress={() => setActiveView('group_messages')}
+            >
+                <Ionicons
+                    name="people-outline"
+                    size={16}
+                    color={activeView === 'group_messages' ? '#fff' : theme.colors.textSecondary}
+                />
+                <Text style={[styles.segmentTabText, activeView === 'group_messages' && styles.segmentTabTextActive]}>
+                    Groups
+                </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={[styles.segmentTab, activeView === 'bus_messages' && styles.segmentTabActive]}
+                onPress={() => setActiveView('bus_messages')}
+            >
+                <Ionicons
+                    name="bus-outline"
+                    size={16}
+                    color={activeView === 'bus_messages' ? '#fff' : theme.colors.textSecondary}
+                />
+                <Text style={[styles.segmentTabText, activeView === 'bus_messages' && styles.segmentTabTextActive]}>
+                    Buses
+                </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
                 style={[styles.segmentTab, styles.segmentTabCompose, activeView === 'compose' && styles.segmentTabActive]}
                 onPress={handleCompose}
             >
@@ -979,6 +1006,14 @@ export const MessagesScreen = ({ navigation, route }: any) => {
 
                 {activeView === 'announcements' && companyId ? (
                     <StaffAnnouncementsPanel companyId={companyId} season={season} />
+                ) : null}
+
+                {activeView === 'group_messages' && companyId ? (
+                    <StaffAudienceMessagesPanel companyId={companyId} season={season} kind="group" />
+                ) : null}
+
+                {activeView === 'bus_messages' && companyId ? (
+                    <StaffAudienceMessagesPanel companyId={companyId} season={season} kind="bus" />
                 ) : null}
 
                 {activeView === 'channels' && !showingChannel && (

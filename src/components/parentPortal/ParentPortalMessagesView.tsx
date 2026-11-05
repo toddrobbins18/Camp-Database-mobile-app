@@ -42,7 +42,88 @@ type Props = {
   initialOpenThreadRootId?: string | null;
 };
 
-type SectionTab = 'chats' | 'photos';
+type SectionTab = 'chats' | 'groups' | 'buses' | 'photos';
+type CampNote = { id: string; title: string; body: string; audience_kind: string | null; audience_label: string | null };
+
+function AudienceReplyScreen({
+  note,
+  replies,
+  draft,
+  userId,
+  onDraft,
+  onBack,
+  onSend,
+}: {
+  note: CampNote;
+  replies: { id: string; sender_id: string; sender_name: string | null; body: string }[];
+  draft: string;
+  userId: string | null;
+  onDraft: (value: string) => void;
+  onBack: () => void;
+  onSend: () => void;
+}) {
+  return (
+    <View style={{ gap: 8 }}>
+      <TouchableOpacity onPress={onBack}>
+        <Text style={{ color: '#0f172a', fontWeight: '700' }}>Back</Text>
+      </TouchableOpacity>
+      <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14 }}>
+        <Text style={{ color: '#475569', fontSize: 12, fontWeight: '700' }}>{note.audience_label}</Text>
+        <Text style={{ color: '#0f172a', fontWeight: '700', marginTop: 4 }}>{note.title}</Text>
+        <Text style={{ color: '#1e293b', marginTop: 6 }}>{note.body}</Text>
+      </View>
+      {replies.map((reply) => (
+        <View key={reply.id} style={{ backgroundColor: '#fff', borderRadius: 16, padding: 12 }}>
+          <Text style={{ color: '#475569', fontSize: 12, fontWeight: '700' }}>
+            {reply.sender_id === userId ? 'You' : reply.sender_name || 'Camp'}
+          </Text>
+          <Text style={{ color: '#0f172a', marginTop: 4 }}>{reply.body}</Text>
+        </View>
+      ))}
+      <TextInput
+        value={draft}
+        onChangeText={onDraft}
+        placeholder="Write a reply"
+        placeholderTextColor="#64748b"
+        style={{ backgroundColor: '#fff', borderRadius: 12, padding: 12, color: '#0f172a', minHeight: 72 }}
+        multiline
+      />
+      <TouchableOpacity onPress={onSend} style={{ backgroundColor: '#1565C0', borderRadius: 12, padding: 12, alignItems: 'center' }}>
+        <Text style={{ color: '#fff', fontWeight: '700' }}>Reply</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function AudienceNoteList({
+  notes,
+  empty,
+  onOpen,
+}: {
+  notes: CampNote[];
+  empty: string;
+  onOpen: (note: CampNote) => void;
+}) {
+  if (notes.length === 0) {
+    return (
+      <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16 }}>
+        <Text style={{ color: '#334155' }}>{empty}</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={{ gap: 8 }}>
+      {notes.map((note) => (
+        <TouchableOpacity key={note.id} onPress={() => onOpen(note)} style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#e2e8f0' }}>
+          <Text style={{ color: '#475569', fontSize: 12, fontWeight: '700' }}>{note.audience_label}</Text>
+          <Text style={{ color: '#0f172a', fontWeight: '700', marginTop: 2 }}>{note.title}</Text>
+          <Text style={{ color: '#1e293b', marginTop: 4 }} numberOfLines={2}>{note.body}</Text>
+          <Text style={{ color: '#64748b', marginTop: 8, fontSize: 12 }}>Open to reply</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
 
 export function ParentPortalMessagesView({
   companyId,
@@ -55,6 +136,10 @@ export function ParentPortalMessagesView({
   const styles = useMemo(() => createStyles(colors, mainAreaHeight), [colors, mainAreaHeight]);
   const [sectionTab, setSectionTab] = useState<SectionTab>('chats');
   const [rows, setRows] = useState<ParentPortalThreadRow[]>([]);
+  const [campNotes, setCampNotes] = useState<CampNote[]>([]);
+  const [openNote, setOpenNote] = useState<CampNote | null>(null);
+  const [noteReplies, setNoteReplies] = useState<{ id: string; sender_id: string; sender_name: string | null; body: string }[]>([]);
+  const [noteDraft, setNoteDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeRow, setActiveRow] = useState<ParentPortalThreadRow | null>(null);
@@ -89,6 +174,15 @@ export function ParentPortalMessagesView({
     const { rows: list, error } = await listParentPortalThreads(supabase, companyId);
     if (error) Alert.alert('Messages', error);
     setRows(list);
+    const notes = await supabase
+      .from('parent_portal_announcements')
+      .select('id, title, body, published_at, audience_kind, audience_label')
+      .eq('company_id', companyId)
+      .eq('is_published', true)
+      .in('audience_kind', ['group', 'bus'])
+      .order('published_at', { ascending: false })
+      .limit(20);
+    setCampNotes((notes.data ?? []) as CampNote[]);
     setLoading(false);
   }, [companyId]);
 
@@ -336,6 +430,20 @@ export function ParentPortalMessagesView({
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
+          style={[styles.segmentBtn, sectionTab === 'groups' && styles.segmentBtnActive]}
+          onPress={() => setSectionTab('groups')}
+        >
+          <Ionicons name="people-outline" size={16} color={sectionTab === 'groups' ? '#fff' : colors.textMuted} />
+          <Text style={[styles.segmentText, sectionTab === 'groups' && styles.segmentTextActive]}>Groups</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segmentBtn, sectionTab === 'buses' && styles.segmentBtnActive]}
+          onPress={() => setSectionTab('buses')}
+        >
+          <Ionicons name="bus-outline" size={16} color={sectionTab === 'buses' ? '#fff' : colors.textMuted} />
+          <Text style={[styles.segmentText, sectionTab === 'buses' && styles.segmentTextActive]}>Buses</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.segmentBtn, sectionTab === 'photos' && styles.segmentBtnActive]}
           onPress={() => setSectionTab('photos')}
         >
@@ -356,6 +464,53 @@ export function ParentPortalMessagesView({
           colors={colors}
           onOpenThread={(rootId, childId) => void openThreadByRootId(rootId, childId)}
         />
+      ) : null}
+      {sectionTab === 'groups' || sectionTab === 'buses' ? (
+        openNote && openNote.audience_kind === (sectionTab === 'groups' ? 'group' : 'bus') ? (
+          <AudienceReplyScreen
+            note={openNote}
+            replies={noteReplies}
+            draft={noteDraft}
+            userId={currentUserId}
+            onDraft={setNoteDraft}
+            onBack={() => setOpenNote(null)}
+            onSend={async () => {
+              const text = noteDraft.trim();
+              if (!text || !currentUserId || !openNote) return;
+              const { error } = await supabase.from('parent_audience_replies').insert({
+                announcement_id: openNote.id,
+                sender_id: currentUserId,
+                sender_name: 'Parent',
+                body: text,
+              });
+              if (error) {
+                Alert.alert('Messages', error.message);
+                return;
+              }
+              setNoteDraft('');
+              const next = await supabase
+                .from('parent_audience_replies')
+                .select('id, sender_id, sender_name, body')
+                .eq('announcement_id', openNote.id)
+                .order('created_at', { ascending: true });
+              setNoteReplies((next.data ?? []) as { id: string; sender_id: string; sender_name: string | null; body: string }[]);
+            }}
+          />
+        ) : (
+          <AudienceNoteList
+            notes={campNotes.filter((note) => note.audience_kind === (sectionTab === 'groups' ? 'group' : 'bus'))}
+            empty={sectionTab === 'groups' ? 'No group messages yet.' : 'No bus messages yet.'}
+            onOpen={async (note) => {
+              setOpenNote(note);
+              const next = await supabase
+                .from('parent_audience_replies')
+                .select('id, sender_id, sender_name, body')
+                .eq('announcement_id', note.id)
+                .order('created_at', { ascending: true });
+              setNoteReplies((next.data ?? []) as { id: string; sender_id: string; sender_name: string | null; body: string }[]);
+            }}
+          />
+        )
       ) : null}
       {sectionTab === 'chats' && rows.length === 0 ? (
         <View style={styles.centered}>
