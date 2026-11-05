@@ -5,30 +5,38 @@ import { useMenuAccess } from './useMenuAccess';
 import { useRole } from './useRole';
 import {
   canViewAllTransportBuses,
-  isBusCounselorMenuAllowed,
-  isBusCounselorNavLocked,
-  loadUserAssignedTransportBus,
+  isPaperlessMenuAllowed,
+  isPaperlessNavLocked,
+  loadUserBusCounselorProfile,
+  type BusCounselorProfile,
 } from '../lib/transportBusCounselor';
+
+const EMPTY_PROFILE: BusCounselorProfile = {
+  busAttendanceOnly: false,
+  assignedTransportBus: null,
+  groupAttendanceOnly: false,
+  assignedGroups: [],
+};
 
 export function useBusCounselorNavScope() {
   const { companyId, isSuperAdmin: isSuperAdminCompany } = useCompany();
   const { userId, data: roleData } = useRole();
   const { hasMenuAccess } = useMenuAccess();
 
-  const [assignedBus, setAssignedBus] = useState<string | null>(null);
+  const [profile, setProfile] = useState<BusCounselorProfile>(EMPTY_PROFILE);
   const [assignedLoading, setAssignedLoading] = useState(true);
 
   useEffect(() => {
     if (!companyId || !userId) {
-      setAssignedBus(null);
+      setProfile(EMPTY_PROFILE);
       setAssignedLoading(false);
       return;
     }
     let cancelled = false;
     setAssignedLoading(true);
-    void loadUserAssignedTransportBus(supabase, userId).then((bus) => {
+    void loadUserBusCounselorProfile(supabase, userId).then((loaded) => {
       if (!cancelled) {
-        setAssignedBus(bus);
+        setProfile(loaded);
         setAssignedLoading(false);
       }
     });
@@ -55,17 +63,22 @@ export function useBusCounselorNavScope() {
     [hasMenuAccess],
   );
 
+  const busAttendanceOnly = profile.busAttendanceOnly;
+  const groupAttendanceOnly = profile.groupAttendanceOnly;
+  const assignedBus = profile.assignedTransportBus;
+  const assignedGroups = profile.assignedGroups;
+
   const isNavLocked = useMemo(
-    () => isBusCounselorNavLocked({ canViewAll, assignedBus }),
-    [canViewAll, assignedBus],
+    () => isPaperlessNavLocked({ canViewAll, busAttendanceOnly, groupAttendanceOnly }),
+    [canViewAll, busAttendanceOnly, groupAttendanceOnly],
   );
 
   const allowMenuItem = useCallback(
     (menuId: string) => {
       if (!isNavLocked) return true;
-      return isBusCounselorMenuAllowed(menuId);
+      return isPaperlessMenuAllowed(menuId, { busAttendanceOnly, groupAttendanceOnly });
     },
-    [isNavLocked],
+    [isNavLocked, busAttendanceOnly, groupAttendanceOnly],
   );
 
   return {
@@ -75,6 +88,9 @@ export function useBusCounselorNavScope() {
     hasTransportCoordinatorAccess,
     isNavLocked,
     allowMenuItem,
+    busAttendanceOnly,
+    groupAttendanceOnly,
+    assignedGroups,
     busScopeLabel: isNavLocked && assignedBus ? assignedBus : null,
   };
 }

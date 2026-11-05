@@ -6,7 +6,7 @@ import { useRole } from './useRole';
 import {
   canViewAllTransportBuses,
   filterRoutesForAssignedBus,
-  loadUserAssignedTransportBus,
+  loadUserBusCounselorProfile,
 } from '../lib/transportBusCounselor';
 import {
   loadBusRunEnrollmentContext,
@@ -23,6 +23,7 @@ export function useFilteredBusRoutes(runDate: string, timeOfDay: 'am' | 'pm') {
   const [boardLoading, setBoardLoading] = useState(true);
   const [enrollmentCtx, setEnrollmentCtx] = useState<BusRunEnrollmentContext | null>(null);
   const [assignedBus, setAssignedBus] = useState<string | null>(null);
+  const [busAttendanceOnly, setBusAttendanceOnly] = useState(false);
 
   const isSuperAdmin = isSuperAdminCompany || (roleData?.isSuperAdmin ?? false);
   const isAdmin = roleData?.globalRoles?.includes('admin') ?? false;
@@ -45,11 +46,15 @@ export function useFilteredBusRoutes(runDate: string, timeOfDay: 'am' | 'pm') {
   useEffect(() => {
     if (!companyId || !userId) {
       setAssignedBus(null);
+      setBusAttendanceOnly(false);
       return;
     }
     let cancelled = false;
-    void loadUserAssignedTransportBus(supabase, userId).then((bus) => {
-      if (!cancelled) setAssignedBus(bus);
+    void loadUserBusCounselorProfile(supabase, userId).then((profile) => {
+      if (!cancelled) {
+        setAssignedBus(profile.assignedTransportBus);
+        setBusAttendanceOnly(profile.busAttendanceOnly);
+      }
     });
     return () => { cancelled = true; };
   }, [companyId, userId]);
@@ -88,8 +93,9 @@ export function useFilteredBusRoutes(runDate: string, timeOfDay: 'am' | 'pm') {
         assignedBus,
         canViewAll,
         hasTransportCoordinatorAccess,
+        busAttendanceOnly,
       }),
-    [allRoutes, assignedBus, canViewAll, hasTransportCoordinatorAccess],
+    [allRoutes, assignedBus, canViewAll, hasTransportCoordinatorAccess, busAttendanceOnly],
   );
 
   return {

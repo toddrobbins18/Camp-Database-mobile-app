@@ -31,6 +31,8 @@ import {
   type GroupRosterCamper,
 } from '../lib/transportGroupAttendance';
 import { FrontOfficeBackButton } from '../components/FrontOfficeBackButton';
+import { useBusCounselorNavScope } from '../hooks/useBusCounselorNavScope';
+import { filterCampersForGroupCounselor } from '../lib/transportBusCounselor';
 
 const ALL_GROUPS = '__all__';
 
@@ -41,6 +43,7 @@ function ymdFromDate(d: Date): string {
 export function GroupAttendanceScreen({ navigation }: any) {
   const { companyId, season } = useCompany();
   const { operationalDateString } = useCampOperationalDate();
+  const { canViewAll, groupAttendanceOnly, assignedGroups, isNavLocked } = useBusCounselorNavScope();
   const [attendanceDate, setAttendanceDate] = useState(operationalDateString);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [calendar, setCalendar] = useState<EnrollmentWeekCalendar>([]);
@@ -114,19 +117,28 @@ export function GroupAttendanceScreen({ navigation }: any) {
     return () => clearTimeout(handle);
   }, [attendance, companyId, season, attendanceDate, attendanceLoading]);
 
+  const scopedRoster = useMemo(
+    () =>
+      filterCampersForGroupCounselor(roster, assignedGroups, {
+        groupAttendanceOnly,
+        canViewAll,
+      }),
+    [roster, assignedGroups, groupAttendanceOnly, canViewAll],
+  );
+
   const groupNames = useMemo(() => {
-    const set = new Set(roster.map((c) => c.groupName));
+    const set = new Set(scopedRoster.map((c) => c.groupName));
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [roster]);
+  }, [scopedRoster]);
 
   const filteredRoster = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return roster.filter((c) => {
+    return scopedRoster.filter((c) => {
       if (groupFilter !== ALL_GROUPS && c.groupName !== groupFilter) return false;
       if (!q) return true;
       return c.name.toLowerCase().includes(q) || c.groupName.toLowerCase().includes(q);
     });
-  }, [roster, groupFilter, search]);
+  }, [scopedRoster, groupFilter, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, GroupRosterCamper[]>();
@@ -171,7 +183,7 @@ export function GroupAttendanceScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <FrontOfficeBackButton navigation={navigation} />
+      {!isNavLocked ? <FrontOfficeBackButton navigation={navigation} /> : null}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuBtn}>
           <Ionicons name="menu-outline" size={26} color={theme.colors.text} />
