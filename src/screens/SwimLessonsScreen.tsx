@@ -44,6 +44,7 @@ import {
   approveSwimLessonRequest,
   isSwimLessonBookedStatus,
   rejectSwimLessonRequest,
+  updateBookedSwimLesson,
   swimLessonStatusLabel,
   swimParentApprovalLabel,
   swimTransportApprovalLabel,
@@ -95,7 +96,12 @@ export function SwimLessonsScreen({ navigation }: any) {
   const [duration, setDuration] = useState('30');
   const [instructor, setInstructor] = useState('');
   const [instructorOptions, setInstructorOptions] = useState<string[]>([]);
-  const [cost, setCost] = useState('45');
+  const [costCents, setCostCents] = useState(5000);
+  const [booking, setBooking] = useState<{ mode: 'approve' | 'edit'; lesson: Lesson } | null>(null);
+  const [bookingInstructor, setBookingInstructor] = useState('');
+  const [bookingCost, setBookingCost] = useState(5000);
+  const [bookingDuration, setBookingDuration] = useState('30');
+  const [bookingNotes, setBookingNotes] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
@@ -156,7 +162,7 @@ export function SwimLessonsScreen({ navigation }: any) {
     setLessonTime(DEFAULT_SWIM_LESSON_TIME);
     setDuration('30');
     setInstructor('');
-    setCost('45');
+    setCostCents(5000);
     setNotes('');
     setDate(operationalDate);
     setShowDatePicker(false);
@@ -221,7 +227,6 @@ export function SwimLessonsScreen({ navigation }: any) {
     }
 
     const durationMinutes = parseInt(duration) || 30;
-    const costCents = Math.round(parseFloat(cost || '0') * 100);
     const instructorVal = instructor || null;
     const notesVal = notes || null;
     const timeStr = lessonTime;
@@ -310,11 +315,35 @@ export function SwimLessonsScreen({ navigation }: any) {
     else load();
   };
 
-  const approveRequest = async (id: string) => {
+  const openBooking = (mode: 'approve' | 'edit', lesson: Lesson) => {
+    setBooking({ mode, lesson });
+    setBookingInstructor(lesson.instructor ?? '');
+    setBookingCost(lesson.cost_cents === 6000 ? 6000 : 5000);
+    setBookingDuration(String(lesson.duration_minutes || 30));
+    setBookingNotes(lesson.notes ?? '');
+  };
+
+  const saveBooking = async () => {
+    if (!booking) return;
+    setSaving(true);
+    const details = {
+      instructor: bookingInstructor.trim() || null,
+      costCents: bookingCost,
+      durationMinutes: parseInt(bookingDuration, 10) || 30,
+      notes: bookingNotes.trim() || null,
+    };
     const { data: userRes } = await supabase.auth.getUser();
-    const { error } = await approveSwimLessonRequest(supabase, id, userRes.user?.id);
-    if (error) Alert.alert('Error', error.message);
-    else load();
+    const { error } =
+      booking.mode === 'approve'
+        ? await approveSwimLessonRequest(supabase, booking.lesson.id, userRes.user?.id, details)
+        : await updateBookedSwimLesson(supabase, booking.lesson.id, details);
+    setSaving(false);
+    if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    setBooking(null);
+    load();
   };
 
   const rejectRequest = (id: string) => {
@@ -489,7 +518,7 @@ export function SwimLessonsScreen({ navigation }: any) {
                   <Text style={styles.listDate}>{format(new Date(l.scheduled_at), 'MMM d, h:mm a')}</Text>
                   {l.notes ? <Text style={styles.listGroup}>{l.notes}</Text> : null}
                   <View style={styles.pendingActions}>
-                    <TouchableOpacity style={[styles.approveBtn, { backgroundColor: brand }]} onPress={() => void approveRequest(l.id)}>
+                    <TouchableOpacity style={[styles.approveBtn, { backgroundColor: brand }]} onPress={() => openBooking('approve', l)}>
                       <Text style={styles.approveBtnText}>Approve</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.rejectBtn} onPress={() => rejectRequest(l.id)}>
@@ -563,9 +592,14 @@ export function SwimLessonsScreen({ navigation }: any) {
                       ) : null}
                     </View>
                   </View>
-                  <TouchableOpacity onPress={() => remove(l.id)} style={styles.deleteButton}>
-                    <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
-                  </TouchableOpacity>
+                  <View>
+                    <TouchableOpacity onPress={() => openBooking('edit', l)} style={styles.deleteButton}>
+                      <Ionicons name="create-outline" size={20} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => remove(l.id)} style={styles.deleteButton}>
+                      <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ))
             )}
@@ -768,12 +802,19 @@ export function SwimLessonsScreen({ navigation }: any) {
                 <View style={{ width: 12 }} />
                 <View style={styles.flex1}>
                   <Text style={styles.label}>Cost (USD)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={cost}
-                    onChangeText={setCost}
-                    keyboardType="numeric"
-                  />
+                  <View style={styles.pendingActions}>
+                    {[5000, 6000].map((cents) => (
+                      <TouchableOpacity
+                        key={cents}
+                        style={[styles.chip, costCents === cents && chipActiveStyle]}
+                        onPress={() => setCostCents(cents)}
+                      >
+                        <Text style={[styles.chipText, costCents === cents && styles.chipTextActive]}>
+                          ${cents / 100}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               </View>
 
@@ -873,6 +914,81 @@ export function SwimLessonsScreen({ navigation }: any) {
                 disabled={saving}
               >
                 <Text style={styles.submitButtonText}>{saving ? 'Saving…' : 'Log request'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={!!booking} animationType="slide" transparent onRequestClose={() => setBooking(null)}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {booking?.mode === 'approve' ? 'Approve swim lesson' : 'Edit booked lesson'}
+              </Text>
+              <TouchableOpacity onPress={() => setBooking(null)}>
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.label}>Instructor (lifeguard)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.camperChips}>
+                {instructorOptions.length === 0 ? (
+                  <Text style={styles.detailText}>No lifeguards on roster for this season</Text>
+                ) : (
+                  instructorOptions.map((name) => (
+                    <TouchableOpacity
+                      key={name}
+                      style={[styles.chip, bookingInstructor === name && chipActiveStyle]}
+                      onPress={() => setBookingInstructor(name)}
+                    >
+                      <Text style={[styles.chipText, bookingInstructor === name && styles.chipTextActive]}>{name}</Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+              <Text style={styles.label}>Cost (USD)</Text>
+              <View style={styles.pendingActions}>
+                {[5000, 6000].map((cents) => (
+                  <TouchableOpacity
+                    key={cents}
+                    style={[styles.chip, bookingCost === cents && chipActiveStyle]}
+                    onPress={() => setBookingCost(cents)}
+                  >
+                    <Text style={[styles.chipText, bookingCost === cents && styles.chipTextActive]}>
+                      ${cents / 100}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.label}>Minutes</Text>
+              <TextInput
+                style={styles.input}
+                value={bookingDuration}
+                onChangeText={setBookingDuration}
+                keyboardType="numeric"
+              />
+              <Text style={styles.label}>Notes</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={bookingNotes}
+                onChangeText={setBookingNotes}
+                multiline
+              />
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setBooking(null)} disabled={saving}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: brand }, saving && styles.submitButtonDisabled]}
+                onPress={() => void saveBooking()}
+                disabled={saving}
+              >
+                <Text style={styles.submitButtonText}>
+                  {saving ? 'Saving…' : booking?.mode === 'approve' ? 'Approve' : 'Save'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>

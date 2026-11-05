@@ -100,6 +100,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         { value: 'admin_staff', label: 'Admin Staff' },
         { value: 'head_of_girls_side', label: 'Head of Girls Side' },
         { value: 'head_of_boys_side', label: 'Head of Boys Side' },
+        { value: 'wsi', label: 'WSI' },
     ];
 
     const showEmailConfigError = (err: unknown) => {
@@ -226,6 +227,7 @@ export const AdminPanelScreen = ({ navigation }: any) => {
         { value: 'admin_staff', label: 'Admin Staff' },
         { value: 'head_of_girls_side', label: 'Head of Girls Side' },
         { value: 'head_of_boys_side', label: 'Head of Boys Side' },
+        { value: 'wsi', label: 'WSI' },
     ];
     const availableTags = [{ value: 'all', label: 'All Tags' }, ...tagOptions];
 

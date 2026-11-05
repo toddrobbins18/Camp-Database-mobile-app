@@ -70,19 +70,15 @@ export async function fetchSwimLessonInstructorOptions(
     lifeguardNames.add(row.name.trim());
   }
 
-  const lifeguardKeys = new Set([...lifeguardNames].map((n) => n.toLowerCase()));
-  const names = new Set<string>(lifeguardNames);
-
-  for (const name of saved) {
-    if (lifeguardKeys.has(name.toLowerCase())) names.add(name);
-  }
-
-  for (const row of lessonRows ?? []) {
-    const instructor = row.instructor?.trim();
-    if (instructor && lifeguardKeys.has(instructor.toLowerCase())) {
-      names.add(instructor);
-    }
-  }
-
-  return [...names].sort((a, b) => a.localeCompare(b));
+  const byKey = new Map<string, string>();
+  const add = (raw: string) => {
+    const name = raw.trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, name);
+  };
+  for (const name of lifeguardNames) add(name);
+  for (const name of saved) add(name);
+  for (const row of lessonRows ?? []) add(row.instructor ?? "");
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b));
 }

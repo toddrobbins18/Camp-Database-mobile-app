@@ -213,6 +213,66 @@ export function buildSwimFormationGroups(
   return groups;
 }
 
+const SWIM_LEVEL_RANK: Record<string, number> = {
+  "No level complete yet": 0,
+  "No level recorded": 0,
+  Goldfish: 1,
+  Minnow: 2,
+  Tadpole: 3,
+  "Red Cross I": 4,
+  "Red Cross II": 5,
+  "Red Cross III": 6,
+  "Red Cross IV": 7,
+  Frog: 8,
+};
+
+function periodGroupLabel(index: number, campers: SwimFormationCamper[]): string {
+  const counts = new Map<string, number>();
+  for (const camper of campers) {
+    const group = camper.group.trim() || "No group";
+    counts.set(group, (counts.get(group) ?? 0) + 1);
+  }
+  const mix = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], undefined, { sensitivity: "base" }))
+    .map(([group, count]) => `${count} ${group}`)
+    .join(" + ");
+  const levels: string[] = [];
+  for (const camper of campers) {
+    if (!levels.includes(camper.highestCompletedLevel)) levels.push(camper.highestCompletedLevel);
+  }
+  const levelText =
+    levels.length <= 2 ? levels.join(", ") : `${levels[0]}–${levels[levels.length - 1]}`;
+  return `Group ${index} · ${mix} · ${levelText}`;
+}
+
+export function buildSwimPeriodGroups(
+  campers: SwimFormationCamper[],
+  selectedGroups: string[],
+  instructorCount: number,
+): SwimFormationGroup[] {
+  const wanted = new Set(
+    selectedGroups.map((name) => name.trim().toLowerCase()).filter(Boolean),
+  );
+  if (wanted.size === 0) return [];
+
+  const rank = (level: string) => SWIM_LEVEL_RANK[level] ?? 0;
+  const filtered = campers.filter((camper) => wanted.has(camper.group.trim().toLowerCase()));
+  const sorted = [...filtered].sort((a, b) => {
+    const byLevel = rank(a.highestCompletedLevel) - rank(b.highestCompletedLevel);
+    if (byLevel !== 0) return byLevel;
+    const byGroup = a.group.localeCompare(b.group, undefined, { sensitivity: "base" });
+    if (byGroup !== 0) return byGroup;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+
+  return splitBalancedByInstructors(sorted, instructorCount).map((chunk, index) => ({
+    id: `period-${index + 1}`,
+    label: periodGroupLabel(index + 1, chunk),
+    keyParts: [...new Set(chunk.map((camper) => camper.highestCompletedLevel))],
+    campers: chunk,
+  }));
+}
+
 type FormationChildRow = RosterChild & {
   leader_id?: string | null;
   status?: string | null;

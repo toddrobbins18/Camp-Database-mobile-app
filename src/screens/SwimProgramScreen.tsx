@@ -21,10 +21,11 @@ import { useCampBrandTheme } from '../hooks/useCampBrandTheme';
 import { BrandTabs } from '../components/BrandTabs';
 import {
   SWIM_BRACELET_DASHBOARD_COLORS,
+  swimBraceletColorLabel,
   DATE_FMT,
   LEVEL_OPTIONS,
   PASS_OPTIONS,
-  fetchSwimProctorOptionsForCompany,
+  fetchWsiProctorOptionsForCompany,
   mergePassOptions,
   mergeProctorOptions,
   normalizePassStatus,
@@ -59,7 +60,7 @@ import { supabase } from '../lib/supabase';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 
 const BRACELET_COLORS: Record<BraceletColor, { bg: string; text: string; border: string }> = {
-  'Non Swimmer/Beginner': { bg: '#e2e8f0', text: '#0f172a', border: '#94a3b8' },
+  'Non Swimmer/Beginner': { bg: '#7e22ce', text: '#ffffff', border: '#6b21a8' },
   Red: { bg: '#dc2626', text: '#ffffff', border: '#b91c1c' },
   Orange: { bg: '#f97316', text: '#ffffff', border: '#ea580c' },
   Yellow: { bg: '#facc15', text: '#422006', border: '#eab308' },
@@ -185,7 +186,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
   const { companyId, season } = useCompany();
   const { brand, brandSoft } = useCampBrandTheme();
   const [activeTab, setActiveTab] = useState<'bracelets' | 'levels' | 'formation' | 'history'>(initialTab);
-  const [proctorOptions, setProctorOptions] = useState<string[]>([]);
+  const [wsiProctorOptions, setWsiProctorOptions] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -227,7 +228,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
         setInactiveHidden(hiddenInactive);
         setBraceletData(mergeBracelets(bracelets, children));
         setLevelData(mergeLevels(levels, children));
-        setProctorOptions(await fetchSwimProctorOptionsForCompany(companyId, season));
+        setWsiProctorOptions(await fetchWsiProctorOptionsForCompany(companyId));
       } catch (err) {
         console.error('[SwimProgram] roster load error:', err);
         if (showLoading) {
@@ -498,7 +499,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
     const c = BRACELET_COLORS[color];
     return (
       <View style={[styles.braceletPillSm, { backgroundColor: c.bg, borderColor: c.border }]}>
-        <Text style={[styles.braceletPillTextSm, { color: c.text }]}>● {color}</Text>
+        <Text style={[styles.braceletPillTextSm, { color: c.text }]}>● {swimBraceletColorLabel(color)}</Text>
       </View>
     );
   };
@@ -620,7 +621,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                     <View key={`${row.personId}-${row.entry.season}`} style={styles.listItem}>
                       <Text style={styles.camperName}>{row.name}</Text>
                       <Text style={styles.camperGroup}>
-                        Season {row.entry.season} · {row.entry.bracelet?.currentBracelet || '—'} bracelet
+                        Season {row.entry.season} · {row.entry.bracelet?.currentBracelet ? swimBraceletColorLabel(row.entry.bracelet.currentBracelet) : '—'} bracelet
                       </Text>
                       {row.entry.levels ? (
                         <View style={styles.listSubInfoLevels}>
@@ -843,7 +844,7 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                     ]}
                     onPress={() => updateBracelet(selectedBracelet.id, { currentBracelet: c })}
                   >
-                    <Text style={[styles.colorChipText, { color: BRACELET_COLORS[c].text }]}>{c}</Text>
+                    <Text style={[styles.colorChipText, { color: BRACELET_COLORS[c].text }]}>{swimBraceletColorLabel(c)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -856,9 +857,9 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                   <View key={n} style={styles.testSection}>
                     <Text style={styles.sectionHeading}>Test {n}</Text>
                     <OptionPicker
-                      label="Proctor"
+                      label="Proctor (WSI)"
                       value={selectedBracelet[pk]}
-                      options={proctorOptions}
+                      options={wsiProctorOptions}
                       onChange={(v) => updateBracelet(selectedBracelet.id, { [pk]: v })}
                     />
                     <DateField

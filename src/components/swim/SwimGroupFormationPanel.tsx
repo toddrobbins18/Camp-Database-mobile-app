@@ -13,10 +13,9 @@ import { theme } from '../../theme/theme';
 import { useCampBrandTheme } from '../../hooks/useCampBrandTheme';
 import { supabase } from '../../lib/supabase';
 import {
-  SWIM_FORMATION_CRITERIA,
-  buildSwimFormationGroups,
+  buildSwimPeriodGroups,
   fetchSwimFormationCampers,
-  type SwimFormationCriterion,
+  type SwimFormationCamper,
   type SwimFormationGroup,
 } from '../../lib/swimGroupFormation';
 
@@ -29,14 +28,10 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
   const { brand, brandSoft } = useCampBrandTheme();
   const [loading, setLoading] = useState(true);
   const [building, setBuilding] = useState(false);
-  const [criteria, setCriteria] = useState<SwimFormationCriterion[]>([
-    'division',
-    'divisionLeader',
-    'swimLevel',
-  ]);
+  const [campers, setCampers] = useState<SwimFormationCamper[]>([]);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [instructorCount, setInstructorCount] = useState('3');
   const [groups, setGroups] = useState<SwimFormationGroup[]>([]);
-  const [rosterCount, setRosterCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const loadRoster = useCallback(async () => {
@@ -44,8 +39,9 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const campers = await fetchSwimFormationCampers(supabase, companyId, season);
-      setRosterCount(campers.length);
+      const next = await fetchSwimFormationCampers(supabase, companyId, season);
+      setCampers(next);
+      setSelectedGroups((prev) => prev.filter((name) => next.some((c) => c.group === name)));
     } catch (err) {
       console.error('[SwimFormation]', err);
       setError(err instanceof Error ? err.message : 'Could not load campers');
@@ -58,23 +54,32 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
     void loadRoster();
   }, [loadRoster]);
 
-  const toggleCriterion = (id: SwimFormationCriterion) => {
-    setCriteria((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+  const campGroupNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const camper of campers) {
+      const group = camper.group.trim();
+      if (group && group !== '—') names.add(group);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [campers]);
+
+  const toggleGroup = (name: string) => {
+    setSelectedGroups((prev) => (prev.includes(name) ? prev.filter((group) => group !== name) : [...prev, name]));
   };
 
   const handleBuild = async () => {
     if (!companyId || !season) return;
+    if (selectedGroups.length === 0) {
+      setError('Select the camp groups for this swim period first.');
+      return;
+    }
     setBuilding(true);
     setError(null);
     try {
-      const campers = await fetchSwimFormationCampers(supabase, companyId, season);
-      setRosterCount(campers.length);
+      const next = await fetchSwimFormationCampers(supabase, companyId, season);
+      setCampers(next);
       const instructors = Math.max(1, Math.min(20, parseInt(instructorCount, 10) || 1));
-      const built = buildSwimFormationGroups(campers, {
-        criteria,
-        instructorCount: instructors,
-      });
-      setGroups(built);
+      setGroups(buildSwimPeriodGroups(next, selectedGroups, instructors));
     } catch (err) {
       console.error('[SwimFormation]', err);
       setError(err instanceof Error ? err.message : 'Could not build groups');
@@ -106,39 +111,46 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
             <Text style={styles.cardTitle}>Swim group formation</Text>
           </View>
           <Text style={styles.cardSubtitle}>
-            Choose who mixes together, set instructor count, and build balanced groups for season {season}.{' '}
-            {rosterCount} active campers. Division leaders are never combined.
+            Pick the camp groups in this swim period and how many instructors you have. Groups follow each camper’s
+            last completed swim level and can mix camps, for example 6 Cheetahs and 4 Panthers. {campers.length} active
+            campers in season {season}.
           </Text>
         </View>
 
-        <Text style={styles.sectionLabel}>Group by (select all that apply)</Text>
-        {SWIM_FORMATION_CRITERIA.map((item) => {
-          const checked = criteria.includes(item.id);
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={[
-                styles.criterionRow,
-                checked && { borderColor: brand, backgroundColor: brandSoft },
-              ]}
-              onPress={() => toggleCriterion(item.id)}
-              activeOpacity={0.7}
-            >
-              <View
+        <Text style={styles.sectionLabel}>Camp groups in this period</Text>
+        {campGroupNames.length === 0 ? (
+          <Text style={styles.hint}>No camp groups on this season’s roster.</Text>
+        ) : (
+          campGroupNames.map((name) => {
+            const checked = selectedGroups.includes(name);
+            const count = campers.filter((c) => c.group === name).length;
+            return (
+              <TouchableOpacity
+                key={name}
                 style={[
-                  styles.checkbox,
-                  checked && { backgroundColor: brand, borderColor: brand },
+                  styles.criterionRow,
+                  checked && { borderColor: brand, backgroundColor: brandSoft },
                 ]}
+                onPress={() => toggleGroup(name)}
+                activeOpacity={0.7}
               >
-                {checked ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
-              </View>
-              <View style={styles.criterionText}>
-                <Text style={styles.criterionLabel}>{item.label}</Text>
-                <Text style={styles.criterionDesc}>{item.description}</Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+                <View
+                  style={[
+                    styles.checkbox,
+                    checked && { backgroundColor: brand, borderColor: brand },
+                  ]}
+                >
+                  {checked ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
+                </View>
+                <View style={styles.criterionText}>
+                  <Text style={styles.criterionLabel}>
+                    {name} ({count})
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
 
         <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Number of instructors</Text>
         <TextInput
@@ -150,14 +162,12 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
           placeholder="3"
         />
         <Text style={styles.hint}>
-          Splits each cohort into balanced groups so each instructor gets roughly the same number of campers.
+          Campers are ordered by completed swim level, then camp group, and split across this many instructors.
         </Text>
 
-        {criteria.length === 0 ? (
+        {selectedGroups.length === 0 ? (
           <View style={styles.alert}>
-            <Text style={styles.alertText}>
-              No criteria selected — campers split only by division leader and instructor count.
-            </Text>
+            <Text style={styles.alertText}>Select the camp groups for this swim period first.</Text>
           </View>
         ) : null}
 
@@ -171,10 +181,10 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
           style={[
             styles.buildBtn,
             { backgroundColor: brand },
-            (building || rosterCount === 0) && styles.buildBtnDisabled,
+            (building || campers.length === 0 || selectedGroups.length === 0) && styles.buildBtnDisabled,
           ]}
           onPress={handleBuild}
-          disabled={building || rosterCount === 0}
+          disabled={building || campers.length === 0 || selectedGroups.length === 0}
         >
           {building ? (
             <ActivityIndicator size="small" color="#fff" />
