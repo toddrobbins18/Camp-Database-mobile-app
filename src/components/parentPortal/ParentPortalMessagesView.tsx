@@ -16,6 +16,7 @@ import {
   openParentDivisionLeaderThread,
   fetchMessageRootById,
   parentPortalThreadListTitle,
+  parentPortalThreadListSubtitle,
   PARENT_DIVISION_LEADER_THREAD_KIND,
   type ParentPortalThreadRow,
 } from '../../lib/parentPortalMessaging';
@@ -538,10 +539,9 @@ export function ParentPortalMessagesView({
             ) : (
               filteredRows.map((row, index) => {
                 const preview = row.latest_preview
-                  ? messageContentPreview(row.latest_preview, 100)
-                  : row.division_leader_name
-                    ? 'Tap to message your division leader'
-                    : 'Division leader not assigned yet';
+                  ? messageContentPreview(row.latest_preview, 80)
+                  : 'No messages yet';
+                const title = parentPortalThreadListTitle(row);
                 return (
                   <TouchableOpacity
                     key={row.child_id}
@@ -554,18 +554,21 @@ export function ParentPortalMessagesView({
                     onPress={() => void openThread(row)}
                   >
                     <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{camperInitials(row.child_name)}</Text>
+                      <Text style={styles.avatarText}>{camperInitials(title)}</Text>
                     </View>
                     <View style={styles.rowBody}>
                       <View style={styles.rowTitleRow}>
                         <Text style={styles.rowTitle} numberOfLines={1}>
-                          {parentPortalThreadListTitle(row)}
+                          {title}
                         </Text>
                         {row.latest_at ? (
                           <Text style={styles.rowDate}>{formatParentMessageListDate(row.latest_at)}</Text>
                         ) : null}
                       </View>
-                      <Text style={styles.rowPreview} numberOfLines={2}>
+                      <Text style={styles.rowCamper} numberOfLines={1}>
+                        {parentPortalThreadListSubtitle(row)}
+                      </Text>
+                      <Text style={styles.rowPreview} numberOfLines={1}>
                         {preview}
                       </Text>
                     </View>
@@ -632,17 +635,14 @@ function createStyles(colors: ParentPortalColors, mainAreaHeight: number) {
       paddingVertical: 10,
     },
     inboxCard: {
-      borderRadius: PP.radiusLg,
-      borderWidth: 1,
-      borderColor: colors.border,
       backgroundColor: colors.elevated,
       overflow: 'hidden',
     },
     inboxRow: {
       flexDirection: 'row',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       gap: 12,
-      paddingVertical: 14,
+      paddingVertical: 12,
       paddingHorizontal: 16,
     },
     inboxRowBorder: {
@@ -660,18 +660,19 @@ function createStyles(colors: ParentPortalColors, mainAreaHeight: number) {
     },
     rowDisabled: { opacity: 0.45 },
     avatar: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      backgroundColor: colors.brandSubtle,
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      backgroundColor: colors.brand,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    avatarText: { fontSize: 15, fontFamily: ppFont.semibold, color: colors.brand },
-    rowBody: { flex: 1, minWidth: 0, paddingTop: 2 },
+    avatarText: { fontSize: 15, fontFamily: ppFont.semibold, color: '#fff' },
+    rowBody: { flex: 1, minWidth: 0 },
     rowTitleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
     rowTitle: { flex: 1, fontSize: 16, fontFamily: ppFont.semibold, color: colors.text },
     rowDate: { fontSize: 12, fontFamily: ppFont.regular, color: colors.textMuted },
-    rowPreview: { fontSize: 14, fontFamily: ppFont.regular, color: colors.textMuted, marginTop: 4, lineHeight: 19 },
+    rowCamper: { fontSize: 12, fontFamily: ppFont.semibold, color: colors.brand, marginTop: 1 },
+    rowPreview: { fontSize: 14, fontFamily: ppFont.regular, color: colors.textMuted, marginTop: 2 },
   });
 }

@@ -118,7 +118,7 @@ function DirectMessageThreadViewInner({
       return (
         <View key={row.id} style={[styles.bubbleRow, isMe ? styles.bubbleRowMe : styles.bubbleRowThem]}>
           <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-            {!isMe ? (
+            {!isMe && appearance !== 'parentGlass' ? (
               <Text style={styles.bubbleSender} numberOfLines={1}>
                 {senderLabel(row)}
               </Text>
@@ -144,7 +144,7 @@ function DirectMessageThreadViewInner({
         </View>
       );
     },
-    [currentUserId, senderLabel, styles],
+    [appearance, currentUserId, senderLabel, styles],
   );
 
   const headerPadTop = appearance === 'parentGlass' ? 8 : Math.max(insets.top, 8);

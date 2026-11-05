@@ -40,7 +40,7 @@ export function createChatThreadStyles(
       chatScroll: {
         flex: 1,
         minHeight: 0,
-        backgroundColor: portalColors.bg,
+        backgroundColor: '#e8eef5',
       },
       chatContent: {
         paddingHorizontal: 12,
@@ -70,15 +70,14 @@ export function createChatThreadStyles(
         elevation: 3,
       },
       bubbleMe: {
-        backgroundColor: 'rgba(255,255,255,0.78)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.92)',
+        backgroundColor: '#d7e8fb',
+        borderWidth: 0,
         borderTopRightRadius: 6,
       },
       bubbleThem: {
-        backgroundColor: 'rgba(255,255,255,0.52)',
+        backgroundColor: '#fff',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.72)',
+        borderColor: 'rgba(15,23,42,0.06)',
         borderTopLeftRadius: 6,
       },
       bubbleSender: {
