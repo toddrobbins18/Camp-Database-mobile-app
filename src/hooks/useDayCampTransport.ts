@@ -2344,6 +2344,9 @@ export function useDayCampTransport() {
           runDate: overrideDate,
           enrollmentWeek: week,
           enrollmentLookup: camperEnrollmentLookup,
+          includeAssignedToBus: true,
+          busLabelForRoute: (routeId) =>
+            routeMeta.find((route) => Number(route.id) === Number(routeId))?.bus ?? `Bus ${routeId}`,
         });
         if (ptCampers.length) {
           const built = await buildBusRosterReportPdf({

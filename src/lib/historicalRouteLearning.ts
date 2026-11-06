@@ -64,6 +64,29 @@ export function lookupCamperPrior(
   return undefined;
 }
 
+/** Parse "Bus 28", "Bus 28 (Pat)", or "Flower Hill · Bus 28". */
+export function parseBusNumberFromLabel(label: string): number | null {
+  const match = label.match(/\bbus\s*(\d+)\b/i) || label.trim().match(/^(\d+)$/);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Board route id for a 2026 MapPoint bus number (id match, then Bus N label). */
+export function routeIdForPriorBus(
+  routeMeta: Pick<TransportRouteMeta, "id" | "bus" | "name">[],
+  priorBusNumber: number,
+): number | undefined {
+  const wanted = Number(priorBusNumber);
+  const exact = routeMeta.find((route) => Number(route.id) === wanted);
+  if (exact) return Number(exact.id);
+  const byLabel = routeMeta.find(
+    (route) =>
+      parseBusNumberFromLabel(route.bus) === wanted || parseBusNumberFromLabel(route.name) === wanted,
+  );
+  return byLabel ? Number(byLabel.id) : undefined;
+}
+
 /** Build priors from bundled MapPoint CSV when warehouse is empty. */
 export function buildPriorsFromBundledMappoint(
   referenceSeason = DEFAULT_REFERENCE_SEASON,
@@ -398,7 +421,6 @@ export function applyHistoricalAssignments(options: {
 }): ApplyHistoricalResult {
   const { routeMeta, unplottedCampers, priorMap } = options;
   const coreStops = cloneCoreStops(options.coreStops);
-  const busIds = new Set(routeMeta.map((r) => r.id));
 
   const placed: ApplyHistoricalResult["placed"] = [];
   const skippedNoPrior: string[] = [];
@@ -414,7 +436,8 @@ export function applyHistoricalAssignments(options: {
       continue;
     }
 
-    if (!busIds.has(prior.busNumber)) {
+    const routeId = routeIdForPriorBus(routeMeta, prior.busNumber);
+    if (routeId == null) {
       skippedNoBus.push({ name: camper.name, priorBus: prior.busNumber });
       remaining.push(camper);
       continue;
@@ -424,32 +447,34 @@ export function applyHistoricalAssignments(options: {
     const lng = camper.lng || prior.lng || 0;
     const address = camper.address || prior.address;
 
+    const stops = coreStops[routeId] ?? [];
+    const addrKey = normAddressKey(address || "");
+    const stopIdx = address ? stops.findIndex((s) => normAddressKey(s.address) === addrKey) : -1;
+
+    if (stopIdx >= 0) {
+      stops[stopIdx] = addCamperToStop(stops[stopIdx], camper.name);
+      coreStops[routeId] = stops;
+      placed.push({ name: camper.name, busNumber: routeId, address: address || stops[stopIdx].address });
+      continue;
+    }
+
     if (!address || (lat === 0 && lng === 0)) {
       skippedNoCoords.push(camper.name);
       remaining.push(camper);
       continue;
     }
 
-    const stops = coreStops[prior.busNumber] ?? [];
-    const addrKey = normAddressKey(address);
-    const stopIdx = stops.findIndex((s) => normAddressKey(s.address) === addrKey);
-
-    if (stopIdx >= 0) {
-      stops[stopIdx] = addCamperToStop(stops[stopIdx], camper.name);
-    } else {
-      const newStop: TransportRouteStop = {
-        name: address.split(",")[0]?.trim() || camper.name,
-        address,
-        lat,
-        lng,
-        pickupTime: "",
-        passengers: 1,
-        camperNames: [camper.name],
-      };
-      coreStops[prior.busNumber] = insertStopByOrder(stops, newStop, prior.stopOrder);
-    }
-
-    placed.push({ name: camper.name, busNumber: prior.busNumber, address });
+    const newStop: TransportRouteStop = {
+      name: address.split(",")[0]?.trim() || camper.name,
+      address,
+      lat,
+      lng,
+      pickupTime: "",
+      passengers: 1,
+      camperNames: [camper.name],
+    };
+    coreStops[routeId] = insertStopByOrder(stops, newStop, prior.stopOrder);
+    placed.push({ name: camper.name, busNumber: routeId, address });
   }
 
   return {
@@ -470,8 +495,7 @@ export function pickHistoricalBusForCamper(
 ): number | undefined {
   const prior = lookupCamperPrior(priorMap, camper.name, "AM");
   if (!prior) return undefined;
-  if (!routeMeta.some((r) => r.id === prior.busNumber)) return undefined;
-  return prior.busNumber;
+  return routeIdForPriorBus(routeMeta, prior.busNumber);
 }
 
 /** Sort stops on each route using historical stop_order when available. */

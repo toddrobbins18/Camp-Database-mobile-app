@@ -133,11 +133,21 @@ export function buildPtOnlyBubbleSheetCampers(options: {
   enrollmentWeek?: number | null;
   enrollmentLookup?: Map<string, CamperEnrollmentInfo>;
   includeCamper?: (name: string) => boolean;
+  includeAssignedToBus?: boolean;
+  busLabelForRoute?: (routeId: number) => string;
 }): BubbleSheetCamper[] {
-  const { parentTransportCampers, runDate, enrollmentWeek = null, enrollmentLookup, includeCamper } = options;
+  const {
+    parentTransportCampers,
+    runDate,
+    enrollmentWeek = null,
+    enrollmentLookup,
+    includeCamper,
+    includeAssignedToBus = false,
+    busLabelForRoute,
+  } = options;
   const out: BubbleSheetCamper[] = [];
   for (const camper of parentTransportCampers) {
-    if (camper.routeId != null) continue;
+    if (camper.routeId != null && !includeAssignedToBus) continue;
     if (includeCamper && !includeCamper(camper.name)) continue;
     if (
       enrollmentWeek != null &&
@@ -149,9 +159,10 @@ export function buildPtOnlyBubbleSheetCampers(options: {
     const ridesAm = isParentTransportScheduledForRun(camper, runDate, 'am');
     const ridesPm = isParentTransportScheduledForRun(camper, runDate, 'pm');
     if (!ridesAm && !ridesPm) continue;
+    const busLabel = camper.routeId != null ? busLabelForRoute?.(camper.routeId) : undefined;
     out.push({
       name: camper.name,
-      detail: PARENT_TRANSPORT_STOP_LABEL,
+      detail: busLabel ? `${PARENT_TRANSPORT_STOP_LABEL} · ${busLabel}` : PARENT_TRANSPORT_STOP_LABEL,
       ridesAm,
       ridesPm,
     });
