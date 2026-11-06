@@ -55,8 +55,8 @@ export async function loadBusRunEnrollmentContext(
     defaultWeek,
     configuredWeeks: configuredEnrollmentWeekRows(calendar),
     weekLabel: defaultWeek != null ? formatEnrollmentWeekLabel(defaultWeek, calendar) : null,
-    weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : null,
-    weekDays: enrollmentWeekDayColumns(weekRow),
+    weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow, runDate) : null,
+    weekDays: enrollmentWeekDayColumns(weekRow, runDate),
     enrollmentLookup: buildCamperEnrollmentLookup(roster),
   };
 }
@@ -64,6 +64,7 @@ export async function loadBusRunEnrollmentContext(
 export function weekContextForNumber(
   calendar: EnrollmentWeekCalendar,
   weekNumber: number,
+  referenceDate?: string | null,
 ): {
   weekRow: EnrollmentWeekRow | null;
   weekLabel: string;
@@ -74,8 +75,8 @@ export function weekContextForNumber(
   return {
     weekRow,
     weekLabel: formatEnrollmentWeekLabel(weekNumber, calendar),
-    weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : null,
-    weekDays: enrollmentWeekDayColumns(weekRow),
+    weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow, referenceDate) : null,
+    weekDays: enrollmentWeekDayColumns(weekRow, referenceDate),
   };
 }
 

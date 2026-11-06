@@ -35,7 +35,6 @@ import {
   defaultEnrollmentWeekForDate,
   attendanceEnrollmentWeek,
   enrollmentWeekForDate,
-  enrollmentWeekDayColumns,
   formatEnrollmentWeekLabel,
   formatEnrollmentWeekRange,
   getEnrollmentWeekRow,
@@ -43,6 +42,15 @@ import {
   type EnrollmentWeekCalendar,
 } from '../lib/enrollmentWeekCalendar';
 import { buildBusBubbleSheetRoutes } from '../lib/transportCamperBusRun';
+import { buildBusRosterReportPdf, buildGroupReportPdf } from '../lib/transportCampMinderReportsPdf';
+import {
+  childToGroupReportCamper,
+  loadBusCounselorForRoute,
+  loadGroupStaffNames,
+  loadTransportReportChildren,
+  reportCampersForBusRoster,
+  sessionSummaryForCampers,
+} from '../lib/transportReportData';
 import {
   applyEnrollmentWeekToRoutes,
   applySeasonRosterToRoutes,
@@ -2234,35 +2242,40 @@ export function useDayCampTransport() {
 
       try {
         installTextCodecPolyfill();
+        const weekRange = weekRow ? formatEnrollmentWeekRange(weekRow, overrideDate) : overrideDate;
+
         if (reportName === 'Group Bubble Sheet') {
-          const rosterForWeek = groupRoster.filter((c) =>
-            camperEnrolledInWeek(c.enrolledWeeks, c.session, week),
+          const kids = companyId
+            ? await loadTransportReportChildren(supabase, companyId, season, { enrollmentWeek: week })
+            : [];
+          const groupNames = [...new Set(kids.map((child) => child.groupName))].sort((a, b) =>
+            a.localeCompare(b),
           );
-          const groupMap = new Map<string, GroupRosterCamper[]>();
-          for (const camper of rosterForWeek) {
-            const list = groupMap.get(camper.groupName) ?? [];
-            list.push(camper);
-            groupMap.set(camper.groupName, list);
-          }
-          const groups = Array.from(groupMap.entries())
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([groupName, campers]) => ({
+          let shared = 0;
+          for (const groupName of groupNames) {
+            const groupKids = kids.filter((child) => child.groupName === groupName);
+            if (!groupKids.length) continue;
+            const staffNames = companyId
+              ? await loadGroupStaffNames(supabase, companyId, season, groupName)
+              : [];
+            const built = await buildGroupReportPdf({
+              companyName,
+              season,
+              weekDateRange: weekRange,
               groupName,
-              campers: campers.map((c) => ({ name: c.name, detail: groupName })),
-            }));
-          const { buildGroupBubbleSheetPdf } = await import('../lib/transportBubbleSheetPdf');
-          const built = await buildGroupBubbleSheetPdf({
-            companyName,
-            enrollmentWeek: week,
-            weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
-            weekDays: enrollmentWeekDayColumns(weekRow),
-            groups,
-          });
-          if (!built) {
-            toast('No campers to print', undefined, true);
-          } else {
+              totalCampers: groupKids.length,
+              staffNames,
+              sessionSummary: sessionSummaryForCampers(groupKids),
+              campers: groupKids.map((child) => ({
+                ...childToGroupReportCamper(child, ''),
+                transportLine: '',
+              })),
+            });
+            if (!built) continue;
             await shareTransportPdf(built);
+            shared += 1;
           }
+          if (!shared) toast('No campers to print', undefined, true);
           return;
         }
 
@@ -2292,18 +2305,41 @@ export function useDayCampTransport() {
           includeCamper: (name) => camperEnrolledInWeekByLookup(camperEnrollmentLookup, name, week),
         });
 
-        const { buildDayBusBubbleSheetPdf } = await import('../lib/transportBubbleSheetPdf');
-        const built = await buildDayBusBubbleSheetPdf({
-          companyName,
-          date: overrideDate,
-          enrollmentWeek: week,
-          weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
-          routes: mergedBusRoutes,
-        });
-        if (!built) {
-          toast('No campers to print', undefined, true);
-        } else {
+        const kids = companyId
+          ? await loadTransportReportChildren(supabase, companyId, season, { enrollmentWeek: week })
+          : [];
+        let shared = 0;
+        for (const bubbleRoute of mergedBusRoutes) {
+          if (!bubbleRoute.campers.length) continue;
+          const meta = routeMeta.find((route) => route.bus === bubbleRoute.bus);
+          const counselor = companyId
+            ? await loadBusCounselorForRoute(supabase, companyId, season, bubbleRoute.bus)
+            : null;
+          const built = await buildBusRosterReportPdf({
+            companyName,
+            season,
+            weekDateRange: weekRange,
+            bus: bubbleRoute.bus,
+            routeName: bubbleRoute.routeName,
+            driverOrCounselor: counselor,
+            totalPassengers: bubbleRoute.campers.length,
+            campers: reportCampersForBusRoster(
+              bubbleRoute.campers,
+              kids,
+              routeMeta,
+              coreStops,
+              parentTransportCampers,
+              camperBusRunSchedules,
+              bubbleRoute.bus,
+            ),
+            bubbleCampers: bubbleRoute.campers,
+          });
+          if (!built) continue;
           await shareTransportPdf(built);
+          shared += 1;
+        }
+        if (!shared) {
+          toast('No campers to print', undefined, true);
         }
       } catch (err) {
         console.error('[Transport] Bubble sheet PDF failed', err);

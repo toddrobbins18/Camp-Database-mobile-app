@@ -1,4 +1,4 @@
-import { addDays, format, parseISO } from 'date-fns';
+import { addDays, differenceInCalendarDays, format, parseISO, startOfWeek } from 'date-fns';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DAY_CAMP_ENROLLMENT_WEEKS, resolveEnrolledWeeks } from './enrolledWeeks';
 
@@ -18,14 +18,23 @@ export function camperEnrolledInWeek(
   return resolveEnrolledWeeks(enrolledWeeks, session).includes(weekNumber);
 }
 
+/** YYYY-MM-DD even when Postgres returns a timestamp. */
+function calendarDateOnly(value: string): string {
+  const s = String(value ?? '').trim();
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(s);
+  return match?.[1] ?? s;
+}
+
 export function enrollmentWeekForDate(
   calendar: EnrollmentWeekCalendar,
   date: string,
 ): number | null {
+  const day = calendarDateOnly(date);
   for (const row of calendar) {
-    if (row.startDate && row.endDate && date >= row.startDate && date <= row.endDate) {
-      return row.weekNumber;
-    }
+    if (!row.startDate || !row.endDate) continue;
+    const start = calendarDateOnly(row.startDate);
+    const end = calendarDateOnly(row.endDate);
+    if (day >= start && day <= end) return row.weekNumber;
   }
   return null;
 }
@@ -125,9 +134,48 @@ export function mergeEnrollmentWeekCalendars(
   return rows;
 }
 
-export function formatEnrollmentWeekRange(row: EnrollmentWeekRow): string {
-  const start = parseISO(row.startDate);
-  const end = parseISO(row.endDate);
+/** If a saved week spans more than Mon–Fri, print the Mon–Fri around the report date. */
+export function printEnrollmentWeekRow(
+  row: EnrollmentWeekRow,
+  referenceDate?: string | null,
+): EnrollmentWeekRow {
+  const start = calendarDateOnly(row.startDate);
+  const end = calendarDateOnly(row.endDate);
+  if (!start || !end) return row;
+  const startDate = parseISO(start);
+  const endDate = parseISO(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return row;
+  if (differenceInCalendarDays(endDate, startDate) <= 6) {
+    return { ...row, startDate: start, endDate: end };
+  }
+
+  const anchorRaw = referenceDate?.trim() ? calendarDateOnly(referenceDate) : end;
+  let anchor = parseISO(anchorRaw);
+  if (Number.isNaN(anchor.getTime())) anchor = startDate;
+  if (anchor < startDate) anchor = startDate;
+  if (anchor > endDate) anchor = endDate;
+  const monday = startOfWeek(anchor, { weekStartsOn: 1 });
+  return {
+    ...row,
+    startDate: format(monday, 'yyyy-MM-dd'),
+    endDate: format(addDays(monday, 4), 'yyyy-MM-dd'),
+  };
+}
+
+export function enrollmentWeekSpanDays(row: EnrollmentWeekRow): number {
+  const start = parseISO(calendarDateOnly(row.startDate));
+  const end = parseISO(calendarDateOnly(row.endDate));
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+  return differenceInCalendarDays(end, start);
+}
+
+export function formatEnrollmentWeekRange(
+  row: EnrollmentWeekRow,
+  referenceDate?: string | null,
+): string {
+  const print = printEnrollmentWeekRow(row, referenceDate);
+  const start = parseISO(print.startDate);
+  const end = parseISO(print.endDate);
   const sameYear = start.getFullYear() === end.getFullYear();
   const startFmt = format(start, sameYear ? 'MMM d' : 'MMM d, yyyy');
   const endFmt = format(end, 'MMM d, yyyy');
@@ -144,14 +192,16 @@ const DEFAULT_WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const;
 /** Five weekday columns for group bubble sheets (Mon–Fri from enrollment week dates). */
 export function enrollmentWeekDayColumns(
   row: EnrollmentWeekRow | null | undefined,
+  referenceDate?: string | null,
 ): EnrollmentWeekDayColumn[] {
   if (!row?.startDate || !row?.endDate) {
     return DEFAULT_WEEKDAY_LABELS.map((label) => ({ label }));
   }
 
+  const print = printEnrollmentWeekRow(row, referenceDate);
   const days: EnrollmentWeekDayColumn[] = [];
-  let cursor = parseISO(row.startDate);
-  const end = parseISO(row.endDate);
+  let cursor = parseISO(print.startDate);
+  const end = parseISO(print.endDate);
 
   while (cursor <= end && days.length < 5) {
     days.push({

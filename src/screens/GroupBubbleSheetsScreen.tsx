@@ -21,7 +21,6 @@ import { campDateStringInSeason } from '../lib/campSeasonDate';
 import { DAY_CAMP_ENROLLMENT_WEEKS } from '../lib/enrolledWeeks';
 import {
   buildMonFriEnrollmentWeeks,
-  enrollmentWeekDayColumns,
   enrollmentWeekForDate,
   formatEnrollmentWeekLabel,
   formatEnrollmentWeekRange,
@@ -32,7 +31,13 @@ import {
   type EnrollmentWeekCalendar,
 } from '../lib/enrollmentWeekCalendar';
 import { loadGroupRoster } from '../lib/transportGroupAttendance';
-import { buildGroupBubbleSheetPdf } from '../lib/transportBubbleSheetPdf';
+import { buildGroupReportPdf } from '../lib/transportCampMinderReportsPdf';
+import {
+  childToGroupReportCamper,
+  loadGroupStaffNames,
+  loadTransportReportChildren,
+  sessionSummaryForCampers,
+} from '../lib/transportReportData';
 import { FrontOfficeBackButton } from '../components/FrontOfficeBackButton';
 import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
 
@@ -123,34 +128,51 @@ export function GroupBubbleSheetsScreen({ navigation }: any) {
   };
 
   const handlePrint = async () => {
+    if (!companyId) return;
     const groupsSource =
       selectedGroup === ALL_GROUPS
         ? rosterByGroup
         : rosterByGroup.filter(([name]) => name === selectedGroup);
-
-    const groups = groupsSource.map(([groupName, campers]) => ({
-      groupName,
-      campers: campers.map((c) => ({ name: c.name, detail: groupName })),
-    }));
+    if (!groupsSource.length) {
+      Alert.alert('Nothing to print', 'No campers enrolled for this week.');
+      return;
+    }
 
     setPrinting(true);
     try {
       installTextCodecPolyfill();
-      const built = await buildGroupBubbleSheetPdf({
-        companyName,
+      const kids = await loadTransportReportChildren(supabase, companyId, season, {
         enrollmentWeek: selectedWeek,
-        weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
-        weekDays: enrollmentWeekDayColumns(weekRow),
-        groups,
       });
-      if (!built) {
-        Alert.alert('Nothing to print', 'No campers enrolled for this week.');
-        return;
+      const weekRange = weekRow ? formatEnrollmentWeekRange(weekRow) : '';
+      let shared = 0;
+      for (const [groupName] of groupsSource) {
+        const groupKids = kids.filter((child) => child.groupName === groupName);
+        if (!groupKids.length) continue;
+        const staffNames = await loadGroupStaffNames(supabase, companyId, season, groupName);
+        const built = await buildGroupReportPdf({
+          companyName,
+          season,
+          weekDateRange: weekRange,
+          groupName,
+          totalCampers: groupKids.length,
+          staffNames,
+          sessionSummary: sessionSummaryForCampers(groupKids),
+          campers: groupKids.map((child) => ({
+            ...childToGroupReportCamper(child, ''),
+            transportLine: '',
+          })),
+        });
+        if (!built) continue;
+        await shareTransportPdf(built);
+        shared += 1;
       }
-      await shareTransportPdf(built);
+      if (!shared) {
+        Alert.alert('Nothing to print', 'No campers enrolled for this week.');
+      }
     } catch (err) {
       console.error('[GroupBubbleSheets] print failed', err);
-      Alert.alert('Print failed', 'Could not generate bubble sheet PDF.');
+      Alert.alert('Print failed', 'Could not generate group report PDF.');
     } finally {
       setPrinting(false);
     }
@@ -210,8 +232,8 @@ export function GroupBubbleSheetsScreen({ navigation }: any) {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Print bubble sheets</Text>
-          <Text style={styles.cardDesc}>Same P/A layout as bus attendance sheets</Text>
+          <Text style={styles.cardTitle}>Print group reports</Text>
+          <Text style={styles.cardDesc}>Weekly Mon–Fri bubbles, same layout as web</Text>
 
           <Text style={styles.fieldLabel}>Enrollment week</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.weekRow}>
@@ -258,7 +280,7 @@ export function GroupBubbleSheetsScreen({ navigation }: any) {
             disabled={printing || rosterLoading || !roster.length}
           >
             <Ionicons name="print-outline" size={18} color="#fff" />
-            <Text style={styles.primaryBtnText}>{printing ? 'Generating…' : 'Print bubble sheet'}</Text>
+            <Text style={styles.primaryBtnText}>{printing ? 'Generating…' : 'Print group report'}</Text>
           </TouchableOpacity>
 
           {rosterLoading ? (

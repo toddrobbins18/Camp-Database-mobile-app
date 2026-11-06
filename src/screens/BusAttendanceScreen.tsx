@@ -33,6 +33,14 @@ import {
 import { campersOnRouteForWeek, weekContextForNumber } from '../lib/transportBusRunContext';
 import { formatEnrollmentWeekLabel } from '../lib/enrollmentWeekCalendar';
 import { getEffectiveCoreStops } from '../lib/transportRunBoard';
+import { consolidateRouteStopsByAddress } from '../lib/transportRouteStops';
+import { buildBusBubbleSheetRoutes } from '../lib/transportCamperBusRun';
+import { buildBusRosterReportPdf } from '../lib/transportCampMinderReportsPdf';
+import {
+  loadBusCounselorForRoute,
+  loadTransportReportChildren,
+  reportCampersForBusRoster,
+} from '../lib/transportReportData';
 import { useFilteredBusRoutes } from '../hooks/useFilteredBusRoutes';
 import { useBusCounselorNavScope } from '../hooks/useBusCounselorNavScope';
 import { installTextCodecPolyfill } from '../lib/textCodecPolyfill';
@@ -115,8 +123,8 @@ export function BusAttendanceScreen({ navigation }: any) {
   const activeWeek = selectedWeek ?? enrollmentCtx?.defaultWeek ?? null;
   const activeWeekContext = useMemo(() => {
     if (!enrollmentCtx || activeWeek == null) return null;
-    return weekContextForNumber(enrollmentCtx.calendar, activeWeek);
-  }, [enrollmentCtx, activeWeek]);
+    return weekContextForNumber(enrollmentCtx.calendar, activeWeek, runDate);
+  }, [enrollmentCtx, activeWeek, runDate]);
 
   const campersForRoute = useCallback(
     (routeId: number) => {
@@ -292,34 +300,82 @@ export function BusAttendanceScreen({ navigation }: any) {
       Alert.alert('No buses selected');
       return;
     }
-    const sheetRoutes = selectedRoutes.map((r) => ({
-      bus: r.bus,
-      routeName: r.name,
-      campers: campersForRoute(r.id).map((c) => ({
-        name: c.name,
-        detail: c.stopName,
-      })),
-    }));
+    if (activeWeek == null || !activeWeekContext || !companyId) {
+      Alert.alert(
+        'Enrollment week required',
+        'Set week start/end dates under Group Bubble Sheets, then pick a week above.',
+      );
+      return;
+    }
+    if (selectedRoutes.length > 5) {
+      Alert.alert(
+        'Pick fewer buses',
+        'Weekly roster is one PDF per bus. Select 1–5 buses, then print.',
+      );
+      return;
+    }
 
     try {
       installTextCodecPolyfill();
-      const { buildDayBusBubbleSheetPdf } = await import('../lib/transportBubbleSheetPdf');
-      const built = await buildDayBusBubbleSheetPdf({
-        companyName,
-        date: runDate,
-        enrollmentWeek: activeWeek ?? undefined,
-        weekDateRange: activeWeekContext?.weekDateRange ?? undefined,
-        routes: sheetRoutes,
+      const kids = await loadTransportReportChildren(supabase, companyId, season, {
+        enrollmentWeek: activeWeek,
       });
-      if (!built) {
-        Alert.alert('No campers to print', 'No enrolled campers on selected buses this week.');
-        return;
+      let shared = 0;
+      for (const route of selectedRoutes) {
+        const sheetRoutes = buildBusBubbleSheetRoutes({
+          routes: [{ id: route.id, bus: route.bus, routeName: route.name }],
+          baseCoreByRoute: (routeId) =>
+            consolidateRouteStopsByAddress(board.coreStops[routeId] ?? []),
+          coreForRun: (routeId, period) => getEffectiveCoreStops(board, routeId, period),
+          schedules: {},
+          runDate,
+          parentTransportCampers: [],
+          enrollmentWeek: activeWeek,
+          enrollmentLookup: enrollmentCtx?.enrollmentLookup,
+        });
+        const bubbleRoute = sheetRoutes[0];
+        if (!bubbleRoute?.campers.length) continue;
+        const counselor = await loadBusCounselorForRoute(supabase, companyId, season, route.bus);
+        const built = await buildBusRosterReportPdf({
+          companyName,
+          season,
+          weekDateRange: activeWeekContext.weekDateRange ?? runDate,
+          bus: route.bus,
+          routeName: route.name,
+          driverOrCounselor: counselor,
+          totalPassengers: bubbleRoute.campers.length,
+          campers: reportCampersForBusRoster(
+            bubbleRoute.campers,
+            kids,
+            board.routeMeta,
+            board.coreStops,
+            [],
+            {},
+            route.bus,
+          ),
+          bubbleCampers: bubbleRoute.campers,
+        });
+        if (!built) continue;
+        await shareTransportPdf(built);
+        shared += 1;
       }
-      await shareTransportPdf(built);
+      if (!shared) {
+        Alert.alert('No campers to print', 'No enrolled campers on selected buses this week.');
+      }
     } catch {
-      Alert.alert('Bubble sheet', 'Could not share PDF.');
+      Alert.alert('Bus roster', 'Could not share PDF.');
     }
-  }, [board, selectedRoutes, activeWeek, activeWeekContext, campersForRoute, companyName, runDate]);
+  }, [
+    activeWeek,
+    activeWeekContext,
+    board,
+    companyId,
+    companyName,
+    enrollmentCtx?.enrollmentLookup,
+    runDate,
+    season,
+    selectedRoutes,
+  ]);
 
   const runDateOutsideWeek =
     enrollmentCtx?.enrollmentWeek == null &&
@@ -348,7 +404,7 @@ export function BusAttendanceScreen({ navigation }: any) {
           disabled={!selectedRoutes.length}
         >
           <Ionicons name="print-outline" size={14} color={theme.colors.text} />
-          <Text style={styles.bubbleBtnText}>Print</Text>
+          <Text style={styles.bubbleBtnText}>Print roster</Text>
         </TouchableOpacity>
       </View>
 
@@ -356,7 +412,7 @@ export function BusAttendanceScreen({ navigation }: any) {
         {routes.length > 1 ? (
           <View style={styles.busPickCard}>
             <Text style={styles.busPickTitle}>Bubble sheet buses</Text>
-            <Text style={styles.busPickSub}>Select bus numbers to include in the PDF.</Text>
+            <Text style={styles.busPickSub}>Weekly AM/PM bus roster PDF, one file per selected bus.</Text>
             <View style={styles.busPickActions}>
               <TouchableOpacity onPress={() => setSelectedRouteIds(routeIdsWithRoster)}>
                 <Text style={[styles.busPickLink, chipTextActiveStyle]}>Select all</Text>
