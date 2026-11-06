@@ -139,7 +139,6 @@ import {
   CAMP_LOCATION,
   buildAMStops,
   buildPMStops,
-  displayStopToCoreIndex,
   routeMiles,
   countBoardStops,
   normalizeAddress,
@@ -147,10 +146,18 @@ import {
 } from '../lib/transportBoardUtils';
 import {
   TransportGeocodeCache,
+  geocodeAddress,
   geocodeBatch,
   geocodeFailureMessage,
   isGeocodePoint,
 } from '../lib/transportGeocode';
+import {
+  coreIndexFromDisplayStops,
+  isValidBusCounselorPickup,
+  parseBusCounselorPickup,
+  withCounselorPickupStops,
+  type BusCounselorPickup,
+} from '../lib/transportCounselorPickup';
 import type { GeocodeResult } from '../lib/transportBoardCache';
 
 export const DAY_CAMP_REPORTS = [
@@ -190,6 +197,9 @@ export type EditRouteState = {
   status: string;
   color: string;
   capacity: number;
+  counselorName: string;
+  counselorAddress: string;
+  counselorStaffId: string | null;
 };
 
 export type ScopeDialogState = {
@@ -878,15 +888,28 @@ export function useDayCampTransport() {
     markRoutesConfigured('manual');
   }, [markRoutesConfigured]);
 
+  const displayStopsForCoreIndex = useCallback(
+    (routeId: number): TransportRouteStop[] => {
+      const core = getEffectiveCore(routeId);
+      const pickup = routeMeta.find((r) => r.id === routeId)?.counselorPickup;
+      const withCounselor = withCounselorPickupStops(core, pickup ?? null, timeOfDay);
+      return timeOfDay === 'am'
+        ? [...withCounselor, { ...CAMP_LOCATION, pickupTime: '', passengers: 0 }]
+        : [{ ...CAMP_LOCATION, pickupTime: '', passengers: 0 }, ...withCounselor];
+    },
+    [getEffectiveCore, routeMeta, timeOfDay],
+  );
+
   const buildRoutes = useCallback(
     (tod: 'am' | 'pm'): TransportDisplayRoute[] =>
       routeMeta.map((meta) => {
         const core = getEffectiveCore(meta.id);
+        const routed = withCounselorPickupStops(core, meta.counselorPickup, tod);
         const timeOpts = { dwellMinutesPerStop: stopDwellMinutes };
         const stops =
           tod === 'am'
-            ? buildAMStops(core, meta.departure, timeOpts)
-            : buildPMStops(core, meta.departure, timeOpts);
+            ? buildAMStops(routed, meta.departure, timeOpts)
+            : buildPMStops(routed, meta.departure, timeOpts);
         const campers = core.reduce((sum, s) => sum + s.passengers, 0);
         return {
           ...meta,
@@ -1029,10 +1052,10 @@ export function useDayCampTransport() {
       if (fromDisplayIdx === toDisplayIdx) return;
       const effective = getEffectiveCore(routeId);
       if (!effective.length) return;
-      const isAM = timeOfDay === 'am';
-      const fromCore = displayStopToCoreIndex(fromDisplayIdx, isAM);
-      const toCore = displayStopToCoreIndex(toDisplayIdx, isAM);
-      if (fromCore < 0 || fromCore >= effective.length || toCore < 0 || toCore >= effective.length) return;
+      const displayStops = displayStopsForCoreIndex(routeId);
+      const fromCore = coreIndexFromDisplayStops(displayStops, fromDisplayIdx, CAMP_LOCATION.address);
+      const toCore = coreIndexFromDisplayStops(displayStops, toDisplayIdx, CAMP_LOCATION.address);
+      if (fromCore == null || toCore == null || fromCore >= effective.length || toCore >= effective.length) return;
 
       const next = [...effective];
       const [moved] = next.splice(fromCore, 1);
@@ -1049,7 +1072,7 @@ export function useDayCampTransport() {
         `Moved "${moved.camperNames?.join(', ') || moved.name}" on this route.`,
       );
     },
-    [getEffectiveCore, timeOfDay, markRoutesConfigured],
+    [getEffectiveCore, timeOfDay, markRoutesConfigured, displayStopsForCoreIndex],
   );
 
   const handleRemoveParentTransport = useCallback(
@@ -1708,8 +1731,12 @@ export function useDayCampTransport() {
 
   const handleMoveStop = (fromRouteId: number, stopIndex: number, toRouteId: number) => {
     const effective = getEffectiveCore(fromRouteId);
-    const coreIndex = displayStopToCoreIndex(stopIndex, timeOfDay === 'am');
-    if (coreIndex < 0 || coreIndex >= effective.length) return;
+    const coreIndex = coreIndexFromDisplayStops(
+      displayStopsForCoreIndex(fromRouteId),
+      stopIndex,
+      CAMP_LOCATION.address,
+    );
+    if (coreIndex == null || coreIndex >= effective.length) return;
     const stop = effective[coreIndex];
     setScopeDialog({
       open: true,
@@ -1759,8 +1786,12 @@ export function useDayCampTransport() {
 
   const handleRemoveStop = (routeId: number, stopIndex: number) => {
     const effective = getEffectiveCore(routeId);
-    const coreIndex = displayStopToCoreIndex(stopIndex, timeOfDay === 'am');
-    if (coreIndex < 0 || coreIndex >= effective.length) return;
+    const coreIndex = coreIndexFromDisplayStops(
+      displayStopsForCoreIndex(routeId),
+      stopIndex,
+      CAMP_LOCATION.address,
+    );
+    if (coreIndex == null || coreIndex >= effective.length) return;
     const stop = effective[coreIndex];
     setScopeDialog({
       open: true,
@@ -2112,7 +2143,7 @@ export function useDayCampTransport() {
     );
   };
 
-  const handleSaveEditRoute = () => {
+  const handleSaveEditRoute = async () => {
     if (!editRoute) return;
     if (!editRoute.name.trim() || !editRoute.bus.trim()) {
       toast('Missing info', 'Route name and bus are required.', true);
@@ -2121,6 +2152,45 @@ export function useDayCampTransport() {
     if (!editRoute.capacity || editRoute.capacity < 1) {
       toast('Invalid capacity', 'Max capacity must be at least 1.', true);
       return;
+    }
+    const counselorName = editRoute.counselorName.trim();
+    const counselorAddress = editRoute.counselorAddress.trim();
+    let counselorPickup: BusCounselorPickup | null = null;
+    if (counselorName || counselorAddress) {
+      if (!counselorName || !counselorAddress) {
+        toast('Counselor pickup incomplete', 'Name and home address are both required, or clear both.', true);
+        return;
+      }
+      const existing = routeMeta.find((r) => r.id === editRoute.id)?.counselorPickup;
+      const sameAddress =
+        existing
+        && existing.address.trim().toLowerCase() === counselorAddress.toLowerCase()
+        && isValidBusCounselorPickup(existing);
+      if (sameAddress) {
+        counselorPickup = {
+          ...existing,
+          name: counselorName,
+          staffId: editRoute.counselorStaffId ?? existing.staffId ?? null,
+        };
+      } else {
+        await geocodeCacheRef.current.init();
+        const geo = await geocodeAddress(counselorAddress, geocodeCacheRef.current);
+        if (!isGeocodePoint(geo)) {
+          toast('Could not map counselor address', geocodeFailureMessage(geo, counselorAddress), true);
+          return;
+        }
+        counselorPickup = parseBusCounselorPickup({
+          staffId: editRoute.counselorStaffId,
+          name: counselorName,
+          address: counselorAddress,
+          lat: geo.lat,
+          lng: geo.lng,
+        });
+        if (!counselorPickup) {
+          toast('Could not save counselor pickup', undefined, true);
+          return;
+        }
+      }
     }
     setRouteMeta((prev) =>
       prev.map((r) =>
@@ -2133,12 +2203,13 @@ export function useDayCampTransport() {
               status: editRoute.status,
               color: editRoute.color,
               capacity: editRoute.capacity,
+              counselorPickup,
             }
           : r,
       ),
     );
     setEditRoute(null);
-    toast('Route updated', 'Changes applied to AM & PM runs.');
+    toast('Route updated', 'Counselor pickup is first on AM and last on PM.');
   };
 
   const handleDeleteEditRoute = () => {
@@ -2313,9 +2384,10 @@ export function useDayCampTransport() {
         for (const bubbleRoute of mergedBusRoutes) {
           if (!bubbleRoute.campers.length) continue;
           const meta = routeMeta.find((route) => route.bus === bubbleRoute.bus);
-          const counselor = companyId
-            ? await loadBusCounselorForRoute(supabase, companyId, season, bubbleRoute.bus)
-            : null;
+          const counselor = meta?.counselorPickup?.name?.trim()
+            || (companyId
+              ? await loadBusCounselorForRoute(supabase, companyId, season, bubbleRoute.bus)
+              : null);
           const built = await buildBusRosterReportPdf({
             companyName,
             season,

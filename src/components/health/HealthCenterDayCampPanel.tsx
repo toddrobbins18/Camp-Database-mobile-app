@@ -20,6 +20,7 @@ import {
   type HealthCenterVisitFormState,
 } from './HealthCenterVisitFormFields';
 import {
+  healthVisitCounselorForCamper,
   healthVisitGroupForCamper,
   type HealthCenterVisitExtraFields,
 } from '../../lib/healthCenterVisitOptions';
@@ -33,9 +34,10 @@ type CamperRow = {
   id: string;
   name: string;
   group_name?: string | null;
-  division?: { name?: string | null } | null;
-  leader?: { name?: string | null } | null;
-  bunk?: { bunk_name?: string | null; bunk_number?: number | null } | null;
+  grade?: string | null;
+  division?: { name?: string | null } | { name?: string | null }[] | null;
+  leader?: { name?: string | null } | { name?: string | null }[] | null;
+  bunk?: { bunk_name?: string | null; bunk_number?: number | null } | { bunk_name?: string | null; bunk_number?: number | null }[] | null;
 };
 
 type StaffRow = {
@@ -152,7 +154,7 @@ export function HealthCenterDayCampPanel({
 
   const counselorOptions = useMemo(() => {
     const names = [
-      ...children.map((c) => c.leader?.name?.trim()).filter(Boolean),
+      ...children.map((c) => healthVisitCounselorForCamper(c)).filter(Boolean),
       ...staff.map((s) => s.name?.trim()).filter(Boolean),
     ] as string[];
     return [...new Set(names)].sort((a, b) => a.localeCompare(b));
@@ -193,7 +195,7 @@ export function HealthCenterDayCampPanel({
         setForm((prev) => ({
           ...prev,
           group_name: healthVisitGroupForCamper(camper, true),
-          counselor_name: camper.leader?.name?.trim() || '',
+          counselor_name: healthVisitCounselorForCamper(camper),
         }));
       }
     } else {
@@ -206,7 +208,7 @@ export function HealthCenterDayCampPanel({
     const camper = children.find((c) => c.id === selectedId);
     if (!camper) return;
     const group_name = healthVisitGroupForCamper(camper, true);
-    const counselor_name = camper.leader?.name?.trim() || '';
+    const counselor_name = healthVisitCounselorForCamper(camper);
     setForm((prev) =>
       prev.group_name === group_name && prev.counselor_name === counselor_name
         ? prev
@@ -447,6 +449,12 @@ export function HealthCenterDayCampPanel({
           <View style={styles.formSection}>
             <Text style={styles.formSectionTitle}>
               Visit for <Text style={{ color: brand, fontWeight: '700' }}>{selectedName}</Text>
+              {form.group_name.trim() ? (
+                <Text style={{ fontWeight: '400', color: theme.colors.textSecondary }}>
+                  {' · '}
+                  {form.group_name}
+                </Text>
+              ) : null}
             </Text>
             <HealthCenterVisitFormFields
               value={form}

@@ -8,6 +8,7 @@ import {
 } from "./transportCamperBusRun";
 import { type ParentTransportCamper } from "./transportParentTransport";
 import type { TransportRouteMeta, TransportRouteStop } from "./transportRoster";
+import { withCounselorPickupStops } from "./transportCounselorPickup";
 import { loadRouteReferenceAssignments } from "./routeReferenceWarehouse";
 import type { BubbleSheetCamper } from "./transportBubbleSheetPdf";
 import type { GroupReportCamper } from "./transportCampMinderReportsPdf";
@@ -294,12 +295,13 @@ export function sessionSummaryForCampers(children: { session: string | null }[])
 }
 
 export function buildRouteSummaryRows(
-  routes: { id: number; name: string; bus: string }[],
+  routes: { id: number; name: string; bus: string; counselorPickup?: TransportRouteMeta["counselorPickup"] }[],
   coreStops: Record<number, TransportRouteStop[]>,
+  period: "am" | "pm" = "am",
 ): RouteSummaryStopRow[] {
   const rows: RouteSummaryStopRow[] = [];
   for (const route of routes) {
-    const stops = coreStops[route.id] ?? [];
+    const stops = withCounselorPickupStops(coreStops[route.id] ?? [], route.counselorPickup, period);
     stops.forEach((stop, index) => {
       rows.push({
         routeName: route.name,

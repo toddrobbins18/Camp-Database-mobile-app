@@ -335,7 +335,8 @@ export function BusAttendanceScreen({ navigation }: any) {
         });
         const bubbleRoute = sheetRoutes[0];
         if (!bubbleRoute?.campers.length) continue;
-        const counselor = await loadBusCounselorForRoute(supabase, companyId, season, route.bus);
+        const counselor = route.counselorPickup?.name?.trim()
+          || await loadBusCounselorForRoute(supabase, companyId, season, route.bus);
         const built = await buildBusRosterReportPdf({
           companyName,
           season,

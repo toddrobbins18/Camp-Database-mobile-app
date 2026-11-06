@@ -10,6 +10,7 @@ import type { TransportRouteStop } from './transportRoster';
 import { riderNamesFromStop } from './transportRouteStops';
 import { stopRiderNames, type RouteLike } from './transportWeekView';
 import { CAMP_LOCATION } from './transportBoardUtils';
+import { isCounselorPickupStop } from './transportCounselorPickup';
 
 export type ParentTransportWeekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri';
 
@@ -159,7 +160,7 @@ export function applyParentTransportExclusionToRoutes<T extends RouteLike>(
 
   return routes.map((route) => {
     const stops = route.stops.map((stop) => {
-      if (stop.address === campAddress) return stop;
+      if (stop.address === campAddress || isCounselorPickupStop(stop)) return stop;
       const riders = stopRiderNames(stop).filter((name) => !ptNames.has(normName(name)));
       const primaryLabel =
         riders[0] ?? (stop.address.split(',')[0]?.trim() || stop.name || stop.address);

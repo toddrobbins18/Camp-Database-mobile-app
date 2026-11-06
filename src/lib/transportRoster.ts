@@ -21,6 +21,7 @@ import {
 import { CAMP_LOCATION } from './transportBoardUtils';
 import { riderNamesFromStop } from './transportRouteStops';
 import type { TransportBoardSettings } from './transportBoardSettings';
+import type { BusCounselorPickup } from './transportCounselorPickup';
 
 export {
   getBundledMappointRoutesCsv2026,
@@ -58,6 +59,8 @@ export type TransportRouteStop = {
   pickupTime: string;
   passengers: number;
   camperNames?: string[];
+  /** Crew pickup — not a camper. Injected on AM first / PM last. */
+  stopRole?: 'counselor';
 };
 
 export type TransportRouteMeta = {
@@ -68,6 +71,8 @@ export type TransportRouteMeta = {
   status: string;
   color: string;
   capacity: number;
+  /** Bus counselor home — routed, not counted as a camper. */
+  counselorPickup?: BusCounselorPickup | null;
 };
 
 export type TransportRoutesSource = "mappoint2026" | "manual";

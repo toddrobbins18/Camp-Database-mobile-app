@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import MapView, { Marker, Polyline, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { CAMP_LOCATION, isCampStop, normAddr } from '../lib/transportBoardUtils';
+import { BUS_COUNSELOR_STOP_LABEL, isCounselorPickupStop } from '../lib/transportCounselorPickup';
 import type { TransportRouteStop } from '../lib/transportRoster';
 
 const UNPLOTTED_COLOR = '#8b5cf6';
@@ -218,9 +219,10 @@ export function TransportRouteMapNative({
         let stopNum = 0;
         return route.stops.map((stop, stopIndex) => {
           const isCamp = isCampStop(stop) || (!!campAddress && normAddr(stop.address) === normAddr(campAddress));
-          if (!isCamp) stopNum += 1;
-          const label = isCamp ? 'C' : String(stopNum);
-          const color = isCamp ? '#16a34a' : route.color;
+          const isCounselor = isCounselorPickupStop(stop);
+          if (!isCamp && !isCounselor) stopNum += 1;
+          const label = isCamp ? 'C' : isCounselor ? BUS_COUNSELOR_STOP_LABEL : String(stopNum);
+          const color = isCamp ? '#16a34a' : isCounselor ? '#0f766e' : route.color;
           return (
             <Marker
               key={`${route.id}-${stopIndex}-${stop.address}`}

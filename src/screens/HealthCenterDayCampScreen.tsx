@@ -20,6 +20,7 @@ const ROSTER_PAGE_SIZE = 500;
 type CamperRow = {
   id: string;
   name: string;
+  grade?: string | null;
   group_name?: string | null;
   division?: { name?: string | null } | null;
   leader?: { name?: string | null } | null;
@@ -52,8 +53,9 @@ export function HealthCenterDayCampScreen({ navigation }: { navigation: any }) {
           `
           id,
           name,
+          grade,
           group_name,
-          division:divisions(id, name),
+          division:division_id(id, name),
           leader:leader_id(id, name),
           bunk:bunk_id(bunk_name, bunk_number)
         `,

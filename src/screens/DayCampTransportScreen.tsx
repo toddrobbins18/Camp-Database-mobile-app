@@ -35,6 +35,7 @@ import {
   buildPendingNamesByAddress,
   filterRoutesForMapDisplay,
 } from '../lib/transportBoardUtils';
+import { coreIndexFromDisplayStops, isCounselorPickupStop } from '../lib/transportCounselorPickup';
 import { todayDateString } from '../lib/transportDailyOverrides';
 import {
   configuredEnrollmentWeekRows,
@@ -360,14 +361,16 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   const renderStopActionModal = () => {
     if (!t.stopAction) return null;
     const { routeId, stopIndex, stop } = t.stopAction;
-    if (isCampStop(stop)) return null;
+    if (isCampStop(stop) || isCounselorPickupStop(stop)) return null;
     const pinned = t.isStopPinnedForOptimize(routeId, stop.address);
-    const isAM = t.timeOfDay === 'am';
-    const coreLen = (t.getEffectiveCore(routeId) || []).length;
+    const displayStops = t.routes.find((route) => route.id === routeId)?.stops ?? [];
+    const fromCore = coreIndexFromDisplayStops(displayStops, stopIndex, CAMP_LOCATION.address);
     const canMoveUp =
-      (isAM && stopIndex > 0) || (!isAM && stopIndex > 1);
+      fromCore != null
+      && coreIndexFromDisplayStops(displayStops, stopIndex - 1, CAMP_LOCATION.address) != null;
     const canMoveDown =
-      (isAM && stopIndex < coreLen - 1) || (!isAM && stopIndex < coreLen);
+      fromCore != null
+      && coreIndexFromDisplayStops(displayStops, stopIndex + 1, CAMP_LOCATION.address) != null;
     return (
       <Modal visible transparent animationType="slide">
         <Pressable style={styles.modalBackdrop} onPress={() => t.setStopAction(null)}>
@@ -617,7 +620,18 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                   <View style={styles.routeCardHeader}>
                     <View style={[styles.routeDot, { backgroundColor: r.color }]} />
                     <Text style={styles.routeBus} numberOfLines={1}>{r.bus}</Text>
-                    <TouchableOpacity onPress={() => t.setEditRoute({ id: r.id, name: r.name, bus: r.bus, departure: r.departure, status: r.status, color: r.color, capacity: r.capacity })}>
+                    <TouchableOpacity onPress={() => t.setEditRoute({
+                      id: r.id,
+                      name: r.name,
+                      bus: r.bus,
+                      departure: r.departure,
+                      status: r.status,
+                      color: r.color,
+                      capacity: r.capacity,
+                      counselorName: r.counselorPickup?.name ?? '',
+                      counselorAddress: r.counselorPickup?.address ?? '',
+                      counselorStaffId: r.counselorPickup?.staffId ?? null,
+                    })}>
                       <Ionicons name="create-outline" size={16} color={theme.colors.icon} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => t.handleOptimizeRoutes(r.id)} disabled={t.optimizing}>
@@ -641,25 +655,26 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                     <ScrollView style={styles.stopList} nestedScrollEnabled>
                       {r.stops.map((stop, i) => {
                         const isCamp = isCampStop(stop);
+                        const isCounselor = isCounselorPickupStop(stop);
                         const stopLines = routeStopListLines(stop, { isCamp });
-                        if (!showBlankOpenStops && !isCamp && isBlankOpenRouteStop(stopLines)) {
+                        if (!showBlankOpenStops && !isCamp && !isCounselor && isBlankOpenRouteStop(stopLines)) {
                           return null;
                         }
                         return (
                           <TouchableOpacity
                             key={i}
                             style={styles.stopRow}
-                            onPress={() => !isCamp && t.setStopAction({ routeId: r.id, stopIndex: i, stop })}
+                            onPress={() => !isCamp && !isCounselor && t.setStopAction({ routeId: r.id, stopIndex: i, stop })}
                           >
                             <View
                               style={[
                                 styles.stopNumber,
-                                { backgroundColor: isCamp ? '#16a34a' : r.color },
+                                { backgroundColor: isCamp ? '#16a34a' : isCounselor ? '#0f766e' : r.color },
                               ]}
                             >
                               <Text style={styles.stopNumberText}>{getRouteStopLabel(r.stops, i)}</Text>
                             </View>
-                            {!isCamp && t.isStopPinnedForOptimize(r.id, stop.address) ? (
+                            {!isCamp && !isCounselor && t.isStopPinnedForOptimize(r.id, stop.address) ? (
                               <Ionicons name="pin" size={12} color={theme.colors.secondary} style={styles.stopPinIcon} />
                             ) : null}
                             <View style={styles.stopTextCol}>
@@ -1045,6 +1060,9 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                 <TextInput style={styles.input} placeholder="Bus name" value={t.editRoute.bus} onChangeText={(v) => t.setEditRoute({ ...t.editRoute!, bus: v })} />
                 <TextInput style={styles.input} placeholder="Departure" value={t.editRoute.departure} onChangeText={(v) => t.setEditRoute({ ...t.editRoute!, departure: v })} />
                 <TextInput style={styles.input} placeholder="Capacity" keyboardType="number-pad" value={String(t.editRoute.capacity)} onChangeText={(v) => t.setEditRoute({ ...t.editRoute!, capacity: parseInt(v, 10) || 0 })} />
+                <Text style={styles.modalDesc}>Bus counselor pickup — first AM, last PM. Not a camper.</Text>
+                <TextInput style={styles.input} placeholder="Counselor name" value={t.editRoute.counselorName} onChangeText={(v) => t.setEditRoute({ ...t.editRoute!, counselorName: v })} />
+                <TextInput style={styles.input} placeholder="Counselor home address" value={t.editRoute.counselorAddress} onChangeText={(v) => t.setEditRoute({ ...t.editRoute!, counselorAddress: v })} />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.colorRow}>
                   {ROUTE_COLORS.map((color) => (
                     <TouchableOpacity
@@ -1057,7 +1075,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                 <View style={styles.modalActions}>
                   <TouchableOpacity style={styles.modalBtnDanger} onPress={t.handleDeleteEditRoute}><Text style={styles.modalBtnDangerText}>Delete</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.modalBtnOutline} onPress={() => t.setEditRoute(null)}><Text style={styles.modalBtnOutlineText}>Cancel</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.modalBtnPrimary} onPress={t.handleSaveEditRoute}><Text style={styles.modalBtnPrimaryText}>Save</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.modalBtnPrimary} onPress={() => void t.handleSaveEditRoute()}><Text style={styles.modalBtnPrimaryText}>Save</Text></TouchableOpacity>
                 </View>
               </>
             )}

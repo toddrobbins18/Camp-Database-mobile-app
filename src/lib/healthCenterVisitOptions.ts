@@ -155,23 +155,43 @@ export type HealthCenterVisitExtraFields = {
   called_home?: string | null;
 };
 
+function relationRecord<T>(value: T | T[] | null | undefined): T | null {
+  if (value == null) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function relationName(
+  value: { name?: string | null } | { name?: string | null }[] | null | undefined,
+): string {
+  return relationRecord(value)?.name?.trim() || '';
+}
+
+type BunkRef = { bunk_name?: string | null; bunk_number?: number | null };
+
 type HealthVisitCamper = {
   group_name?: string | null;
-  division?: { name?: string | null } | null;
-  bunk?: { bunk_name?: string | null; bunk_number?: number | null } | null;
+  grade?: string | null;
+  division?: { name?: string | null } | { name?: string | null }[] | null;
+  leader?: { name?: string | null } | { name?: string | null }[] | null;
+  bunk?: BunkRef | BunkRef[] | null;
 };
 
-/** Group/bunk for health center visit log — roster group first, then division. */
+/** Group/bunk for health center visit log — roster group, bunk, division, then grade. */
 export function healthVisitGroupForCamper(
   camper: HealthVisitCamper,
   isDayCamp: boolean,
 ): string {
   const fromGroup = camper.group_name?.trim();
   if (fromGroup) return fromGroup;
-  const fromBunkName = camper.bunk?.bunk_name?.trim();
+  const bunk = relationRecord(camper.bunk);
+  const fromBunkName = bunk?.bunk_name?.trim();
   if (fromBunkName) return fromBunkName;
-  if (!isDayCamp && camper.bunk?.bunk_number != null) {
-    return `Bunk ${camper.bunk.bunk_number}`;
+  if (bunk?.bunk_number != null) {
+    return isDayCamp ? `Group ${bunk.bunk_number}` : `Bunk ${bunk.bunk_number}`;
   }
-  return camper.division?.name?.trim() || '';
+  return relationName(camper.division) || camper.grade?.trim() || '';
+}
+
+export function healthVisitCounselorForCamper(camper: HealthVisitCamper): string {
+  return relationName(camper.leader);
 }

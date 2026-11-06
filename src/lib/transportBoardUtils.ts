@@ -1,4 +1,5 @@
 import type { TransportRouteStop } from './transportRoster';
+import { BUS_COUNSELOR_STOP_LABEL, isCounselorPickupStop } from './transportCounselorPickup';
 
 export const ROUTE_COLORS = [
   '#3eb8a0', '#4a9eff', '#f59e0b', '#ef4444', '#a855f7',
@@ -30,6 +31,7 @@ export type TransportRouteMeta = {
   status: string;
   color: string;
   capacity: number;
+  counselorPickup?: import('./transportCounselorPickup').BusCounselorPickup | null;
 };
 
 export type TransportDisplayRoute = TransportRouteMeta & {
@@ -260,9 +262,10 @@ export function isBlankOpenRouteStop(lines: RouteStopListLines): boolean {
   return lines.isOpenStop && lines.camperNames.length === 0 && lines.subtitle === BLANK_OPEN_STOP_SUBTITLE;
 }
 
-export function countBlankOpenStopsOnRoute(stops: { name: string; address: string; camperNames?: string[] }[]): number {
+export function countBlankOpenStopsOnRoute(stops: { name: string; address: string; camperNames?: string[]; stopRole?: string | null }[]): number {
   let count = 0;
   for (const stop of stops) {
+    if (isCounselorPickupStop(stop)) continue;
     const isCamp = isCampStop(stop as TransportRouteStop);
     const lines = routeStopListLines(stop, { isCamp });
     if (isBlankOpenRouteStop(lines)) count += 1;
@@ -297,7 +300,7 @@ export function filterRouteStopsForMapDisplay<T extends TransportRouteStop>(
 ): T[] {
   if (options.showBlankOpenStops) return stops;
   return stops.filter((stop) => {
-    if (normAddr(stop.address) === normAddr(options.campAddress)) return true;
+    if (normAddr(stop.address) === normAddr(options.campAddress) || isCounselorPickupStop(stop)) return true;
     const pending =
       options.pendingNamesByAddress?.get(normAddrForPending(stop.address)) ?? [];
     const lines = routeStopListLines(stop, { isCamp: false, pendingNames: pending });
@@ -320,11 +323,20 @@ export function filterRoutesForMapDisplay<R extends { stops: TransportRouteStop[
 }
 
 export function routeStopListLines(
-  stop: { name: string; address: string; passengers?: number; camperNames?: string[] },
+  stop: { name: string; address: string; passengers?: number; camperNames?: string[]; stopRole?: string | null },
   options: { isCamp: boolean; pendingNames?: string[] },
 ): RouteStopListLines {
   if (options.isCamp) {
     return { title: stop.name, subtitle: null, isOpenStop: false, camperNames: [] };
+  }
+  if (isCounselorPickupStop(stop)) {
+    const street = shortStopStreet(stop.address);
+    return {
+      title: stop.name?.trim() || 'Bus counselor',
+      subtitle: street ? `${street} · counselor pickup` : 'Counselor pickup',
+      isOpenStop: false,
+      camperNames: [],
+    };
   }
 
   const street = shortStopStreet(stop.address);
@@ -358,14 +370,17 @@ export function routeStopListLines(
 }
 
 export function getRouteStopLabel(
-  stops: Pick<TransportRouteStop, 'address'>[],
+  stops: Pick<TransportRouteStop, 'address' | 'stopRole'>[],
   index: number,
   campAddress: string = CAMP_LOCATION.address,
 ): string {
-  if (normAddr(stops[index].address) === normAddr(campAddress)) return 'C';
+  const stop = stops[index];
+  if (normAddr(stop.address) === normAddr(campAddress)) return 'C';
+  if (isCounselorPickupStop(stop)) return BUS_COUNSELOR_STOP_LABEL;
   let num = 0;
   for (let j = 0; j <= index; j++) {
-    if (normAddr(stops[j].address) !== normAddr(campAddress)) num++;
+    if (normAddr(stops[j].address) === normAddr(campAddress) || isCounselorPickupStop(stops[j])) continue;
+    num++;
   }
   return String(num);
 }
