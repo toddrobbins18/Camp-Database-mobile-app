@@ -43,6 +43,7 @@ import { campDateTimeToIso } from '../lib/campTime';
 import {
   approveSwimLessonRequest,
   isSwimLessonBookedStatus,
+  isSwimLessonCompleted,
   rejectSwimLessonRequest,
   updateBookedSwimLesson,
   swimLessonStatusLabel,
@@ -113,6 +114,7 @@ export function SwimLessonsScreen({ navigation }: any) {
   const [selectedDays, setSelectedDays] = useState<CampWeekday[]>([]);
   const [reminderRunning, setReminderRunning] = useState(false);
   const [pageView, setPageView] = useState<'list' | 'calendar'>('list');
+  const [listTab, setListTab] = useState<'pending' | 'booked' | 'completed'>('booked');
 
   const sendThreeDayReminders = async () => {
     if (!companyId || reminderRunning) return;
@@ -292,8 +294,15 @@ export function SwimLessonsScreen({ navigation }: any) {
   };
 
   const pendingLessons = useMemo(() => lessons.filter((l) => l.status === 'pending'), [lessons]);
-  const activeLessons = useMemo(
-    () => lessons.filter((l) => isSwimLessonBookedStatus(l.status)),
+  const bookedLessons = useMemo(
+    () =>
+      lessons.filter(
+        (l) => isSwimLessonBookedStatus(l.status) && !isSwimLessonCompleted(l.status, l.scheduled_at, l.duration_minutes),
+      ),
+    [lessons],
+  );
+  const completedLessons = useMemo(
+    () => lessons.filter((l) => isSwimLessonCompleted(l.status, l.scheduled_at, l.duration_minutes)),
     [lessons],
   );
 
@@ -505,13 +514,39 @@ export function SwimLessonsScreen({ navigation }: any) {
           />
         ) : null}
 
-        {pageView === 'list' && pendingLessons.length > 0 ? (
+        {pageView === 'list' ? (
+          <View style={styles.viewToggleRow}>
+            {([
+              ['pending', 'Pending', pendingLessons.length],
+              ['booked', 'Booked', bookedLessons.length],
+              ['completed', 'Completed', completedLessons.length],
+            ] as const).map(([key, label, count]) => (
+              <TouchableOpacity
+                key={key}
+                style={[
+                  styles.viewToggleBtn,
+                  listTab === key && { backgroundColor: brand, borderColor: brand },
+                ]}
+                onPress={() => setListTab(key)}
+              >
+                <Text style={[styles.viewToggleText, listTab === key && styles.viewToggleTextActive]}>
+                  {label} ({count})
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
+
+        {pageView === 'list' && listTab === 'pending' ? (
           <View style={[styles.card, styles.pendingCard]}>
             <View style={styles.cardHeader}>
               <Ionicons name="time-outline" size={18} color="#92400E" />
               <Text style={styles.cardTitle}>Pending requests ({pendingLessons.length})</Text>
             </View>
-            {pendingLessons.map((l) => (
+            {pendingLessons.length === 0 ? (
+              <Text style={styles.emptyText}>No pending requests.</Text>
+            ) : (
+              pendingLessons.map((l) => (
               <View key={l.id} style={styles.listItem}>
                 <View style={styles.listContent}>
                   <Text style={styles.listName}>{camperName(l.camper_id)}</Text>
@@ -527,24 +562,25 @@ export function SwimLessonsScreen({ navigation }: any) {
                   </View>
                 </View>
               </View>
-            ))}
+              ))
+            )}
           </View>
         ) : null}
 
-        {pageView === 'list' ? (
+        {pageView === 'list' && listTab === 'booked' ? (
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="list" size={18} color={theme.colors.text} />
             <Text style={styles.cardTitle}>Booked lessons</Text>
           </View>
           <Text style={styles.cardDescription}>
-            Parent Pending/Approved; after parent approves, transport goes to Pending Changes for staff.
+            Upcoming approved lessons. After the lesson time, they move to Completed.
           </Text>
           <View style={styles.listContainer}>
-            {activeLessons.length === 0 ? (
-              <Text style={styles.emptyText}>No approved lessons yet.</Text>
+            {bookedLessons.length === 0 ? (
+              <Text style={styles.emptyText}>No upcoming booked lessons.</Text>
             ) : (
-              activeLessons.map(l => (
+              bookedLessons.map(l => (
                 <View key={l.id} style={styles.listItem}>
                   <View style={styles.listContent}>
                     <View style={styles.listHeaderRow}>
@@ -605,6 +641,55 @@ export function SwimLessonsScreen({ navigation }: any) {
             )}
           </View>
         </View>
+        ) : null}
+
+        {pageView === 'list' && listTab === 'completed' ? (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="checkmark-circle-outline" size={18} color={theme.colors.text} />
+              <Text style={styles.cardTitle}>Completed lessons</Text>
+            </View>
+            <Text style={styles.cardDescription}>Booked lessons whose time has already passed.</Text>
+            <View style={styles.listContainer}>
+              {completedLessons.length === 0 ? (
+                <Text style={styles.emptyText}>No completed lessons yet.</Text>
+              ) : (
+                [...completedLessons]
+                  .sort((a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime())
+                  .map((l) => (
+                    <View key={l.id} style={styles.listItem}>
+                      <View style={styles.listContent}>
+                        <View style={styles.listHeaderRow}>
+                          <Text style={styles.listName}>{camperName(l.camper_id)}</Text>
+                          <Text style={styles.listDate}>{format(new Date(l.scheduled_at), 'MMM d, h:mm a')}</Text>
+                        </View>
+                        <Text style={styles.listGroup}>{familyEmail(l.camper_id)}</Text>
+                        <View style={styles.detailsGrid}>
+                          <View style={styles.detailItem}>
+                            <Ionicons name="time-outline" size={12} color={theme.colors.textSecondary} />
+                            <Text style={styles.detailText}>{l.duration_minutes} min</Text>
+                          </View>
+                          <View style={styles.detailItem}>
+                            <Ionicons name="person-outline" size={12} color={theme.colors.textSecondary} />
+                            <Text style={styles.detailText}>{l.instructor || 'TBD'}</Text>
+                          </View>
+                          <View style={styles.detailItem}>
+                            <Ionicons name="cash-outline" size={12} color={theme.colors.textSecondary} />
+                            <Text style={styles.detailText}>${(l.cost_cents / 100).toFixed(2)}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.badgeSent}>
+                          <Text style={styles.badgeSentText}>Completed</Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity onPress={() => remove(l.id)} style={styles.deleteButton}>
+                        <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+              )}
+            </View>
+          </View>
         ) : null}
       </ScrollView>
 
