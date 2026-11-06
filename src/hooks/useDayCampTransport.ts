@@ -41,7 +41,8 @@ import {
   loadEnrollmentWeekCalendar,
   type EnrollmentWeekCalendar,
 } from '../lib/enrollmentWeekCalendar';
-import { buildBusBubbleSheetRoutes } from '../lib/transportCamperBusRun';
+import { buildBusBubbleSheetRoutes, buildPtOnlyBubbleSheetCampers } from '../lib/transportCamperBusRun';
+import { PARENT_TRANSPORT_CHANGE_SHEET_BUS } from '../lib/transportParentTransport';
 import { buildBusRosterReportPdf, buildGroupReportPdf } from '../lib/transportCampMinderReportsPdf';
 import {
   childToGroupReportCamper,
@@ -156,10 +157,10 @@ export const DAY_CAMP_REPORTS = [
   { name: 'Transport Exceptions', desc: 'Absences, swim, office changes, and manual route edits for this date' },
   { name: 'Master Change Sheet', desc: 'Approved pickup/absence/swim changes by bus for this date & run' },
   {
-    name: 'Bus Bubble Sheet',
-    desc: 'Per bus: AM & PM bubbles per camper. X = not on that run (mini day, PM-only, or exception)',
+    name: 'Bus Roster Report',
+    desc: 'Weekly AM/PM bus PDFs including PT — same as Transport Print Reports',
   },
-  { name: 'Group Bubble Sheet', desc: 'Group attendance bubbles Mon–Fri for enrolled campers' },
+  { name: 'Group Report', desc: 'Weekly Mon–Fri group PDFs — same as Transport Print Reports' },
   { name: 'Digital Attendance Log', desc: 'Export Present/Absent saved in Bus Attendance for this date & run' },
   { name: 'Bus Report', desc: 'Day camp bus assignments' },
   { name: 'Bus Route Summary', desc: 'Route overview with stops' },
@@ -2220,7 +2221,7 @@ export function useDayCampTransport() {
       await shareCsv(rows, filename);
       return;
     }
-    if (reportName === 'Bus Bubble Sheet' || reportName === 'Group Bubble Sheet') {
+    if (reportName === 'Bus Roster Report' || reportName === 'Group Report' || reportName === 'Bus Bubble Sheet' || reportName === 'Group Bubble Sheet') {
       let calendar = enrollmentWeekCalendar;
       let week = attendanceEnrollmentWeek(calendar, overrideDate, attendanceWeekOverride);
       if (week == null && companyId) {
@@ -2244,7 +2245,7 @@ export function useDayCampTransport() {
         installTextCodecPolyfill();
         const weekRange = weekRow ? formatEnrollmentWeekRange(weekRow, overrideDate) : overrideDate;
 
-        if (reportName === 'Group Bubble Sheet') {
+        if (reportName === 'Group Report' || reportName === 'Group Bubble Sheet') {
           const kids = companyId
             ? await loadTransportReportChildren(supabase, companyId, season, { enrollmentWeek: week })
             : [];
@@ -2337,6 +2338,36 @@ export function useDayCampTransport() {
           if (!built) continue;
           await shareTransportPdf(built);
           shared += 1;
+        }
+        const ptCampers = buildPtOnlyBubbleSheetCampers({
+          parentTransportCampers,
+          runDate: overrideDate,
+          enrollmentWeek: week,
+          enrollmentLookup: camperEnrollmentLookup,
+        });
+        if (ptCampers.length) {
+          const built = await buildBusRosterReportPdf({
+            companyName,
+            season,
+            weekDateRange: weekRange,
+            bus: PARENT_TRANSPORT_CHANGE_SHEET_BUS,
+            routeName: 'Parent drop-off / pick-up',
+            totalPassengers: ptCampers.length,
+            campers: reportCampersForBusRoster(
+              ptCampers,
+              kids,
+              routeMeta,
+              coreStops,
+              parentTransportCampers,
+              camperBusRunSchedules,
+              PARENT_TRANSPORT_CHANGE_SHEET_BUS,
+            ),
+            bubbleCampers: ptCampers,
+          });
+          if (built) {
+            await shareTransportPdf(built);
+            shared += 1;
+          }
         }
         if (!shared) {
           toast('No campers to print', undefined, true);
