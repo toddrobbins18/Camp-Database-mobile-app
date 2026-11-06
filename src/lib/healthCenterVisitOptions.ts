@@ -176,20 +176,17 @@ type HealthVisitCamper = {
   bunk?: BunkRef | BunkRef[] | null;
 };
 
-/** Group/bunk for health center visit log — roster group, bunk, division, then grade. */
+/** Health Center Group field: day camp group_name only — never division or grade. */
 export function healthVisitGroupForCamper(
   camper: HealthVisitCamper,
   isDayCamp: boolean,
 ): string {
-  const fromGroup = camper.group_name?.trim();
-  if (fromGroup) return fromGroup;
+  if (isDayCamp) return camper.group_name?.trim() || '';
   const bunk = relationRecord(camper.bunk);
-  const fromBunkName = bunk?.bunk_name?.trim();
-  if (fromBunkName) return fromBunkName;
-  if (bunk?.bunk_number != null) {
-    return isDayCamp ? `Group ${bunk.bunk_number}` : `Bunk ${bunk.bunk_number}`;
-  }
-  return relationName(camper.division) || camper.grade?.trim() || '';
+  const fromBunk = bunk?.bunk_name?.trim();
+  if (fromBunk) return fromBunk;
+  if (bunk?.bunk_number != null) return `Bunk ${bunk.bunk_number}`;
+  return camper.group_name?.trim() || '';
 }
 
 export function healthVisitCounselorForCamper(camper: HealthVisitCamper): string {
