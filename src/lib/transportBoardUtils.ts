@@ -50,10 +50,16 @@ export const haversineMiles = (lat1: number, lng1: number, lat2: number, lng2: n
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+const ROAD_DISTANCE_FACTOR = 1.4;
+const SHORT_LEG_MPH = 18;
+const LONG_LEG_MPH = 14;
+const LONG_LEG_ROAD_MILES = 3;
+
 const drivingLegMinutes = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
-  const miles = haversineMiles(lat1, lng1, lat2, lng2) * 1.4;
+  const miles = haversineMiles(lat1, lng1, lat2, lng2) * ROAD_DISTANCE_FACTOR;
   if (miles <= 0.001) return 0;
-  return (miles / 25) * 60;
+  const mph = miles >= LONG_LEG_ROAD_MILES ? LONG_LEG_MPH : SHORT_LEG_MPH;
+  return (miles / mph) * 60;
 };
 
 /** Parse route departure (e.g. "7:00 AM") to minutes since midnight. */
