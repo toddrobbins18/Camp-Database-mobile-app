@@ -458,20 +458,7 @@ export function useMessagesRealtimeSync(userId: string | null) {
 
                     if (payload.eventType === 'INSERT' && newRow?.id) {
                         void (async () => {
-                            if (
-                                newRow.thread_kind === 'division_channel' &&
-                                newRow.parent_message_id &&
-                                newRow.division_id
-                            ) {
-                                const { data: allowed } = await supabase.rpc(
-                                    'staff_can_access_division_messaging',
-                                    {
-                                        _user_id: userId,
-                                        _division_id: newRow.division_id,
-                                    },
-                                );
-                                if (!allowed) return;
-                            }
+                            if (newRow.thread_kind === 'division_channel') return;
 
                             let plan = planInboxPushForInsert(newRow, userId);
                             if (!plan) return;

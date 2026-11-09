@@ -18,6 +18,7 @@
       "buildNumber": "42",
       "supportsTablet": true,
       "infoPlist": {
+        "NSSupportsLiveActivities": true,
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "The Nest uses the camera to take photos and videos for camp messages.",
         "NSMicrophoneUsageDescription": "The Nest uses the microphone for voice and video messages.",
@@ -38,6 +39,8 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/withIosMinDeployment",
+      "expo-live-activity",
       "@react-native-community/datetimepicker",
       "expo-secure-store",
       "expo-notifications",

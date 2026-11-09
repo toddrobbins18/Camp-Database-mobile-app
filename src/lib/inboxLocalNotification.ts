@@ -41,7 +41,7 @@ export type InboxPushData = {
     messageId?: string;
     threadId?: string;
     groupId?: string;
-    activeView?: 'inbox' | 'sent' | 'families' | 'channels' | 'groups' | 'parent_portal';
+    activeView?: 'inbox' | 'sent' | 'families' | 'groups' | 'parent_portal';
     channelRootId?: string;
     channelName?: string;
 };

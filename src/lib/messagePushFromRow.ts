@@ -23,7 +23,7 @@ export type MessagePushPlan = {
   data: InboxPushData;
 };
 
-/** Local push when a new messages row is relevant to this user (staff inbox, families, channels). */
+/** Local push when a new messages row is relevant to this user (staff inbox, families). */
 export function planInboxPushForInsert(
   row: MessageInsertRow,
   userId: string,
@@ -38,19 +38,7 @@ export function planInboxPushForInsert(
     row.media_file_name,
   );
 
-  if (row.thread_kind === 'division_channel' && row.parent_message_id) {
-    const rootId = String(row.parent_message_id);
-    return {
-      title: 'Division channel',
-      body: preview,
-      data: {
-        activeView: 'channels',
-        channelRootId: rootId,
-        threadId: rootId,
-        messageId: String(row.id),
-      },
-    };
-  }
+  if (row.thread_kind === 'division_channel') return null;
 
   if (row.thread_kind === 'parent_division_leader') {
     const threadId = threadIdFromMessageRow(row);

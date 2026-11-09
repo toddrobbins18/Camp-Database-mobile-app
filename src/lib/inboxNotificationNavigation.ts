@@ -6,7 +6,7 @@ export type InboxNotificationData = {
   messageId?: string;
   threadId?: string;
   groupId?: string;
-  activeView?: 'inbox' | 'sent' | 'families' | 'channels' | 'groups' | 'parent_portal';
+  activeView?: 'inbox' | 'sent' | 'families' | 'groups' | 'parent_portal';
   channelRootId?: string;
   channelName?: string;
 };
@@ -43,18 +43,6 @@ export function navigateFromInboxNotification(
         moduleId: 'parent-portal',
         initialTab: 'messages',
         openMessageThreadRootId: data.threadId,
-      },
-    });
-    return;
-  }
-
-  if (data.activeView === 'channels' && data.channelRootId) {
-    navigationRef.navigate('MainApp', {
-      screen: 'Messages',
-      params: {
-        activeView: 'channels',
-        openChannelRootId: String(data.channelRootId),
-        channelName: data.channelName,
       },
     });
     return;

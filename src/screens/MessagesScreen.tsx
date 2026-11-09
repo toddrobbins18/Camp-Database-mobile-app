@@ -50,14 +50,6 @@ import {
     listStaffParentPortalInbox,
     type StaffParentPortalThreadRow,
 } from '../lib/parentPortalMessaging';
-import {
-    listStaffDivisionChannels,
-    countStaffDivisionChannelUnread,
-    markDivisionChannelRead,
-    openDivisionChannelRoot,
-    type DivisionChannelRow,
-} from '../lib/divisionChannelMessaging';
-import { DivisionChannelChatPanel } from '../components/messages/DivisionChannelChatPanel';
 import { StaffAnnouncementsPanel } from '../components/messages/StaffAnnouncementsPanel';
 import { StaffAudienceMessagesPanel } from '../components/messages/StaffAudienceMessagesPanel';
 import { isNestSandboxCompany } from '../constants/camps';
@@ -145,10 +137,6 @@ export const MessagesScreen = ({ navigation, route }: any) => {
     const [openGroupTitle, setOpenGroupTitle] = useState('');
     const [familyThreads, setFamilyThreads] = useState<StaffParentPortalThreadRow[]>([]);
     const [familyThreadsLoading, setFamilyThreadsLoading] = useState(false);
-    const [divisionChannels, setDivisionChannels] = useState<DivisionChannelRow[]>([]);
-    const [divisionChannelsLoading, setDivisionChannelsLoading] = useState(false);
-    const [openChannel, setOpenChannel] = useState<{ rootId: string; name: string } | null>(null);
-    const [channelsUnreadCount, setChannelsUnreadCount] = useState(0);
 
     const { companyId, companySlug, profile, season } = useCompany();
     const messageMediaEnabled = messageMediaEnabledForCamp(companySlug);
@@ -268,14 +256,12 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         setShowComposeModal(false);
         setOpenThreadId(null);
         setOpenGroupId(null);
-        setOpenChannel(null);
     };
     const handleSent = () => {
         setActiveView('sent');
         setShowComposeModal(false);
         setOpenThreadId(null);
         setOpenGroupId(null);
-        setOpenChannel(null);
         queryClient.invalidateQueries({ queryKey: ['messages_sent'] });
     };
     const handleGroups = () => {
@@ -283,14 +269,12 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         setShowComposeModal(false);
         setOpenThreadId(null);
         setOpenGroupId(null);
-        setOpenChannel(null);
     };
     const handleFamilies = () => {
         setActiveView('families');
         setShowComposeModal(false);
         setOpenThreadId(null);
         setOpenGroupId(null);
-        setOpenChannel(null);
         if (companyId) {
             setFamilyThreadsLoading(true);
             void listStaffParentPortalInbox(supabase, companyId).then(({ rows, error }) => {
@@ -301,41 +285,16 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         }
     };
 
-    const refreshDivisionChannelsList = useCallback(async () => {
-        if (!companyId) return;
-        setDivisionChannelsLoading(true);
-        const { rows, error } = await listStaffDivisionChannels(supabase, companyId);
-        if (error) Alert.alert('Channels', error);
-        setDivisionChannels(rows);
-        setChannelsUnreadCount(rows.reduce((n, r) => n + (r.unread_for_staff ?? 0), 0));
-        setDivisionChannelsLoading(false);
-    }, [companyId]);
-
     useEffect(() => {
         const params = route?.params as
             | {
                   openThreadId?: string;
                   openGroupId?: string;
-                  openChannelRootId?: string;
-                  channelName?: string;
                   activeView?: string;
                   groupName?: string;
               }
             | undefined;
         if (!params) return;
-        if (params.openChannelRootId && params.activeView === 'channels') {
-            setActiveView('channels');
-            setOpenChannel({
-                rootId: params.openChannelRootId,
-                name: params.channelName ?? 'Division',
-            });
-            void refreshDivisionChannelsList();
-            navigation.setParams?.({
-                openChannelRootId: undefined,
-                channelName: undefined,
-                activeView: undefined,
-            });
-        }
         if (params.openThreadId) {
             const view = params.activeView;
             setActiveView(
@@ -357,47 +316,13 @@ export const MessagesScreen = ({ navigation, route }: any) => {
             navigation.setParams?.({ openGroupId: undefined, groupName: undefined });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mutate is stable enough; omit markReadMutation object identity
-    }, [route?.params, currentUserId, navigation, refreshDivisionChannelsList]);
-
-    const refreshChannelsUnreadOnly = useCallback(async () => {
-        if (!companyId) return;
-        const { total } = await countStaffDivisionChannelUnread(supabase, companyId);
-        setChannelsUnreadCount(total);
-    }, [companyId]);
-
-    useEffect(() => {
-        void refreshChannelsUnreadOnly();
-    }, [refreshChannelsUnreadOnly]);
-
-    const handleChannels = () => {
-        setActiveView('channels');
-        setShowComposeModal(false);
-        setOpenThreadId(null);
-        setOpenGroupId(null);
-        setOpenChannel(null);
-        void refreshDivisionChannelsList();
-    };
+    }, [route?.params, currentUserId, navigation]);
 
     const handleAnnouncements = () => {
         setActiveView('announcements');
         setShowComposeModal(false);
         setOpenThreadId(null);
         setOpenGroupId(null);
-        setOpenChannel(null);
-    };
-
-    const openDivisionChannel = async (row: DivisionChannelRow) => {
-        let rootId = row.thread_root_id;
-        if (!rootId) {
-            const created = await openDivisionChannelRoot(supabase, row.division_id);
-            if (created.error || !created.rootId) {
-                Alert.alert('Channels', created.error ?? 'Could not open channel');
-                return;
-            }
-            rootId = created.rootId;
-        }
-        setOpenChannel({ rootId, name: row.division_name });
-        void markDivisionChannelRead(supabase, rootId).then(() => refreshDivisionChannelsList());
     };
 
     const openGroup = (group: { id: string; name: string }) => {
@@ -751,8 +676,7 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         !!openThreadId &&
         !!detailMessage;
     const showingGroup = activeView === 'groups' && !!openGroupId;
-    const showingChannel = activeView === 'channels' && !!openChannel;
-    const showMessagesChrome = !showingThread && !showingGroup && !showingChannel;
+    const showMessagesChrome = !showingThread && !showingGroup;
 
     const activeFamilyRow = familyThreads.find((f) => f.thread_root_id === openThreadId);
     const threadPartyLabel =
@@ -828,19 +752,6 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                 </Text>
             </TouchableOpacity>
             <TouchableOpacity
-                style={[styles.segmentTab, activeView === 'channels' && styles.segmentTabActive]}
-                onPress={handleChannels}
-            >
-                <Ionicons
-                    name="grid-outline"
-                    size={16}
-                    color={activeView === 'channels' ? '#fff' : theme.colors.textSecondary}
-                />
-                <Text style={[styles.segmentTabText, activeView === 'channels' && styles.segmentTabTextActive]}>
-                    Channels{channelsUnreadCount > 0 ? ` · ${channelsUnreadCount}` : ''}
-                </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
                 style={[styles.segmentTab, activeView === 'announcements' && styles.segmentTabActive]}
                 onPress={handleAnnouncements}
             >
@@ -908,21 +819,10 @@ export const MessagesScreen = ({ navigation, route }: any) => {
 
     return (
         <SafeAreaView
-            style={[styles.container, (showingThread || showingChannel) && styles.containerThread]}
-            edges={showingThread || showingChannel ? ['left', 'right'] : undefined}
+            style={[styles.container, showingThread && styles.containerThread]}
+            edges={showingThread ? ['left', 'right'] : undefined}
         >
-            {showingChannel && openChannel && companyId ? (
-                <View style={styles.flex1}>
-                    <DivisionChannelChatPanel
-                        rootId={openChannel.rootId}
-                        divisionName={openChannel.name}
-                        companyId={companyId}
-                        companySlug={companySlug}
-                        onBack={() => setOpenChannel(null)}
-                        onMarkedRead={() => void refreshDivisionChannelsList()}
-                    />
-                </View>
-            ) : showingThread && detailMessage ? (
+            {showingThread && detailMessage ? (
                 <View style={styles.flex1}>
                 <DirectMessageThreadView
                     threadId={detailMessage.id}
@@ -1015,54 +915,6 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                 {activeView === 'bus_messages' && companyId ? (
                     <StaffAudienceMessagesPanel companyId={companyId} season={season} kind="bus" />
                 ) : null}
-
-                {activeView === 'channels' && !showingChannel && (
-                    <StyledCard style={styles.messagesListCard}>
-                        <View style={styles.listCardHeader}>
-                            <Text style={styles.listCardTitle}>Division channels</Text>
-                            <Text style={styles.messageCountCompact}>{divisionChannels.length} channels</Text>
-                        </View>
-                        {divisionChannelsLoading ? (
-                            <ActivityIndicator size="large" color={theme.colors.secondary} style={{ marginTop: 24 }} />
-                        ) : divisionChannels.length === 0 ? (
-                            <View style={styles.emptyStateCompact}>
-                                <Ionicons name="grid-outline" size={40} color={theme.colors.icon} />
-                                <Text style={styles.emptyText}>No division channels for your access yet.</Text>
-                            </View>
-                        ) : (
-                            <View style={styles.inboxList}>
-                                {divisionChannels.map((row) => (
-                                    <TouchableOpacity
-                                        key={row.division_id}
-                                        activeOpacity={0.7}
-                                        style={styles.inboxRow}
-                                        onPress={() => void openDivisionChannel(row)}
-                                    >
-                                        <View style={[styles.avatarCircle, styles.groupAvatar]}>
-                                            <Ionicons name="grid" size={20} color={theme.colors.primary} />
-                                        </View>
-                                        <View style={styles.inboxRowBody}>
-                                            <View style={styles.inboxRowTop}>
-                                                <Text style={styles.inboxRowParty} numberOfLines={1}>
-                                                    {row.division_name}
-                                                </Text>
-                                                {(row.unread_for_staff ?? 0) > 0 ? (
-                                                    <Text style={styles.inboxRowDate}>{row.unread_for_staff} new</Text>
-                                                ) : null}
-                                            </View>
-                                            {row.latest_preview ? (
-                                                <Text style={styles.inboxRowSnippet} numberOfLines={2}>
-                                                    {messageContentPreview(row.latest_preview, 80)}
-                                                </Text>
-                                            ) : null}
-                                        </View>
-                                        <Ionicons name="chevron-forward" size={18} color={theme.colors.icon} />
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        )}
-                    </StyledCard>
-                )}
 
                 {activeView === 'families' && !showingThread && (
                     <StyledCard style={styles.messagesListCard}>

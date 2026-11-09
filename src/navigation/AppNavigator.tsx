@@ -177,6 +177,7 @@ import { getMenuDrawerThemeFromCompany } from '../theme/menuDrawerTheme';
 import { isScreenAllowedForCompany } from '../lib/campScreenAccess';
 import { getActiveRoute } from '../lib/navigationRouteUtils';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DivisionLeaderLiveActivityHost } from '../components/DivisionLeaderLiveActivityHost';
 
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
@@ -890,7 +891,7 @@ const MainAppNavigator = () => {
     useMessagesRealtimeSync(realtimeUserId);
     useParentAnnouncementNotifications(realtimeUserId);
 
-    return (
+    const drawer = (
         <Drawer.Navigator
             drawerContent={(props) => <CustomDrawerContent {...props} />}
             screenOptions={{
@@ -940,6 +941,13 @@ const MainAppNavigator = () => {
             <Drawer.Screen name="ElectiveSignUp" component={ElectiveSignUpScreen} />
             <Drawer.Screen name="DayCampModule" component={DayCampModuleRouter} />
         </Drawer.Navigator>
+    );
+
+    return (
+        <View style={{ flex: 1 }}>
+            <DivisionLeaderLiveActivityHost />
+            {drawer}
+        </View>
     );
 };
 
