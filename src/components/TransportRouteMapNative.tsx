@@ -53,6 +53,7 @@ export type TransportRouteMapNativeProps = {
 function routeCoordinates(route: MapRoute): { latitude: number; longitude: number }[] {
   const coords: { latitude: number; longitude: number }[] = [];
   for (const stop of route.stops) {
+    if (isCampStop(stop)) continue;
     const next = { latitude: stop.lat, longitude: stop.lng };
     const prev = coords[coords.length - 1];
     if (!prev || Math.abs(prev.latitude - next.latitude) > 0.000001 || Math.abs(prev.longitude - next.longitude) > 0.000001) {
