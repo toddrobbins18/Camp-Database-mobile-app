@@ -55,7 +55,11 @@ const SHORT_LEG_MPH = 18;
 const LONG_LEG_MPH = 14;
 const LONG_LEG_ROAD_MILES = 3;
 
+const isValidCoord = (lat: number, lng: number) =>
+  Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+
 const drivingLegMinutes = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+  if (!isValidCoord(lat1, lng1) || !isValidCoord(lat2, lng2)) return 0;
   const miles = haversineMiles(lat1, lng1, lat2, lng2) * ROAD_DISTANCE_FACTOR;
   if (miles <= 0.001) return 0;
   const mph = miles >= LONG_LEG_ROAD_MILES ? LONG_LEG_MPH : SHORT_LEG_MPH;
@@ -112,17 +116,21 @@ const assignDrivingTimes = (
   const useClock = startMinutes != null;
   let cumulativeMin = 0;
 
+  let lastValid = stops[0];
   return stops.map((stop, i) => {
     if (i > 0) {
-      const prev = stops[i - 1];
+      const prev = lastValid ?? stops[i - 1];
       cumulativeMin += drivingLegMinutes(prev.lat, prev.lng, stop.lat, stop.lng);
+      const dwellFrom = stops[i - 1];
       if (
         dwellMinutesPerStop > 0 &&
-        !isCampStopAddress(prev.address) &&
-        !isCounselorPickupStop(prev)
+        dwellFrom &&
+        !isCampStopAddress(dwellFrom.address) &&
+        !isCounselorPickupStop(dwellFrom)
       ) {
         cumulativeMin += dwellMinutesPerStop;
       }
+      if (isValidCoord(stop.lat, stop.lng)) lastValid = stop;
     }
     if (i === 0) {
       return {
