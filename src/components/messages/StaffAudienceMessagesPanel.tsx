@@ -3,14 +3,18 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert 
 import { theme } from '../../theme/theme';
 import { supabase } from '../../lib/supabase';
 import {
+  audienceDivisionNames,
+  audienceGroupNames,
   audienceWeekChoices,
   campersForBus,
+  campersForDivision,
   campersForGroup,
   loadAudienceCampers,
   loadBusRosters,
   publishAudienceMessage,
   type AudienceCamper,
   type AudienceKind,
+  type AudienceRosterKind,
   type BusRoster,
 } from '../../lib/audienceMessaging';
 import { defaultEnrollmentWeekForDate, loadEnrollmentWeekCalendar } from '../../lib/enrollmentWeekCalendar';
@@ -20,9 +24,10 @@ type Props = { companyId: string; season: string; kind: AudienceKind };
 export function StaffAudienceMessagesPanel({ companyId, season, kind }: Props) {
   const [campers, setCampers] = useState<AudienceCamper[]>([]);
   const [buses, setBuses] = useState<BusRoster[]>([]);
+  const [rosterKind, setRosterKind] = useState<AudienceRosterKind>('group');
   const [target, setTarget] = useState('');
   const [weeks, setWeeks] = useState<number[]>([1]);
-  const [everyone, setEveryone] = useState(false);
+  const [everyone, setEveryone] = useState(true);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
@@ -51,33 +56,31 @@ export function StaffAudienceMessagesPanel({ companyId, season, kind }: Props) {
 
   useEffect(() => {
     setTarget('');
-  }, [kind]);
+    setEveryone(true);
+  }, [kind, rosterKind]);
 
-  const groups = useMemo(() => {
-    const names = new Set<string>();
-    for (const camper of campers) {
-      if (camper.groupName && camper.groupName !== 'Unassigned') names.add(camper.groupName);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [campers]);
+  const groups = useMemo(() => audienceGroupNames(campers), [campers]);
+  const divisions = useMemo(() => audienceDivisionNames(campers), [campers]);
+  const rosterNames = rosterKind === 'division' ? divisions : groups;
 
   const bus = buses.find((row) => row.id === target);
   const recipients = useMemo(() => {
     if (!target) return [];
-    if (kind === 'group') return campersForGroup(campers, target, weeks, everyone);
-    return campersForBus(campers, bus?.camperNames ?? [], weeks, everyone);
-  }, [bus, campers, everyone, kind, target, weeks]);
+    if (kind === 'bus') return campersForBus(campers, bus?.camperNames ?? [], weeks, everyone);
+    if (rosterKind === 'division') return campersForDivision(campers, target, weeks, everyone);
+    return campersForGroup(campers, target, weeks, everyone);
+  }, [bus, campers, everyone, kind, rosterKind, target, weeks]);
 
   const send = async () => {
     if (!target || !body.trim() || recipients.length === 0 || sending) return;
     setSending(true);
-    const label = kind === 'group' ? target : bus?.label ?? 'Bus';
+    const label = kind === 'bus' ? bus?.label ?? 'Bus' : target;
     const { error } = await publishAudienceMessage(supabase, {
       companyId,
       season,
       title: title.trim() || `${label} update`,
       body: body.trim(),
-      kind,
+      kind: kind === 'bus' ? 'bus' : 'group',
       label,
       weeks,
       everyone,
@@ -92,11 +95,26 @@ export function StaffAudienceMessagesPanel({ companyId, season, kind }: Props) {
     setBody('');
   };
 
-  const choices = kind === 'group' ? groups.map((name) => ({ id: name, label: name })) : buses.map((row) => ({ id: row.id, label: row.label }));
+  const choices =
+    kind === 'bus'
+      ? buses.map((row) => ({ id: row.id, label: row.label }))
+      : rosterNames.map((name) => ({ id: name, label: name }));
 
   return (
     <ScrollView contentContainerStyle={styles.wrap}>
-      <Text style={styles.meta}>{kind === 'group' ? 'Group messages' : 'Bus messages'}</Text>
+      <Text style={styles.meta}>
+        {kind === 'bus' ? 'Bus messages' : rosterKind === 'division' ? 'Division messages' : 'Group messages'}
+      </Text>
+      {kind === 'group' ? (
+        <View style={styles.row}>
+          <TouchableOpacity style={[styles.chip, rosterKind === 'group' && styles.chipOn]} onPress={() => setRosterKind('group')}>
+            <Text style={styles.chipText}>Groups</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.chip, rosterKind === 'division' && styles.chipOn]} onPress={() => setRosterKind('division')}>
+            <Text style={styles.chipText}>Divisions</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chips}>
         {choices.map((choice) => (
           <TouchableOpacity key={choice.id} style={[styles.chip, target === choice.id && styles.chipOn]} onPress={() => setTarget(choice.id)}>
@@ -104,8 +122,21 @@ export function StaffAudienceMessagesPanel({ companyId, season, kind }: Props) {
           </TouchableOpacity>
         ))}
       </ScrollView>
+      {kind === 'group' && choices.length === 0 ? (
+        <Text style={styles.meta}>
+          {rosterKind === 'division' ? 'No divisions assigned on campers yet.' : 'No groups assigned on campers yet.'}
+        </Text>
+      ) : null}
       <TouchableOpacity style={[styles.mode, everyone && styles.modeOn]} onPress={() => setEveryone((value) => !value)}>
-        <Text style={styles.modeText}>{everyone ? 'Everyone included' : kind === 'group' ? 'Message everyone in this group' : 'Message everyone on this bus'}</Text>
+        <Text style={styles.modeText}>
+          {everyone
+            ? 'Everyone included'
+            : kind === 'bus'
+              ? 'Message everyone on this bus'
+              : rosterKind === 'division'
+                ? 'Message everyone in this division'
+                : 'Message everyone in this group'}
+        </Text>
       </TouchableOpacity>
       <View style={styles.row}>
         {audienceWeekChoices().map((week) => {

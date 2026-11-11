@@ -1,13 +1,14 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { camperEnrolledInWeek } from "./enrollmentWeekCalendar";
-import { DAY_CAMP_ENROLLMENT_WEEKS } from "./enrolledWeeks";
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { DAY_CAMP_ENROLLMENT_WEEKS, resolveEnrolledWeeks } from './enrolledWeeks';
 
-export type AudienceKind = "group" | "bus";
+export type AudienceKind = 'group' | 'bus';
+export type AudienceRosterKind = 'group' | 'division';
 
 export type AudienceCamper = {
   id: string;
   name: string;
   groupName: string;
+  divisionName: string;
   enrolledWeeks: number[] | null;
   session: string | null;
 };
@@ -19,7 +20,19 @@ export type BusRoster = {
 };
 
 export function normalizeAudienceName(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+export function matchesAudienceWeeks(
+  camper: Pick<AudienceCamper, 'enrolledWeeks' | 'session'>,
+  weeks: number[],
+  everyone: boolean,
+): boolean {
+  if (everyone) return true;
+  if (weeks.length === 0) return false;
+  const enrolled = resolveEnrolledWeeks(camper.enrolledWeeks, camper.session);
+  if (enrolled.length === 0) return true;
+  return weeks.some((week) => enrolled.includes(week));
 }
 
 export function campersForGroup(
@@ -31,9 +44,20 @@ export function campersForGroup(
   const key = normalizeAudienceName(groupName);
   return campers.filter((camper) => {
     if (normalizeAudienceName(camper.groupName) !== key || !key) return false;
-    if (everyone) return true;
-    if (weeks.length === 0) return false;
-    return weeks.some((week) => camperEnrolledInWeek(camper.enrolledWeeks, camper.session, week));
+    return matchesAudienceWeeks(camper, weeks, everyone);
+  });
+}
+
+export function campersForDivision(
+  campers: AudienceCamper[],
+  divisionName: string,
+  weeks: number[],
+  everyone: boolean,
+): AudienceCamper[] {
+  const key = normalizeAudienceName(divisionName);
+  return campers.filter((camper) => {
+    if (normalizeAudienceName(camper.divisionName) !== key || !key) return false;
+    return matchesAudienceWeeks(camper, weeks, everyone);
   });
 }
 
@@ -46,10 +70,24 @@ export function campersForBus(
   const onBus = new Set(busNames.map(normalizeAudienceName).filter(Boolean));
   return campers.filter((camper) => {
     if (!onBus.has(normalizeAudienceName(camper.name))) return false;
-    if (everyone) return true;
-    if (weeks.length === 0) return false;
-    return weeks.some((week) => camperEnrolledInWeek(camper.enrolledWeeks, camper.session, week));
+    return matchesAudienceWeeks(camper, weeks, everyone);
   });
+}
+
+export function audienceDivisionNames(campers: AudienceCamper[]): string[] {
+  const names = new Set<string>();
+  for (const camper of campers) {
+    if (camper.divisionName) names.add(camper.divisionName);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+export function audienceGroupNames(campers: AudienceCamper[]): string[] {
+  const names = new Set<string>();
+  for (const camper of campers) {
+    if (camper.groupName && camper.groupName !== 'Unassigned') names.add(camper.groupName);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
 }
 
 export function audienceWeekChoices(): number[] {
@@ -60,7 +98,7 @@ type BoardStop = { name?: string; camperNames?: string[] };
 type BoardMeta = { id?: number; name?: string; bus?: string };
 
 export function busRostersFromBoard(data: unknown): BusRoster[] {
-  if (!data || typeof data !== "object") return [];
+  if (!data || typeof data !== 'object') return [];
   const board = data as { coreStops?: Record<string, BoardStop[]>; routeMeta?: BoardMeta[] };
   const meta = new Map<number, BoardMeta>();
   for (const row of board.routeMeta ?? []) {
@@ -81,7 +119,7 @@ export function busRostersFromBoard(data: unknown): BusRoster[] {
     if (names.size === 0) continue;
     const bus = route?.bus?.trim();
     const routeName = route?.name?.trim();
-    const label = [bus ? `Bus ${bus}` : `Route ${id}`, routeName].filter(Boolean).join(" · ");
+    const label = [bus ? `Bus ${bus}` : `Route ${id}`, routeName].filter(Boolean).join(' · ');
     rosters.push({ id: String(id), label, camperNames: [...names].sort((a, b) => a.localeCompare(b)) });
   }
   return rosters.sort((a, b) => a.label.localeCompare(b.label));
@@ -93,20 +131,25 @@ export async function loadAudienceCampers(
   season: string,
 ): Promise<AudienceCamper[]> {
   const { data, error } = await supabase
-    .from("children")
-    .select("id, name, group_name, enrolled_weeks, session, status")
-    .eq("company_id", companyId)
-    .eq("season", season);
+    .from('children')
+    .select('id, name, group_name, enrolled_weeks, session, status, division_id, divisions(name)')
+    .eq('company_id', companyId)
+    .eq('season', season);
   if (error) throw new Error(error.message);
   return (data ?? [])
-    .filter((row) => String(row.status ?? "active") !== "inactive")
-    .map((row) => ({
-      id: row.id,
-      name: row.name,
-      groupName: row.group_name?.trim() || "",
-      enrolledWeeks: (row.enrolled_weeks as number[] | null) ?? null,
-      session: row.session,
-    }));
+    .filter((row) => String(row.status ?? 'active') !== 'inactive')
+    .map((row) => {
+      const division = row.divisions as { name?: string | null } | { name?: string | null }[] | null;
+      const divisionRow = Array.isArray(division) ? division[0] : division;
+      return {
+        id: row.id,
+        name: row.name,
+        groupName: row.group_name?.trim() || '',
+        divisionName: divisionRow?.name?.trim() || '',
+        enrolledWeeks: (row.enrolled_weeks as number[] | null) ?? null,
+        session: row.session,
+      };
+    });
 }
 
 export async function loadBusRosters(
@@ -115,10 +158,10 @@ export async function loadBusRosters(
   season: string,
 ): Promise<BusRoster[]> {
   const { data, error } = await supabase
-    .from("transport_boards")
-    .select("data")
-    .eq("company_id", companyId)
-    .eq("season", season)
+    .from('transport_boards')
+    .select('data')
+    .eq('company_id', companyId)
+    .eq('season', season)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return busRostersFromBoard(data?.data);
@@ -138,7 +181,7 @@ export async function publishAudienceMessage(
     childIds: string[];
   },
 ): Promise<{ id: string | null; error: string | null }> {
-  const { data, error } = await supabase.rpc("publish_parent_audience_message", {
+  const { data, error } = await supabase.rpc('publish_parent_audience_message', {
     _company_id: input.companyId,
     _season: input.season,
     _title: input.title,

@@ -87,6 +87,18 @@ function nameInitial(label: string): string {
 
 const EMPTY_THREAD_REPLIES: Awaited<ReturnType<typeof fetchMessageThread>> = [];
 
+const TAG_LABELS: Record<string, string> = {
+    nurse: 'Nurses',
+    transportation: 'Transportation',
+    food_service: 'Food Service',
+    specialist: 'Specialists',
+    division_leader: 'Division Leaders',
+    director: 'Directors',
+    general_staff: 'General Staff',
+    admin_staff: 'Admin Staff',
+    wsi: 'WSI',
+};
+
 function inboxThreadListSnippet(msg: {
     latest_reply_content?: string | null;
     latest_reply_sender_name?: string | null;
@@ -119,6 +131,7 @@ export const MessagesScreen = ({ navigation, route }: any) => {
     const [message, setMessage] = useState('');
     const [searchUsers, setSearchUsers] = useState('');
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+    const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [showRecipientPreview, setShowRecipientPreview] = useState(false);
     const [openThreadId, setOpenThreadId] = useState<string | null>(null);
     const [threadRootFallback, setThreadRootFallback] = useState<any>(null);
@@ -247,6 +260,45 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         },
         enabled: !!companyId && !!currentUserId,
     });
+
+    const { data: userTags = [] } = useQuery({
+        queryKey: ['user_tags_for_messages', companyId],
+        queryFn: async () => {
+            if (!companyId) return [];
+            const { data, error } = await supabase
+                .from('user_tags')
+                .select('user_id, tag')
+                .eq('company_id', companyId);
+            if (error) throw error;
+            return (data ?? []) as { user_id: string; tag: string }[];
+        },
+        enabled: !!companyId && !!currentUserId,
+    });
+
+    const tagGroups = useMemo(() => {
+        const counts: Record<string, number> = {};
+        for (const row of userTags) {
+            if (!row.tag) continue;
+            counts[row.tag] = (counts[row.tag] || 0) + 1;
+        }
+        return Object.entries(counts)
+            .map(([tag, count]) => ({ tag, count, label: TAG_LABELS[tag] || tag }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    }, [userTags]);
+
+    const taggedRecipientIds = useMemo(() => {
+        const ids = new Set<string>();
+        for (const row of userTags) {
+            if (selectedTags.includes(row.tag)) ids.add(row.user_id);
+        }
+        return ids;
+    }, [selectedTags, userTags]);
+
+    const composeRecipientCount = useMemo(() => {
+        const ids = new Set(selectedUsers);
+        for (const id of taggedRecipientIds) ids.add(id);
+        return ids.size;
+    }, [selectedUsers, taggedRecipientIds]);
     const messageCount = messages.length;
     const sentCount = sentMessages.length;
     const unreadCount = messages.filter((m: any) => !m.read && m.recipient_id === currentUserId).length;
@@ -343,6 +395,7 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         setSubject('');
         setMessage('');
         setSelectedUsers([]);
+        setSelectedTags([]);
         setSearchUsers('');
         setDeliveryMethod('in-app');
         setPendingMedia(null);
@@ -385,6 +438,11 @@ export const MessagesScreen = ({ navigation, route }: any) => {
         setSubject('');
         setMessage('');
         setSelectedUsers([]);
+        setSelectedTags([]);
+    };
+
+    const toggleTagSelection = (tag: string) => {
+        setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((value) => value !== tag) : [...prev, tag]));
     };
 
     const toggleUserSelection = (userId: string) => {
@@ -1288,8 +1346,29 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                                 <Ionicons name="people-outline" size={20} color={theme.colors.text} />
                                 <Text style={styles.sectionTitle}>Tag Groups</Text>
                             </View>
-                            <Text style={styles.cardDescription}>Select groups by tag</Text>
-                            <Text style={styles.noTagsText}>No tags found</Text>
+                            <Text style={styles.cardDescription}>Message whole groups like Division Leaders, Nurses, or Transportation</Text>
+                            {tagGroups.length === 0 ? (
+                                <Text style={styles.noTagsText}>No tags found</Text>
+                            ) : (
+                                tagGroups.map((group) => {
+                                    const on = selectedTags.includes(group.tag);
+                                    return (
+                                        <TouchableOpacity
+                                            key={group.tag}
+                                            style={styles.userItem}
+                                            onPress={() => toggleTagSelection(group.tag)}
+                                        >
+                                            <View style={[styles.radio, on && styles.radioSelected]}>
+                                                {on ? <View style={styles.radioInner} /> : null}
+                                            </View>
+                                            <View style={styles.userInfo}>
+                                                <Text style={styles.userName}>{group.label}</Text>
+                                                <Text style={styles.userEmail}>{group.count} staff</Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+                                })
+                            )}
                         </StyledCard>
 
                         {/* Individual Users Card */}
@@ -1379,7 +1458,7 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                                 <Text style={styles.sectionTitle}>Compose Notification</Text>
                             </View>
                             <Text style={styles.cardDescription}>
-                                Subject and body — recipients are selected in Individual Users above.
+                                Subject and body — pick a tag group and/or individual users above.
                             </Text>
 
                             <View style={styles.formField}>
@@ -1429,10 +1508,10 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                                         Alert.alert('Error', 'You must be signed in to send notifications.');
                                         return;
                                     }
-                                    if (selectedUsers.length === 0) {
+                                    if (composeRecipientCount === 0) {
                                         Alert.alert(
                                             'Select recipients',
-                                            'Scroll up to Individual Users and tap one or more people before sending.'
+                                            'Pick a tag group or tap people under Individual Users before sending.'
                                         );
                                         return;
                                     }
@@ -1481,7 +1560,7 @@ export const MessagesScreen = ({ navigation, route }: any) => {
                                             body: {
                                                 subject: subject.trim(),
                                                 message: message.trim(),
-                                                recipientTags: [],
+                                                recipientTags: selectedTags,
                                                 recipientIds: selectedUsers,
                                                 deliveryMethods: {
                                                     inApp: deliveryMethod === 'in-app',
