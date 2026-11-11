@@ -67,7 +67,7 @@ import {
   normalizeTransportBoardSettings,
   type TransportBoardSettings,
 } from '../lib/transportBoardSettings';
-import { consolidateRouteStopsByAddress, sanitizeRouteStops } from '../lib/transportRouteStops';
+import { consolidateRouteStopsByAddress, mergeCampersIntoStops, sanitizeRouteStops } from '../lib/transportRouteStops';
 import { reorderRouteForOptimize } from '../lib/transportRouteOptimize';
 import {
   type CamperBusRunMode,
@@ -1318,34 +1318,16 @@ export function useDayCampTransport() {
 
       const names = campers.map((c) => c.name);
       const idSet = new Set(campers.map((c) => c.id));
-      const applyMerge = (stops: TransportRouteStop[]) => {
-        let next = [...stops];
-        for (const camper of campers) {
-          const newStop: TransportRouteStop = {
-            name: camper.name,
-            address: camper.address,
-            lat: camper.lat,
-            lng: camper.lng,
-            pickupTime: 'TBD',
-            passengers: 1,
-            camperNames: [camper.name],
-          };
-          const idx = next.findIndex(
-            (s) => normalizeAddress(s.address) === normalizeAddress(camper.address),
-          );
-          if (idx === -1) {
-            next = [...next, newStop];
-            continue;
-          }
-          const existing = next[idx];
-          next[idx] = {
-            ...existing,
-            passengers: existing.passengers + 1,
-            camperNames: [...(existing.camperNames || [existing.name]), camper.name],
-          };
-        }
-        return next;
-      };
+      const applyMerge = (stops: TransportRouteStop[]) =>
+        mergeCampersIntoStops(
+          stops,
+          campers.map((c) => ({
+            name: c.name,
+            address: c.address,
+            lat: c.lat,
+            lng: c.lng,
+          })),
+        ).next;
 
       setScopeDialog({
         open: true,
