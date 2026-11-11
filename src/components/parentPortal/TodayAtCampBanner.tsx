@@ -10,6 +10,7 @@ import {
   type SwimLesson,
 } from '../../constants/parentPortalConstants';
 import type { ParentPortalColors } from '../../lib/parentPortalTheme';
+import { formatTime12Hour } from '../../lib/formatTime';
 import { PP, ppCard, ppFont } from '../../lib/parentPortalUi';
 
 type Props = {
@@ -50,7 +51,7 @@ export function TodayAtCampBanner({
     lines.push({
       id: `p-${p.id}`,
       icon: 'car-outline',
-      text: `${camperName(p.camper_id)} — ${changeTypeLabel(p.change_type).toLowerCase()}${p.pickup_time ? ` at ${p.pickup_time}` : ''}`,
+      text: `${camperName(p.camper_id)} — ${changeTypeLabel(p.change_type).toLowerCase()}${p.pickup_time ? ` at ${formatTime12Hour(p.pickup_time)}` : ''}`,
       tone: 'info',
     });
   }

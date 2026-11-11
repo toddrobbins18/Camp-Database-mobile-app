@@ -28,6 +28,14 @@ import {
 import { useDivisions, useCampers } from '../api/campers';
 import { useCompany } from '../contexts/CompanyContext';
 import { getTutoringTherapyServiceTypes } from '../lib/tutoringTherapyServiceTypes';
+import { formatTime12Hour } from '../lib/formatTime';
+import {
+    splitTutoringSchedulePeriods,
+    tutoringSchedulePeriodsForSave,
+    TUTORING_WEEKDAYS_ALL,
+    TUTORING_WEEKDAYS_DAY_CAMP,
+} from '../lib/amPmTime';
+import { AmPmTimeInput } from '../components/AmPmTimeInput';
 
 interface TutoringTherapyScreenProps {
     navigation: any;
@@ -92,7 +100,7 @@ function matchesGenderFilter(childGender: string | null | undefined, selectedGen
 type SheetOption = { value: string; label: string };
 
 export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps) => {
-    const { companyId, companySlug, season } = useCompany();
+    const { companyId, companySlug, season, isDayCamp, isTimberLakeCamp } = useCompany();
     const queryClient = useQueryClient();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -110,10 +118,13 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
     const [selectedServiceType, setSelectedServiceType] = useState('');
     const [instructorName, setInstructorName] = useState('');
     const [selectedPeriods, setSelectedPeriods] = useState<string[]>([]);
+    const [sessionTime, setSessionTime] = useState('');
+    const [recurring, setRecurring] = useState(false);
     const [selectedWeekdays, setSelectedWeekdays] = useState<string[]>([]);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [notes, setNotes] = useState('');
+    const weekdayOptions = isDayCamp ? TUTORING_WEEKDAYS_DAY_CAMP : TUTORING_WEEKDAYS_ALL;
 
     const [showCamperDropdown, setShowCamperDropdown] = useState(false);
     const [showServiceTypeDropdown, setShowServiceTypeDropdown] = useState(false);
@@ -432,6 +443,8 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                         setSelectedServiceType('');
                         setInstructorName('');
                         setSelectedPeriods([]);
+                        setSessionTime('');
+                        setRecurring(false);
                         setSelectedWeekdays([]);
                         setStartDate('');
                         setEndDate('');
@@ -537,12 +550,12 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                             {enrollmentDisplayName(entry)} — {entry.service_type}
                                         </Text>
                                         <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 2 }}>
-                                            Instructor: {entry.instructor || 'N/A'} • Periods: {(entry.schedule_periods || []).join(', ') || 'N/A'}
+                                            Instructor: {entry.instructor || 'N/A'} • {(entry.schedule_periods || []).map((p) => formatTime12Hour(p) || p).join(', ') || 'Time TBD'}
                                         </Text>
                                         
-                                        {companySlug === 'timber-lake-camp' && entry.weekdays && entry.weekdays.length > 0 && (
+                                        {entry.weekdays && entry.weekdays.length > 0 && (
                                             <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }}>
-                                                {entry.weekdays.join(', ')}
+                                                Repeats {entry.weekdays.join(', ')}
                                             </Text>
                                         )}
 
@@ -563,7 +576,10 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                                 setSelectedCamperId(entry.child_id);
                                                 setSelectedServiceType(entry.service_type);
                                                 setInstructorName(entry.instructor || '');
-                                                setSelectedPeriods([...(entry.schedule_periods || [])]);
+                                                const split = splitTutoringSchedulePeriods(entry.schedule_periods || []);
+                                                setSelectedPeriods(split.periods);
+                                                setSessionTime(split.time);
+                                                setRecurring((entry.weekdays || []).length > 0);
                                                 setSelectedWeekdays([...(entry.weekdays || [])]);
                                                 setStartDate(isoToMmddyyyy(entry.start_date));
                                                 setEndDate(isoToMmddyyyy(entry.end_date));
@@ -690,45 +706,48 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                 />
                             </View>
 
-                            {/* Schedule Periods */}
-                            <View style={styles.formGroup}>
-                                <Text style={styles.formLabel}>Schedule Periods</Text>
-                                <View style={styles.periodsGrid}>
-                                    {SCHEDULE_PERIODS.map((period) => (
-                                        <TouchableOpacity
-                                            key={period}
-                                            style={[
-                                                styles.periodButton,
-                                                selectedPeriods.includes(period) && styles.periodButtonSelected,
-                                            ]}
-                                            onPress={() => togglePeriod(period)}
-                                        >
-                                            <Text
+                            {isDayCamp ? (
+                                <AmPmTimeInput label="Time" optional value={sessionTime} onChange={setSessionTime} />
+                            ) : (
+                                <View style={styles.formGroup}>
+                                    <Text style={styles.formLabel}>Schedule Periods</Text>
+                                    <View style={styles.periodsGrid}>
+                                        {SCHEDULE_PERIODS.map((period) => (
+                                            <TouchableOpacity
+                                                key={period}
                                                 style={[
-                                                    styles.periodButtonText,
-                                                    selectedPeriods.includes(period) && styles.periodButtonTextSelected,
+                                                    styles.periodButton,
+                                                    selectedPeriods.includes(period) && styles.periodButtonSelected,
                                                 ]}
+                                                onPress={() => togglePeriod(period)}
                                             >
-                                                {period}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
+                                                <Text
+                                                    style={[
+                                                        styles.periodButtonText,
+                                                        selectedPeriods.includes(period) && styles.periodButtonTextSelected,
+                                                    ]}
+                                                >
+                                                    {period}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
                                 </View>
-                            </View>
+                            )}
 
-                            {companySlug === 'timber-lake-camp' ? (
+                            {isTimberLakeCamp ? (
                                 <View style={styles.formGroup}>
                                     <Text style={styles.formLabel}>Weekdays</Text>
                                     <View style={styles.periodsGrid}>
-                                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
+                                        {TUTORING_WEEKDAYS_ALL.map((day) => {
                                             const isSelected = selectedWeekdays.includes(day);
                                             return (
                                                 <TouchableOpacity
                                                     key={day}
                                                     style={[styles.periodChip, isSelected && styles.periodChipSelected]}
                                                     onPress={() => {
-                                                        setSelectedWeekdays(prev =>
-                                                            prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+                                                        setSelectedWeekdays((prev) =>
+                                                            prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
                                                         );
                                                     }}
                                                 >
@@ -742,9 +761,59 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                 </View>
                             ) : (
                                 <>
-                                    {/* Start Date */}
                                     <View style={styles.formGroup}>
-                                        <Text style={styles.formLabel}>Start Date</Text>
+                                        <Text style={styles.formLabel}>Schedule type</Text>
+                                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                                            <TouchableOpacity
+                                                style={[styles.periodChip, !recurring && styles.periodChipSelected]}
+                                                onPress={() => {
+                                                    setRecurring(false);
+                                                    setSelectedWeekdays([]);
+                                                }}
+                                            >
+                                                <Text style={[styles.periodChipText, !recurring && styles.periodChipTextSelected]}>
+                                                    One-time
+                                                </Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={[styles.periodChip, recurring && styles.periodChipSelected]}
+                                                onPress={() => setRecurring(true)}
+                                            >
+                                                <Text style={[styles.periodChipText, recurring && styles.periodChipTextSelected]}>
+                                                    Repeat weekly
+                                                </Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+
+                                    {recurring ? (
+                                        <View style={styles.formGroup}>
+                                            <Text style={styles.formLabel}>Repeats on</Text>
+                                            <View style={styles.periodsGrid}>
+                                                {weekdayOptions.map((day) => {
+                                                    const isSelected = selectedWeekdays.includes(day);
+                                                    return (
+                                                        <TouchableOpacity
+                                                            key={day}
+                                                            style={[styles.periodChip, isSelected && styles.periodChipSelected]}
+                                                            onPress={() => {
+                                                                setSelectedWeekdays((prev) =>
+                                                                    prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+                                                                );
+                                                            }}
+                                                        >
+                                                            <Text style={[styles.periodChipText, isSelected && styles.periodChipTextSelected]}>
+                                                                {day.substring(0, 3)}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </View>
+                                        </View>
+                                    ) : null}
+
+                                    <View style={styles.formGroup}>
+                                        <Text style={styles.formLabel}>{recurring ? 'Starts' : 'Date'}</Text>
                                         <TouchableOpacity
                                             style={styles.dateInput}
                                             onPress={() => {
@@ -759,9 +828,8 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                         </TouchableOpacity>
                                     </View>
 
-                                    {/* End Date */}
                                     <View style={styles.formGroup}>
-                                        <Text style={styles.formLabel}>End Date</Text>
+                                        <Text style={styles.formLabel}>{recurring ? 'Ends' : 'End date'}</Text>
                                         <TouchableOpacity
                                             style={styles.dateInput}
                                             onPress={() => {
@@ -771,7 +839,7 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                         >
                                             <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />
                                             <Text style={[styles.dateInputText, !endDate && styles.placeholder]}>
-                                                {endDate || 'Pick a date'}
+                                                {endDate || (recurring ? 'Pick a date' : 'Optional')}
                                             </Text>
                                         </TouchableOpacity>
                                     </View>
@@ -814,6 +882,11 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                 onPress={() => {
                                     if (!companyId || !selectedCamperId || !selectedServiceType) return;
 
+                                    const repeats = isTimberLakeCamp || recurring;
+                                    if (repeats && selectedWeekdays.length === 0) {
+                                        Alert.alert('Weekdays', 'Pick at least one weekday for a repeating enrollment.');
+                                        return;
+                                    }
                                     const startIso = mmddyyyyToIso(startDate);
                                     const endIso = mmddyyyyToIso(endDate);
                                     const basePayload = {
@@ -822,8 +895,12 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                         season,
                                           service_type: selectedServiceType,
                                           instructor: instructorName.trim() || null,
-                                          schedule_periods: selectedPeriods.length ? selectedPeriods : [],
-                                          weekdays: selectedWeekdays.length ? selectedWeekdays : [],
+                                          schedule_periods: tutoringSchedulePeriodsForSave({
+                                            useClockTime: isDayCamp,
+                                            clockTime: sessionTime,
+                                            periods: selectedPeriods,
+                                          }),
+                                          weekdays: repeats ? selectedWeekdays : [],
                                           start_date: startIso,
                                         end_date: endIso,
                                         notes: notes.trim() || null,
@@ -850,7 +927,10 @@ export const TutoringTherapyScreen = ({ navigation }: TutoringTherapyScreenProps
                                                 setSelectedCamperId('');
                                                 setSelectedServiceType('');
                                                 setInstructorName('');
-                                                setSelectedPeriods([]);
+                                                    setSelectedPeriods([]);
+                                                setSessionTime('');
+                                                setRecurring(false);
+                                                setSelectedWeekdays([]);
                                                 setStartDate('');
                                                 setEndDate('');
                                                 setNotes('');

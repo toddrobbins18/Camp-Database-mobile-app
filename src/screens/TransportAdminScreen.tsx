@@ -42,6 +42,8 @@ import {
 import { submitNurseSentHomeTransportException } from '../lib/nurseTransportException';
 import { useTransportFamilySiblings } from '../hooks/useTransportFamilySiblings';
 import { ABSENCE_TYPES, CHANGE_TYPES } from '../constants/parentPortalConstants';
+import { AmPmTimeInput } from '../components/AmPmTimeInput';
+import { formatTime12Hour } from '../lib/formatTime';
 
 type TabId = 'pending' | 'exceptions' | 'log';
 type Camper = { id: string; name: string; group_name: string | null };
@@ -331,7 +333,7 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
                   brandColor={brand}
                   title={p.camperName}
                   subtitle={`Pickup · ${PICKUP_CHANGE_LABELS[p.change_type] ?? p.change_type}`}
-                  detail={p.notes ?? undefined}
+                  detail={[formatTime12Hour(p.pickup_time), p.notes].filter(Boolean).join(' · ') || undefined}
                   approving={approving === p.id}
                   onApprove={() => void approve('pickup', p.id, p.camperName)}
                 />
@@ -342,7 +344,7 @@ export function TransportAdminScreen({ navigation }: { navigation: any }) {
                   brandColor={brand}
                   title={a.camperName}
                   subtitle={`Absence · ${ABSENCE_TYPE_LABELS[a.absence_type] ?? a.absence_type}`}
-                  detail={a.reason ?? undefined}
+                  detail={[formatTime12Hour(a.arrival_time), a.reason].filter(Boolean).join(' · ') || undefined}
                   approving={approving === a.id}
                   onApprove={() => void approve('absence', a.id, a.camperName)}
                 />
@@ -800,7 +802,7 @@ function SwimLogForm({
         loading={family.loading}
       />
       <TextInput style={styles.input} value={lessonDate} onChangeText={setLessonDate} placeholder="YYYY-MM-DD" />
-      <TextInput style={styles.input} value={time} onChangeText={setTime} placeholder="HH:MM (24h)" />
+      <AmPmTimeInput label="Time" value={time} onChange={setTime} />
       <TextInput style={styles.input} value={instructor} onChangeText={setInstructor} placeholder="Instructor" />
       <View style={styles.switchRow}>
         <Text style={styles.fieldLabel}>Staff confirmed</Text>

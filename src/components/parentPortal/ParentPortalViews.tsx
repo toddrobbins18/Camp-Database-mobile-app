@@ -8,6 +8,7 @@ import { PP_AERIAL_GLASS } from '../../lib/parentPortalTheme';
 import { formatSwimLessonRejectionForParent } from '../../lib/swimLessonApproval';
 import { supabase } from '../../lib/supabase';
 import { formatCampDateTime } from '../../lib/campTime';
+import { formatTime12Hour } from '../../lib/formatTime';
 import {
   absenceTypeLabel,
   camperDisplayGroup,
@@ -419,7 +420,7 @@ export function ParentPickupsView(props: SharedViewProps) {
               <Text style={[ppFont.bodyMedium, { color: props.colors.text }]}>{props.camperName(p.camper_id)}</Text>
               <Text style={[ppFont.caption, { color: props.colors.textMuted, marginTop: PP.xs }]}>
                 {changeTypeLabel(p.change_type)}
-                {p.pickup_time ? ` · ${p.pickup_time}` : ''}
+                {p.pickup_time ? ` · ${formatTime12Hour(p.pickup_time)}` : ''}
               </Text>
               <View style={{ marginTop: PP.sm, alignSelf: 'flex-start' }}>
                 <StatusBadge status={p.status} />
@@ -437,7 +438,7 @@ export function ParentPickupsView(props: SharedViewProps) {
             <SubmissionCard
               key={p.id}
               title={`${props.camperName(p.camper_id)} · ${changeTypeLabel(p.change_type)}`}
-              meta={`${p.change_date}${p.pickup_time ? ` · ${p.pickup_time}` : ''}${p.pickup_person_name ? ` · ${p.pickup_person_name}` : ''}`}
+              meta={`${p.change_date}${p.pickup_time ? ` · ${formatTime12Hour(p.pickup_time)}` : ''}${p.pickup_person_name ? ` · ${p.pickup_person_name}` : ''}`}
               detail={p.notes ?? undefined}
               status={p.status}
               colors={props.colors}
@@ -481,7 +482,7 @@ export function ParentAbsencesView(props: SharedViewProps) {
             <SubmissionCard
               key={a.id}
               title={`${props.camperName(a.camper_id)} · ${absenceTypeLabel(a.absence_type)}`}
-              meta={`${a.absence_date}${a.arrival_time ? ` · ${a.arrival_time}` : ''}`}
+              meta={`${a.absence_date}${a.arrival_time ? ` · ${formatTime12Hour(a.arrival_time)}` : ''}`}
               detail={a.reason ? `Reason: ${a.reason}` : a.notes ?? undefined}
               status={a.status}
               colors={props.colors}

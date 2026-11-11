@@ -38,6 +38,7 @@ import { resolveChildForCampView } from '../lib/profileCampResolution';
 import { appointmentsEnabledForCompany } from '../constants/camps';
 import { HealthCenterVisitDetailRows } from '../components/health/HealthCenterDayCampPanel';
 import { ParentTemplateEmailPanel } from '../components/parentEmail/ParentTemplateEmailPanel';
+import { formatTime12Hour } from '../lib/formatTime';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 375;
@@ -1361,7 +1362,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                         >
                                                             {periods.map((period: string, idx: number) => (
                                                                 <View key={`${enrollment.id}-p-${idx}`} style={styles.achievementTag}>
-                                                                    <Text style={styles.achievementTagText}>{period}</Text>
+                                                                    <Text style={styles.achievementTagText}>{formatTime12Hour(period) || period}</Text>
                                                                 </View>
                                                             ))}
                                                         </View>
@@ -1600,7 +1601,7 @@ export const CamperDetailScreen = ({ route, navigation }: any) => {
                                                                     style={styles.achievementTagOutline}
                                                                 >
                                                                     <Text style={styles.achievementTagOutlineText}>
-                                                                        {period}
+                                                                        {formatTime12Hour(period) || period}
                                                                     </Text>
                                                                 </View>
                                                             ))}

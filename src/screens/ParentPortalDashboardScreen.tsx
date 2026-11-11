@@ -19,6 +19,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { CampUpdatesEditor } from '../components/parentPortal/CampUpdatesEditor';
 import { NestSandboxParentFlowGuide } from '../components/parentPortal/NestSandboxParentFlowGuide';
 import { isNestSandboxParentTraining } from '../lib/nestSandboxParentDemo';
+import { formatTime12Hour } from '../lib/formatTime';
 import { linkFamilyChildrenByGuardianEmail } from '../lib/parentFamilyLink';
 import {
   ABSENCE_TYPES,
@@ -647,7 +648,7 @@ function renderSubmissionList(
         <Text style={styles.meta}>{meta}</Text>
         {kind === 'pickup' && ((row as PickupRow).pickup_time || (row as PickupRow).pickup_person_name || (row as PickupRow).notes) ? (
           <Text style={styles.detail}>
-            {[(row as PickupRow).pickup_time, (row as PickupRow).pickup_person_name, (row as PickupRow).notes]
+            {[formatTime12Hour((row as PickupRow).pickup_time), (row as PickupRow).pickup_person_name, (row as PickupRow).notes]
               .filter(Boolean)
               .join(' · ')}
           </Text>

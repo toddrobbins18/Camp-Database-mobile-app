@@ -24,6 +24,7 @@ import {
 } from '../../lib/parentPortalCutoff';
 import { campDateTimeToIso } from '../../lib/campTime';
 import type { ParentPortalColors } from '../../lib/parentPortalTheme';
+import { AmPmTimeInput } from '../AmPmTimeInput';
 
 type FormProps = {
   visible: boolean;
@@ -129,7 +130,7 @@ export function PickupChangeForm({
       {CHANGE_TYPES.map((t) => (
         <OptionRow key={t.v} label={t.l} selected={changeType === t.v} onPress={() => setChangeType(t.v)} colors={colors} />
       ))}
-      <Field label="Pickup time (optional)" value={pickupTime} onChangeText={setPickupTime} placeholder="HH:MM" colors={colors} />
+      <AmPmTimeInput label="Pickup time" optional value={pickupTime} onChange={setPickupTime} />
       <Field label="Person picking up" value={personName} onChangeText={setPersonName} colors={colors} />
       <Field label="Their phone" value={personPhone} onChangeText={setPersonPhone} colors={colors} />
       <Field label="Notes" value={notes} onChangeText={setNotes} multiline colors={colors} />
@@ -205,7 +206,12 @@ export function AbsenceForm({
         <OptionRow key={t.v} label={t.l} selected={absenceType === t.v} onPress={() => setAbsenceType(t.v)} colors={colors} />
       ))}
       {(absenceType === 'late_arrival' || absenceType === 'leaving_early') && (
-        <Field label="Time" value={arrivalTime} onChangeText={setArrivalTime} placeholder="HH:MM" colors={colors} />
+        <AmPmTimeInput
+          label={absenceType === 'late_arrival' ? 'Arrival time' : 'Leaving time'}
+          optional
+          value={arrivalTime}
+          onChange={setArrivalTime}
+        />
       )}
       <Field label="Reason" value={reason} onChangeText={setReason} colors={colors} />
       <Field label="Notes" value={notes} onChangeText={setNotes} multiline colors={colors} />

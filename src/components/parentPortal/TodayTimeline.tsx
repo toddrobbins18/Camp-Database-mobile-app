@@ -10,6 +10,7 @@ import {
   type SwimLesson,
 } from '../../constants/parentPortalConstants';
 import type { ParentPortalColors } from '../../lib/parentPortalTheme';
+import { formatTime12Hour } from '../../lib/formatTime';
 import { PP_AERIAL_GLASS } from '../../lib/parentPortalTheme';
 import { PP, ppCard, ppFont } from '../../lib/parentPortalUi';
 
@@ -46,7 +47,7 @@ export function TodayTimeline({
   for (const absence of absences.filter((a) => a.absence_date === todayIso && a.status !== 'cancelled')) {
     items.push({
       id: `absence-${absence.id}`,
-      timeLabel: absence.arrival_time || 'All day',
+      timeLabel: formatTime12Hour(absence.arrival_time) || 'All day',
       title: `${camperName(absence.camper_id)} · ${absenceTypeLabel(absence.absence_type)}`,
       detail: absence.reason ?? undefined,
       icon: 'time-outline',
@@ -57,7 +58,7 @@ export function TodayTimeline({
   for (const pickup of pickups.filter((p) => p.change_date === todayIso && p.status !== 'cancelled')) {
     items.push({
       id: `pickup-${pickup.id}`,
-      timeLabel: pickup.pickup_time || 'Scheduled',
+      timeLabel: formatTime12Hour(pickup.pickup_time) || 'Scheduled',
       title: `${camperName(pickup.camper_id)} · ${changeTypeLabel(pickup.change_type)}`,
       detail: pickup.pickup_person_name
         ? `Pickup by ${pickup.pickup_person_name}`
