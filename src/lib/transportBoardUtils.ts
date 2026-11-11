@@ -116,7 +116,11 @@ const assignDrivingTimes = (
     if (i > 0) {
       const prev = stops[i - 1];
       cumulativeMin += drivingLegMinutes(prev.lat, prev.lng, stop.lat, stop.lng);
-      if (dwellMinutesPerStop > 0 && !isCampStopAddress(prev.address)) {
+      if (
+        dwellMinutesPerStop > 0 &&
+        !isCampStopAddress(prev.address) &&
+        !isCounselorPickupStop(prev)
+      ) {
         cumulativeMin += dwellMinutesPerStop;
       }
     }

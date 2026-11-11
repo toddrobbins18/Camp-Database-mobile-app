@@ -26,6 +26,8 @@ export type TransportRouteMapNativeProps = {
   onMoveStop?: (fromRouteId: number, stopIndex: number, toRouteId: number) => void;
   onRemoveStop?: (routeId: number, stopIndex: number) => void;
   onAssignCamper?: (camperId: number, routeId: number) => void;
+  onAssignCampers?: (camperIds: number[], routeId: number) => void;
+  onRequestNewRouteForCampers?: (camperIds: number[]) => void;
   onStopPress?: (routeId: number, stopIndex: number, stop: TransportRouteStop) => void;
   onUnplottedPress?: (camperId: number) => void;
 };

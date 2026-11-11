@@ -155,7 +155,9 @@ import {
   coreIndexFromDisplayStops,
   isValidBusCounselorPickup,
   parseBusCounselorPickup,
+  routeStopsForTiming,
   withCounselorPickupStops,
+  withUntimedCounselorDisplay,
   type BusCounselorPickup,
 } from '../lib/transportCounselorPickup';
 import type { GeocodeResult } from '../lib/transportBoardCache';
@@ -327,6 +329,8 @@ export function useDayCampTransport() {
   const [regeocoding, setRegeocoding] = useState(false);
 
   const [addRouteOpen, setAddRouteOpen] = useState(false);
+  const [pendingLassoCamperIds, setPendingLassoCamperIds] = useState<number[]>([]);
+  const assignCampersRef = useRef<(ids: number[], routeId: number) => void>(() => {});
   const [addCamperOpen, setAddCamperOpen] = useState(false);
   const [newUnplotted, setNewUnplotted] = useState({ name: '', address: '', age: 10, session: 'Session 1' });
   const [newRoute, setNewRoute] = useState({ name: '', bus: '', departure: '', capacity: 50 });
@@ -900,16 +904,27 @@ export function useDayCampTransport() {
     [getEffectiveCore, routeMeta, timeOfDay],
   );
 
+  const includeCounselorInRouteTime = boardSettings.includeCounselorInRouteTime;
+
   const buildRoutes = useCallback(
     (tod: 'am' | 'pm'): TransportDisplayRoute[] =>
       routeMeta.map((meta) => {
         const core = getEffectiveCore(meta.id);
-        const routed = withCounselorPickupStops(core, meta.counselorPickup, tod);
+        const forTiming = routeStopsForTiming(
+          withCounselorPickupStops(core, meta.counselorPickup, tod),
+          includeCounselorInRouteTime,
+        );
         const timeOpts = { dwellMinutesPerStop: stopDwellMinutes };
-        const stops =
+        const timed =
           tod === 'am'
-            ? buildAMStops(routed, meta.departure, timeOpts)
-            : buildPMStops(routed, meta.departure, timeOpts);
+            ? buildAMStops(forTiming, meta.departure, timeOpts)
+            : buildPMStops(forTiming, meta.departure, timeOpts);
+        const stops = withUntimedCounselorDisplay(
+          timed,
+          meta.counselorPickup,
+          tod,
+          includeCounselorInRouteTime,
+        );
         const campers = core.reduce((sum, s) => sum + s.passengers, 0);
         return {
           ...meta,
@@ -918,7 +933,7 @@ export function useDayCampTransport() {
           direction: tod === 'am' ? 'Inbound' : 'Outbound',
         };
       }),
-    [getEffectiveCore, routeMeta, stopDwellMinutes],
+    [getEffectiveCore, routeMeta, stopDwellMinutes, includeCounselorInRouteTime],
   );
 
   const routes = buildRoutes(timeOfDay);
@@ -1209,9 +1224,12 @@ export function useDayCampTransport() {
     setCoreStops((prev) => ({ ...prev, [id]: [] }));
     setVisibleRoutes((prev) => [...prev, id]);
     markRoutesConfigured('manual');
+    const pending = [...pendingLassoCamperIds];
+    setPendingLassoCamperIds([]);
     setAddRouteOpen(false);
     setNewRoute({ name: '', bus: '', departure: '', capacity: 50 });
     toast('Route added', `"${newRoute.name}" has been created for both AM and PM runs.`);
+    if (pending.length > 0) assignCampersRef.current(pending, id);
   };
 
   const handleAssignCamperToRoute = useCallback(
@@ -1289,6 +1307,76 @@ export function useDayCampTransport() {
     },
     [unplottedCampers, routeMeta, coreStops, todayOverrides, markRoutesConfigured],
   );
+
+  const handleAssignCampersToRoute = useCallback(
+    (camperIds: number[], routeId: number) => {
+      const uniqueIds = [...new Set(camperIds)];
+      const campers = uniqueIds
+        .map((id) => unplottedCampers.find((c) => c.id === id))
+        .filter((c): c is NonNullable<typeof c> => !!c);
+      if (campers.length === 0) return;
+
+      const names = campers.map((c) => c.name);
+      const idSet = new Set(campers.map((c) => c.id));
+      const applyMerge = (stops: TransportRouteStop[]) => {
+        let next = [...stops];
+        for (const camper of campers) {
+          const newStop: TransportRouteStop = {
+            name: camper.name,
+            address: camper.address,
+            lat: camper.lat,
+            lng: camper.lng,
+            pickupTime: 'TBD',
+            passengers: 1,
+            camperNames: [camper.name],
+          };
+          const idx = next.findIndex(
+            (s) => normalizeAddress(s.address) === normalizeAddress(camper.address),
+          );
+          if (idx === -1) {
+            next = [...next, newStop];
+            continue;
+          }
+          const existing = next[idx];
+          next[idx] = {
+            ...existing,
+            passengers: existing.passengers + 1,
+            camperNames: [...(existing.camperNames || [existing.name]), camper.name],
+          };
+        }
+        return next;
+      };
+
+      setScopeDialog({
+        open: true,
+        title: campers.length === 1 ? 'Assign camper' : 'Assign campers',
+        description: `Add ${names.join(', ')} to this route for today only, or permanently (both AM & PM, every day)?`,
+        onChoose: (scope) => {
+          if (scope === 'today') {
+            setTodayOverrides((prev) => ({
+              ...prev,
+              added: { ...prev.added, [routeId]: applyMerge(prev.added[routeId] || []) },
+            }));
+            toast('Added for today', `${names.join(', ')} added to today's run.`);
+          } else {
+            markRoutesConfigured('manual');
+            setCoreStops((cs) => ({ ...cs, [routeId]: applyMerge(cs[routeId] || []) }));
+            toast('Campers assigned', `${names.join(', ')} added permanently (AM & PM).`);
+          }
+          setUnplottedCampers((prev) => prev.filter((c) => !idSet.has(c.id)));
+          setScopeDialog((prev) => ({ ...prev, open: false }));
+          setAssignCamperId(null);
+        },
+      });
+    },
+    [unplottedCampers, markRoutesConfigured],
+  );
+  assignCampersRef.current = handleAssignCampersToRoute;
+
+  const handleRequestNewRouteForCampers = useCallback((camperIds: number[]) => {
+    setPendingLassoCamperIds(camperIds);
+    setAddRouteOpen(true);
+  }, []);
 
   const handleAddUnplottedCamper = async () => {
     if (!newUnplotted.name.trim() || !newUnplotted.address.trim()) {
@@ -2659,6 +2747,8 @@ export function useDayCampTransport() {
     totalCampers,
     addRouteOpen,
     setAddRouteOpen,
+    pendingLassoCamperIds,
+    setPendingLassoCamperIds,
     addCamperOpen,
     setAddCamperOpen,
     newRoute,
@@ -2682,6 +2772,8 @@ export function useDayCampTransport() {
     selectRouteOnMap,
     handleAddRoute,
     handleAssignCamperToRoute,
+    handleAssignCampersToRoute,
+    handleRequestNewRouteForCampers,
     handleAddUnplottedCamper,
     handleRemoveUnplotted,
     handleApplyRouteTemplate,

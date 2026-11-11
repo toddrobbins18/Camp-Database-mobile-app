@@ -13,6 +13,8 @@ import {
   FlatList,
   Alert,
   Switch,
+  Share,
+  Linking,
 } from 'react-native';
 import {
   initialWindowMetrics,
@@ -35,7 +37,15 @@ import {
   buildPendingNamesByAddress,
   filterRoutesForMapDisplay,
 } from '../lib/transportBoardUtils';
-import { coreIndexFromDisplayStops, isCounselorPickupStop } from '../lib/transportCounselorPickup';
+import { coreIndexFromDisplayStops, isCounselorPickupStop, routeStopsForTiming } from '../lib/transportCounselorPickup';
+import {
+  buildTurnByTurnShareText,
+  formatTurnDistance,
+  formatTurnDuration,
+  googleMapsDirUrl,
+  type TurnByTurnStep,
+} from '../lib/transportTurnByTurnPrint';
+import { supabase } from '../lib/supabase';
 import { todayDateString } from '../lib/transportDailyOverrides';
 import {
   configuredEnrollmentWeekRows,
@@ -138,6 +148,29 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   const [showBlankOpenStops, setShowBlankOpenStops] = useState(false);
   const [mapExpanded, setMapExpanded] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
+  const [directions, setDirections] = useState<{
+    open: boolean;
+    bus: string;
+    routeName: string;
+    loading: boolean;
+    error: string | null;
+    totalDistanceMi: number;
+    totalDurationSec: number;
+    steps: TurnByTurnStep[];
+    stopLabels: string[];
+    stops: { name: string; address: string; lat: number; lng: number; pickupTime: string }[];
+  }>({
+    open: false,
+    bus: '',
+    routeName: '',
+    loading: false,
+    error: null,
+    totalDistanceMi: 0,
+    totalDurationSec: 0,
+    steps: [],
+    stopLabels: [],
+    stops: [],
+  });
   const [ptModalOpen, setPtModalOpen] = useState(false);
   const [busRunModalOpen, setBusRunModalOpen] = useState(false);
   const [busRunSearch, setBusRunSearch] = useState('');
@@ -261,6 +294,70 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
     updatedAt: row.updated_at,
   }));
 
+  const handleShowDirections = async (route: (typeof t.routes)[number]) => {
+    const directionStops = routeStopsForTiming(route.stops, t.boardSettings.includeCounselorInRouteTime)
+      .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng) && !(Math.abs(s.lat) < 0.0001 && Math.abs(s.lng) < 0.0001));
+    if (directionStops.length < 2) {
+      Alert.alert('Not enough stops', 'Add at least two stops to generate directions.');
+      return;
+    }
+    const stopLabels = directionStops.map((s) => {
+      if (s.address === CAMP_LOCATION.address) return 'Camp';
+      if (isCounselorPickupStop(s)) return s.name || 'Bus counselor';
+      return s.camperNames?.join(', ') || s.name;
+    });
+    const stops = directionStops.map((s) => ({
+      name: s.name,
+      address: s.address,
+      lat: s.lat,
+      lng: s.lng,
+      pickupTime: s.pickupTime,
+    }));
+    setDirections({
+      open: true,
+      bus: route.bus,
+      routeName: route.name,
+      loading: true,
+      error: null,
+      totalDistanceMi: 0,
+      totalDurationSec: 0,
+      steps: [],
+      stopLabels,
+      stops,
+    });
+    try {
+      const coordinates = directionStops.map((s) => [s.lng, s.lat] as [number, number]);
+      const { data, error } = await supabase.functions.invoke('route-optimizer', {
+        body: { action: 'directions', coordinates },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setDirections((prev) => ({
+        ...prev,
+        loading: false,
+        totalDistanceMi: data.totalDistanceMi || 0,
+        totalDurationSec: data.totalDurationSec || 0,
+        steps: data.steps || [],
+      }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setDirections((prev) => ({ ...prev, loading: false, error: msg }));
+    }
+  };
+
+  const shareDirections = async () => {
+    const message = buildTurnByTurnShareText({
+      bus: directions.bus,
+      routeName: directions.routeName,
+      totalDistanceMi: directions.totalDistanceMi,
+      totalDurationSec: directions.totalDurationSec,
+      steps: directions.steps,
+      stopLabels: directions.stopLabels,
+      stops: directions.stops,
+    });
+    await Share.share({ title: `${directions.bus} directions`, message });
+  };
+
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: 'map', label: 'Route Map' },
     { id: 'unplotted', label: 'Unplotted', badge: t.unplottedForWeek.length || undefined },
@@ -289,7 +386,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
       : []),
     { key: 'camper', label: 'Add Camper', icon: 'person-add-outline' as const, onPress: () => t.setAddCamperOpen(true) },
     { key: 'regeo', label: 'Re-geocode', icon: 'location-outline' as const, onPress: t.handleRegeocodeAll, loading: t.regeocoding },
-    { key: 'route', label: 'Add Route', icon: 'add-circle-outline' as const, onPress: () => t.setAddRouteOpen(true) },
+    { key: 'route', label: 'Add Route', icon: 'add-circle-outline' as const, onPress: () => { t.setPendingLassoCamperIds([]); t.setAddRouteOpen(true); } },
     {
       key: 'pt',
       label: 'Add PT',
@@ -557,6 +654,9 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
             unplottedCampers={t.unplottedForWeek}
             liveBuses={liveBuses}
             campAddress={CAMP_LOCATION.address}
+            onAssignCamper={t.handleAssignCamperToRoute}
+            onAssignCampers={t.handleAssignCampersToRoute}
+            onRequestNewRouteForCampers={t.handleRequestNewRouteForCampers}
             onStopPress={(routeId, stopIndex, stop) => t.setStopAction({ routeId, stopIndex, stop })}
             onUnplottedPress={(camperId) => {
               Alert.alert('Assign camper', 'Choose a route', [
@@ -620,6 +720,9 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                   <View style={styles.routeCardHeader}>
                     <View style={[styles.routeDot, { backgroundColor: r.color }]} />
                     <Text style={styles.routeBus} numberOfLines={1}>{r.bus}</Text>
+                    <TouchableOpacity onPress={() => void handleShowDirections(r)}>
+                      <Ionicons name="map-outline" size={16} color={theme.colors.icon} />
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={() => t.setEditRoute({
                       id: r.id,
                       name: r.name,
@@ -1017,13 +1120,20 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
       <Modal visible={t.addRouteOpen} transparent animationType="slide">
         <Pressable style={styles.modalBackdrop} onPress={() => t.setAddRouteOpen(false)}>
           <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>Add Route</Text>
+            <Text style={styles.modalTitle}>
+              {t.pendingLassoCamperIds.length > 0 ? 'New bus for circled campers' : 'Add Route'}
+            </Text>
+            {t.pendingLassoCamperIds.length > 0 ? (
+              <Text style={styles.weekHint}>
+                This bus will get {t.pendingLassoCamperIds.length} circled camper{t.pendingLassoCamperIds.length === 1 ? '' : 's'} after you create it.
+              </Text>
+            ) : null}
             <TextInput style={styles.input} placeholder="Route name" value={t.newRoute.name} onChangeText={(v) => t.setNewRoute((p) => ({ ...p, name: v }))} />
             <TextInput style={styles.input} placeholder="Bus name" value={t.newRoute.bus} onChangeText={(v) => t.setNewRoute((p) => ({ ...p, bus: v }))} />
             <TextInput style={styles.input} placeholder="Departure (optional)" value={t.newRoute.departure} onChangeText={(v) => t.setNewRoute((p) => ({ ...p, departure: v }))} />
             <TextInput style={styles.input} placeholder="Capacity" keyboardType="number-pad" value={String(t.newRoute.capacity)} onChangeText={(v) => t.setNewRoute((p) => ({ ...p, capacity: parseInt(v, 10) || 50 }))} />
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalBtnOutline} onPress={() => t.setAddRouteOpen(false)}><Text style={styles.modalBtnOutlineText}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnOutline} onPress={() => { t.setPendingLassoCamperIds([]); t.setAddRouteOpen(false); }}><Text style={styles.modalBtnOutlineText}>Cancel</Text></TouchableOpacity>
               <TouchableOpacity style={styles.modalBtnPrimary} onPress={t.handleAddRoute}><Text style={styles.modalBtnPrimaryText}>Add Route</Text></TouchableOpacity>
             </View>
           </Pressable>
@@ -1389,6 +1499,17 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                   </TouchableOpacity>
                 ))}
               </View>
+              <View style={styles.overflowSwitchRow}>
+                <Text style={styles.overflowText}>Include bus counselor in route time</Text>
+                <Switch
+                  value={t.boardSettings.includeCounselorInRouteTime}
+                  onValueChange={(includeCounselorInRouteTime) =>
+                    t.setBoardSettings((prev) =>
+                      normalizeTransportBoardSettings({ ...prev, includeCounselorInRouteTime }),
+                    )
+                  }
+                />
+              </View>
             </View>
             <TouchableOpacity
               style={styles.overflowItem}
@@ -1411,6 +1532,9 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
           unplottedCampers={t.unplottedForWeek}
           liveBuses={liveBuses}
           campAddress={CAMP_LOCATION.address}
+          onAssignCamper={t.handleAssignCamperToRoute}
+          onAssignCampers={t.handleAssignCampersToRoute}
+          onRequestNewRouteForCampers={t.handleRequestNewRouteForCampers}
           onStopPress={(routeId, stopIndex, stop) => {
             setMapExpanded(false);
             t.setStopAction({ routeId, stopIndex, stop });
@@ -1427,6 +1551,57 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
           }}
         />
       </RouteMapFullscreen>
+
+      <Modal visible={directions.open} transparent animationType="slide">
+        <Pressable style={styles.modalBackdrop} onPress={() => setDirections((prev) => ({ ...prev, open: false }))}>
+          <Pressable style={[styles.modalCard, styles.directionsCard]} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Turn-by-turn · {directions.bus}</Text>
+            <Text style={styles.weekHint}>
+              {directions.routeName} · first stop to last stop
+              {!directions.loading && directions.steps.length > 0
+                ? ` · ${directions.totalDistanceMi.toFixed(1)} mi · ~${Math.round(directions.totalDurationSec / 60)} min`
+                : ''}
+            </Text>
+            <ScrollView style={styles.directionsList}>
+              {directions.stops.map((stop, i) => (
+                <View key={`${stop.address}-${i}`} style={styles.directionStopRow}>
+                  <Text style={styles.directionStopName}>{directions.stopLabels[i] || stop.name}</Text>
+                  <Text style={styles.directionStopAddr}>{stop.address}</Text>
+                </View>
+              ))}
+              {directions.loading ? <Text style={styles.weekHint}>Calculating turn-by-turn directions…</Text> : null}
+              {directions.error ? (
+                <Text style={styles.reportWeekWarning}>
+                  Could not load street-by-street turns: {directions.error}. You can still share the stop list.
+                </Text>
+              ) : null}
+              {!directions.loading && !directions.error && directions.steps.map((step, idx) => (
+                <Text key={idx} style={styles.directionStep}>
+                  {step.instruction}
+                  {formatTurnDistance(step.distanceMi) || formatTurnDuration(step.durationSec)
+                    ? ` — ${[formatTurnDistance(step.distanceMi), formatTurnDuration(step.durationSec)].filter(Boolean).join(', ')}`
+                    : ''}
+                </Text>
+              ))}
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalBtnOutline}
+                onPress={() => {
+                  if (directions.stops.length >= 2) {
+                    void Linking.openURL(googleMapsDirUrl(directions.stops));
+                  }
+                }}
+              >
+                <Text style={styles.modalBtnOutlineText}>Maps</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnPrimary} onPress={() => void shareDirections()}>
+                <Text style={styles.modalBtnPrimaryText}>Print / Share</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {renderScopeDialog()}
       {renderStopActionModal()}
@@ -1721,6 +1896,12 @@ const styles = StyleSheet.create({
   reportShareIcon: { position: 'absolute', top: 14, right: 14 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: theme.spacing.md },
   modalCard: { backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.lg, padding: theme.spacing.md, gap: 10 },
+  directionsCard: { maxHeight: '85%' },
+  directionsList: { maxHeight: 360 },
+  directionStopRow: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  directionStopName: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
+  directionStopAddr: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 2 },
+  directionStep: { fontSize: 12, color: theme.colors.text, lineHeight: 18, marginTop: 4 },
   modalCardTall: { maxHeight: '85%' },
   modalTitle: { ...theme.typography.h3, fontSize: 18 },
   modalDesc: { fontSize: 13, color: theme.colors.textSecondary, lineHeight: 18 },
@@ -1765,5 +1946,5 @@ const styles = StyleSheet.create({
   optimizeRowSub: { fontSize: 11, color: theme.colors.textSecondary },
   overflowMenu: { position: 'absolute', top: 120, right: theme.spacing.md, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.lg, padding: 8, minWidth: 180, borderWidth: 1, borderColor: theme.colors.border, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   overflowItem: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
-  overflowText: { fontSize: 14 },
+  overflowText: { fontSize: 14, flex: 1, paddingRight: 8 },
 });

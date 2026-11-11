@@ -1,9 +1,10 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import MapView, { Marker, Polyline, Region } from 'react-native-maps';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import MapView, { Marker, Polygon, Polyline, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { CAMP_LOCATION, isCampStop, normAddr } from '../lib/transportBoardUtils';
 import { BUS_COUNSELOR_STOP_LABEL, isCounselorPickupStop } from '../lib/transportCounselorPickup';
+import { campersInsideLasso } from '../lib/transportMapLasso';
 import type { TransportRouteStop } from '../lib/transportRoster';
 
 const UNPLOTTED_COLOR = '#8b5cf6';
@@ -46,6 +47,8 @@ export type TransportRouteMapNativeProps = {
   onMoveStop?: (fromRouteId: number, stopIndex: number, toRouteId: number) => void;
   onRemoveStop?: (routeId: number, stopIndex: number) => void;
   onAssignCamper?: (camperId: number, routeId: number) => void;
+  onAssignCampers?: (camperIds: number[], routeId: number) => void;
+  onRequestNewRouteForCampers?: (camperIds: number[]) => void;
   onStopPress?: (routeId: number, stopIndex: number, stop: TransportRouteStop) => void;
   onUnplottedPress?: (camperId: number) => void;
 };
@@ -100,15 +103,24 @@ function LiveBusMarkerView({ label }: { label: string }) {
 
 export function TransportRouteMapNative({
   routes,
+  allRoutes,
   unplottedCampers = [],
   liveBuses = [],
   campAddress = CAMP_LOCATION.address,
+  onAssignCamper,
+  onAssignCampers,
+  onRequestNewRouteForCampers,
   onStopPress,
   onUnplottedPress,
 }: TransportRouteMapNativeProps) {
   const mapRef = useRef<MapView>(null);
   const hasFitRef = useRef(false);
   const [region, setRegion] = useState<Region | null>(null);
+  const [lassoMode, setLassoMode] = useState(false);
+  const [drawPath, setDrawPath] = useState<{ latitude: number; longitude: number }[]>([]);
+  const [lassoSelection, setLassoSelection] = useState<MapUnplottedCamper[] | null>(null);
+  const [lassoHint, setLassoHint] = useState<string | null>(null);
+  const availableRoutes = allRoutes ?? routes;
 
   const allPoints = useMemo(() => {
     const routePoints = routes.flatMap((r) => r.stops.map((s) => ({ lat: s.lat, lng: s.lng })));
@@ -190,6 +202,32 @@ export function TransportRouteMapNative({
   const zoomIn = useCallback(() => zoomBy(0.5), [zoomBy]);
   const zoomOut = useCallback(() => zoomBy(2), [zoomBy]);
 
+  const resetLasso = useCallback(() => {
+    setDrawPath([]);
+    setLassoSelection(null);
+    setLassoHint(null);
+  }, []);
+
+  const finishLasso = useCallback(() => {
+    if (drawPath.length < 6) {
+      setLassoHint('Loop was too small — draw around the addresses');
+      setDrawPath([]);
+      return;
+    }
+    const found = campersInsideLasso(
+      unplottedCampers.filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng)),
+      drawPath.map((p) => ({ lat: p.latitude, lng: p.longitude })),
+    );
+    if (found.length === 0) {
+      setLassoSelection(null);
+      setLassoHint('No unassigned campers inside that loop');
+      return;
+    }
+    setLassoSelection(found);
+    setLassoHint(null);
+    setLassoMode(false);
+  }, [drawPath, unplottedCampers]);
+
   return (
     <View style={styles.mapWrap}>
     <MapView
@@ -197,9 +235,30 @@ export function TransportRouteMapNative({
       style={styles.map}
       initialRegion={initialRegion}
       showsUserLocation={false}
-      zoomEnabled
-      scrollEnabled
-      onRegionChangeComplete={setRegion}
+      zoomEnabled={!lassoMode}
+      scrollEnabled={!lassoMode}
+      rotateEnabled={!lassoMode}
+      pitchEnabled={!lassoMode}
+      onRegionChangeComplete={lassoMode ? undefined : setRegion}
+      onPanDrag={
+        lassoMode
+          ? (e) => {
+              const coord = e.nativeEvent.coordinate;
+              if (!coord) return;
+              setDrawPath((prev) => {
+                const last = prev[prev.length - 1];
+                if (
+                  last &&
+                  Math.abs(last.latitude - coord.latitude) < 0.00002 &&
+                  Math.abs(last.longitude - coord.longitude) < 0.00002
+                ) {
+                  return prev;
+                }
+                return [...prev, coord];
+              });
+            }
+          : undefined
+      }
     >
       {routes.map((route) => {
         const coords = routeCoordinates(route);
@@ -263,6 +322,23 @@ export function TransportRouteMapNative({
           <LiveBusMarkerView label={bus.busLabel} />
         </Marker>
       ))}
+
+      {drawPath.length > 1 ? (
+        <Polyline
+          coordinates={drawPath}
+          strokeColor={UNPLOTTED_COLOR}
+          strokeWidth={3}
+          lineDashPattern={[6, 4]}
+        />
+      ) : null}
+      {drawPath.length > 2 ? (
+        <Polygon
+          coordinates={drawPath}
+          strokeColor={UNPLOTTED_COLOR}
+          fillColor="rgba(139, 92, 246, 0.18)"
+          strokeWidth={2}
+        />
+      ) : null}
     </MapView>
     <View style={styles.zoomControls}>
       <TouchableOpacity style={styles.zoomBtn} onPress={zoomIn} accessibilityLabel="Zoom in">
@@ -277,6 +353,85 @@ export function TransportRouteMapNative({
         <Ionicons name="scan-outline" size={18} color="#334155" />
       </TouchableOpacity>
     </View>
+    <TouchableOpacity
+      style={[styles.lassoBtn, lassoMode && styles.lassoBtnActive]}
+      onPress={() => {
+        if (lassoMode) {
+          if (drawPath.length >= 6) finishLasso();
+          else {
+            setLassoMode(false);
+            resetLasso();
+          }
+          return;
+        }
+        resetLasso();
+        setLassoMode(true);
+        setLassoHint('Draw a loop around purple pins, then tap Done');
+      }}
+    >
+      <Ionicons name="pencil" size={14} color={lassoMode ? '#fff' : '#5b21b6'} />
+      <Text style={[styles.lassoBtnText, lassoMode && styles.lassoBtnTextActive]}>
+        {lassoMode ? (drawPath.length >= 6 ? 'Done' : 'Drawing…') : 'Circle to add'}
+      </Text>
+    </TouchableOpacity>
+    {lassoHint ? (
+      <View style={styles.lassoHint}>
+        <Text style={styles.lassoHintText}>{lassoHint}</Text>
+      </View>
+    ) : null}
+    {lassoSelection && lassoSelection.length > 0 ? (
+      <View style={styles.lassoPanel}>
+        <View style={styles.lassoPanelHeader}>
+          <View>
+            <Text style={styles.lassoPanelTitle}>
+              {lassoSelection.length} camper{lassoSelection.length === 1 ? '' : 's'} circled
+            </Text>
+            <Text style={styles.lassoPanelSub} numberOfLines={2}>
+              {lassoSelection.map((c) => c.name).join(', ')}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={resetLasso} accessibilityLabel="Clear circled addresses">
+            <Ionicons name="close" size={18} color="#64748b" />
+          </TouchableOpacity>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.lassoBusRow}>
+          {availableRoutes.map((route) => (
+            <TouchableOpacity
+              key={route.id}
+              style={styles.lassoBusChip}
+              onPress={() => {
+                const ids = lassoSelection.map((c) => c.id);
+                if (onAssignCampers) onAssignCampers(ids, route.id);
+                else ids.forEach((id) => onAssignCamper?.(id, route.id));
+                resetLasso();
+              }}
+            >
+              <Text style={styles.lassoBusChipText}>{route.bus}</Text>
+            </TouchableOpacity>
+          ))}
+          {onRequestNewRouteForCampers ? (
+            <TouchableOpacity
+              style={[styles.lassoBusChip, styles.lassoBusChipNew]}
+              onPress={() => {
+                onRequestNewRouteForCampers(lassoSelection.map((c) => c.id));
+                resetLasso();
+              }}
+            >
+              <Text style={styles.lassoBusChipText}>New bus</Text>
+            </TouchableOpacity>
+          ) : null}
+        </ScrollView>
+        <TouchableOpacity
+          onPress={() => {
+            resetLasso();
+            setLassoMode(true);
+            setLassoHint('Draw a loop around purple pins, then tap Done');
+          }}
+        >
+          <Text style={styles.lassoDrawAgain}>Draw again</Text>
+        </TouchableOpacity>
+      </View>
+    ) : null}
     </View>
   );
 }
@@ -361,5 +516,101 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     fontWeight: '700',
+  },
+  lassoBtn: {
+    position: 'absolute',
+    top: 156,
+    left: 8,
+    zIndex: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ddd6fe',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  lassoBtnActive: {
+    backgroundColor: '#7c3aed',
+    borderColor: '#7c3aed',
+  },
+  lassoBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5b21b6',
+  },
+  lassoBtnTextActive: {
+    color: '#fff',
+  },
+  lassoHint: {
+    position: 'absolute',
+    top: 196,
+    right: 8,
+    left: 8,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd6fe',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  lassoHintText: {
+    fontSize: 11,
+    color: '#5b21b6',
+    lineHeight: 15,
+  },
+  lassoPanel: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 8,
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    gap: 8,
+  },
+  lassoPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  lassoPanelTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  lassoPanelSub: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+    maxWidth: 240,
+  },
+  lassoBusRow: {
+    flexGrow: 0,
+  },
+  lassoBusChip: {
+    marginRight: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: '#7c3aed',
+  },
+  lassoBusChipNew: {
+    backgroundColor: '#0f766e',
+  },
+  lassoBusChipText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  lassoDrawAgain: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
   },
 });
