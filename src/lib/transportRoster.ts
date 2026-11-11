@@ -4,6 +4,7 @@ import {
   getBundledMappointRoutesCsv2026,
   parseMappointRoutesCsv,
   resolveBundledGeocodeResult,
+  snapToBundledGeocode,
   mappointRoutesSummary,
   type ParsedMappointRoute,
 } from './mappointTransportImport';
@@ -382,12 +383,12 @@ export function buildUnplottedFromEnrollment(options: {
     const syncedAddress = child.homeAddress?.trim() || "";
     if (kept) {
       const address = kept.address?.trim() || syncedAddress || hint?.address || "";
-      const bundled = address ? resolveBundledGeocodeResult(address) : null;
+      const snapped = snapToBundledGeocode(address, kept.lat, kept.lng);
       out.push({
         ...kept,
         address,
-        lat: kept.lat || bundled?.lat || hint?.lat || 0,
-        lng: kept.lng || bundled?.lng || hint?.lng || 0,
+        lat: snapped.lat || hint?.lat || 0,
+        lng: snapped.lng || hint?.lng || 0,
         age: resolvedAge ?? kept.age,
         session: child.session ?? child.grade ?? kept.session,
       });

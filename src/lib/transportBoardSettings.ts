@@ -1,3 +1,8 @@
+import {
+  parseChangeSheetAttendanceSource,
+  type ChangeSheetAttendanceSource,
+} from './paperAttendance';
+
 /** Global transport board settings (one camp-wide pickup-time knob). */
 export type TransportBoardSettings = {
   stopPickupMinutes: number;
@@ -5,12 +10,14 @@ export type TransportBoardSettings = {
   /** When false, counselor pickup is listed but first camper starts the clock (and TBT). */
   includeCounselorInRouteTime: boolean;
   pinnedStopsByRoute?: Record<number, string[]>;
+  changeSheetAttendanceSource: ChangeSheetAttendanceSource;
 };
 
 export const DEFAULT_TRANSPORT_BOARD_SETTINGS: TransportBoardSettings = {
   stopPickupMinutes: 2,
   stopPickupEnabled: true,
   includeCounselorInRouteTime: false,
+  changeSheetAttendanceSource: 'paperless',
 };
 
 export function normalizeTransportBoardSettings(
@@ -37,6 +44,7 @@ export function normalizeTransportBoardSettings(
         ? Math.round(minutes)
         : DEFAULT_TRANSPORT_BOARD_SETTINGS.stopPickupMinutes,
     pinnedStopsByRoute,
+    changeSheetAttendanceSource: parseChangeSheetAttendanceSource(raw?.changeSheetAttendanceSource),
   };
 }
 

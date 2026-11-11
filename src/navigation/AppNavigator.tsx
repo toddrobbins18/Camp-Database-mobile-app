@@ -80,6 +80,7 @@ import { TransportAdminScreen } from '../screens/TransportAdminScreen';
 import { GroupAttendanceScreen } from '../screens/GroupAttendanceScreen';
 import { GroupSchedulesScreen } from '../screens/GroupSchedulesScreen';
 import { GroupBubbleSheetsScreen } from '../screens/GroupBubbleSheetsScreen';
+import { ConflictReviewScreen } from '../screens/ConflictReviewScreen';
 
 function DayCampModuleRouter({ route, navigation }: any) {
     const moduleId = route.params?.moduleId;
@@ -142,6 +143,9 @@ function DayCampModuleRouter({ route, navigation }: any) {
     }
     if (moduleId === 'change-sheets') {
         return <TransportChangeSheetsScreen navigation={navigation} />;
+    }
+    if (moduleId === 'conflict-review') {
+        return <ConflictReviewScreen navigation={navigation} />;
     }
     if (moduleId === 'pending-transport-changes') {
         return <PendingTransportChangesScreen navigation={navigation} />;

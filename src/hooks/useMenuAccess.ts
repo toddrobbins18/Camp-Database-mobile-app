@@ -44,6 +44,7 @@ export function useMenuAccess() {
         menuItem === 'group-attendance' ||
         menuItem === 'group-bubble-sheets' ||
         menuItem === 'change-sheets' ||
+        menuItem === 'conflict-review' ||
         menuItem === 'pending-transport-changes' ||
         menuItem === 'transport-admin' ||
         menuItem === 'front-office'

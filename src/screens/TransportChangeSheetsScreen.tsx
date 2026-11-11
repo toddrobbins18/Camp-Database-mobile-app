@@ -29,6 +29,13 @@ import {
   PARENT_TRANSPORT_CHANGE_SHEET_BUS,
   type TransportChangeSheetRow,
 } from '../lib/transportChangeSheets';
+import { loadBusAttendance } from '../lib/transportBusAttendance';
+import { reviewPaperAttendance, type ChangeSheetAttendanceSource } from '../lib/paperAttendance';
+import {
+  loadChangeSheetAttendanceSource,
+  loadPaperAttendance,
+  saveChangeSheetAttendanceSource,
+} from '../lib/paperAttendanceStore';
 
 function ymdFromDate(d: Date) {
   return format(d, 'yyyy-MM-dd');
@@ -48,6 +55,7 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
   const [includeParentTransport, setIncludeParentTransport] = useState(true);
   const [rows, setRows] = useState<TransportChangeSheetRow[]>([]);
   const [loadingSheet, setLoadingSheet] = useState(false);
+  const [attendanceSource, setAttendanceSource] = useState<ChangeSheetAttendanceSource>('paperless');
 
   const routeIdsKey = useMemo(() => routeMeta.map((r) => r.id).join(','), [routeMeta]);
 
@@ -79,10 +87,15 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
         setRows([]);
         return;
       }
-      const [exceptions, manual] = await Promise.all([
+      const [exceptions, manual, busAttendance, paper, source] = await Promise.all([
         fetchTransportExceptions(supabase, companyId, sheetDate),
         loadManualOverrides(supabase, companyId, season, sheetDate),
+        loadBusAttendance(supabase, companyId, season, sheetDate, runPeriod),
+        loadPaperAttendance(supabase, companyId, season, sheetDate),
+        loadChangeSheetAttendanceSource(supabase, companyId, season),
       ]);
+      setAttendanceSource(source);
+      const confirmed = reviewPaperAttendance(paper.bus, paper.group).confirmed;
       const built = buildApprovedChangeSheetRows({
         overrideDate: sheetDate,
         runPeriod,
@@ -93,6 +106,9 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
         selectedRouteIds,
         includeParentTransport,
         parentTransportCampers,
+        attendanceSource: source,
+        paperConfirmedAbsents: confirmed,
+        busAttendance: source === 'paper_scan' ? undefined : busAttendance.records,
       });
       setRows(built.filter((r) => !r.camper.startsWith('(No transport')));
     } finally {
@@ -182,6 +198,26 @@ export function TransportChangeSheetsScreen({ navigation }: { navigation: any })
             >
               <Text style={[styles.runBtnText, runPeriod === run && styles.runBtnTextActive]}>
                 {run.toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.runToggle}>
+          {(['paperless', 'paper_scan'] as const).map((source) => (
+            <TouchableOpacity
+              key={source}
+              style={[styles.runBtn, attendanceSource === source && styles.runBtnActive]}
+              onPress={() => {
+                setAttendanceSource(source);
+                if (companyId && season) {
+                  void saveChangeSheetAttendanceSource(supabase, companyId, season, source).then(() =>
+                    void loadSheet(),
+                  );
+                }
+              }}
+            >
+              <Text style={[styles.runBtnText, attendanceSource === source && styles.runBtnTextActive]}>
+                {source === 'paperless' ? 'Paperless' : 'Paper scan'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -333,6 +369,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     marginTop: theme.spacing.sm,
     gap: 8,
+    flexWrap: 'wrap',
   },
   dateBtn: {
     flexDirection: 'row',

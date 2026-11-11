@@ -25,6 +25,7 @@ export const FRONT_OFFICE_TRANSPORT_MENU_IDS = new Set([
   'change-sheets',
   'pending-transport-changes',
   'group-bubble-sheets',
+  'conflict-review',
 ]);
 
 /** Front Office child modules — hidden from drawer, opened from Front Office dashboard. */
@@ -138,6 +139,14 @@ export function getDayCampPocMenuItems(): MobileDrawerMenuItem[] {
       icon: 'document-text-outline',
       screen: 'DayCampModule',
       params: { moduleId: 'change-sheets' },
+    },
+    {
+      key: 'conflict-review',
+      menuId: 'conflict-review',
+      label: 'Conflict Review',
+      icon: 'scan-outline',
+      screen: 'DayCampModule',
+      params: { moduleId: 'conflict-review' },
     },
     {
       key: 'pending-transport-changes',
