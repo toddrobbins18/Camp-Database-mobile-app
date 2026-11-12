@@ -1367,18 +1367,14 @@ export function useDayCampTransport() {
       toast('Missing info', 'Name and address are required.', true);
       return;
     }
-    let lat = 40.85 + (Math.random() - 0.5) * 0.1;
-    let lng = -73.65 + (Math.random() - 0.5) * 0.1;
-    try {
-      const { data } = await supabase.functions.invoke('route-optimizer', {
-        body: { action: 'geocode', address: newUnplotted.address.trim() },
-      });
-      if (data?.found) {
-        lat = data.lat;
-        lng = data.lng;
-      }
-    } catch {
-      /* fallback */
+    const address = newUnplotted.address.trim();
+    let lat = 40.85;
+    let lng = -73.65;
+    const geo = await geocodeAddress(address, geocodeCacheRef.current);
+    if (isGeocodePoint(geo)) {
+      const pin = snapToBundledGeocode(address, geo.lat, geo.lng);
+      lat = pin.lat;
+      lng = pin.lng;
     }
     const id = Math.max(300, ...unplottedCampers.map((c) => c.id)) + 1;
     setUnplottedCampers((prev) => [
@@ -1386,7 +1382,7 @@ export function useDayCampTransport() {
       {
         id,
         name: newUnplotted.name.trim(),
-        address: newUnplotted.address.trim(),
+        address,
         lat,
         lng,
         age: Number(newUnplotted.age) || 10,
