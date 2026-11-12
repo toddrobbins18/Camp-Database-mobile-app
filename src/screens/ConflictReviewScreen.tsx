@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,14 +22,16 @@ import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import { useTransportBoardSnapshot } from '../hooks/useTransportBoardSnapshot';
 import { captureMessageMedia } from '../lib/messageMediaCapture';
 import {
+  formatPaperScanChecklist,
   reviewPaperAttendance,
   weekdayBubbleIndex,
   type ChangeSheetAttendanceSource,
   type PaperAbsentCamper,
   type PaperAttendanceListKind,
 } from '../lib/paperAttendance';
-import { loadRgbaFromUri } from '../lib/paperAttendanceImage';
-import { analyzePaperAttendanceImage, omrRowsToAbsentFlags } from '../lib/paperAttendanceOmr';
+import { loadRgbaPagesFromUri } from '../lib/paperAttendanceImage';
+import type { RgbaImage } from '../lib/paperAttendanceOmr';
+import { processPaperAttendancePages } from '../lib/paperAttendanceScan';
 import {
   loadChangeSheetAttendanceSource,
   loadPaperAttendance,
@@ -50,28 +52,76 @@ function dateFromYmd(ymd: string) {
   return new Date(`${ymd}T12:00:00`);
 }
 
-async function pickScanPhoto(): Promise<string | null> {
-  const run = async (action: 'camera_photo' | 'library' | 'file') => {
-    const picked = await captureMessageMedia(action);
-    return picked?.uri ?? null;
+type ScanPick = { uri: string; mimeType?: string | null; fileName?: string | null };
+
+async function pickLibraryPages(): Promise<ScanPick[]> {
+  try {
+    const ImagePicker = await import('expo-image-picker');
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Photos', 'Photo library access is required.');
+      return [];
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+      allowsMultipleSelection: true,
+      selectionLimit: 40,
+    });
+    if (result.canceled || !result.assets?.length) return [];
+    return result.assets.map((asset) => ({
+      uri: asset.uri,
+      mimeType: asset.mimeType,
+      fileName: asset.fileName,
+    }));
+  } catch {
+    const picked = await captureMessageMedia('library');
+    return picked?.uri ? [{ uri: picked.uri, mimeType: picked.mimeType, fileName: picked.fileName }] : [];
+  }
+}
+
+async function pickFilePages(): Promise<ScanPick[]> {
+  const DocumentPicker = await import('expo-document-picker');
+  const result = await DocumentPicker.getDocumentAsync({
+    type: ['image/jpeg', 'image/png', 'application/pdf'],
+    multiple: true,
+    copyToCacheDirectory: true,
+  });
+  if (result.canceled || !result.assets?.length) return [];
+  return result.assets.map((asset) => ({
+    uri: asset.uri,
+    mimeType: asset.mimeType,
+    fileName: asset.name,
+  }));
+}
+
+async function pickScanPages(): Promise<ScanPick[]> {
+  const runCamera = async () => {
+    const picked = await captureMessageMedia('camera_photo');
+    return picked?.uri ? [{ uri: picked.uri, mimeType: picked.mimeType, fileName: picked.fileName }] : [];
   };
   if (Platform.OS === 'ios') {
     return new Promise((resolve) => {
       ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Take photo', 'Photo library'], cancelButtonIndex: 0 },
+        {
+          options: ['Cancel', 'Take photo', 'Photo library (all pages)', 'Files / PDF'],
+          cancelButtonIndex: 0,
+        },
         (index) => {
-          if (index === 1) void run('camera_photo').then(resolve);
-          else if (index === 2) void run('library').then(resolve);
-          else resolve(null);
+          if (index === 1) void runCamera().then(resolve);
+          else if (index === 2) void pickLibraryPages().then(resolve);
+          else if (index === 3) void pickFilePages().then(resolve);
+          else resolve([]);
         },
       );
     });
   }
   return new Promise((resolve) => {
-    Alert.alert('Scan sheet', 'Photograph the printed roster', [
-      { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
-      { text: 'Camera', onPress: () => void run('camera_photo').then(resolve) },
-      { text: 'Library', onPress: () => void run('library').then(resolve) },
+    Alert.alert('Scan sheets', 'One PDF of every bus or group, or photos of every page', [
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve([]) },
+      { text: 'Camera', onPress: () => void runCamera().then(resolve) },
+      { text: 'Library', onPress: () => void pickLibraryPages().then(resolve) },
+      { text: 'Files / PDF', onPress: () => void pickFilePages().then(resolve) },
     ]);
   });
 }
@@ -88,11 +138,17 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
   const [marks, setMarks] = useState<RosterMark[]>([]);
   const [scanWarning, setScanWarning] = useState<string | null>(null);
+  const [scanChecklist, setScanChecklist] = useState<{
+    scannedLabels: string[];
+    missingLabels: string[];
+    unreadPages: Array<{ sourceName: string; reason: string }>;
+  } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busAbsents, setBusAbsents] = useState<PaperAbsentCamper[]>([]);
   const [groupAbsents, setGroupAbsents] = useState<PaperAbsentCamper[]>([]);
   const [attendanceSource, setAttendanceSource] = useState<ChangeSheetAttendanceSource>('paperless');
+  const pendingScanAbsents = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     setSheetDate(operationalDateString);
@@ -144,32 +200,40 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
     if (!sheetOptions.includes(sheetLabel)) setSheetLabel(sheetOptions[0]);
   }, [sheetLabel, sheetOptions]);
 
-  const rosterForSheet = useCallback((): RosterMark[] => {
-    if (!sheetLabel) return [];
-    if (listKind === 'group') {
-      return groupRoster
-        .filter((c) => c.groupName === sheetLabel)
-        .map((c) => ({ id: c.id, name: c.name, absent: false }));
-    }
-    if (sheetLabel === PARENT_TRANSPORT_CHANGE_SHEET_BUS) {
-      return parentTransportCampers.map((c, i) => ({
-        id: `pt-${i}-${c.name}`,
+  const rosterForLabel = useCallback(
+    (label: string): RosterMark[] => {
+      if (!label) return [];
+      if (listKind === 'group') {
+        return groupRoster
+          .filter((c) => c.groupName === label)
+          .map((c) => ({ id: c.id, name: c.name, absent: false }));
+      }
+      if (label === PARENT_TRANSPORT_CHANGE_SHEET_BUS) {
+        return parentTransportCampers.map((c, i) => ({
+          id: `pt-${i}-${c.name}`,
+          name: c.name,
+          absent: false,
+        }));
+      }
+      const route = routeMeta.find((r) => r.bus === label);
+      if (!route) return [];
+      return campersOnRoute(route.id, coreStops[route.id] ?? []).map((c) => ({
+        id: c.key,
         name: c.name,
         absent: false,
       }));
-    }
-    const route = routeMeta.find((r) => r.bus === sheetLabel);
-    if (!route) return [];
-    return campersOnRoute(route.id, coreStops[route.id] ?? []).map((c) => ({
-      id: c.key,
-      name: c.name,
-      absent: false,
-    }));
-  }, [coreStops, groupRoster, listKind, parentTransportCampers, routeMeta, sheetLabel]);
+    },
+    [coreStops, groupRoster, listKind, parentTransportCampers, routeMeta],
+  );
+
+  const rosterForSheet = useCallback((): RosterMark[] => rosterForLabel(sheetLabel), [rosterForLabel, sheetLabel]);
 
   useEffect(() => {
-    setMarks(rosterForSheet());
-    setScanWarning(null);
+    const base = rosterForSheet();
+    const pending = pendingScanAbsents.current;
+    pendingScanAbsents.current = null;
+    setMarks(pending ? base.map((row) => ({ ...row, absent: pending.has(row.name) })) : base);
+    if (!pending) setScanWarning(null);
   }, [rosterForSheet]);
 
   const handleScan = async () => {
@@ -177,25 +241,73 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
       Alert.alert('Weekday only', 'Bus and group sheets are Monday–Friday.');
       return;
     }
-    if (!marks.length) {
-      Alert.alert('Pick a sheet', 'Choose the bus or group that matches this page.');
+    if (!sheetOptions.length) {
+      Alert.alert(
+        `No ${listKind} sheets`,
+        listKind === 'bus' ? 'Open Transportation so buses are on the board.' : 'No groups in this season.',
+      );
       return;
     }
-    const uri = await pickScanPhoto();
-    if (!uri) return;
+    const picks = await pickScanPages();
+    if (!picks.length) return;
     setScanning(true);
     try {
-      const image = await loadRgbaFromUri(uri);
-      const result = analyzePaperAttendanceImage(image, {
+      const pages: Array<{ image: RgbaImage; sourceName: string }> = [];
+      for (const pick of picks) {
+        pages.push(...(await loadRgbaPagesFromUri(pick.uri, pick.mimeType, pick.fileName)));
+      }
+      const batch = processPaperAttendancePages(pages, {
         kind: listKind,
         weekdayIndex,
-        camperCount: marks.length,
+        expectedLabels: sheetOptions,
+        rosterForLabel,
+        fallbackLabel: pages.length === 1 ? sheetLabel : null,
       });
-      const flags = new Map(omrRowsToAbsentFlags(result.rows, listKind).map((row) => [row.camperIndex, row.absent]));
-      setMarks((prev) => prev.map((row, index) => ({ ...row, absent: flags.get(index) === true })));
-      setScanWarning(result.warning ?? null);
+      if (!companyId || !season) {
+        Alert.alert('Not signed in to a camp');
+        return;
+      }
+      const { data: userRes } = await supabase.auth.getUser();
+      for (const sheet of batch.sheets) {
+        const ok = await savePaperAttendanceSheet(supabase, {
+          companyId,
+          season,
+          attendanceDate: sheetDate,
+          listKind,
+          sheetLabel: sheet.label,
+          absents: sheet.absents,
+          userId: userRes.user?.id ?? null,
+        });
+        if (!ok) Alert.alert('Save failed', sheet.label);
+      }
+      setScanChecklist({
+        scannedLabels: batch.scannedLabels,
+        missingLabels: batch.missingLabels,
+        unreadPages: batch.unreadPages,
+      });
+      setScanWarning(batch.sheets.find((sheet) => sheet.warning)?.warning ?? null);
+      if (batch.sheets.length === 1) {
+        const sheet = batch.sheets[0];
+        const absents = new Set(sheet.absents.map((row) => row.camperName));
+        if (sheet.label === sheetLabel) {
+          setMarks(rosterForLabel(sheet.label).map((row) => ({ ...row, absent: absents.has(row.name) })));
+        } else {
+          pendingScanAbsents.current = absents;
+          setSheetLabel(sheet.label);
+        }
+      }
+      await loadLists();
+      Alert.alert(
+        batch.missingLabels.length ? 'Sheets missing' : 'Scan saved',
+        formatPaperScanChecklist({
+          kind: listKind,
+          scannedLabels: batch.scannedLabels,
+          missingLabels: batch.missingLabels,
+          unreadPages: batch.unreadPages,
+        }),
+      );
     } catch (err) {
-      Alert.alert('Could not read that photo', err instanceof Error ? err.message : 'Mark names by hand.');
+      Alert.alert('Could not read that file', err instanceof Error ? err.message : 'Mark names by hand.');
     } finally {
       setScanning(false);
     }
@@ -246,7 +358,9 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Conflict Review</Text>
-          <Text style={styles.subtitle}>Scan bus + group sheets. Both lists = really absent.</Text>
+          <Text style={styles.subtitle}>
+            Camper barcodes are CampMinder IDs. Upload one file of every bus or every group.
+          </Text>
         </View>
       </View>
 
@@ -288,7 +402,7 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
           ))}
         </View>
 
-        <Text style={styles.section}>Scan a sheet</Text>
+        <Text style={styles.section}>Scan all {listKind} sheets</Text>
         <View style={styles.rowBtns}>
           {(['bus', 'group'] as const).map((kind) => (
             <TouchableOpacity
@@ -318,7 +432,7 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
             {scanning ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.primaryBtnText}>Camera / photo</Text>
+              <Text style={styles.primaryBtnText}>Scan all pages</Text>
             )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={() => void saveSheet()} disabled={saving || !sheetLabel}>
@@ -326,6 +440,30 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
           </TouchableOpacity>
         </View>
         {scanWarning ? <Text style={styles.warn}>{scanWarning}</Text> : null}
+        {scanChecklist ? (
+          <View style={styles.checklist}>
+            <Text style={styles.checklistTitle}>
+              Read {scanChecklist.scannedLabels.length} of {sheetOptions.length} {listKind} sheets
+            </Text>
+            {scanChecklist.missingLabels.length ? (
+              <>
+                <Text style={styles.warn}>Missing</Text>
+                {scanChecklist.missingLabels.map((label) => (
+                  <Text key={label} style={styles.listLine}>
+                    {label}
+                  </Text>
+                ))}
+              </>
+            ) : scanChecklist.scannedLabels.length ? (
+              <Text style={styles.empty}>Every {listKind} sheet is in.</Text>
+            ) : null}
+            {scanChecklist.unreadPages.map((page) => (
+              <Text key={page.sourceName} style={styles.warn}>
+                {page.sourceName}: {page.reason}
+              </Text>
+            ))}
+          </View>
+        ) : null}
 
         {boardLoading ? <ActivityIndicator style={{ marginVertical: 8 }} /> : null}
         {marks.map((row, index) => (
@@ -436,6 +574,15 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
   warn: { fontSize: 12, color: '#b45309', marginBottom: 8 },
+  checklist: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    backgroundColor: theme.colors.surface,
+  },
+  checklistTitle: { fontSize: 13, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
   markRow: {
     flexDirection: 'row',
     alignItems: 'center',

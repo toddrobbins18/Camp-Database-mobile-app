@@ -12,6 +12,7 @@ import { withCounselorPickupStops } from "./transportCounselorPickup";
 import { loadRouteReferenceAssignments } from "./routeReferenceWarehouse";
 import type { BubbleSheetCamper } from "./transportBubbleSheetPdf";
 import type { GroupReportCamper } from "./transportCampMinderReportsPdf";
+import { encodeCamperBarcode } from "./transportReportPdfLayout";
 
 export type TransportReportChildRow = {
   id: string;
@@ -272,7 +273,7 @@ export function childToGroupReportCamper(
   child: TransportReportChildRow,
   transportLine: string,
 ): GroupReportCamper {
-  const barcodeValue = String(child.personId ?? child.id ?? "").trim();
+  const barcodeValue = encodeCamperBarcode(child.personId ?? child.id);
   return {
     name: child.name,
     demographicsLine: formatReportGenderAgeGrade(child),
