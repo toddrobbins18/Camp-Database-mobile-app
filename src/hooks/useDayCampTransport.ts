@@ -9,6 +9,7 @@ import { parseCSV, pickFirst } from '../lib/sunshineCsv';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import {
   resolveBundledGeocodeResult,
+  snapToBundledGeocode,
 } from '../lib/mappointTransportImport';
 import {
   applyRouteOverrides,
@@ -105,6 +106,7 @@ import {
   loadStopsOnlyTemplateFromSeason,
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
+  repinTransportBoardCoordinates,
   transportBoardSeasonSyncChanged,
   type TransportBoardPayload,
   type TransportRouteMeta,
@@ -1753,31 +1755,39 @@ export function useDayCampTransport() {
       /* ignore */
     }
     try {
-      const results = await geocodeBatch(addresses, 6, geocodeCacheRef.current);
-      const resolved = new Map<string, { lat: number; lng: number }>();
-      let failed = 0;
-      addresses.forEach((address, i) => {
-        const r = results[i];
-        if (isGeocodePoint(r)) resolved.set(address, { lat: r.lat, lng: r.lng });
-        else failed++;
+      const snapped = repinTransportBoardCoordinates({
+        coreStops,
+        unplottedCampers,
       });
-      let moved = 0;
-      const changed = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
-        Math.abs(a.lat - b.lat) > 0.0002 || Math.abs(a.lng - b.lng) > 0.0002;
-      setUnplottedCampers((prev) =>
-        prev.map((c) => {
+      let nextCore = snapped.coreStops;
+      let nextUnplotted = snapped.unplottedCampers;
+      let moved = snapped.movedCount;
+      let failed = 0;
+      const leftover = addresses.filter((address) => !resolveBundledGeocodeResult(address));
+      if (leftover.length > 0) {
+        const results = await geocodeBatch(leftover, 6, geocodeCacheRef.current);
+        const resolved = new Map<string, { lat: number; lng: number }>();
+        leftover.forEach((address, i) => {
+          const r = results[i];
+          if (isGeocodePoint(r)) {
+            resolved.set(address, snapToBundledGeocode(address, r.lat, r.lng));
+          } else {
+            failed++;
+          }
+        });
+        const changed = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
+          Math.abs(a.lat - b.lat) > 0.0002 || Math.abs(a.lng - b.lng) > 0.0002;
+        nextUnplotted = nextUnplotted.map((c) => {
           const hit = resolved.get(c.address);
           if (hit && changed(c, hit)) {
             moved++;
             return { ...c, lat: hit.lat, lng: hit.lng };
           }
           return c;
-        }),
-      );
-      setCoreStops((prev) => {
-        const next: typeof prev = {};
-        Object.entries(prev).forEach(([routeId, stops]) => {
-          next[Number(routeId)] = (stops || []).map((stop) => {
+        });
+        const patched: typeof nextCore = {};
+        Object.entries(nextCore).forEach(([routeId, stops]) => {
+          patched[Number(routeId)] = (stops || []).map((stop) => {
             const hit = resolved.get(stop.address);
             if (hit && changed(stop, hit)) {
               moved++;
@@ -1786,11 +1796,13 @@ export function useDayCampTransport() {
             return stop;
           });
         });
-        return next;
-      });
+        nextCore = patched;
+      }
+      setUnplottedCampers(nextUnplotted);
+      setCoreStops(nextCore);
       toast(
-        'Re-geocode complete',
-        `${moved} pin${moved === 1 ? '' : 's'} repositioned · ${addresses.length - failed} matched${failed ? ` · ${failed} could not be geocoded` : ''}.`,
+        'Map pins reset',
+        `${moved} pin${moved === 1 ? '' : 's'} moved onto the street address${failed ? ` · ${failed} could not be geocoded` : ''}.`,
       );
     } catch (e: unknown) {
       toast('Re-geocode failed', e instanceof Error ? e.message : String(e), true);

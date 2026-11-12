@@ -385,7 +385,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
       ? [{ key: 'bulk', label: 'Bulk Upload', icon: 'cloud-upload-outline' as const, onPress: t.openBulkImport }]
       : []),
     { key: 'camper', label: 'Add Camper', icon: 'person-add-outline' as const, onPress: () => t.setAddCamperOpen(true) },
-    { key: 'regeo', label: 'Re-geocode', icon: 'location-outline' as const, onPress: t.handleRegeocodeAll, loading: t.regeocoding },
+    { key: 'regeo', label: 'Reset pins', icon: 'location-outline' as const, onPress: t.handleRegeocodeAll, loading: t.regeocoding },
     { key: 'route', label: 'Add Route', icon: 'add-circle-outline' as const, onPress: () => { t.setPendingLassoCamperIds([]); t.setAddRouteOpen(true); } },
     {
       key: 'pt',

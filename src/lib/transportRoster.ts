@@ -154,7 +154,17 @@ export async function normalizeTransportBoardForSeason(
     parentTransportCampers,
   );
 
-  return { ...board, coreStops: prunedStops, parentTransportCampers, unplottedCampers };
+  const repinned = repinTransportBoardCoordinates({
+    coreStops: prunedStops,
+    unplottedCampers,
+  });
+
+  return {
+    ...board,
+    coreStops: repinned.coreStops,
+    parentTransportCampers,
+    unplottedCampers: repinned.unplottedCampers,
+  };
 }
 
 /** True when season normalize changed stored stops or unplotted (ghost riders removed). */
@@ -303,6 +313,34 @@ export async function loadEnrolledCampersForTransport(
     groupName: row.group_name as string | null,
     homeAddress: (row.home_address as string | null)?.trim() || null,
   })).filter((c) => c.name);
+}
+
+/** Re-pin every stop/unplotted camper from its street address (MapPoint first). */
+export function repinTransportBoardCoordinates(options: {
+  coreStops: Record<number, TransportRouteStop[]>;
+  unplottedCampers: TransportUnplottedCamper[];
+}): {
+  coreStops: Record<number, TransportRouteStop[]>;
+  unplottedCampers: TransportUnplottedCamper[];
+  movedCount: number;
+} {
+  let movedCount = 0;
+  const coreStops: Record<number, TransportRouteStop[]> = {};
+  for (const [routeId, stops] of Object.entries(options.coreStops)) {
+    coreStops[Number(routeId)] = (stops ?? []).map((stop) => {
+      const snapped = snapToBundledGeocode(stop.address || '', stop.lat, stop.lng);
+      if (snapped.lat === stop.lat && snapped.lng === stop.lng) return stop;
+      movedCount += 1;
+      return { ...stop, lat: snapped.lat, lng: snapped.lng };
+    });
+  }
+  const unplottedCampers = options.unplottedCampers.map((camper) => {
+    const snapped = snapToBundledGeocode(camper.address || '', camper.lat, camper.lng);
+    if (snapped.lat === camper.lat && snapped.lng === camper.lng) return camper;
+    movedCount += 1;
+    return { ...camper, lat: snapped.lat, lng: snapped.lng };
+  });
+  return { coreStops, unplottedCampers, movedCount };
 }
 
 /** Names currently assigned to any route stop. */

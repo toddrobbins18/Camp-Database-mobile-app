@@ -77,14 +77,13 @@ export async function geocodeAddress(
   address: string,
   cache: TransportGeocodeCache,
 ): Promise<GeocodeResult | null> {
-  const cacheKey = address.trim().toLowerCase();
-  const cached = cache.get(address);
-  if (cached !== undefined) return cached;
   const bundled = resolveBundledGeocodeResult(address);
   if (bundled) {
     cache.set(address, bundled);
     return bundled;
   }
+  const cached = cache.get(address);
+  if (cached !== undefined) return cached;
   const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -123,17 +122,17 @@ export async function geocodeBatch(
   const pending: { index: number; address: string }[] = [];
 
   addresses.forEach((address, i) => {
-    const cached = cache.get(address);
-    if (cached !== undefined) {
-      results[i] = cached;
-      onEach?.(i, cached);
-      return;
-    }
     const bundled = resolveBundledGeocodeResult(address);
     if (bundled) {
       cache.set(address, bundled);
       results[i] = bundled;
       onEach?.(i, bundled);
+      return;
+    }
+    const cached = cache.get(address);
+    if (cached !== undefined) {
+      results[i] = cached;
+      onEach?.(i, cached);
       return;
     }
     pending.push({ index: i, address });
