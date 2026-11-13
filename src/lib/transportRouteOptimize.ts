@@ -125,7 +125,7 @@ export function optimizeStopsWithPinned(
 
 export function reorderRouteForOptimize(
   stops: TransportRouteStop[],
-  options?: { fromFirstStop?: boolean; pinnedKeys?: string[] },
+  options?: { fromFirstStop?: boolean; pinnedKeys?: string[]; camp?: { lat: number; lng: number } },
 ): TransportRouteStop[] {
   const consolidated = consolidateRouteStopsByAddress(stops);
   let pins = [...(options?.pinnedKeys ?? [])];
@@ -138,5 +138,5 @@ export function reorderRouteForOptimize(
   if (options?.fromFirstStop) {
     return sanitizeRouteStops(optimizeStopsFromFirstStop(consolidated));
   }
-  return sanitizeRouteStops(nearestNeighborOrder(consolidated));
+  return sanitizeRouteStops(nearestNeighborOrder(consolidated, options?.camp));
 }

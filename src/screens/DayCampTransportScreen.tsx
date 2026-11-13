@@ -27,7 +27,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { theme } from '../theme/theme';
 import {
-  CAMP_LOCATION,
   ROUTE_COLORS,
   getRouteStopLabel,
   isCampStop,
@@ -195,11 +194,11 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   const mapDisplayedRoutes = useMemo(() => {
     const pending = buildPendingNamesByAddress(t.unplottedForWeek);
     return filterRoutesForMapDisplay(t.displayedRoutes, {
-      campAddress: CAMP_LOCATION.address,
+      campAddress: t.campLocation.address,
       showBlankOpenStops,
       pendingNamesByAddress: pending,
     });
-  }, [t.displayedRoutes, t.unplottedForWeek, showBlankOpenStops]);
+  }, [t.displayedRoutes, t.unplottedForWeek, showBlankOpenStops, t.campLocation.address]);
 
   const ptRosterOptions = useMemo(() => {
     const q = ptCamperSearch.trim().toLowerCase();
@@ -211,8 +210,8 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   }, [ptCamperSearch, t.groupRoster, t.parentTransportCampers]);
 
   const hiddenBlankOpenStopCount = useMemo(
-    () => t.routes.reduce((sum, r) => sum + countBlankOpenStopsOnRoute(r.stops), 0),
-    [t.routes],
+    () => t.routes.reduce((sum, r) => sum + countBlankOpenStopsOnRoute(r.stops, t.campLocation.address), 0),
+    [t.routes, t.campLocation.address],
   );
 
   const filteredBusRunEntries = useMemo(() => {
@@ -302,7 +301,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
       return;
     }
     const stopLabels = directionStops.map((s) => {
-      if (s.address === CAMP_LOCATION.address) return 'Camp';
+      if (s.address === t.campLocation.address) return 'Camp';
       if (isCounselorPickupStop(s)) return s.name || 'Bus counselor';
       return s.camperNames?.join(', ') || s.name;
     });
@@ -368,7 +367,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   const toolbarItems = [
     {
       key: 'template',
-      label: t.sandboxTransport ? 'Reset sandbox routes' : 'Route Template',
+      label: t.sandboxTransport ? 'Reset sandbox routes' : t.useNsMappoint ? 'Route Template' : 'Add buses',
       icon: 'layers-outline' as const,
       onPress: t.handleApplyRouteTemplate,
       loading: t.applyingTemplate,
@@ -458,16 +457,16 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
   const renderStopActionModal = () => {
     if (!t.stopAction) return null;
     const { routeId, stopIndex, stop } = t.stopAction;
-    if (isCampStop(stop) || isCounselorPickupStop(stop)) return null;
+    if (isCampStop(stop, t.campLocation.address) || isCounselorPickupStop(stop)) return null;
     const pinned = t.isStopPinnedForOptimize(routeId, stop.address);
     const displayStops = t.routes.find((route) => route.id === routeId)?.stops ?? [];
-    const fromCore = coreIndexFromDisplayStops(displayStops, stopIndex, CAMP_LOCATION.address);
+    const fromCore = coreIndexFromDisplayStops(displayStops, stopIndex, t.campLocation.address);
     const canMoveUp =
       fromCore != null
-      && coreIndexFromDisplayStops(displayStops, stopIndex - 1, CAMP_LOCATION.address) != null;
+      && coreIndexFromDisplayStops(displayStops, stopIndex - 1, t.campLocation.address) != null;
     const canMoveDown =
       fromCore != null
-      && coreIndexFromDisplayStops(displayStops, stopIndex + 1, CAMP_LOCATION.address) != null;
+      && coreIndexFromDisplayStops(displayStops, stopIndex + 1, t.campLocation.address) != null;
     return (
       <Modal visible transparent animationType="slide">
         <Pressable style={styles.modalBackdrop} onPress={() => t.setStopAction(null)}>
@@ -653,7 +652,9 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
             allRoutes={t.allRoutes}
             unplottedCampers={t.unplottedForWeek}
             liveBuses={liveBuses}
-            campAddress={CAMP_LOCATION.address}
+            campAddress={t.campLocation.address}
+            campLat={t.campLocation.lat}
+            campLng={t.campLocation.lng}
             onAssignCamper={t.handleAssignCamperToRoute}
             onAssignCampers={t.handleAssignCampersToRoute}
             onRequestNewRouteForCampers={t.handleRequestNewRouteForCampers}
@@ -711,7 +712,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
             renderItem={({ item: r }) => {
               const isVisible = t.visibleRoutes.includes(r.id);
               const core = t.coreStops[r.id] || [];
-              const blankOpenOnRoute = countBlankOpenStopsOnRoute(r.stops);
+              const blankOpenOnRoute = countBlankOpenStopsOnRoute(r.stops, t.campLocation.address);
               return (
                 <TouchableOpacity
                   style={[styles.routeCard, isVisible && styles.routeCardActive, { borderLeftColor: r.color }]}
@@ -757,7 +758,7 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
                   {isVisible && r.stops.length > 0 && (
                     <ScrollView style={styles.stopList} nestedScrollEnabled>
                       {r.stops.map((stop, i) => {
-                        const isCamp = isCampStop(stop);
+                        const isCamp = isCampStop(stop, t.campLocation.address);
                         const isCounselor = isCounselorPickupStop(stop);
                         const stopLines = routeStopListLines(stop, { isCamp });
                         if (!showBlankOpenStops && !isCamp && !isCounselor && isBlankOpenRouteStop(stopLines)) {
@@ -1531,7 +1532,9 @@ export function DayCampTransportScreen({ navigation }: { navigation: any }) {
           allRoutes={t.allRoutes}
           unplottedCampers={t.unplottedForWeek}
           liveBuses={liveBuses}
-          campAddress={CAMP_LOCATION.address}
+          campAddress={t.campLocation.address}
+          campLat={t.campLocation.lat}
+          campLng={t.campLocation.lng}
           onAssignCamper={t.handleAssignCamperToRoute}
           onAssignCampers={t.handleAssignCampersToRoute}
           onRequestNewRouteForCampers={t.handleRequestNewRouteForCampers}

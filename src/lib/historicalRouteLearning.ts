@@ -23,6 +23,8 @@ import type {
   TransportRouteStop,
   TransportUnplottedCamper,
 } from './transportRoster';
+import { usesNorthShoreMappoint } from '../constants/camps';
+import { fetchCompanySlug, isSandboxTransportSlug } from './nestSandboxTransport';
 
 export const DEFAULT_REFERENCE_SEASON = "2026";
 
@@ -147,11 +149,20 @@ async function loadHistoricalPriorMap(
   companyId: string,
   historicalSeason = DEFAULT_REFERENCE_SEASON,
 ): Promise<Map<string, CamperRoutingPrior>> {
+  const slug = await fetchCompanySlug(supabase, companyId);
+  if (isSandboxTransportSlug(slug)) {
+    return buildCamperPriorMap([]);
+  }
+
   for (const source of ["mappoint", "nest"] as const) {
     const priors = await loadPriorsForSeasonSource(supabase, companyId, historicalSeason, source);
     if (priors.length > 0) {
       return buildCamperPriorMap(priors);
     }
+  }
+
+  if (!usesNorthShoreMappoint(slug)) {
+    return buildCamperPriorMap([]);
   }
 
   return buildCamperPriorMap(buildPriorsFromBundledMappoint(historicalSeason));
@@ -204,6 +215,17 @@ export async function getReferenceDatasetStatus(
         priorCount: priors.length,
       };
     }
+  }
+
+  const slug = await fetchCompanySlug(supabase, companyId);
+  if (!usesNorthShoreMappoint(slug) || isSandboxTransportSlug(slug)) {
+    return {
+      referenceSeason: historicalSeason,
+      loaded: false,
+      source: "nest",
+      stats: null,
+      priorCount: 0,
+    };
   }
 
   const bundled = buildPriorsFromBundledMappoint(historicalSeason);
@@ -325,6 +347,10 @@ export async function syncBundledMapPointToWarehouse(
   companyId: string,
   options?: { userId?: string | null; referenceSeason?: string },
 ): Promise<{ ok: boolean; error?: string; stats?: RouteReferenceImportStats }> {
+  const slug = await fetchCompanySlug(supabase, companyId);
+  if (!usesNorthShoreMappoint(slug)) {
+    return { ok: false, error: 'Bundled MapPoint is North Shore only' };
+  }
   const referenceSeason = options?.referenceSeason ?? DEFAULT_REFERENCE_SEASON;
   const payload = buildRouteReferenceFromMappointCsv(getBundledMappointRoutesCsv2026(), {
     referenceSeason,

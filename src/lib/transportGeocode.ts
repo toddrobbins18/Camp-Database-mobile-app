@@ -47,10 +47,12 @@ export class TransportGeocodeCache {
   private cache: Map<string, GeocodeResult | null> = new Map();
   private loaded = false;
 
-  async init() {
+  async init(options?: { useBundledMappoint?: boolean }) {
     if (this.loaded) return;
     this.cache = await loadPersistedGeocodeCache();
-    seedGeocodeCacheFromBundled(this.cache as Map<string, { lat: number; lng: number; provider?: string } | null>);
+    if (options?.useBundledMappoint !== false) {
+      seedGeocodeCacheFromBundled(this.cache as Map<string, { lat: number; lng: number; provider?: string } | null>);
+    }
     this.loaded = true;
   }
 
@@ -66,6 +68,7 @@ export class TransportGeocodeCache {
 
   clear() {
     this.cache.clear();
+    this.loaded = false;
   }
 
   persist() {
@@ -76,8 +79,9 @@ export class TransportGeocodeCache {
 export async function geocodeAddress(
   address: string,
   cache: TransportGeocodeCache,
+  useBundledMappoint = true,
 ): Promise<GeocodeResult | null> {
-  const bundled = resolveBundledGeocodeResult(address);
+  const bundled = useBundledMappoint ? resolveBundledGeocodeResult(address) : null;
   if (bundled) {
     cache.set(address, bundled);
     return bundled;
@@ -117,12 +121,13 @@ export async function geocodeBatch(
   concurrency: number,
   cache: TransportGeocodeCache,
   onEach?: (index: number, result: GeocodeResult | null) => void,
+  useBundledMappoint = true,
 ): Promise<(GeocodeResult | null)[]> {
   const results: (GeocodeResult | null)[] = new Array(addresses.length).fill(null);
   const pending: { index: number; address: string }[] = [];
 
   addresses.forEach((address, i) => {
-    const bundled = resolveBundledGeocodeResult(address);
+    const bundled = useBundledMappoint ? resolveBundledGeocodeResult(address) : null;
     if (bundled) {
       cache.set(address, bundled);
       results[i] = bundled;

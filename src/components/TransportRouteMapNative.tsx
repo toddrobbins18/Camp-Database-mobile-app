@@ -44,6 +44,8 @@ export type TransportRouteMapNativeProps = {
   unplottedCampers?: MapUnplottedCamper[];
   liveBuses?: LiveBusMarker[];
   campAddress?: string;
+  campLat?: number;
+  campLng?: number;
   onMoveStop?: (fromRouteId: number, stopIndex: number, toRouteId: number) => void;
   onRemoveStop?: (routeId: number, stopIndex: number) => void;
   onAssignCamper?: (camperId: number, routeId: number) => void;
@@ -53,10 +55,13 @@ export type TransportRouteMapNativeProps = {
   onUnplottedPress?: (camperId: number) => void;
 };
 
-function routeCoordinates(route: MapRoute): { latitude: number; longitude: number }[] {
+function routeCoordinates(
+  route: MapRoute,
+  campAddress?: string,
+): { latitude: number; longitude: number }[] {
   const coords: { latitude: number; longitude: number }[] = [];
   for (const stop of route.stops) {
-    if (isCampStop(stop)) continue;
+    if (isCampStop(stop, campAddress)) continue;
     const next = { latitude: stop.lat, longitude: stop.lng };
     const prev = coords[coords.length - 1];
     if (!prev || Math.abs(prev.latitude - next.latitude) > 0.000001 || Math.abs(prev.longitude - next.longitude) > 0.000001) {
@@ -107,6 +112,8 @@ export function TransportRouteMapNative({
   unplottedCampers = [],
   liveBuses = [],
   campAddress = CAMP_LOCATION.address,
+  campLat = CAMP_LOCATION.lat,
+  campLng = CAMP_LOCATION.lng,
   onAssignCamper,
   onAssignCampers,
   onRequestNewRouteForCampers,
@@ -126,14 +133,14 @@ export function TransportRouteMapNative({
     const routePoints = routes.flatMap((r) => r.stops.map((s) => ({ lat: s.lat, lng: s.lng })));
     const camperPoints = unplottedCampers.map((c) => ({ lat: c.lat, lng: c.lng }));
     const busPoints = liveBuses.map((b) => ({ lat: b.latitude, lng: b.longitude }));
-    return [...routePoints, ...camperPoints, ...busPoints, { lat: CAMP_LOCATION.lat, lng: CAMP_LOCATION.lng }];
-  }, [routes, unplottedCampers, liveBuses]);
+    return [...routePoints, ...camperPoints, ...busPoints, { lat: campLat, lng: campLng }];
+  }, [routes, unplottedCampers, liveBuses, campLat, campLng]);
 
   const initialRegion: Region = useMemo(() => {
     if (allPoints.length === 0) {
       return {
-        latitude: CAMP_LOCATION.lat,
-        longitude: CAMP_LOCATION.lng,
+        latitude: campLat,
+        longitude: campLng,
         latitudeDelta: 0.15,
         longitudeDelta: 0.15,
       };
@@ -261,7 +268,7 @@ export function TransportRouteMapNative({
       }
     >
       {routes.map((route) => {
-        const coords = routeCoordinates(route);
+        const coords = routeCoordinates(route, campAddress);
         if (coords.length > 1) {
           return (
             <Polyline
@@ -278,7 +285,7 @@ export function TransportRouteMapNative({
       {routes.map((route) => {
         let stopNum = 0;
         return route.stops.map((stop, stopIndex) => {
-          const isCamp = isCampStop(stop) || (!!campAddress && normAddr(stop.address) === normAddr(campAddress));
+          const isCamp = isCampStop(stop, campAddress);
           const isCounselor = isCounselorPickupStop(stop);
           if (!isCamp && !isCounselor) stopNum += 1;
           const label = isCamp ? 'C' : isCounselor ? BUS_COUNSELOR_STOP_LABEL : String(stopNum);

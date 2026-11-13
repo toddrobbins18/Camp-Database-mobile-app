@@ -1,5 +1,6 @@
 import type { TransportRouteStop } from './transportRoster';
 import { BUS_COUNSELOR_STOP_LABEL, isCounselorPickupStop } from './transportCounselorPickup';
+import { NORTH_SHORE_CAMP_LOCATION } from '../constants/camps';
 
 export const ROUTE_COLORS = [
   '#3eb8a0', '#4a9eff', '#f59e0b', '#ef4444', '#a855f7',
@@ -14,14 +15,8 @@ export const ROUTE_COLORS = [
   '#1e40af', '#166534', '#854d0e', '#6b21a8', '#134e4a',
 ];
 
-export const CAMP_LOCATION = {
-  name: 'Camp — 85 Crescent Beach Rd',
-  address: '85 Crescent Beach Road, Glen Cove, NY 11542',
-  lat: 40.879993,
-  lng: -73.642634,
-  pickupTime: '',
-  passengers: 0,
-};
+/** Default camp pin (North Shore). Use `getCampLocation(slug)` for the active camp. */
+export const CAMP_LOCATION = NORTH_SHORE_CAMP_LOCATION;
 
 export type TransportRouteMeta = {
   id: number;
@@ -104,12 +99,14 @@ export function formatMinutesAsPickupTime(totalMinutes: number): string {
   return `${hour12}:${String(min).padStart(2, '0')} ${ampm}`;
 }
 
-const isCampStopAddress = (address: string) => address === CAMP_LOCATION.address;
+const isCampStopAddress = (address: string, campAddress: string = CAMP_LOCATION.address) =>
+  address === campAddress;
 
 const assignDrivingTimes = (
   stops: TransportRouteStop[],
   departureTime?: string | null,
   dwellMinutesPerStop = 0,
+  campAddress: string = CAMP_LOCATION.address,
 ): TransportRouteStop[] => {
   if (stops.length === 0) return stops;
   const startMinutes = parseDepartureToMinutes(departureTime);
@@ -125,7 +122,7 @@ const assignDrivingTimes = (
       if (
         dwellMinutesPerStop > 0 &&
         dwellFrom &&
-        !isCampStopAddress(dwellFrom.address) &&
+        !isCampStopAddress(dwellFrom.address, campAddress) &&
         !isCounselorPickupStop(dwellFrom)
       ) {
         cumulativeMin += dwellMinutesPerStop;
@@ -152,36 +149,46 @@ const assignDrivingTimes = (
 
 export type BuildRouteStopsOptions = {
   dwellMinutesPerStop?: number;
+  campLocation?: typeof CAMP_LOCATION;
 };
 
 export const buildAMStops = (
   stops: TransportRouteStop[],
   departureTime?: string | null,
   options?: BuildRouteStopsOptions,
-): TransportRouteStop[] =>
-  assignDrivingTimes(
-    [...stops, { ...CAMP_LOCATION, pickupTime: '', passengers: 0 }],
+): TransportRouteStop[] => {
+  const camp = options?.campLocation ?? CAMP_LOCATION;
+  return assignDrivingTimes(
+    [...stops, { ...camp, pickupTime: '', passengers: 0 }],
     departureTime,
     options?.dwellMinutesPerStop ?? 0,
+    camp.address,
   );
+};
 
 export const buildPMStops = (
   stops: TransportRouteStop[],
   departureTime?: string | null,
   options?: BuildRouteStopsOptions,
-): TransportRouteStop[] =>
-  assignDrivingTimes(
-    [{ ...CAMP_LOCATION, pickupTime: '', passengers: 0 }, ...stops],
+): TransportRouteStop[] => {
+  const camp = options?.campLocation ?? CAMP_LOCATION;
+  return assignDrivingTimes(
+    [{ ...camp, pickupTime: '', passengers: 0 }, ...stops],
     departureTime,
     options?.dwellMinutesPerStop ?? 0,
+    camp.address,
   );
+};
 
 export const displayStopToCoreIndex = (displayIdx: number, isAM: boolean): number =>
   isAM ? displayIdx : displayIdx - 1;
 
-export const routeMiles = (stops: TransportRouteStop[]): number => {
+export const routeMiles = (
+  stops: TransportRouteStop[],
+  camp: { lat: number; lng: number } = CAMP_LOCATION,
+): number => {
   if (stops.length === 0) return 0;
-  const seq = [...stops, { lat: CAMP_LOCATION.lat, lng: CAMP_LOCATION.lng } as TransportRouteStop];
+  const seq = [...stops, { lat: camp.lat, lng: camp.lng } as TransportRouteStop];
   let total = 0;
   let prev = seq[0];
   for (let i = 1; i < seq.length; i++) {
@@ -191,12 +198,15 @@ export const routeMiles = (stops: TransportRouteStop[]): number => {
   return total;
 };
 
-export const nearestNeighborOrder = (stops: TransportRouteStop[]): TransportRouteStop[] => {
+export const nearestNeighborOrder = (
+  stops: TransportRouteStop[],
+  camp: { lat: number; lng: number } = CAMP_LOCATION,
+): TransportRouteStop[] => {
   if (stops.length <= 1) return [...stops];
   const remaining = [...stops];
   const ordered: TransportRouteStop[] = [];
-  let curLat = CAMP_LOCATION.lat;
-  let curLng = CAMP_LOCATION.lng;
+  let curLat = camp.lat;
+  let curLng = camp.lng;
   while (remaining.length) {
     let bestIdx = 0;
     let bestDist = Infinity;
@@ -258,8 +268,8 @@ export const normalizeAddress = (raw: string): string =>
     .map((tok) => STREET_SUFFIX_MAP[tok] ?? tok)
     .join(' ');
 
-export const isCampStop = (stop: TransportRouteStop) =>
-  normAddr(stop.address) === normAddr(CAMP_LOCATION.address);
+export const isCampStop = (stop: TransportRouteStop, campAddress: string = CAMP_LOCATION.address) =>
+  normAddr(stop.address) === normAddr(campAddress);
 
 /** Stop label for route lists: 1, 2, 3… or C for camp. */
 export function shortStopStreet(address: string): string {
@@ -280,11 +290,14 @@ export function isBlankOpenRouteStop(lines: RouteStopListLines): boolean {
   return lines.isOpenStop && lines.camperNames.length === 0 && lines.subtitle === BLANK_OPEN_STOP_SUBTITLE;
 }
 
-export function countBlankOpenStopsOnRoute(stops: { name: string; address: string; camperNames?: string[]; stopRole?: string | null }[]): number {
+export function countBlankOpenStopsOnRoute(
+  stops: { name: string; address: string; camperNames?: string[]; stopRole?: string | null }[],
+  campAddress: string = CAMP_LOCATION.address,
+): number {
   let count = 0;
   for (const stop of stops) {
     if (isCounselorPickupStop(stop)) continue;
-    const isCamp = isCampStop(stop as TransportRouteStop);
+    const isCamp = isCampStop(stop as TransportRouteStop, campAddress);
     const lines = routeStopListLines(stop, { isCamp });
     if (isBlankOpenRouteStop(lines)) count += 1;
   }

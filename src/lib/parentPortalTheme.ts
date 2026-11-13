@@ -63,6 +63,8 @@ export function resolveParentPortalThemeColor(
 ): string {
   const trimmed = themeColor?.trim();
   if (trimmed && /^#[0-9a-fA-F]{3,8}$/.test(trimmed)) return trimmed;
+  if (companySlug === CAMP_SLUG.HAMPTON_COUNTRY_DAY_CAMP) return '#2E7D32';
+  if (companySlug === CAMP_SLUG.SOUTHAMPTON_CAMP_CLUB) return '#0277BD';
   if (companySlug === CAMP_SLUG.NORTH_SHORE_DAY_CAMP) return NORTH_SHORE_THEME_COLOR;
   return DEFAULT_PARENT_PORTAL_THEME;
 }
@@ -102,6 +104,8 @@ export function resolveParentPortalHeroImageSource(
 ): ImageSourcePropType | null {
   switch (companySlug) {
     case CAMP_SLUG.NORTH_SHORE_DAY_CAMP:
+    case CAMP_SLUG.HAMPTON_COUNTRY_DAY_CAMP:
+    case CAMP_SLUG.SOUTHAMPTON_CAMP_CLUB:
     case CAMP_SLUG.NEST_SANDBOX_DAY_CAMP:
       return require('../../assets/ns-parent-portal-aerial.jpg');
     case CAMP_SLUG.TYLER_HILL_CAMP:
