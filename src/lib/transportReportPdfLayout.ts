@@ -118,7 +118,7 @@ export function drawCode39Barcode(
   const barH = options?.heightMm ?? 7;
   let cx = x;
 
-  doc.setFillColor(0);
+  doc.setFillColor(0, 0, 0);
   doc.setDrawColor(0);
 
   for (const ch of encoded) {

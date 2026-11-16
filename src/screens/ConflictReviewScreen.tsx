@@ -22,6 +22,7 @@ import { useCampOperationalDate } from '../hooks/useCampOperationalDate';
 import { useTransportBoardSnapshot } from '../hooks/useTransportBoardSnapshot';
 import { captureMessageMedia } from '../lib/messageMediaCapture';
 import {
+  findPaperSheetLabelsInText,
   formatPaperScanChecklist,
   reviewPaperAttendance,
   weekdayBubbleIndex,
@@ -29,8 +30,8 @@ import {
   type PaperAbsentCamper,
   type PaperAttendanceListKind,
 } from '../lib/paperAttendance';
-import { loadRgbaPagesFromUri } from '../lib/paperAttendanceImage';
-import type { RgbaImage } from '../lib/paperAttendanceOmr';
+import { loadPaperScanInputFromUri } from '../lib/paperAttendanceImage';
+import type { PaperScanPage } from '../lib/paperAttendanceScan';
 import { processPaperAttendancePages } from '../lib/paperAttendanceScan';
 import {
   loadChangeSheetAttendanceSource,
@@ -104,13 +105,13 @@ async function pickScanPages(): Promise<ScanPick[]> {
     return new Promise((resolve) => {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['Cancel', 'Take photo', 'Photo library (all pages)', 'Files / PDF'],
+          options: ['Cancel', 'Files / PDF', 'Take photo', 'Photo library (all pages)'],
           cancelButtonIndex: 0,
         },
         (index) => {
-          if (index === 1) void runCamera().then(resolve);
-          else if (index === 2) void pickLibraryPages().then(resolve);
-          else if (index === 3) void pickFilePages().then(resolve);
+          if (index === 1) void pickFilePages().then(resolve);
+          else if (index === 2) void runCamera().then(resolve);
+          else if (index === 3) void pickLibraryPages().then(resolve);
           else resolve([]);
         },
       );
@@ -119,9 +120,9 @@ async function pickScanPages(): Promise<ScanPick[]> {
   return new Promise((resolve) => {
     Alert.alert('Scan sheets', 'One PDF of every bus or group, or photos of every page', [
       { text: 'Cancel', style: 'cancel', onPress: () => resolve([]) },
+      { text: 'Files / PDF', onPress: () => void pickFilePages().then(resolve) },
       { text: 'Camera', onPress: () => void runCamera().then(resolve) },
       { text: 'Library', onPress: () => void pickLibraryPages().then(resolve) },
-      { text: 'Files / PDF', onPress: () => void pickFilePages().then(resolve) },
     ]);
   });
 }
@@ -236,11 +237,7 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
     if (!pending) setScanWarning(null);
   }, [rosterForSheet]);
 
-  const handleScan = async () => {
-    if (weekdayIndex == null) {
-      Alert.alert('Weekday only', 'Bus and group sheets are Monday–Friday.');
-      return;
-    }
+  const handleScan = async (mode: 'pdf' | 'photos' = 'pdf') => {
     if (!sheetOptions.length) {
       Alert.alert(
         `No ${listKind} sheets`,
@@ -248,13 +245,21 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
       );
       return;
     }
-    const picks = await pickScanPages();
+    const picks = mode === 'pdf' ? await pickFilePages() : await pickScanPages();
     if (!picks.length) return;
     setScanning(true);
     try {
-      const pages: Array<{ image: RgbaImage; sourceName: string }> = [];
+      const pages: PaperScanPage[] = [];
+      const texts: string[] = [];
       for (const pick of picks) {
-        pages.push(...(await loadRgbaPagesFromUri(pick.uri, pick.mimeType, pick.fileName)));
+        const input = await loadPaperScanInputFromUri(pick.uri, pick.mimeType, pick.fileName);
+        pages.push(...input.pages);
+        if (input.documentText.trim()) texts.push(input.documentText);
+      }
+      const foundInPdf = findPaperSheetLabelsInText(texts.join('\n'), sheetOptions, listKind);
+      if (!pages.length && !foundInPdf.length) {
+        Alert.alert('Could not read that PDF', 'Use the Nest bus/group PDF, a copier scan, or photos of every page.');
+        return;
       }
       const batch = processPaperAttendancePages(pages, {
         kind: listKind,
@@ -262,6 +267,7 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
         expectedLabels: sheetOptions,
         rosterForLabel,
         fallbackLabel: pages.length === 1 ? sheetLabel : null,
+        extraFoundLabels: foundInPdf,
       });
       if (!companyId || !season) {
         Alert.alert('Not signed in to a camp');
@@ -307,7 +313,7 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
         }),
       );
     } catch (err) {
-      Alert.alert('Could not read that file', err instanceof Error ? err.message : 'Mark names by hand.');
+        Alert.alert('Could not read that file', err instanceof Error ? err.message : 'Use one bus-roster PDF or one group-list PDF.');
     } finally {
       setScanning(false);
     }
@@ -359,7 +365,7 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Conflict Review</Text>
           <Text style={styles.subtitle}>
-            Camper barcodes are CampMinder IDs. Upload one file of every bus or every group.
+            Upload one PDF of every bus roster, or one PDF of every group list. Nest lists any sheets missing from that file.
           </Text>
         </View>
       </View>
@@ -402,7 +408,7 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
           ))}
         </View>
 
-        <Text style={styles.section}>Scan all {listKind} sheets</Text>
+        <Text style={styles.section}>Scan all {listKind === 'bus' ? 'bus rosters' : 'group lists'}</Text>
         <View style={styles.rowBtns}>
           {(['bus', 'group'] as const).map((kind) => (
             <TouchableOpacity
@@ -428,12 +434,17 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
           ))}
         </ScrollView>
         <View style={styles.rowBtns}>
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => void handleScan()} disabled={scanning}>
+          <TouchableOpacity style={styles.primaryBtn} onPress={() => void handleScan('pdf')} disabled={scanning}>
             {scanning ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.primaryBtnText}>Scan all pages</Text>
+              <Text style={styles.primaryBtnText}>
+                {listKind === 'bus' ? 'Upload bus PDF' : 'Upload group PDF'}
+              </Text>
             )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => void handleScan('photos')} disabled={scanning}>
+            <Text style={styles.secondaryBtnText}>Photos</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={() => void saveSheet()} disabled={saving || !sheetLabel}>
             <Text style={styles.secondaryBtnText}>{saving ? 'Saving…' : `Save ${listKind} list`}</Text>
@@ -443,11 +454,15 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
         {scanChecklist ? (
           <View style={styles.checklist}>
             <Text style={styles.checklistTitle}>
-              Read {scanChecklist.scannedLabels.length} of {sheetOptions.length} {listKind} sheets
+              Read {scanChecklist.scannedLabels.length} of {sheetOptions.length}{' '}
+              {listKind === 'bus' ? 'buses' : 'groups'}
             </Text>
+            {scanChecklist.scannedLabels.length ? (
+              <Text style={styles.empty}>In this PDF: {scanChecklist.scannedLabels.join(', ')}</Text>
+            ) : null}
             {scanChecklist.missingLabels.length ? (
               <>
-                <Text style={styles.warn}>Missing</Text>
+                <Text style={styles.warn}>Missing from this PDF</Text>
                 {scanChecklist.missingLabels.map((label) => (
                   <Text key={label} style={styles.listLine}>
                     {label}
@@ -455,7 +470,9 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
                 ))}
               </>
             ) : scanChecklist.scannedLabels.length ? (
-              <Text style={styles.empty}>Every {listKind} sheet is in.</Text>
+              <Text style={styles.empty}>
+                Every {listKind === 'bus' ? 'bus' : 'group'} on this camp is in the file.
+              </Text>
             ) : null}
             {scanChecklist.unreadPages.map((page) => (
               <Text key={page.sourceName} style={styles.warn}>

@@ -1,6 +1,7 @@
 import {
   applyOmrFlagsToRoster,
   decodePaperSheetBarcode,
+  findPaperSheetLabelsInText,
   formatPaperScanChecklist,
   matchPaperSheetLabel,
   missingPaperSheets,
@@ -10,6 +11,7 @@ import {
 } from '../paperAttendance';
 import { rasterCode39 } from '../paperAttendanceBarcode';
 import { extractJpegBuffersFromPdf } from '../paperAttendanceImage';
+import { extractPdfLiteralStrings } from '../paperAttendancePdfText';
 import { processPaperAttendancePages } from '../paperAttendanceScan';
 import {
   analyzePaperAttendanceImage,
@@ -114,6 +116,48 @@ describe('paper attendance', () => {
     expect(matchPaperSheetLabel('BBUS3', 'bus', ['Bus 1', 'Bus 3'])).toBe('Bus 3');
   });
 
+  it('searches a combined PDF for every bus or group title', () => {
+    const text = 'Bus Roster Report Bus 1 · Bus 12 · Barcelona · Bus 3';
+    expect(findPaperSheetLabelsInText(text, ['Bus 1', 'Bus 3', 'Bus 5', 'Bus 12'], 'bus').sort()).toEqual([
+      'Bus 1',
+      'Bus 12',
+      'Bus 3',
+    ]);
+    expect(findPaperSheetLabelsInText(text, ['Barcelona', 'Koalas'], 'group')).toEqual(['Barcelona']);
+    const pdf = new TextEncoder().encode('%PDF-1.4\nBT (Bus 7) Tj (Bus 9) Tj ET');
+    expect(extractPdfLiteralStrings(pdf)).toContain('Bus 7');
+    expect(findPaperSheetLabelsInText(extractPdfLiteralStrings(pdf), ['Bus 7', 'Bus 8'], 'bus')).toEqual(['Bus 7']);
+  });
+
+  it('lists missing buses after searching one combined roster PDF', () => {
+    const expected = Array.from({ length: 39 }, (_, i) => `Bus ${i + 1}`);
+    const inPdf = expected.filter((label) => label !== 'Bus 17' && label !== 'Bus 39');
+    const found = findPaperSheetLabelsInText(`Bus Roster Report · ${inPdf.join(' · ')}`, expected, 'bus');
+    const batch = processPaperAttendancePages([], {
+      kind: 'bus',
+      weekdayIndex: 0,
+      expectedLabels: expected,
+      rosterForLabel: () => [],
+      extraFoundLabels: found,
+    });
+    expect(batch.scannedLabels).toHaveLength(37);
+    expect(batch.missingLabels).toEqual(['Bus 17', 'Bus 39']);
+  });
+
+  it('lists missing groups after searching one combined group PDF', () => {
+    const expected = ['Barcelona', 'Koalas', 'Penguins', 'Tigers'];
+    const found = findPaperSheetLabelsInText('Group List · Barcelona · Penguins · Tigers', expected, 'group');
+    const batch = processPaperAttendancePages([], {
+      kind: 'group',
+      weekdayIndex: 0,
+      expectedLabels: expected,
+      rosterForLabel: () => [],
+      extraFoundLabels: found,
+    });
+    expect(batch.scannedLabels.sort()).toEqual(['Barcelona', 'Penguins', 'Tigers']);
+    expect(batch.missingLabels).toEqual(['Koalas']);
+  });
+
   it('lists missing sheets after a combined scan', () => {
     expect(missingPaperSheets(['Bus 3', 'Bus 5', 'Bus 7'], ['Bus 3', 'Bus 7'])).toEqual(['Bus 5']);
     expect(
@@ -191,6 +235,21 @@ describe('paper attendance', () => {
     );
     expect(batch.scannedLabels.sort()).toEqual(['Bus 3', 'Bus 7']);
     expect(batch.missingLabels).toEqual(['Bus 5']);
+  });
+
+  it('counts a bus as present from PDF text even with no campers', () => {
+    const batch = processPaperAttendancePages(
+      [{ sourceName: 'rosters.pdf page 1', pageText: 'Bus Roster Report · Bus 5' }],
+      {
+        kind: 'bus',
+        weekdayIndex: 2,
+        expectedLabels: ['Bus 5', 'Bus 8'],
+        rosterForLabel: () => [],
+        extraFoundLabels: ['Bus 5'],
+      },
+    );
+    expect(batch.scannedLabels).toEqual(['Bus 5']);
+    expect(batch.missingLabels).toEqual(['Bus 8']);
   });
 
   it('pulls page JPEGs out of a copier PDF', () => {
