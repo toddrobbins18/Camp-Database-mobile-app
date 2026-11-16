@@ -118,7 +118,7 @@ async function pickScanPages(): Promise<ScanPick[]> {
     });
   }
   return new Promise((resolve) => {
-    Alert.alert('Scan sheets', 'One PDF of every bus or group, or photos of every page', [
+    Alert.alert('Scan sheets', 'One PDF for all buses or all groups, or photos of the pages', [
       { text: 'Cancel', style: 'cancel', onPress: () => resolve([]) },
       { text: 'Files / PDF', onPress: () => void pickFilePages().then(resolve) },
       { text: 'Camera', onPress: () => void runCamera().then(resolve) },
@@ -365,7 +365,7 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Conflict Review</Text>
           <Text style={styles.subtitle}>
-            Upload one PDF of every bus roster, or one PDF of every group list. Nest lists any sheets missing from that file.
+            Upload one PDF for all buses, or one PDF for all groups. Nest lists any sheets missing from that file.
           </Text>
         </View>
       </View>
@@ -441,7 +441,7 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.primaryBtnText}>
-                {listKind === 'bus' ? 'Upload bus PDF' : 'Upload group PDF'}
+                {listKind === 'bus' ? 'One PDF for all buses' : 'One PDF for all groups'}
               </Text>
             )}
           </TouchableOpacity>
