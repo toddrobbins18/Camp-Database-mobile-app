@@ -68,20 +68,27 @@ export async function loadPaperScanInputFromUri(
   if (isPdf) {
     const documentText = extractPdfLiteralStrings(buf);
     const jpegs = extractJpegBuffersFromPdf(buf);
-    if (!jpegs.length) {
-      if (documentText.trim()) return { pages: [], documentText };
-      throw new Error(
-        'Could not read that PDF. Use the Nest bus/group PDF, a copier scan, or JPEG photos of every page.',
-      );
+    if (jpegs.length) {
+      try {
+        const decode = await jpegDecoder();
+        const pages = jpegs.flatMap((jpeg, index) => {
+          try {
+            const image = decodeJpegBuffer(decode, jpeg);
+            if (Math.min(image.width, image.height) < 400) return [];
+            return [{ image, sourceName: `${name} page ${index + 1}` }];
+          } catch {
+            return [];
+          }
+        });
+        if (pages.length) return { documentText, pages };
+      } catch {
+        /* Fall through to PDF text. */
+      }
     }
-    const decode = await jpegDecoder();
-    return {
-      documentText,
-      pages: jpegs.map((jpeg, index) => ({
-        image: decodeJpegBuffer(decode, jpeg),
-        sourceName: `${name} page ${index + 1}`,
-      })),
-    };
+    if (documentText.trim()) return { pages: [], documentText };
+    throw new Error(
+      'Could not read that PDF. Use one PDF for all buses, one PDF for all groups, or photos of the pages.',
+    );
   }
   if (buf[0] !== 0xff || buf[1] !== 0xd8) {
     throw new Error('Take a JPEG photo of the page, or pick a bus/group PDF.');
