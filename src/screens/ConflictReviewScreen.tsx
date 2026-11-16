@@ -531,40 +531,52 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
         ))}
 
         <Text style={styles.section}>Bus list ({busAbsents.length})</Text>
-        {busAbsents.length === 0 ? <Text style={styles.empty}>None yet.</Text> : null}
-        {busAbsents.map((row) => (
-          <Text key={`b-${row.camperName}`} style={styles.listLine}>
-            {row.camperName} · {row.sheetLabel}
-          </Text>
-        ))}
+        {busAbsents.length === 0 ? <Text style={styles.empty}>None yet.</Text> : (
+          <ScrollView style={styles.shortList} nestedScrollEnabled>
+            {busAbsents.map((row) => (
+              <Text key={`b-${row.camperName}`} style={styles.listLine}>
+                {row.camperName} · {row.sheetLabel}
+              </Text>
+            ))}
+          </ScrollView>
+        )}
         <Text style={styles.section}>Group list ({groupAbsents.length})</Text>
-        {groupAbsents.length === 0 ? <Text style={styles.empty}>None yet.</Text> : null}
-        {groupAbsents.map((row) => (
-          <Text key={`g-${row.camperName}`} style={styles.listLine}>
-            {row.camperName} · {row.sheetLabel}
-          </Text>
-        ))}
+        {groupAbsents.length === 0 ? <Text style={styles.empty}>None yet.</Text> : (
+          <ScrollView style={styles.shortList} nestedScrollEnabled>
+            {groupAbsents.map((row) => (
+              <Text key={`g-${row.camperName}`} style={styles.listLine}>
+                {row.camperName} · {row.sheetLabel}
+              </Text>
+            ))}
+          </ScrollView>
+        )}
         <Text style={styles.section}>Confirmed absent ({review.confirmed.length})</Text>
-        {review.confirmed.length === 0 ? <Text style={styles.empty}>No matches yet.</Text> : null}
-        {review.confirmed.map((row) => (
-          <Text key={`c-${row.camperName}`} style={styles.listLine}>
-            {row.camperName}
-          </Text>
-        ))}
+        {review.confirmed.length === 0 ? <Text style={styles.empty}>No matches yet.</Text> : (
+          <ScrollView style={styles.shortList} nestedScrollEnabled>
+            {review.confirmed.map((row) => (
+              <Text key={`c-${row.camperName}`} style={styles.listLine}>
+                {row.camperName}
+              </Text>
+            ))}
+          </ScrollView>
+        )}
         <Text style={styles.section}>Conflicts</Text>
         {review.busOnly.length === 0 && review.groupOnly.length === 0 ? (
           <Text style={styles.empty}>No conflicts.</Text>
-        ) : null}
-        {review.busOnly.map((row) => (
-          <Text key={`bo-${row.camperName}`} style={styles.listLine}>
-            {row.camperName} · bus only
-          </Text>
-        ))}
-        {review.groupOnly.map((row) => (
-          <Text key={`go-${row.camperName}`} style={styles.listLine}>
-            {row.camperName} · group only
-          </Text>
-        ))}
+        ) : (
+          <ScrollView style={styles.shortList} nestedScrollEnabled>
+            {review.busOnly.map((row) => (
+              <Text key={`bo-${row.camperName}`} style={styles.listLine}>
+                {row.camperName} · bus only
+              </Text>
+            ))}
+            {review.groupOnly.map((row) => (
+              <Text key={`go-${row.camperName}`} style={styles.listLine}>
+                {row.camperName} · group only
+              </Text>
+            ))}
+          </ScrollView>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -639,5 +651,6 @@ const styles = StyleSheet.create({
   markName: { fontSize: 14, color: theme.colors.text },
   markAbsent: { fontWeight: '700' },
   empty: { fontSize: 13, color: theme.colors.textSecondary },
+  shortList: { maxHeight: 220, marginBottom: 4 },
   listLine: { fontSize: 13, color: theme.colors.text, paddingVertical: 2 },
 });
