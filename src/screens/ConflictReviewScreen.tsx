@@ -408,7 +408,9 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
           ))}
         </View>
 
-        <Text style={styles.section}>Scan all {listKind === 'bus' ? 'bus rosters' : 'group lists'}</Text>
+        <Text style={styles.section}>
+          Missing-sheet checklist · {sheetOptions.length} {listKind === 'bus' ? 'buses' : 'groups'}
+        </Text>
         <View style={styles.rowBtns}>
           {(['bus', 'group'] as const).map((kind) => (
             <TouchableOpacity
@@ -451,36 +453,54 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
           </TouchableOpacity>
         </View>
         {scanWarning ? <Text style={styles.warn}>{scanWarning}</Text> : null}
-        {scanChecklist ? (
-          <View style={styles.checklist}>
-            <Text style={styles.checklistTitle}>
-              Read {scanChecklist.scannedLabels.length} of {sheetOptions.length}{' '}
-              {listKind === 'bus' ? 'buses' : 'groups'}
+        <View style={styles.checklist}>
+          <Text style={styles.checklistTitle}>
+            {scanChecklist
+              ? `Read ${scanChecklist.scannedLabels.length} of ${sheetOptions.length} ${listKind === 'bus' ? 'buses' : 'groups'}`
+              : `Waiting for one PDF · ${sheetOptions.length} ${listKind === 'bus' ? 'buses' : 'groups'} to check`}
+          </Text>
+          {scanChecklist ? (
+            <>
+              {scanChecklist.scannedLabels.length ? (
+                <Text style={styles.empty}>In this PDF: {scanChecklist.scannedLabels.join(', ')}</Text>
+              ) : null}
+              {scanChecklist.missingLabels.length ? (
+                <>
+                  <Text style={styles.warn}>Missing from this PDF</Text>
+                  {scanChecklist.missingLabels.map((label) => (
+                    <Text key={label} style={styles.listLine}>
+                      {label}
+                    </Text>
+                  ))}
+                </>
+              ) : scanChecklist.scannedLabels.length ? (
+                <Text style={styles.empty}>
+                  Every {listKind === 'bus' ? 'bus' : 'group'} on this camp is in the file.
+                </Text>
+              ) : null}
+              {scanChecklist.unreadPages.map((page) => (
+                <Text key={page.sourceName} style={styles.warn}>
+                  {page.sourceName}: {page.reason}
+                </Text>
+              ))}
+            </>
+          ) : sheetOptions.length ? (
+            <>
+              <Text style={styles.warn}>Not in a PDF yet</Text>
+              {sheetOptions.map((label) => (
+                <Text key={label} style={styles.listLine}>
+                  {label}
+                </Text>
+              ))}
+            </>
+          ) : (
+            <Text style={styles.empty}>
+              {listKind === 'bus'
+                ? 'No buses on this camp yet. Open Transportation to add them.'
+                : 'No groups on this camp yet.'}
             </Text>
-            {scanChecklist.scannedLabels.length ? (
-              <Text style={styles.empty}>In this PDF: {scanChecklist.scannedLabels.join(', ')}</Text>
-            ) : null}
-            {scanChecklist.missingLabels.length ? (
-              <>
-                <Text style={styles.warn}>Missing from this PDF</Text>
-                {scanChecklist.missingLabels.map((label) => (
-                  <Text key={label} style={styles.listLine}>
-                    {label}
-                  </Text>
-                ))}
-              </>
-            ) : scanChecklist.scannedLabels.length ? (
-              <Text style={styles.empty}>
-                Every {listKind === 'bus' ? 'bus' : 'group'} on this camp is in the file.
-              </Text>
-            ) : null}
-            {scanChecklist.unreadPages.map((page) => (
-              <Text key={page.sourceName} style={styles.warn}>
-                {page.sourceName}: {page.reason}
-              </Text>
-            ))}
-          </View>
-        ) : null}
+          )}
+        </View>
 
         {boardLoading ? <ActivityIndicator style={{ marginVertical: 8 }} /> : null}
         {marks.map((row, index) => (
