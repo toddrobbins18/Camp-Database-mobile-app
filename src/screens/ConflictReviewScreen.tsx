@@ -292,25 +292,33 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
         unreadPages: batch.unreadPages,
       });
       setScanWarning(batch.sheets.find((sheet) => sheet.warning)?.warning ?? null);
-      if (batch.sheets.length === 1) {
-        const sheet = batch.sheets[0];
-        const absents = new Set(sheet.absents.map((row) => row.camperName));
-        if (sheet.label === sheetLabel) {
-          setMarks(rosterForLabel(sheet.label).map((row) => ({ ...row, absent: absents.has(row.name) })));
+      const withAbsents = batch.sheets.filter((sheet) => sheet.absents.length);
+      const focus =
+        batch.sheets.find((sheet) => sheet.label === sheetLabel)
+        ?? withAbsents[0]
+        ?? batch.sheets[0];
+      if (focus) {
+        const absents = new Set(focus.absents.map((row) => row.camperName));
+        if (focus.label === sheetLabel) {
+          setMarks(rosterForLabel(focus.label).map((row) => ({ ...row, absent: absents.has(row.name) })));
         } else {
           pendingScanAbsents.current = absents;
-          setSheetLabel(sheet.label);
+          setSheetLabel(focus.label);
         }
       }
       await loadLists();
+      const absentLine = withAbsents
+        .flatMap((sheet) => sheet.absents.map((row) => `${row.camperName} (${sheet.label})`))
+        .join(', ');
+      const checklist = formatPaperScanChecklist({
+        kind: listKind,
+        scannedLabels: batch.scannedLabels,
+        missingLabels: batch.missingLabels,
+        unreadPages: batch.unreadPages,
+      });
       Alert.alert(
         batch.missingLabels.length ? 'Sheets missing' : 'Scan saved',
-        formatPaperScanChecklist({
-          kind: listKind,
-          scannedLabels: batch.scannedLabels,
-          missingLabels: batch.missingLabels,
-          unreadPages: batch.unreadPages,
-        }),
+        absentLine ? `${checklist} Absent: ${absentLine}.` : checklist,
       );
     } catch (err) {
         Alert.alert('Could not read that file', err instanceof Error ? err.message : 'Use one bus-roster PDF or one group-list PDF.');
@@ -365,7 +373,7 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Conflict Review</Text>
           <Text style={styles.subtitle}>
-            Upload one PDF for all buses, or one PDF for all groups. Nest lists any sheets missing from that file.
+            Upload one PDF for all buses, or one PDF for all groups. Nest lists missing sheets and marks filled bubbles absent.
           </Text>
         </View>
       </View>

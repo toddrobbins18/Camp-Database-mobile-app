@@ -206,6 +206,53 @@ describe('paper attendance', () => {
     expect(roster.map((r) => r.absent)).toEqual([true, false, true]);
   });
 
+  it('does not mark empty rings as absent', () => {
+    const image = makeWhite(240, 360);
+    const pageRight = 240 * 0.945;
+    const bubbleW = 240 * (58 / 215.9);
+    const bubbleX = pageRight - bubbleW;
+    const gutter = bubbleW * (9 / 58);
+    const colW = (bubbleW - gutter) / 5;
+    for (const top of [70, 150, 230]) {
+      for (let c = 0; c < 5; c += 1) {
+        const cx = bubbleX + gutter + colW * c + colW / 2;
+        strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    const result = analyzePaperAttendanceImage(image, {
+      kind: 'bus',
+      weekdayIndex: 0,
+      camperCount: 3,
+    });
+    expect(omrRowsToAbsentFlags(result.rows, 'bus').every((row) => !row.absent)).toBe(true);
+  });
+
+  it('reads a Monday AM fill even when the date is Tuesday', () => {
+    const image = makeWhite(240, 360);
+    const pageRight = 240 * 0.945;
+    const bubbleW = 240 * (58 / 215.9);
+    const bubbleX = pageRight - bubbleW;
+    const gutter = bubbleW * (9 / 58);
+    const colW = (bubbleW - gutter) / 5;
+    for (const top of [70, 150, 230]) {
+      for (let c = 0; c < 5; c += 1) {
+        const cx = bubbleX + gutter + colW * c + colW / 2;
+        strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    const monday = bubbleX + gutter + colW * 0 + colW / 2;
+    fillCircle(image, monday, 82, 6, 40);
+    const result = analyzePaperAttendanceImage(image, {
+      kind: 'bus',
+      weekdayIndex: 1,
+      camperCount: 3,
+    });
+    expect(result.usedWeekdayIndex).toBe(0);
+    expect(omrRowsToAbsentFlags(result.rows, 'bus').map((row) => row.absent)).toEqual([true, false, false]);
+  });
+
   it('reads header barcodes and flags a missing bus sheet', () => {
     const makePage = (payload: string, fillFirst: boolean) => {
       const image = makeWhite(420, 360);
