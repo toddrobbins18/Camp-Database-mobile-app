@@ -24,6 +24,7 @@ import { captureMessageMedia } from '../lib/messageMediaCapture';
 import {
   findPaperSheetLabelsInText,
   formatPaperScanChecklist,
+  formatUsAttendanceDate,
   reviewPaperAttendance,
   weekdayBubbleIndex,
   type ChangeSheetAttendanceSource,
@@ -34,6 +35,7 @@ import { loadPaperScanInputFromUri } from '../lib/paperAttendanceImage';
 import type { PaperScanPage } from '../lib/paperAttendanceScan';
 import { processPaperAttendancePages } from '../lib/paperAttendanceScan';
 import {
+  clearPaperAttendanceForDate,
   loadChangeSheetAttendanceSource,
   loadPaperAttendance,
   saveChangeSheetAttendanceSource,
@@ -146,6 +148,7 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
   } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [busAbsents, setBusAbsents] = useState<PaperAbsentCamper[]>([]);
   const [groupAbsents, setGroupAbsents] = useState<PaperAbsentCamper[]>([]);
   const [attendanceSource, setAttendanceSource] = useState<ChangeSheetAttendanceSource>('paperless');
@@ -354,6 +357,40 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
     }
   };
 
+  const clearDay = () => {
+    if (!companyId || !season) return;
+    Alert.alert(
+      'Clear this day',
+      `Clear all scanned bus and group absents for ${sheetDate}? You can scan the PDF again after.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setClearing(true);
+              try {
+                const ok = await clearPaperAttendanceForDate(supabase, companyId, season, sheetDate);
+                if (!ok) {
+                  Alert.alert('Could not clear this day');
+                  return;
+                }
+                setBusAbsents([]);
+                setGroupAbsents([]);
+                setScanChecklist(null);
+                setScanWarning(null);
+                setMarks((rows) => rows.map((row) => ({ ...row, absent: false })));
+              } finally {
+                setClearing(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
   const setSource = async (source: ChangeSheetAttendanceSource) => {
     setAttendanceSource(source);
     if (!companyId || !season) return;
@@ -381,13 +418,20 @@ export function ConflictReviewScreen({ navigation }: { navigation: any }) {
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 32 }}>
         <View style={styles.toolbar}>
           <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
-            <Text style={styles.dateBtnText}>{sheetDate}</Text>
+            <Text style={styles.dateBtnText}>{formatUsAttendanceDate(sheetDate)}</Text>
           </TouchableOpacity>
           <Text style={styles.weekBadge}>
             {weekdayIndex == null
               ? 'Weekend — no bubbles'
-              : `${['Mon', 'Tue', 'Wed', 'Thu', 'Fri'][weekdayIndex]} column`}
+              : `Reads ${['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][weekdayIndex]} only`}
           </Text>
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={clearDay}
+            disabled={clearing || (!busAbsents.length && !groupAbsents.length)}
+          >
+            <Text style={styles.secondaryBtnText}>{clearing ? 'Clearing…' : 'Clear this day'}</Text>
+          </TouchableOpacity>
         </View>
         {showDatePicker ? (
           <DateTimePicker
