@@ -10,12 +10,13 @@ import {
   reviewPaperAttendance,
   weekdayBubbleIndex,
 } from '../paperAttendance';
-import { rasterCode39 } from '../paperAttendanceBarcode';
+import { rasterCode39, uprightPaperScanImage } from '../paperAttendanceBarcode';
 import { extractJpegBuffersFromPdf } from '../paperAttendanceImage';
 import { extractPdfLiteralStrings } from '../paperAttendancePdfText';
 import { processPaperAttendancePages } from '../paperAttendanceScan';
 import {
   analyzePaperAttendanceImage,
+  flipRgbaVertical,
   omrRowsToAbsentFlags,
   type RgbaImage,
 } from '../paperAttendanceOmr';
@@ -59,6 +60,31 @@ function strokeCircle(image: RgbaImage, cx: number, cy: number, r: number) {
       image.data[i + 3] = 255;
     }
   }
+}
+
+function inkPixel(image: RgbaImage, x: number, y: number) {
+  if (x < 0 || y < 0 || x >= image.width || y >= image.height) return;
+  const i = (y * image.width + x) * 4;
+  image.data[i] = 0;
+  image.data[i + 1] = 0;
+  image.data[i + 2] = 0;
+  image.data[i + 3] = 255;
+}
+
+function drawX(image: RgbaImage, cx: number, cy: number, r: number) {
+  for (let i = -r + 1; i <= r - 1; i += 1) {
+    inkPixel(image, Math.round(cx + i), Math.round(cy + i));
+    inkPixel(image, Math.round(cx + i), Math.round(cy - i));
+  }
+}
+
+function nestBusCols(width: number) {
+  const pageRight = width * 0.945;
+  const bubbleW = width * (58 / 215.9);
+  const bubbleX = pageRight - bubbleW;
+  const gutter = bubbleW * (9 / 58);
+  const colW = (bubbleW - gutter) / 5;
+  return [0, 1, 2, 3, 4].map((c) => bubbleX + gutter + colW * c + colW / 2);
 }
 
 describe('paper attendance', () => {
@@ -119,6 +145,14 @@ describe('paper attendance', () => {
     expect(encodePaperSheetBarcode('bus', 'Bus 3')).toBe('BBUS3');
     expect(decodePaperSheetBarcode('BBUS3')).toEqual({ kind: 'bus', key: 'BUS3' });
     expect(matchPaperSheetLabel('BBUS3', 'bus', ['Bus 1', 'Bus 3'])).toBe('Bus 3');
+  });
+
+  it('recognizes Parent Transport from the printed title or header barcode', () => {
+    const labels = ['Bus 3', 'Parent Transport (PT)', 'Bus 7'];
+    expect(findPaperSheetLabelsInText('Parent Transport (PT) · Total Passengers: 5', labels, 'bus')).toEqual([
+      'Parent Transport (PT)',
+    ]);
+    expect(findPaperSheetLabelsInText('BPARENTTRANSPORTPT', labels, 'bus')).toEqual(['Parent Transport (PT)']);
   });
 
   it('searches a combined PDF for every bus or group title', () => {
@@ -211,6 +245,56 @@ describe('paper attendance', () => {
     expect(roster.map((r) => r.absent)).toEqual([true, false, true]);
   });
 
+  it('reads the first-page Tuesday fill even when the bus roster is longer than the page', () => {
+    const width = 240;
+    const height = 360;
+    const image = makeWhite(width, height);
+    const pageRight = width * 0.945;
+    const bubbleW = width * (58 / 215.9);
+    const bubbleX = pageRight - bubbleW;
+    const gutter = bubbleW * (9 / 58);
+    const colW = (bubbleW - gutter) / 5;
+    const tops = [70, 150, 230];
+    for (const top of tops) {
+      for (let c = 0; c < 5; c += 1) {
+        const cx = bubbleX + gutter + colW * c + colW / 2;
+        if (c === 1 && top === 70) fillCircle(image, cx, top + 12, 6, 170);
+        else strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    const names = Array.from({ length: 23 }, (_, i) => (i === 0 ? 'Alex Rubel' : `Camper ${i}`));
+    const result = analyzePaperAttendanceImage(image, {
+      kind: 'bus',
+      weekdayIndex: 1,
+      camperCount: names.length,
+      camperNames: names,
+    });
+    const flags = omrRowsToAbsentFlags(result.rows, 'bus');
+    expect(flags[0]?.absent).toBe(true);
+    expect(flags.slice(1, 3).every((row) => !row.absent)).toBe(true);
+  });
+
+  it('treats an X in the Tuesday circle as absent', () => {
+    const width = 240;
+    const height = 360;
+    const image = makeWhite(width, height);
+    const cols = nestBusCols(width);
+    for (const top of [70, 150, 230]) {
+      for (const cx of cols) {
+        strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    drawX(image, cols[1], 82, 5);
+    const result = analyzePaperAttendanceImage(image, {
+      kind: 'bus',
+      weekdayIndex: 1,
+      camperCount: 3,
+    });
+    expect(omrRowsToAbsentFlags(result.rows, 'bus').map((row) => row.absent)).toEqual([true, false, false]);
+  });
+
   it('does not mark empty rings as absent', () => {
     const image = makeWhite(240, 360);
     const pageRight = 240 * 0.945;
@@ -296,6 +380,46 @@ describe('paper attendance', () => {
     );
     expect(monday.sheets[0]?.absents.map((row) => row.camperName)).toEqual(['Aria Zachary']);
     expect(tuesday.sheets[0]?.absents.map((row) => row.camperName)).toEqual(['Gema Escoto']);
+  });
+
+  it('flips an upside-down copier page and reads Tuesday, not Monday', () => {
+    const image = makeWhite(420, 360);
+    rasterCode39(image, 250, 12, 'BBUS3', { narrow: 1, height: 28 });
+    const pageRight = 420 * 0.945;
+    const bubbleW = 420 * (58 / 215.9);
+    const bubbleX = pageRight - bubbleW;
+    const gutter = bubbleW * (9 / 58);
+    const colW = (bubbleW - gutter) / 5;
+    for (let c = 0; c < 5; c += 1) {
+      const cx = bubbleX + gutter + colW * c + colW / 2;
+      if (c === 1) fillCircle(image, cx, 82, 7, 0);
+      else strokeCircle(image, cx, 82, 7);
+      strokeCircle(image, cx, 102, 7);
+      strokeCircle(image, cx, 162, 7);
+      strokeCircle(image, cx, 182, 7);
+    }
+    const flipped = flipRgbaVertical(image);
+    expect(uprightPaperScanImage(flipped).flipped).toBe(true);
+    const roster = [
+      { id: 'alex', name: 'Alex Rubel' },
+      { id: 'asher', name: 'Asher Cohan' },
+    ];
+    const options = {
+      kind: 'bus' as const,
+      expectedLabels: ['Bus 3'],
+      rosterForLabel: () => roster,
+    };
+    const tuesday = processPaperAttendancePages(
+      [{ image: flipped, sourceName: 'upside-down-bus3' }],
+      { ...options, weekdayIndex: 1 },
+    );
+    const monday = processPaperAttendancePages(
+      [{ image: flipped, sourceName: 'upside-down-bus3' }],
+      { ...options, weekdayIndex: 0 },
+    );
+    expect(tuesday.scannedLabels).toEqual(['Bus 3']);
+    expect(tuesday.sheets[0]?.absents.map((row) => row.camperName)).toEqual(['Alex Rubel']);
+    expect(monday.sheets[0]?.absents).toEqual([]);
   });
 
   it('reads header barcodes and flags a missing bus sheet', () => {
