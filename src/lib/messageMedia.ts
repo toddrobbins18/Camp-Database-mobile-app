@@ -65,6 +65,7 @@ const EXTENSION_KIND: { ext: string; kind: MessageKind }[] = [
   { ext: 'mp4', kind: 'video' },
   { ext: 'mov', kind: 'video' },
   { ext: 'm4v', kind: 'video' },
+  { ext: 'webm', kind: 'video' },
   { ext: 'mp3', kind: 'audio' },
   { ext: 'm4a', kind: 'audio' },
   { ext: 'wav', kind: 'audio' },

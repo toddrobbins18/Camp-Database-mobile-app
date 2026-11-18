@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import { useParentPortalColors } from '../components/parentPortal/ParentPortalSh
 import { NestSandboxParentFlowGuide } from '../components/parentPortal/NestSandboxParentFlowGuide';
 import { isNestSandboxParentTraining } from '../lib/nestSandboxParentDemo';
 import { resolveParentPortalHeroImageSource } from '../lib/parentPortalTheme';
+import { rememberParentCampForSignedInUser } from '../lib/parentFamilyLink';
 import { sidebarBackgroundHexFromBrandHex } from '../theme/sidebarFromBrandColor';
 
 type Props = {
@@ -29,13 +30,116 @@ type Props = {
   embedded?: boolean;
   onAuthenticated?: () => void;
   onOpenFamilyPortal?: () => void;
+  onBack?: () => void;
+  /** Login screen switch: camp photo behind the form, no staff menu bar. */
+  compact?: boolean;
+  header?: ReactNode;
 };
+
+const fieldColors = { borderColor: '#e2e8f0', color: '#0f172a', backgroundColor: '#ffffff' };
+
+/** Uncontrolled fields so the iOS simulator hardware keyboard can keep every letter. */
+function ParentLoginFields({
+  loading,
+  brand,
+  large,
+  onLogin,
+  onForgot,
+}: {
+  loading: boolean;
+  brand: string;
+  large?: boolean;
+  onLogin: (email: string, password: string) => void;
+  onForgot: (email: string) => void;
+}) {
+  const emailRef = useRef('');
+  const passwordRef = useRef('');
+  const [passwordLocked, setPasswordLocked] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const inputStyle = [styles.input, large && styles.inputLarge, fieldColors];
+
+  return (
+    <View style={styles.form} collapsable={false}>
+      <Text style={[styles.label, { color: '#0f172a' }]}>Email</Text>
+      <TextInput
+        style={inputStyle}
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
+        keyboardType="default"
+        textContentType="none"
+        autoComplete="off"
+        importantForAutofill="no"
+        onChangeText={(value) => {
+          emailRef.current = value;
+        }}
+      />
+      <Text style={[styles.label, { color: '#0f172a' }]}>Password</Text>
+      <View style={styles.passwordWrap}>
+        {passwordLocked ? (
+          <TextInput
+            key={showPassword ? 'pw-shown' : 'pw-hidden'}
+            defaultValue={passwordRef.current}
+            style={[inputStyle, styles.inputWithEye]}
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            secureTextEntry={!showPassword}
+            textContentType={showPassword ? 'none' : 'oneTimeCode'}
+            autoComplete="off"
+            onChangeText={(value) => {
+              passwordRef.current = value;
+            }}
+          />
+        ) : (
+          <TextInput
+            style={[inputStyle, styles.inputWithEye]}
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            textContentType="none"
+            autoComplete="off"
+            onFocus={() => setPasswordLocked(true)}
+            onChangeText={(value) => {
+              passwordRef.current = value;
+            }}
+          />
+        )}
+        <TouchableOpacity
+          style={styles.eyeBtn}
+          onPress={() => {
+            setPasswordLocked(true);
+            setShowPassword((current) => !current);
+          }}
+          hitSlop={8}
+          accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+        >
+          <Text style={[styles.showPassText, { color: brand }]}>{showPassword ? 'Hide' : 'Show'}</Text>
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity
+        style={[styles.primaryBtn, large && styles.primaryBtnLarge, { backgroundColor: brand }]}
+        onPress={() => onLogin(emailRef.current, passwordRef.current)}
+        disabled={loading}
+      >
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Sign in</Text>}
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => onForgot(emailRef.current)}>
+        <Text style={[styles.link, { color: brand }]}>Forgot password?</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 export function ParentAuthScreen({
   navigation,
   embedded = false,
   onAuthenticated,
   onOpenFamilyPortal,
+  onBack,
+  compact = false,
+  header,
 }: Props) {
   const { companyId, companySlug, companyName, themeColor, loading: companyLoading } = useParentCompany();
   const colors = useParentPortalColors(themeColor, companySlug);
@@ -48,13 +152,12 @@ export function ParentAuthScreen({
   const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [sessionChecked, setSessionChecked] = useState(false);
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [familyName, setFamilyName] = useState('');
   const [contactName, setContactName] = useState('');
   const [phone, setPhone] = useState('');
   const [suEmail, setSuEmail] = useState('');
   const [suPassword, setSuPassword] = useState('');
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
 
   const isStaffPreview = userIsCampStaff(roleData?.globalRoles ?? []);
   const sandboxTraining = isNestSandboxParentTraining(companySlug);
@@ -62,31 +165,37 @@ export function ParentAuthScreen({
   useEffect(() => {
     if (roleLoading || companyLoading) return;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSessionChecked(true);
       if (!session) return;
       if (isStaffPreview) return;
+      await rememberParentCampForSignedInUser(supabase);
       onAuthenticated?.();
     });
   }, [roleLoading, companyLoading, isStaffPreview, onAuthenticated]);
 
-  const handleLogin = async () => {
-    if (!companyId) {
-      Alert.alert('Missing camp', 'Select your camp before using the Parent Portal.');
+  const handleLogin = async (nextEmail: string, nextPassword: string) => {
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: nextEmail.trim(),
+      password: nextPassword,
+    });
+    if (error) {
+      setLoading(false);
+      Alert.alert('Sign in failed', error.message);
       return;
     }
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const linked = await rememberParentCampForSignedInUser(supabase);
     setLoading(false);
-    if (error) Alert.alert('Sign in failed', error.message);
-    else onAuthenticated?.();
+    if (!linked) {
+      await supabase.auth.signOut();
+      Alert.alert('Not linked', 'This email is not tied to a camper yet.');
+      return;
+    }
+    onAuthenticated?.();
   };
 
   const handleSignUp = async () => {
-    if (!companyId) {
-      Alert.alert('Missing camp', 'Select your camp before using the Parent Portal.');
-      return;
-    }
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
       email: suEmail,
@@ -99,8 +208,15 @@ export function ParentAuthScreen({
       return;
     }
     if (data.session) {
+      const linked = await rememberParentCampForSignedInUser(supabase);
+      if (!linked) {
+        setLoading(false);
+        await supabase.auth.signOut();
+        Alert.alert('Not linked', 'This email is not tied to a camper yet.');
+        return;
+      }
       const { error: rpcErr } = await supabase.rpc('register_parent_account', {
-        _company_id: companyId,
+        _company_id: linked.companyId,
         _family_name: familyName,
         _primary_contact_name: contactName,
         _phone: phone,
@@ -114,12 +230,12 @@ export function ParentAuthScreen({
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email) {
+  const handleForgotPassword = async (nextEmail: string) => {
+    if (!nextEmail.trim()) {
       Alert.alert('Enter email', 'Enter your email first.');
       return;
     }
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(nextEmail.trim());
     if (error) Alert.alert('Error', error.message);
     else Alert.alert('Email sent', 'Password reset email sent.');
   };
@@ -135,6 +251,10 @@ export function ParentAuthScreen({
   const goToNest = () => navigation.navigate('Dashboard');
 
   const goBackFromAuth = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
     if (navigation.canGoBack?.()) navigation.goBack();
     else goToNest();
   };
@@ -144,12 +264,14 @@ export function ParentAuthScreen({
       style={[
         styles.card,
         styles.cardShadow,
-        {
-          backgroundColor: colors.elevated,
-          borderColor: hasPhotoBg ? 'rgba(255,255,255,0.35)' : colors.border,
-          shadowColor: colors.brandDark,
-        },
-        hasPhotoBg && styles.cardOnPhoto,
+        compact
+          ? styles.cardPlain
+          : {
+              backgroundColor: colors.elevated,
+              borderColor: hasPhotoBg ? 'rgba(255,255,255,0.35)' : colors.border,
+              shadowColor: colors.brandDark,
+            },
+        !compact && hasPhotoBg && styles.cardOnPhoto,
       ]}
     >
       <View style={styles.brandRow}>
@@ -157,10 +279,10 @@ export function ParentAuthScreen({
           <Ionicons name="shield-checkmark" size={22} color="#fff" />
         </View>
         <View style={styles.brandTextCol}>
-          <Text style={[styles.cardHeading, { color: colors.text }]} numberOfLines={2}>
-            {companyName}
+          <Text style={[compact ? styles.cardHeadingLarge : styles.cardHeading, { color: colors.text }]} numberOfLines={2}>
+            {compact ? 'Parent sign in' : companyName}
           </Text>
-          <Text style={[styles.muted, { color: colors.textMuted }]}>Parent sign in</Text>
+          <Text style={[styles.muted, { color: colors.textMuted }]}>Use the email on your camper</Text>
         </View>
       </View>
 
@@ -180,29 +302,13 @@ export function ParentAuthScreen({
       </View>
 
       {tab === 'login' ? (
-        <View style={styles.form}>
-          <Text style={[styles.label, { color: colors.text }]}>Email</Text>
-          <TextInput
-            style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: '#fff' }]}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
-          <Text style={[styles.label, { color: colors.text }]}>Password</Text>
-          <TextInput
-            style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: '#fff' }]}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.brand }]} onPress={handleLogin} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Sign in</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleForgotPassword}>
-            <Text style={[styles.link, { color: colors.brand }]}>Forgot password?</Text>
-          </TouchableOpacity>
-        </View>
+        <ParentLoginFields
+          loading={loading}
+          brand={colors.brand}
+          large={compact}
+          onLogin={handleLogin}
+          onForgot={handleForgotPassword}
+        />
       ) : (
         <View style={styles.form}>
           <Text style={[styles.label, { color: colors.text }]}>Family last name</Text>
@@ -232,12 +338,25 @@ export function ParentAuthScreen({
             onChangeText={setSuEmail}
           />
           <Text style={[styles.label, { color: colors.text }]}>Password</Text>
-          <TextInput
-            style={[styles.input, { borderColor: colors.border, color: colors.text }]}
-            secureTextEntry
-            value={suPassword}
-            onChangeText={setSuPassword}
-          />
+          <View style={styles.passwordWrap}>
+            <TextInput
+              style={[styles.input, styles.inputWithEye, { borderColor: colors.border, color: colors.text }]}
+              secureTextEntry={!showSignupPassword}
+              textContentType={showSignupPassword ? 'none' : 'oneTimeCode'}
+              value={suPassword}
+              onChangeText={setSuPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeBtn}
+              onPress={() => setShowSignupPassword((current) => !current)}
+              hitSlop={8}
+              accessibilityLabel={showSignupPassword ? 'Hide password' : 'Show password'}
+            >
+              <Text style={[styles.showPassText, { color: colors.brand }]}>
+                {showSignupPassword ? 'Hide' : 'Show'}
+              </Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.brand }]} onPress={handleSignUp} disabled={loading}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create parent account</Text>}
           </TouchableOpacity>
@@ -254,12 +373,12 @@ export function ParentAuthScreen({
     >
       <View style={[styles.nestTopBar, { backgroundColor: sidebarBarBg }]}>
         <TouchableOpacity
-          onPress={embedded ? goBackFromAuth : () => navigation.openDrawer()}
+          onPress={embedded || onBack ? goBackFromAuth : () => navigation.openDrawer()}
           hitSlop={12}
-          accessibilityLabel={embedded ? 'Go back' : 'Open menu'}
+          accessibilityLabel={embedded || onBack ? 'Go back' : 'Open menu'}
         >
           <Ionicons
-            name={embedded ? 'chevron-back' : 'menu-outline'}
+            name={embedded || onBack ? 'chevron-back' : 'menu-outline'}
             size={26}
             color="#fff"
           />
@@ -343,6 +462,42 @@ export function ParentAuthScreen({
     </KeyboardAvoidingView>
   );
 
+  if (compact) {
+    const compactBody = (
+      <SafeAreaView style={styles.safeOnHero} edges={['top', 'left', 'right', 'bottom']}>
+        <View style={styles.flex}>
+          {header ? <View style={styles.compactHeader}>{header}</View> : null}
+          <View style={styles.scrollCompact}>
+            <View style={styles.welcomeOnPhoto}>
+              <View style={styles.familyPortalPill}>
+                <Ionicons name="sparkles" size={14} color="#fff" />
+                <Text style={styles.familyPortalPillText}>Family portal</Text>
+              </View>
+              <Text style={styles.heroTitleOnPhoto}>Family portal</Text>
+              <Text style={styles.heroBodyOnPhoto}>
+                Manage pickups, report absences, update authorized adults, and confirm swim lessons.
+              </Text>
+            </View>
+            {renderFormCard()}
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+
+    return (
+      <View style={styles.flex}>
+        <ImageBackground
+          source={heroSource ?? require('../../assets/ns-parent-portal-aerial.jpg')}
+          style={styles.heroBg}
+          resizeMode="cover"
+        >
+          <View style={styles.heroDim} pointerEvents="none" />
+          {compactBody}
+        </ImageBackground>
+      </View>
+    );
+  }
+
   if (companyLoading || roleLoading || !sessionChecked) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.bg }]}>
@@ -407,6 +562,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15,23,42,0.55)',
   },
   safeOnHero: { flex: 1, backgroundColor: 'transparent' },
+  compactHeader: { paddingHorizontal: 24, paddingTop: 8, alignItems: 'center' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   nestTopBar: {
     flexDirection: 'row',
@@ -502,7 +658,19 @@ const styles = StyleSheet.create({
   cardOnPhoto: {
     backgroundColor: 'rgba(255,255,255,0.97)',
   },
+  cardPlain: {
+    alignSelf: 'stretch',
+    width: '100%',
+    borderRadius: 28,
+    borderWidth: 0,
+    backgroundColor: '#ffffff',
+    padding: 26,
+  },
   card: { borderRadius: 24, borderWidth: 1, padding: 20 },
+  cardHeadingLarge: { fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
+  inputLarge: { minHeight: 54, paddingVertical: 16, fontSize: 17, borderRadius: 14 },
+  primaryBtnLarge: { marginTop: 18, paddingVertical: 16, borderRadius: 14 },
+  scrollCompact: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 36, flexGrow: 1 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   brandTextCol: { flex: 1, minWidth: 0 },
   brandIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
@@ -514,6 +682,10 @@ const styles = StyleSheet.create({
   form: { gap: 4 },
   label: { fontSize: 13, fontWeight: '600', marginTop: 10, marginBottom: 6 },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, fontSize: 16 },
+  passwordWrap: { position: 'relative', justifyContent: 'center' },
+  inputWithEye: { paddingRight: 64 },
+  eyeBtn: { position: 'absolute', right: 14, top: 0, bottom: 0, justifyContent: 'center' },
+  showPassText: { fontSize: 14, fontWeight: '700' },
   primaryBtn: { marginTop: 12, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   outlineBtn: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 },

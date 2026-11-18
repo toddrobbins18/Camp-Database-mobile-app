@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCompany } from '../contexts/CompanyContext';
 import { isNestSandboxCompany } from '../constants/camps';
 import { LoginScreen } from '../screens/LoginScreen';
+import { clearSessionHomeChoice, resolveSessionHome } from '../lib/sessionHome';
 import { SignUpScreen } from '../screens/SignUpScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { CamperScreen } from '../screens/CamperScreen';
@@ -763,8 +764,9 @@ const CustomDrawerContent = (props: any) => {
                     label="Log out"
                     icon={({ color }) => <Ionicons name="exit-outline" size={22} color={color} />}
                     onPress={async () => {
+                        await clearSessionHomeChoice();
                         await supabase.auth.signOut();
-                        props.navigation.getParent()?.navigate('Login');
+                        props.navigation.getParent()?.reset({ index: 0, routes: [{ name: 'Login' }] });
                     }}
                     labelStyle={styles.drawerLabel}
                     inactiveTintColor={menuTheme.menuItemInactive}
@@ -854,6 +856,9 @@ function CampSwitchNavigationGuard({
         const activeRoute = getActiveRoute(state);
         const company = { slug: companySlug, camp_type: isDayCamp ? 'day_camp' : 'overnight' };
 
+        if (activeRoute.name === 'ParentHome' || activeRoute.name === 'Login' || activeRoute.name === 'SignUp') {
+            return;
+        }
         if (!isScreenAllowedForCompany(activeRoute, company)) {
             navigationRef.navigate('MainApp', { screen: 'Dashboard' });
         }
@@ -963,14 +968,16 @@ function InboxNotificationDeepLink({ navigationRef }: { navigationRef: ReturnTyp
 
 export const AppNavigator = () => {
     const navigationRef = useNavigationContainerRef();
-    const [initialRouteName, setInitialRouteName] = useState<'Login' | 'MainApp' | null>(null);
+    const [initialRouteName, setInitialRouteName] = useState<'Login' | 'MainApp' | 'ParentHome' | null>(null);
 
     useEffect(() => {
         let mounted = true;
         (async () => {
-            const { data: { session } } = await supabase.auth.getSession();
+            const home = await resolveSessionHome();
             if (!mounted) return;
-            setInitialRouteName(session ? 'MainApp' : 'Login');
+            if (home === 'staff') setInitialRouteName('MainApp');
+            else if (home === 'parent') setInitialRouteName('ParentHome');
+            else setInitialRouteName('Login');
         })();
         return () => {
             mounted = false;
@@ -993,6 +1000,7 @@ export const AppNavigator = () => {
             >
                 <Stack.Screen name="Login" component={LoginScreen} />
                 <Stack.Screen name="SignUp" component={SignUpScreen} />
+                <Stack.Screen name="ParentHome" component={ParentPortalScreen} initialParams={{ standalone: true }} />
                 <Stack.Screen name="MainApp" component={MainAppNavigator} />
             </Stack.Navigator>
         </NavigationContainer>

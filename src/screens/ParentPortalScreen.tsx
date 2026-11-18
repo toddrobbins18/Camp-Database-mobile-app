@@ -37,13 +37,15 @@ import {
   hasParentPortalHeroBackground,
   resolveParentPortalHeroImageSource,
 } from '../lib/parentPortalTheme';
-import { linkFamilyChildrenByGuardianEmail } from '../lib/parentFamilyLink';
+import { linkFamilyChildrenByGuardianEmail, rememberParentCampForSignedInUser } from '../lib/parentFamilyLink';
+import { clearSessionHomeChoice } from '../lib/sessionHome';
 import { ParentPortalMessagesView } from '../components/parentPortal/ParentPortalMessagesView';
 
 export function ParentPortalScreen({ navigation, route }: { navigation: any; route?: any }) {
-  const { companyId, companySlug, companyName, themeColor, loading: companyLoading } = useParentCompany();
+  const { companyId, companySlug, companyName, themeColor, loading: companyLoading, chooseCamp } = useParentCompany();
   const colors = useParentPortalColors(themeColor, companySlug);
   const { data: roleData } = useRole(companyId);
+  const standalone = route?.params?.standalone === true;
 
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [activeView, setActiveView] = useState<ParentPortalView>('home');
@@ -155,18 +157,27 @@ export function ParentPortalScreen({ navigation, route }: { navigation: any; rou
   }, [companyId]);
 
   useEffect(() => {
+    if (!standalone || !authed) return;
+    void rememberParentCampForSignedInUser(supabase).then((linked) => {
+      if (linked) void chooseCamp(linked.slug);
+    });
+  }, [standalone, authed]);
+
+  useEffect(() => {
     if (authed && companyId) void loadAll();
   }, [authed, companyId, loadAll]);
 
   const handleSignOut = async () => {
     const staffRoles = roleData?.globalRoles ?? [];
-    if (userIsCampStaff(staffRoles)) {
+    if (!standalone && userIsCampStaff(staffRoles)) {
       navigation.navigate('Dashboard');
       return;
     }
+    await clearSessionHomeChoice();
     await supabase.auth.signOut();
     setAuthed(false);
     setFamilyId(null);
+    if (standalone) navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
   const linkAccount = async () => {
@@ -217,6 +228,7 @@ export function ParentPortalScreen({ navigation, route }: { navigation: any; rou
         embedded
         onAuthenticated={() => setAuthed(true)}
         onOpenFamilyPortal={() => setAuthed(true)}
+        onBack={standalone ? () => navigation.navigate('Login') : undefined}
       />
     );
   }

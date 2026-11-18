@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Image, ActivityIndicator, TouchableOpacity, Linking, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { ResizeMode, Video, type AVPlaybackStatus } from 'expo-av';
 import { supabase } from '../lib/supabase';
 import {
   classifyMessageMediaMime,
@@ -21,6 +22,65 @@ type Props = {
   notificationType?: string | null;
   style?: object;
 };
+
+function InlineVideo({ url }: { url: string }) {
+  const videoRef = useRef<Video>(null);
+  const [playing, setPlaying] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      void videoRef.current?.unloadAsync();
+    };
+  }, []);
+
+  const onStatus = (status: AVPlaybackStatus) => {
+    if (!status.isLoaded && status.error) setFailed(true);
+  };
+
+  if (failed) {
+    return (
+      <View style={styles.videoFrame}>
+        <Ionicons name="videocam" size={32} color="#fff" />
+        <Text style={styles.videoFail}>This video can’t play on this phone</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.videoFrame}>
+      <Video
+        ref={videoRef}
+        source={{ uri: url }}
+        style={styles.videoFill}
+        resizeMode={ResizeMode.CONTAIN}
+        useNativeControls={playing}
+        shouldPlay={playing}
+        isLooping={false}
+        onReadyForDisplay={() => setReady(true)}
+        onPlaybackStatusUpdate={onStatus}
+        onError={() => setFailed(true)}
+      />
+      {playing ? null : (
+        <TouchableOpacity
+          style={styles.playOverlay}
+          onPress={() => setPlaying(true)}
+          activeOpacity={0.9}
+          accessibilityLabel="Play video"
+        >
+          {ready ? (
+            <View style={styles.playButton}>
+              <Ionicons name="play" size={28} color="#fff" />
+            </View>
+          ) : (
+            <ActivityIndicator color="#fff" />
+          )}
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
 
 function MediaOpenRow({
   icon,
@@ -151,9 +211,7 @@ export function MessageMediaContent({
           />
         </TouchableOpacity>
       ) : null}
-      {kind === 'video' ? (
-        <MediaOpenRow icon="videocam-outline" label={fileLabel || 'Play video'} onPress={open} />
-      ) : null}
+      {kind === 'video' ? <InlineVideo url={url} /> : null}
       {kind === 'audio' ? (
         <MediaOpenRow icon="musical-notes-outline" label={fileLabel || 'Play audio'} onPress={open} />
       ) : null}
@@ -180,6 +238,43 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     borderRadius: 10,
     backgroundColor: theme.colors.background,
+  },
+  videoFrame: {
+    width: '100%',
+    maxWidth: 280,
+    aspectRatio: 16 / 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoFill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#0f172a',
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.28)',
+  },
+  playButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 3,
+  },
+  videoFail: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 16,
   },
   placeholderTitle: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
   fileRow: {

@@ -50,16 +50,16 @@ export function ParentPortalMediaGallery({ companyId, currentUserId, colors, onO
       {rows.map((row) => {
         const isMe = currentUserId != null && row.sender_id === currentUserId;
         return (
-          <TouchableOpacity
-            key={row.message_id}
-            style={styles.tile}
-            activeOpacity={0.85}
-            onPress={() => onOpenThread(row.thread_root_id, row.child_id)}
-          >
-            <Text style={styles.tileTitle} numberOfLines={1}>
-              {row.child_name ?? 'Camper'}
-            </Text>
-            <Text style={styles.tileMeta}>{isMe ? 'You' : 'Camp'}</Text>
+          <View key={row.message_id} style={styles.tile}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => onOpenThread(row.thread_root_id, row.child_id)}
+            >
+              <Text style={styles.tileTitle} numberOfLines={1}>
+                {row.child_name ?? 'Camper'}
+              </Text>
+              <Text style={styles.tileMeta}>{isMe ? 'You' : 'Camp'}</Text>
+            </TouchableOpacity>
             <MessageMediaContent
               content={row.content ?? ''}
               messageKind={row.message_kind}
@@ -68,7 +68,7 @@ export function ParentPortalMediaGallery({ companyId, currentUserId, colors, onO
               mediaFileName={row.media_file_name}
               senderId={row.sender_id}
             />
-          </TouchableOpacity>
+          </View>
         );
       })}
     </View>

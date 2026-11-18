@@ -20,6 +20,9 @@ export type ActiveRoute = {
 };
 
 const ALWAYS_ALLOWED_SCREENS = new Set([
+  'Login',
+  'SignUp',
+  'ParentHome',
   'Dashboard',
   'AdminPanel',
   'EvaluationQuestions',

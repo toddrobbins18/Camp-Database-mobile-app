@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import { clearSessionHomeChoice } from '../lib/sessionHome';
 import { useRole } from '../hooks/useRole';
 import { theme } from '../theme/theme';
 
@@ -35,6 +36,7 @@ export function MobileUserMenu({ navigation }: { navigation: any }) {
 
     const handleLogout = async () => {
         setOpen(false);
+        await clearSessionHomeChoice();
         await supabase.auth.signOut();
         navigation?.navigate?.('Login');
     };

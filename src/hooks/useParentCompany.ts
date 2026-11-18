@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { useCompany } from '../contexts/CompanyContext';
 import { PARENT_PORTAL_COMPANY_SLUG_KEY } from '../constants/parentPortalConstants';
+import { DEFAULT_COMPANY_SLUG } from '../constants/camps';
 
 type ParentCompanyRow = {
   id: string;
@@ -42,6 +43,12 @@ export function useParentCompany() {
   const [companyName, setCompanyName] = useState('Your Camp');
   const [themeColor, setThemeColor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pickedSlug, setPickedSlug] = useState<string | null>(null);
+
+  const chooseCamp = async (slug: string) => {
+    await AsyncStorage.setItem(PARENT_PORTAL_COMPANY_SLUG_KEY, slug);
+    setPickedSlug(slug);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -54,10 +61,10 @@ export function useParentCompany() {
     };
 
     const resolve = async () => {
-      setLoading(true);
+      if (!companyId) setLoading(true);
 
       const stored = await AsyncStorage.getItem(PARENT_PORTAL_COMPANY_SLUG_KEY);
-      const slug = contextSlug ?? stored;
+      const slug = pickedSlug ?? contextSlug ?? stored ?? DEFAULT_COMPANY_SLUG;
 
       if (slug) await AsyncStorage.setItem(PARENT_PORTAL_COMPANY_SLUG_KEY, slug);
 
@@ -125,6 +132,7 @@ export function useParentCompany() {
       cancelled = true;
     };
   }, [
+    pickedSlug,
     contextSlug,
     contextCompanyId,
     companyThemeColor,
@@ -132,5 +140,5 @@ export function useParentCompany() {
     availableCompanies,
   ]);
 
-  return { companyId, companySlug, companyName, themeColor, loading };
+  return { companyId, companySlug, companyName, themeColor, loading, chooseCamp };
 }

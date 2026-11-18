@@ -15,6 +15,8 @@ import { theme } from '../theme/theme';
 import { useLogin } from '../hooks/useAuth';
 import { loginSchema } from '../lib/authSchemas';
 import { supabase } from '../lib/supabase';
+import { rememberSessionHome, resolveSessionHome } from '../lib/sessionHome';
+import { ParentAuthScreen } from './ParentAuthScreen';
 import * as SecureStore from 'expo-secure-store';
 
 interface LoginScreenProps {
@@ -35,6 +37,7 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
     const [isForgotPassword, setIsForgotPassword] = useState(false);
     const [resetStatus, setResetStatus] = useState<'none' | 'error' | 'success'>('none');
     const [error, setError] = useState('');
+    const [audience, setAudience] = useState<'staff' | 'parent'>('staff');
 
     const REMEMBER_EMAIL_KEY = 'remembered_login_email';
     const REMEMBER_PASSWORD_KEY = 'remembered_login_password';
@@ -93,7 +96,9 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
             const { data: { session } } = await supabase.auth.getSession();
             if (!mounted) return;
             if (session) {
-                navigation.replace('MainApp');
+                const home = await resolveSessionHome();
+                if (!mounted) return;
+                navigation.replace(home === 'parent' ? 'ParentHome' : 'MainApp', home === 'parent' ? { standalone: true } : undefined);
             }
         })();
         return () => {
@@ -139,6 +144,7 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
         } catch {
             // Non-blocking: auth succeeded, so do not block navigation on storage failure.
         }
+        await rememberSessionHome('staff');
         navigation.replace('MainApp');
     });
 
@@ -164,6 +170,37 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
     };
 
 
+    const audienceSwitch = !isForgotPassword ? (
+        <View style={styles.audienceSwitch}>
+            <TouchableOpacity
+                style={[styles.audienceOption, audience === 'staff' && styles.audienceOptionOn]}
+                onPress={() => setAudience('staff')}
+            >
+                <Text style={[styles.audienceText, audience === 'staff' && styles.audienceTextOn]}>Staff</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={[styles.audienceOption, audience === 'parent' && styles.audienceOptionOn]}
+                onPress={() => setAudience('parent')}
+            >
+                <Text style={[styles.audienceText, audience === 'parent' && styles.audienceTextOn]}>Parent</Text>
+            </TouchableOpacity>
+        </View>
+    ) : null;
+
+    if (audience === 'parent' && !isForgotPassword) {
+        return (
+            <ParentAuthScreen
+                navigation={navigation}
+                compact
+                header={audienceSwitch}
+                onAuthenticated={async () => {
+                    await rememberSessionHome('parent');
+                    navigation.replace('ParentHome', { standalone: true });
+                }}
+            />
+        );
+    }
+
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView
@@ -178,8 +215,13 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
                         {/* Header */}
                         <Text style={styles.title}>{isForgotPassword ? 'Reset Password' : 'Welcome Back'}</Text>
                         <Text style={styles.subtitle}>
-                            {isForgotPassword ? 'Follow instructions to reset password' : 'Sign in to manage The Nest'}
+                            {isForgotPassword
+                                ? 'Follow instructions to reset password'
+                                : audience === 'parent'
+                                  ? 'Sign in to your family portal'
+                                  : 'Sign in to manage The Nest'}
                         </Text>
+                        {audienceSwitch}
 
                         {error ? (
                             <View style={styles.errorBox}>
@@ -187,7 +229,6 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
                             </View>
                         ) : null}
 
-                        {/* Form */}
                         <View style={styles.form}>
                             {!isForgotPassword ? (
                                 <>
@@ -388,6 +429,33 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         marginBottom: theme.spacing.sm,
         textAlign: 'center',
+    },
+    audienceSwitch: {
+        flexDirection: 'row',
+        alignSelf: 'center',
+        backgroundColor: theme.colors.background,
+        borderRadius: 999,
+        padding: 4,
+        marginBottom: theme.spacing.lg,
+        width: '100%',
+        maxWidth: 400,
+    },
+    audienceOption: {
+        flex: 1,
+        borderRadius: 999,
+        paddingVertical: 10,
+        alignItems: 'center',
+    },
+    audienceOptionOn: {
+        backgroundColor: theme.colors.primary,
+    },
+    audienceText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+    },
+    audienceTextOn: {
+        color: '#fff',
     },
     subtitle: {
         fontSize: 16,

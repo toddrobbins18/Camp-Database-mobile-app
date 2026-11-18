@@ -119,30 +119,6 @@ export function MobileNotificationBell({ navigation, iconColor, iconSize = 26 }:
     }, [userId, companyId, companySlug]);
 
     useEffect(() => {
-        if (!userId) return;
-        const channel = supabase
-            .channel(`mobile-notification-bell-${userId}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'messages',
-                    filter: `recipient_id=eq.${userId}`,
-                },
-                () => {
-                    void queryClient.refetchQueries({ queryKey: inboxUnreadCountQueryKey(userId) });
-                    if (open) void fetchRecent();
-                },
-            )
-            .subscribe();
-
-        return () => {
-            void supabase.removeChannel(channel);
-        };
-    }, [userId, open, fetchRecent, queryClient]);
-
-    useEffect(() => {
         if (open) void fetchRecent();
     }, [open, fetchRecent]);
 
