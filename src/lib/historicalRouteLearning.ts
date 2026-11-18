@@ -469,15 +469,20 @@ export function applyHistoricalAssignments(options: {
       continue;
     }
 
-    const lat = camper.lat || prior.lat || 0;
-    const lng = camper.lng || prior.lng || 0;
     const address = camper.address || prior.address;
+    const bundledPin = address ? resolveBundledGeocodeResult(address) : null;
+    const lat = bundledPin?.lat || camper.lat || prior.lat || 0;
+    const lng = bundledPin?.lng || camper.lng || prior.lng || 0;
 
     const stops = coreStops[routeId] ?? [];
     const addrKey = normAddressKey(address || "");
     const stopIdx = address ? stops.findIndex((s) => normAddressKey(s.address) === addrKey) : -1;
 
     if (stopIdx >= 0) {
+      const onStop = resolveBundledGeocodeResult(stops[stopIdx].address || address || '');
+      if (onStop) {
+        stops[stopIdx] = { ...stops[stopIdx], lat: onStop.lat, lng: onStop.lng };
+      }
       stops[stopIdx] = addCamperToStop(stops[stopIdx], camper.name);
       coreStops[routeId] = stops;
       placed.push({ name: camper.name, busNumber: routeId, address: address || stops[stopIdx].address });

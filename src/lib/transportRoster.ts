@@ -415,6 +415,15 @@ export async function loadHistoricalAddressHints(
   for (const [key, value] of withBus) {
     hints.set(key, { address: value.address, lat: value.lat, lng: value.lng });
   }
+  if (usesNorthShoreMappoint(slug) && !isSandboxTransportSlug(slug)) {
+    const bundled = await buildMappoint2026AddressHints();
+    for (const [key, value] of bundled) hints.set(key, value);
+    for (const [key, existing] of hints) {
+      const pin = resolveBundledGeocodeResult(existing.address);
+      if (!pin) continue;
+      hints.set(key, { ...existing, lat: pin.lat, lng: pin.lng });
+    }
+  }
   return hints;
 }
 

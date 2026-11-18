@@ -8,6 +8,7 @@ import { DEFAULT_SEASON } from '../constants/seasonConstants';
 import { parseCSV, pickFirst } from '../lib/sunshineCsv';
 import { pickAndReadCsvText } from '../lib/pickCsvDocument';
 import {
+  pinAtBundledStreet,
   resolveBundledGeocodeResult,
   snapToBundledGeocode,
 } from '../lib/mappointTransportImport';
@@ -857,9 +858,12 @@ export function useDayCampTransport() {
   }, [companyId, season, persistBoard]);
 
   const getEffectiveCore = useCallback(
-    (routeId: number): TransportRouteStop[] =>
-      applyRouteOverrides(coreStops[routeId] || [], routeId, todayOverrides, excludedCampers),
-    [coreStops, todayOverrides, excludedCampers],
+    (routeId: number): TransportRouteStop[] => {
+      const stops = applyRouteOverrides(coreStops[routeId] || [], routeId, todayOverrides, excludedCampers);
+      if (!useNsMappoint) return stops;
+      return stops.map((stop) => pinAtBundledStreet(stop));
+    },
+    [coreStops, todayOverrides, excludedCampers, useNsMappoint],
   );
 
   const stopDwellMinutes = effectiveStopDwellMinutes(boardSettings);
@@ -981,8 +985,10 @@ export function useDayCampTransport() {
 
   const unplottedForWeek = useMemo(() => {
     const onSeasonRoster = filterUnplottedToSeasonRoster(unplottedCampers, seasonRosterNames);
-    return filterUnplottedForWeek(onSeasonRoster, activeRouteEnrollmentWeek, camperEnrollmentLookup);
-  }, [unplottedCampers, seasonRosterNames, activeRouteEnrollmentWeek, camperEnrollmentLookup]);
+    const week = filterUnplottedForWeek(onSeasonRoster, activeRouteEnrollmentWeek, camperEnrollmentLookup);
+    if (!useNsMappoint) return week;
+    return week.map((camper) => pinAtBundledStreet(camper));
+  }, [unplottedCampers, seasonRosterNames, activeRouteEnrollmentWeek, camperEnrollmentLookup, useNsMappoint]);
 
   const parentTransportForWeek = useMemo(() => {
     if (activeRouteEnrollmentWeek == null) return parentTransportCampers;
@@ -1254,11 +1260,14 @@ export function useDayCampTransport() {
           true,
         );
       }
+      const pin = useNsMappoint
+        ? snapToBundledGeocode(camper.address, camper.lat, camper.lng)
+        : camper;
       const newStop: TransportRouteStop = {
         name: camper.name,
         address: camper.address,
-        lat: camper.lat,
-        lng: camper.lng,
+        lat: pin.lat,
+        lng: pin.lng,
         pickupTime: 'TBD',
         passengers: 1,
         camperNames: [camper.name],
@@ -1312,7 +1321,7 @@ export function useDayCampTransport() {
         },
       });
     },
-    [unplottedCampers, routeMeta, coreStops, todayOverrides, markRoutesConfigured],
+    [unplottedCampers, routeMeta, coreStops, todayOverrides, markRoutesConfigured, useNsMappoint],
   );
 
   const handleAssignCampersToRoute = useCallback(
@@ -1328,12 +1337,15 @@ export function useDayCampTransport() {
       const applyMerge = (stops: TransportRouteStop[]) =>
         mergeCampersIntoStops(
           stops,
-          campers.map((c) => ({
-            name: c.name,
-            address: c.address,
-            lat: c.lat,
-            lng: c.lng,
-          })),
+          campers.map((c) => {
+            const pin = useNsMappoint ? snapToBundledGeocode(c.address, c.lat, c.lng) : c;
+            return {
+              name: c.name,
+              address: c.address,
+              lat: pin.lat,
+              lng: pin.lng,
+            };
+          }),
           campLocation,
         ).next;
 
@@ -1359,7 +1371,7 @@ export function useDayCampTransport() {
         },
       });
     },
-    [unplottedCampers, markRoutesConfigured],
+    [unplottedCampers, markRoutesConfigured, useNsMappoint],
   );
   assignCampersRef.current = handleAssignCampersToRoute;
 
@@ -1427,18 +1439,13 @@ export function useDayCampTransport() {
         }
         const age = parseInt(pickFirst(r, ['age']) || '10', 10) || 10;
         const session = pickFirst(r, ['session']) || 'Session 1';
-        let lat = 40.85 + (Math.random() - 0.5) * 0.1;
-        let lng = -73.65 + (Math.random() - 0.5) * 0.1;
-        try {
-          const { data } = await supabase.functions.invoke('route-optimizer', {
-            body: { action: 'geocode', address },
-          });
-          if (data?.found) {
-            lat = data.lat;
-            lng = data.lng;
-          }
-        } catch {
-          /* fallback */
+        let lat = campLocation.lat;
+        let lng = campLocation.lng;
+        const geo = await geocodeAddress(address, geocodeCacheRef.current, useNsMappoint);
+        if (isGeocodePoint(geo)) {
+          const pin = useNsMappoint ? snapToBundledGeocode(address, geo.lat, geo.lng) : geo;
+          lat = pin.lat;
+          lng = pin.lng;
         }
         nextId++;
         newOnes.push({ id: nextId, name, address, lat, lng, age, session });
@@ -2008,14 +2015,17 @@ export function useDayCampTransport() {
       if (targetRouteId === undefined) {
         unplottedCampers.forEach((camper) => jobRefs.push({ kind: 'camper', camper }));
       }
-      const jobs = jobRefs.map((ref, i) => ({
-        id: i + 1,
-        location:
-          ref.kind === 'stop'
-            ? ([ref.stop.lng, ref.stop.lat] as [number, number])
-            : ([ref.camper.lng, ref.camper.lat] as [number, number]),
-        amount: ref.kind === 'stop' ? [Math.max(1, ref.stop.passengers || 1)] : [1],
-      }));
+      const jobs = jobRefs.map((ref, i) => {
+        const source = ref.kind === 'stop' ? ref.stop : ref.camper;
+        const pin = useNsMappoint
+          ? snapToBundledGeocode(source.address, source.lat, source.lng)
+          : source;
+        return {
+          id: i + 1,
+          location: [pin.lng, pin.lat] as [number, number],
+          amount: ref.kind === 'stop' ? [Math.max(1, ref.stop.passengers || 1)] : [1],
+        };
+      });
       const vehicles = targetRoutes.map((r) => ({
         id: r.id,
         start: [campLocation.lng, campLocation.lat] as [number, number],
@@ -2037,14 +2047,15 @@ export function useDayCampTransport() {
               if (step.type !== 'job') continue;
               const ref = jobRefs[(step.job as number) - 1];
               if (!ref) continue;
-              if (ref.kind === 'stop') ordered.push(ref.stop);
+              if (ref.kind === 'stop') ordered.push(useNsMappoint ? pinAtBundledStreet(ref.stop) : ref.stop);
               else {
                 const c = ref.camper;
+                const pin = useNsMappoint ? snapToBundledGeocode(c.address, c.lat, c.lng) : c;
                 ordered.push({
                   name: c.name,
                   address: c.address,
-                  lat: c.lat,
-                  lng: c.lng,
+                  lat: pin.lat,
+                  lng: pin.lng,
                   pickupTime: 'TBD',
                   passengers: 1,
                   camperNames: [c.name],
@@ -2091,11 +2102,14 @@ export function useDayCampTransport() {
             }
 
             if (bestRouteId !== undefined) {
+              const pin = useNsMappoint
+                ? snapToBundledGeocode(camper.address, camper.lat, camper.lng)
+                : camper;
               proposedCore[bestRouteId].push({
                 name: camper.name,
                 address: camper.address,
-                lat: camper.lat,
-                lng: camper.lng,
+                lat: pin.lat,
+                lng: pin.lng,
                 pickupTime: 'TBD',
                 passengers: 1,
                 camperNames: [camper.name],
