@@ -24,6 +24,8 @@ import type {
   TransportUnplottedCamper,
 } from './transportRoster';
 import { usesNorthShoreMappoint } from '../constants/camps';
+import { normalizeTransportAddress } from './transportAddressNormalize';
+import { haversineMiles } from './transportBoardUtils';
 import { fetchCompanySlug, isSandboxTransportSlug } from './nestSandboxTransport';
 
 export const DEFAULT_REFERENCE_SEASON = "2026";
@@ -90,10 +92,11 @@ export function routeIdForPriorBus(
 }
 
 /** Build priors from bundled MapPoint CSV when warehouse is empty. */
-export function buildPriorsFromBundledMappoint(
+export async function buildPriorsFromBundledMappoint(
   referenceSeason = DEFAULT_REFERENCE_SEASON,
-): CamperRoutingPrior[] {
-  const routes = parseMappointRoutesCsv(getBundledMappointRoutesCsv2026(), { direction: "AM" });
+): Promise<CamperRoutingPrior[]> {
+  const csv = await getBundledMappointRoutesCsv2026();
+  const routes = parseMappointRoutesCsv(csv, { direction: "AM" });
   const priors: CamperRoutingPrior[] = [];
 
   for (const route of routes) {
@@ -118,6 +121,71 @@ export function buildPriorsFromBundledMappoint(
   }
 
   return priors;
+}
+
+const STREET_BUS_SPREAD_MILES = 1.5;
+
+export type StreetBusSuggestion = {
+  busNumber: number;
+  routeName: string;
+  street: string;
+  riderCount: number;
+  sampleNames: string[];
+  farFromBus: boolean;
+};
+
+function streetNameKey(address: string): string {
+  return normalizeTransportAddress(address).replace(/^\d+[a-z]?\s+/i, '');
+}
+
+/** New camper on a street that already has riders → that bus, not a new route. */
+export function suggestBusForStreet(
+  address: string,
+  priors: CamperRoutingPrior[],
+): StreetBusSuggestion | null {
+  const street = streetNameKey(address);
+  if (street.length < 3) return null;
+
+  const matches = priors.filter(
+    (prior) => prior.direction === 'AM' && streetNameKey(prior.address || '') === street,
+  );
+  if (!matches.length) return null;
+
+  const byBus = new Map<number, CamperRoutingPrior[]>();
+  for (const prior of matches) {
+    const list = byBus.get(prior.busNumber) ?? [];
+    list.push(prior);
+    byBus.set(prior.busNumber, list);
+  }
+  const ranked = [...byBus.entries()].sort((a, b) => b[1].length - a[1].length);
+  const [busNumber, riders] = ranked[0];
+  const pin = resolveBundledGeocodeResult(address);
+  let farFromBus = false;
+  if (pin) {
+    const others = priors.filter(
+      (prior) =>
+        prior.direction === 'AM'
+        && prior.busNumber === busNumber
+        && prior.lat != null
+        && prior.lng != null
+        && streetNameKey(prior.address || '') !== street,
+    );
+    if (others.length) {
+      const nearest = Math.min(
+        ...others.map((prior) => haversineMiles(pin.lat, pin.lng, prior.lat!, prior.lng!)),
+      );
+      farFromBus = nearest > STREET_BUS_SPREAD_MILES;
+    }
+  }
+
+  return {
+    busNumber,
+    routeName: riders[0].routeName,
+    street,
+    riderCount: riders.length,
+    sampleNames: riders.slice(0, 4).map((rider) => rider.camperName),
+    farFromBus,
+  };
 }
 
 async function loadPriorsForSeasonSource(
@@ -165,7 +233,7 @@ async function loadHistoricalPriorMap(
     return buildCamperPriorMap([]);
   }
 
-  return buildCamperPriorMap(buildPriorsFromBundledMappoint(historicalSeason));
+  return buildCamperPriorMap(await buildPriorsFromBundledMappoint(historicalSeason));
 }
 
 export async function loadCamperPriorMap(
@@ -228,7 +296,7 @@ export async function getReferenceDatasetStatus(
     };
   }
 
-  const bundled = buildPriorsFromBundledMappoint(historicalSeason);
+  const bundled = await buildPriorsFromBundledMappoint(historicalSeason);
   return {
     referenceSeason: historicalSeason,
     loaded: bundled.length > 0,
@@ -352,7 +420,8 @@ export async function syncBundledMapPointToWarehouse(
     return { ok: false, error: 'Bundled MapPoint is North Shore only' };
   }
   const referenceSeason = options?.referenceSeason ?? DEFAULT_REFERENCE_SEASON;
-  const payload = buildRouteReferenceFromMappointCsv(getBundledMappointRoutesCsv2026(), {
+  const csv = await getBundledMappointRoutesCsv2026();
+  const payload = buildRouteReferenceFromMappointCsv(csv, {
     referenceSeason,
     label: `MapPoint ${referenceSeason} (auto-sync)`,
     geocodeLookup: (address) => resolveBundledGeocodeResult(address),
