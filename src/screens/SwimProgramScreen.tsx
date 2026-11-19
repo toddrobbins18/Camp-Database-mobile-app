@@ -48,7 +48,10 @@ import {
   type SwimImportProgress,
   SWIM_LEVEL_REPORT_VIEWS,
   swimLevelColumnVisible,
+  SWIM_RC_VIEW_SKILL_BANDS,
+  RC_PROGRESS_SKILL_LENGTHS,
   type SwimLevelReportView,
+  type RcProgressSkillField,
   EXIT_SKILL_COUNT,
 } from '../lib/swimProgram';
 import { sendSwimProgressEmail } from '../lib/swimProgressApi';
@@ -368,6 +371,14 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
       next[idx] = value;
       const levelKey = `${group}Level` as 'goldfishLevel' | 'minnowLevel' | 'tadpoleLevel';
       return { [group]: next, [levelKey]: levelFromSkills(next) } as Partial<LevelRecord>;
+    });
+  };
+
+  const updateRcSkill = (id: string, field: RcProgressSkillField, idx: number, value: SkillStatus) => {
+    updateLevel(id, (r) => {
+      const next = [...r[field]];
+      next[idx] = value;
+      return { [field]: next } as Partial<LevelRecord>;
     });
   };
 
@@ -985,6 +996,23 @@ export function SwimProgramScreen({ navigation, initialTab = 'bracelets' }: Swim
                   )}
                 </View>
               ) : null}
+
+              {(SWIM_RC_VIEW_SKILL_BANDS[levelReportView] ?? []).map((band) => (
+                <View key={band.field} style={styles.levelSection}>
+                  <Text style={styles.sectionHeading}>{band.title}</Text>
+                  {Array.from({ length: RC_PROGRESS_SKILL_LENGTHS[band.field] }, (_, i) =>
+                    swimLevelColumnVisible(levelReportView, `${band.field}-${i}`) ? (
+                      <OptionPicker
+                        key={`${band.field}-${i}`}
+                        label={band.header(i)}
+                        value={selectedLevel[band.field]?.[i] ?? '—'}
+                        options={SKILL_OPTIONS}
+                        onChange={(v) => updateRcSkill(selectedLevel.id, band.field, i, v as SkillStatus)}
+                      />
+                    ) : null,
+                  )}
+                </View>
+              ))}
 
               {(
                 [

@@ -60,8 +60,81 @@ export interface LevelRecord {
   frog: LevelStatus;
   /** Red Cross 1 exit skills (2 required assessments). */
   exitSkills: SkillStatus[];
+  rc2Frog: SkillStatus[];
+  rc2Toad: SkillStatus[];
+  rc2Bullfrog: SkillStatus[];
+  rc2Exit: SkillStatus[];
+  rc3Perch: SkillStatus[];
+  rc3Trout: SkillStatus[];
+  rc3Bass: SkillStatus[];
+  rc3Exit: SkillStatus[];
+  rc4Wahoo: SkillStatus[];
+  rc4Barracuda: SkillStatus[];
+  rc4Exit: SkillStatus[];
   lastModified: string;
 }
+
+export const RC_PROGRESS_SKILL_LENGTHS = {
+  rc2Frog: 5,
+  rc2Toad: 5,
+  rc2Bullfrog: 5,
+  rc2Exit: 3,
+  rc3Perch: 6,
+  rc3Trout: 6,
+  rc3Bass: 7,
+  rc3Exit: 2,
+  rc4Wahoo: 6,
+  rc4Barracuda: 7,
+  rc4Exit: 4,
+} as const;
+
+export type RcProgressSkillField = keyof typeof RC_PROGRESS_SKILL_LENGTHS;
+
+export type RcProgressSkillBand = {
+  field: RcProgressSkillField;
+  title: string;
+  header: (index: number) => string;
+};
+
+export function emptySkillRow(length: number): SkillStatus[] {
+  return Array.from({ length }, () => "—" as SkillStatus);
+}
+
+export function emptyRcProgressSkills(): Record<RcProgressSkillField, SkillStatus[]> {
+  return {
+    rc2Frog: emptySkillRow(RC_PROGRESS_SKILL_LENGTHS.rc2Frog),
+    rc2Toad: emptySkillRow(RC_PROGRESS_SKILL_LENGTHS.rc2Toad),
+    rc2Bullfrog: emptySkillRow(RC_PROGRESS_SKILL_LENGTHS.rc2Bullfrog),
+    rc2Exit: emptySkillRow(RC_PROGRESS_SKILL_LENGTHS.rc2Exit),
+    rc3Perch: emptySkillRow(RC_PROGRESS_SKILL_LENGTHS.rc3Perch),
+    rc3Trout: emptySkillRow(RC_PROGRESS_SKILL_LENGTHS.rc3Trout),
+    rc3Bass: emptySkillRow(RC_PROGRESS_SKILL_LENGTHS.rc3Bass),
+    rc3Exit: emptySkillRow(RC_PROGRESS_SKILL_LENGTHS.rc3Exit),
+    rc4Wahoo: emptySkillRow(RC_PROGRESS_SKILL_LENGTHS.rc4Wahoo),
+    rc4Barracuda: emptySkillRow(RC_PROGRESS_SKILL_LENGTHS.rc4Barracuda),
+    rc4Exit: emptySkillRow(RC_PROGRESS_SKILL_LENGTHS.rc4Exit),
+  };
+}
+
+export const SWIM_RC_VIEW_SKILL_BANDS: Partial<Record<SwimLevelReportView, RcProgressSkillBand[]>> = {
+  "red-cross-2": [
+    { field: "rc2Frog", title: "Frog 2A", header: (i) => `Frog 2A${i + 1}` },
+    { field: "rc2Toad", title: "Toad 2B", header: (i) => `Toad 2B${i + 1}` },
+    { field: "rc2Bullfrog", title: "Bullfrog 2C", header: (i) => `Bullfrog 2C${i + 1}` },
+    { field: "rc2Exit", title: "Exit Skills", header: (i) => `Exit ${i + 1}` },
+  ],
+  "red-cross-3": [
+    { field: "rc3Perch", title: "Perch 3A", header: (i) => `Perch 3A${i + 1}` },
+    { field: "rc3Trout", title: "Trout 3B", header: (i) => `Trout 3B${i + 1}` },
+    { field: "rc3Bass", title: "Bass 3C", header: (i) => `Bass 3C${i + 1}` },
+    { field: "rc3Exit", title: "Exit Skills", header: (i) => `Exit ${i + 1}` },
+  ],
+  "red-cross-4": [
+    { field: "rc4Wahoo", title: "Wahoo 4A", header: (i) => `Wahoo 4A${i + 1}` },
+    { field: "rc4Barracuda", title: "Barracuda 4B", header: (i) => `Barracuda 4B${i + 1}` },
+    { field: "rc4Exit", title: "Exit Skills", header: (i) => `Exit ${i + 1}` },
+  ],
+};
 
 export const EXIT_SKILL_COUNT = 2;
 
@@ -119,31 +192,32 @@ const SWIM_LEVEL_VIEW_COLUMNS: Record<Exclude<SwimLevelReportView, 'all'>, Set<s
     'exit-1',
   ]),
   'red-cross-2': new Set([
-    'minnow-0',
-    'minnow-1',
-    'minnow-2',
-    'minnow-3',
-    'minnow-4',
-    'minnow-5',
-    'minnowLevel',
+    ...(['rc2Frog', 'rc2Toad', 'rc2Bullfrog', 'rc2Exit'] as const).flatMap((field) =>
+      Array.from({ length: RC_PROGRESS_SKILL_LENGTHS[field] }, (_, i) => `${field}-${i}`),
+    ),
+    'redCross2',
   ]),
   'red-cross-3': new Set([
-    'tadpole-0',
-    'tadpole-1',
-    'tadpole-2',
-    'tadpole-3',
-    'tadpoleLevel',
-    'redCross',
-    'frog',
+    ...(['rc3Perch', 'rc3Trout', 'rc3Bass', 'rc3Exit'] as const).flatMap((field) =>
+      Array.from({ length: RC_PROGRESS_SKILL_LENGTHS[field] }, (_, i) => `${field}-${i}`),
+    ),
+    'redCross3',
   ]),
-  'red-cross-4': new Set(['redCross2']),
+  'red-cross-4': new Set([
+    ...(['rc4Wahoo', 'rc4Barracuda', 'rc4Exit'] as const).flatMap((field) =>
+      Array.from({ length: RC_PROGRESS_SKILL_LENGTHS[field] }, (_, i) => `${field}-${i}`),
+    ),
+    'redCross4',
+  ]),
   'red-cross-5': new Set(['redCross3']),
   'red-cross-6': new Set(['redCross4']),
 };
 
 export function swimLevelColumnVisible(view: SwimLevelReportView, column: string): boolean {
-  if (view === 'all') return true;
   if (column === 'name' || column === 'group' || column === 'lastModified') return true;
+  if (view === 'all') {
+    return !Object.keys(RC_PROGRESS_SKILL_LENGTHS).some((field) => column.startsWith(`${field}-`));
+  }
   return SWIM_LEVEL_VIEW_COLUMNS[view].has(column);
 }
 
@@ -283,6 +357,7 @@ export function levelFromChild(child: RosterChild): LevelRecord {
     redCross4: "—",
     frog: "—",
     exitSkills: emptyExitSkills(),
+    ...emptyRcProgressSkills(),
     lastModified: "—",
   };
 }
@@ -341,6 +416,17 @@ function levelFromJson(child: RosterChild, raw: Record<string, unknown>, updated
     redCross4: normalizeLevelStatus(raw.redCross4),
     frog: normalizeLevelStatus(raw.frog),
     exitSkills: parseSkillArray(raw.exitSkills, EXIT_SKILL_COUNT),
+    rc2Frog: parseSkillArray(raw.rc2Frog, RC_PROGRESS_SKILL_LENGTHS.rc2Frog),
+    rc2Toad: parseSkillArray(raw.rc2Toad, RC_PROGRESS_SKILL_LENGTHS.rc2Toad),
+    rc2Bullfrog: parseSkillArray(raw.rc2Bullfrog, RC_PROGRESS_SKILL_LENGTHS.rc2Bullfrog),
+    rc2Exit: parseSkillArray(raw.rc2Exit, RC_PROGRESS_SKILL_LENGTHS.rc2Exit),
+    rc3Perch: parseSkillArray(raw.rc3Perch, RC_PROGRESS_SKILL_LENGTHS.rc3Perch),
+    rc3Trout: parseSkillArray(raw.rc3Trout, RC_PROGRESS_SKILL_LENGTHS.rc3Trout),
+    rc3Bass: parseSkillArray(raw.rc3Bass, RC_PROGRESS_SKILL_LENGTHS.rc3Bass),
+    rc3Exit: parseSkillArray(raw.rc3Exit, RC_PROGRESS_SKILL_LENGTHS.rc3Exit),
+    rc4Wahoo: parseSkillArray(raw.rc4Wahoo, RC_PROGRESS_SKILL_LENGTHS.rc4Wahoo),
+    rc4Barracuda: parseSkillArray(raw.rc4Barracuda, RC_PROGRESS_SKILL_LENGTHS.rc4Barracuda),
+    rc4Exit: parseSkillArray(raw.rc4Exit, RC_PROGRESS_SKILL_LENGTHS.rc4Exit),
     lastModified: updatedAt ? formatSwimTimestamp(updatedAt) : String(raw.lastModified ?? "—"),
   };
 }
@@ -377,6 +463,17 @@ export function levelToJson(record: LevelRecord): Record<string, unknown> {
     redCross4: record.redCross4,
     frog: record.frog,
     exitSkills: record.exitSkills,
+    rc2Frog: record.rc2Frog,
+    rc2Toad: record.rc2Toad,
+    rc2Bullfrog: record.rc2Bullfrog,
+    rc2Exit: record.rc2Exit,
+    rc3Perch: record.rc3Perch,
+    rc3Trout: record.rc3Trout,
+    rc3Bass: record.rc3Bass,
+    rc3Exit: record.rc3Exit,
+    rc4Wahoo: record.rc4Wahoo,
+    rc4Barracuda: record.rc4Barracuda,
+    rc4Exit: record.rc4Exit,
   };
 }
 
@@ -425,7 +522,12 @@ export function mergeLevels(saved: Map<string, LevelRecord>, children: RosterChi
     if (!prev) return levelFromChild(child);
     const exitSkills =
       prev.exitSkills?.length === EXIT_SKILL_COUNT ? prev.exitSkills : emptyExitSkills();
-    return { ...prev, ...rosterFields, exitSkills };
+    const emptyRc = emptyRcProgressSkills();
+    const merged: LevelRecord = { ...emptyRc, ...prev, ...rosterFields, exitSkills };
+    (Object.keys(RC_PROGRESS_SKILL_LENGTHS) as RcProgressSkillField[]).forEach((field) => {
+      if (merged[field]?.length !== RC_PROGRESS_SKILL_LENGTHS[field]) merged[field] = emptyRc[field];
+    });
+    return merged;
   });
 }
 
@@ -625,6 +727,18 @@ export async function fetchSwimHistoryReport(
       (levels?.goldfish.some((s) => s !== "—") ?? false) ||
       (levels?.minnow.some((s) => s !== "—") ?? false) ||
       (levels?.tadpole.some((s) => s !== "—") ?? false) ||
+      (levels?.exitSkills.some((s) => s !== "—") ?? false) ||
+      (levels?.rc2Frog.some((s) => s !== "—") ?? false) ||
+      (levels?.rc2Toad.some((s) => s !== "—") ?? false) ||
+      (levels?.rc2Bullfrog.some((s) => s !== "—") ?? false) ||
+      (levels?.rc2Exit.some((s) => s !== "—") ?? false) ||
+      (levels?.rc3Perch.some((s) => s !== "—") ?? false) ||
+      (levels?.rc3Trout.some((s) => s !== "—") ?? false) ||
+      (levels?.rc3Bass.some((s) => s !== "—") ?? false) ||
+      (levels?.rc3Exit.some((s) => s !== "—") ?? false) ||
+      (levels?.rc4Wahoo.some((s) => s !== "—") ?? false) ||
+      (levels?.rc4Barracuda.some((s) => s !== "—") ?? false) ||
+      (levels?.rc4Exit.some((s) => s !== "—") ?? false) ||
       (levels
         ? [
             levels.goldfishLevel,
@@ -1212,6 +1326,7 @@ export function parseSwimProgramCsv(
         redCross4: levelFields.redCross4 ?? "—",
         frog: levelFields.frog ?? "—",
         exitSkills,
+        ...emptyRcProgressSkills(),
         ...(csvGroup ? { group: csvGroup } : {}),
       };
     }
