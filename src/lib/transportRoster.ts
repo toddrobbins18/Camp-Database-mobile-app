@@ -23,6 +23,10 @@ import { CAMP_LOCATION } from './transportBoardUtils';
 import { getCampLocation, usesNorthShoreMappoint } from '../constants/camps';
 import { fetchCompanySlug, isSandboxTransportSlug } from './nestSandboxTransport';
 import { riderNamesFromStop } from './transportRouteStops';
+import {
+  isMalformedTransportGeocodeAddress,
+  sanitizeTransportGeocodeAddress,
+} from './transportAddressNormalize';
 import type { TransportBoardSettings } from './transportBoardSettings';
 import type { BusCounselorPickup } from './transportCounselorPickup';
 
@@ -96,6 +100,8 @@ export type TransportBoardPayload = {
 };
 
 const normName = (name: string) => name.trim().toLowerCase();
+const normAddressCompareKey = (address: string) =>
+  address.trim().toLowerCase().replace(/\s+/g, ' ');
 
 export const countTransportBoardStops = (stops: Record<number, TransportRouteStop[]>) =>
   Object.values(stops).reduce((sum, arr) => sum + (arr?.length || 0), 0);
@@ -172,9 +178,15 @@ export async function normalizeTransportBoardForSeason(
     parentTransportCampers,
   );
 
-  const repinned = repinTransportBoardCoordinates({
+  const rewritten = sanitizeTransportBoardPins({
     coreStops: prunedStops,
     unplottedCampers,
+    useBundledMappoint,
+  });
+
+  const repinned = repinTransportBoardCoordinates({
+    coreStops: rewritten.coreStops,
+    unplottedCampers: rewritten.unplottedCampers,
     useBundledMappoint,
   });
 
@@ -341,6 +353,57 @@ export async function loadEnrolledCampersForTransport(
   })).filter((c) => c.name);
 }
 
+function rewriteBoardPoint<T extends { address?: string; lat: number; lng: number }>(
+  point: T,
+  useBundledMappoint: boolean,
+): { point: T; rewritten: boolean } {
+  const raw = point.address?.trim() || '';
+  if (!raw) return { point, rewritten: false };
+  const address = sanitizeTransportGeocodeAddress(raw) || raw;
+  const malformed = isMalformedTransportGeocodeAddress(raw);
+  const addressChanged = normAddressCompareKey(address) !== normAddressCompareKey(raw);
+  if (!addressChanged && !malformed) {
+    return address === point.address ? { point, rewritten: false } : { point: { ...point, address }, rewritten: false };
+  }
+  const bundled = useBundledMappoint ? resolveBundledGeocodeResult(address) : null;
+  return {
+    point: {
+      ...point,
+      address,
+      lat: bundled?.lat ?? (malformed ? 0 : point.lat),
+      lng: bundled?.lng ?? (malformed ? 0 : point.lng),
+    },
+    rewritten: true,
+  };
+}
+
+export function sanitizeTransportBoardPins(options: {
+  coreStops: Record<number, TransportRouteStop[]>;
+  unplottedCampers: TransportUnplottedCamper[];
+  useBundledMappoint?: boolean;
+}): {
+  coreStops: Record<number, TransportRouteStop[]>;
+  unplottedCampers: TransportUnplottedCamper[];
+  rewrittenCount: number;
+} {
+  const useBundledMappoint = options.useBundledMappoint !== false;
+  let rewrittenCount = 0;
+  const coreStops: Record<number, TransportRouteStop[]> = {};
+  for (const [routeId, stops] of Object.entries(options.coreStops)) {
+    coreStops[Number(routeId)] = (stops ?? []).map((stop) => {
+      const next = rewriteBoardPoint(stop, useBundledMappoint);
+      if (next.rewritten) rewrittenCount += 1;
+      return next.point;
+    });
+  }
+  const unplottedCampers = options.unplottedCampers.map((camper) => {
+    const next = rewriteBoardPoint(camper, useBundledMappoint);
+    if (next.rewritten) rewrittenCount += 1;
+    return next.point;
+  });
+  return { coreStops, unplottedCampers, rewrittenCount };
+}
+
 /** Re-pin every stop/unplotted camper from its street address (MapPoint first). */
 export function repinTransportBoardCoordinates(options: {
   coreStops: Record<number, TransportRouteStop[]>;
@@ -468,24 +531,42 @@ export function buildUnplottedFromEnrollment(options: {
     const resolvedAge = child.age ?? null;
     const kept = existingByName.get(key);
     const hint = addressHints?.get(key);
-    const syncedAddress = child.homeAddress?.trim() || "";
+    const syncedAddress = sanitizeTransportGeocodeAddress(child.homeAddress?.trim() || "")
+      || child.homeAddress?.trim()
+      || "";
     if (kept) {
-      const address = kept.address?.trim() || syncedAddress || hint?.address || "";
-      const snapped = useBundledMappoint
-        ? snapToBundledGeocode(address, kept.lat, kept.lng)
-        : { lat: kept.lat, lng: kept.lng };
+      const rawAddress = syncedAddress || kept.address?.trim() || hint?.address || "";
+      const address = sanitizeTransportGeocodeAddress(rawAddress) || rawAddress;
+      const addressChanged =
+        normAddressCompareKey(address) !== normAddressCompareKey(kept.address || "");
+      const malformed = isMalformedTransportGeocodeAddress(kept.address || "")
+        || isMalformedTransportGeocodeAddress(rawAddress);
+      const bundled = address && useBundledMappoint ? resolveBundledGeocodeResult(address) : null;
+      let lat = kept.lat;
+      let lng = kept.lng;
+      if (bundled) {
+        lat = bundled.lat;
+        lng = bundled.lng;
+      } else if (addressChanged || malformed) {
+        lat = 0;
+        lng = 0;
+      } else if (useBundledMappoint) {
+        const snapped = snapToBundledGeocode(address, lat, lng);
+        lat = snapped.lat;
+        lng = snapped.lng;
+      }
       out.push({
         ...kept,
         address,
-        lat: snapped.lat || hint?.lat || 0,
-        lng: snapped.lng || hint?.lng || 0,
+        lat,
+        lng,
         age: resolvedAge ?? kept.age,
         session: child.session ?? child.grade ?? kept.session,
       });
       return;
     }
 
-    const address = syncedAddress || hint?.address || "";
+    const address = syncedAddress || sanitizeTransportGeocodeAddress(hint?.address || "") || hint?.address || "";
     const bundled = address && useBundledMappoint ? resolveBundledGeocodeResult(address) : null;
     out.push({
       id: stableUnplottedId(child.id, index + 1),

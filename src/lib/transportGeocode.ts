@@ -1,6 +1,13 @@
 import { supabase } from './supabase';
 import { resolveBundledGeocodeResult, seedGeocodeCacheFromBundled } from './mappointTransportImport';
 import {
+  geocodeLabelMatchScore,
+  isSuspiciousStreetSuffixAddress,
+  pickPreferredStreetGeocode,
+  sanitizeTransportGeocodeAddress,
+  streetSuffixGeocodeCandidates,
+} from './transportAddressNormalize';
+import {
   loadPersistedGeocodeCache,
   persistGeocodeCache,
   type GeocodeResult,
@@ -12,7 +19,7 @@ export type GeocodeProvider = 'ors' | 'nominatim' | 'census';
 
 export const isGeocodePoint = (
   result: GeocodeResult | null,
-): result is { lat: number; lng: number; provider?: string; label?: string } =>
+): result is { lat: number; lng: number; provider?: string; label?: string; correctedAddress?: string } =>
   !!result && 'lat' in result && 'lng' in result;
 
 export const isRetryableGeocodeFailure = (result: GeocodeResult | null) =>
@@ -76,23 +83,23 @@ export class TransportGeocodeCache {
   }
 }
 
-export async function geocodeAddress(
-  address: string,
+async function geocodeOnce(
+  query: string,
   cache: TransportGeocodeCache,
-  useBundledMappoint = true,
+  useBundledMappoint: boolean,
 ): Promise<GeocodeResult | null> {
-  const bundled = useBundledMappoint ? resolveBundledGeocodeResult(address) : null;
+  const bundled = useBundledMappoint ? resolveBundledGeocodeResult(query) : null;
   if (bundled) {
-    cache.set(address, bundled);
+    cache.set(query, bundled);
     return bundled;
   }
-  const cached = cache.get(address);
+  const cached = cache.get(query);
   if (cached !== undefined) return cached;
   const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const { data, error } = await supabase.functions.invoke('route-optimizer', {
-        body: { action: 'geocode', address },
+        body: { action: 'geocode', address: query },
       });
       if (error) {
         const msg = error.message || '';
@@ -104,7 +111,7 @@ export async function geocodeAddress(
         return { error: msg, retryable: true };
       }
       const result = geocodePayloadToResult(data as Record<string, unknown>);
-      cache.set(address, result);
+      cache.set(query, result);
       return result;
     } catch {
       if (attempt < maxAttempts) {
@@ -114,6 +121,46 @@ export async function geocodeAddress(
     }
   }
   return null;
+}
+
+export async function geocodeAddress(
+  address: string,
+  cache: TransportGeocodeCache,
+  useBundledMappoint = true,
+): Promise<GeocodeResult | null> {
+  const query = sanitizeTransportGeocodeAddress(address) || address.trim();
+  const candidates = streetSuffixGeocodeCandidates(query);
+  const scored: { address: string; lat: number; lng: number; label?: string }[] = [];
+  let lastError: GeocodeResult | null = null;
+
+  for (const candidate of candidates) {
+    const result = await geocodeOnce(candidate, cache, useBundledMappoint);
+    if (isGeocodePoint(result)) {
+      scored.push({
+        address: candidate,
+        lat: result.lat,
+        lng: result.lng,
+        label: result.label,
+      });
+      if (geocodeLabelMatchScore(candidate, result.label) >= 6) break;
+    } else {
+      lastError = result;
+    }
+    if (!isSuspiciousStreetSuffixAddress(query)) break;
+  }
+
+  const picked = pickPreferredStreetGeocode(query, scored);
+  if (!picked) return lastError;
+  const result: GeocodeResult = {
+    lat: picked.lat,
+    lng: picked.lng,
+    label: picked.label,
+    correctedAddress: picked.address.toLowerCase() !== query.toLowerCase() ? picked.address : undefined,
+  };
+  cache.set(address, result);
+  cache.set(query, result);
+  cache.set(picked.address, result);
+  return result;
 }
 
 export async function geocodeBatch(
@@ -127,20 +174,22 @@ export async function geocodeBatch(
   const pending: { index: number; address: string }[] = [];
 
   addresses.forEach((address, i) => {
-    const bundled = useBundledMappoint ? resolveBundledGeocodeResult(address) : null;
+    const query = sanitizeTransportGeocodeAddress(address) || address.trim();
+    const bundled = useBundledMappoint ? resolveBundledGeocodeResult(query) : null;
     if (bundled) {
       cache.set(address, bundled);
+      cache.set(query, bundled);
       results[i] = bundled;
       onEach?.(i, bundled);
       return;
     }
-    const cached = cache.get(address);
+    const cached = cache.get(query);
     if (cached !== undefined) {
       results[i] = cached;
       onEach?.(i, cached);
       return;
     }
-    pending.push({ index: i, address });
+    pending.push({ index: i, address: query });
   });
 
   const CHUNK = 50;
@@ -233,6 +282,16 @@ export async function geocodeBatch(
         await new Promise((r) => setTimeout(r, 2000));
       }
     }
+  }
+
+  for (let i = 0; i < addresses.length; i++) {
+    const query = sanitizeTransportGeocodeAddress(addresses[i] ?? '') || (addresses[i] ?? '').trim();
+    if (!isSuspiciousStreetSuffixAddress(query)) continue;
+    const current = results[i];
+    if (isGeocodePoint(current) && geocodeLabelMatchScore(query, current.label) >= 6) continue;
+    const refined = await geocodeAddress(query, cache, useBundledMappoint);
+    results[i] = refined;
+    onEach?.(i, refined);
   }
 
   cache.persist();

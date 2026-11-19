@@ -3,7 +3,7 @@ import type { TransportBoardPayload } from './transportRoster';
 import type { TransportRouteStop } from './transportRoster';
 
 const boardCacheKey = (companyId: string, season: string) => `transport-board-v1:${companyId}:${season}`;
-export const GEOCODE_CACHE_KEY = 'transport-geocode-cache-v1';
+export const GEOCODE_CACHE_KEY = 'transport-geocode-cache-v3';
 
 export async function loadBoardCache(companyId: string, season: string): Promise<TransportBoardPayload | null> {
   try {
@@ -29,7 +29,7 @@ export async function persistBoardCache(companyId: string, season: string, paylo
 }
 
 export type GeocodeResult =
-  | { lat: number; lng: number; provider?: string; label?: string }
+  | { lat: number; lng: number; provider?: string; label?: string; correctedAddress?: string }
   | { error: string; retryable?: boolean; message?: string };
 
 export async function loadPersistedGeocodeCache(): Promise<Map<string, GeocodeResult | null>> {

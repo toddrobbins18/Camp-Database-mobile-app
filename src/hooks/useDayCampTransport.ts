@@ -108,6 +108,7 @@ import {
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
   repinTransportBoardCoordinates,
+  sanitizeTransportBoardPins,
   transportBoardSeasonSyncChanged,
   type TransportBoardPayload,
   type TransportRouteMeta,
@@ -1772,24 +1773,38 @@ export function useDayCampTransport() {
       /* ignore */
     }
     try {
-      const snapped = repinTransportBoardCoordinates({
+      const cleaned = sanitizeTransportBoardPins({
         coreStops,
         unplottedCampers,
         useBundledMappoint: useNsMappoint,
       });
+      const snapped = repinTransportBoardCoordinates({
+        coreStops: cleaned.coreStops,
+        unplottedCampers: cleaned.unplottedCampers,
+        useBundledMappoint: useNsMappoint,
+      });
       let nextCore = snapped.coreStops;
       let nextUnplotted = snapped.unplottedCampers;
-      let moved = snapped.movedCount;
+      let moved = snapped.movedCount + cleaned.rewrittenCount;
       let failed = 0;
-      const leftover = addresses.filter((address) => !useNsMappoint || !resolveBundledGeocodeResult(address));
+      const leftover = Array.from(new Set([
+        ...nextUnplotted.map((c) => c.address).filter(Boolean),
+        ...Object.values(nextCore).flatMap((stops) => (stops || []).map((s) => s.address)).filter((address) => address && address !== campLocation.address),
+      ])).filter((address) => !useNsMappoint || !resolveBundledGeocodeResult(address));
       if (leftover.length > 0) {
         const results = await geocodeBatch(leftover, 6, geocodeCacheRef.current, undefined, useNsMappoint);
-        const resolved = new Map<string, { lat: number; lng: number }>();
+        const resolved = new Map<string, { lat: number; lng: number; address?: string }>();
         leftover.forEach((address, i) => {
           const r = results[i];
           if (isGeocodePoint(r)) {
-            const pin = useNsMappoint ? snapToBundledGeocode(address, r.lat, r.lng) : r;
-            resolved.set(address, pin);
+            const snapped = useNsMappoint
+              ? snapToBundledGeocode(r.correctedAddress || address, r.lat, r.lng)
+              : r;
+            resolved.set(address, {
+              lat: snapped.lat,
+              lng: snapped.lng,
+              address: r.correctedAddress || address,
+            });
           } else {
             failed++;
           }
@@ -1798,21 +1813,19 @@ export function useDayCampTransport() {
           Math.abs(a.lat - b.lat) > 0.0002 || Math.abs(a.lng - b.lng) > 0.0002;
         nextUnplotted = nextUnplotted.map((c) => {
           const hit = resolved.get(c.address);
-          if (hit && changed(c, hit)) {
-            moved++;
-            return { ...c, lat: hit.lat, lng: hit.lng };
-          }
-          return c;
+          if (!hit) return c;
+          if (!changed(c, hit) && hit.address === c.address) return c;
+          moved++;
+          return { ...c, lat: hit.lat, lng: hit.lng, address: hit.address || c.address };
         });
         const patched: typeof nextCore = {};
         Object.entries(nextCore).forEach(([routeId, stops]) => {
           patched[Number(routeId)] = (stops || []).map((stop) => {
             const hit = resolved.get(stop.address);
-            if (hit && changed(stop, hit)) {
-              moved++;
-              return { ...stop, lat: hit.lat, lng: hit.lng };
-            }
-            return stop;
+            if (!hit) return stop;
+            if (!changed(stop, hit) && hit.address === stop.address) return stop;
+            moved++;
+            return { ...stop, lat: hit.lat, lng: hit.lng, address: hit.address || stop.address };
           });
         });
         nextCore = patched;
